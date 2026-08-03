@@ -20,3 +20,4 @@ side of a conflict.
 | [0011](0011-edge-and-node-observability-fields-wired-up.md) | HITL-approval edges now actually block; emergent-routing and telemetry tags now actually surface | High |
 | [0012](0012-toolcall-tool-name-must-match-the-tool-being-evaluated.md) | PolicyEngine now denies a ToolCall whose tool_name doesn't match the Tool it's evaluated against | High |
 | [0013](0013-eval-record-unmeasured-fields-are-none-not-zero.md) | cost_dollars/latency_ms are None when unmeasured, not a misleading 0.0; latency_ms now actually computed | High |
+| [0014](0014-config-to-services-wiring-is-partial-by-design.md) | `aef run --config` wires a real model_provider; full config-to-Services wiring needs a plugin registry (Phase 2) | High |

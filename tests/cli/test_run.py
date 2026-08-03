@@ -40,3 +40,88 @@ def test_run_graph_module_missing_build_graph_raises(
     monkeypatch.syspath_prepend(str(tmp_path))
     with pytest.raises(ValueError, match="build_graph"):
         run_graph_module("no_build_graph_mod", agent_id="a1", objective="x")
+
+
+def test_run_graph_module_without_config_leaves_model_provider_unconfigured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module_code = """
+from aef.kernel import END, Context, Graph, Node, Route, Services
+from aef.state import AEFState, StateDelta
+
+
+def check_node(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
+    is_none = services.model_provider is None
+    return StateDelta(working_memory={"model_provider_is_none": is_none}), END
+
+
+def build_graph() -> Graph:
+    node = Node(id="check", version="0.1.0", fn=check_node, deterministic=True)
+    return Graph(id="g", version="0.1.0", nodes={"check": node}, edges=[], entry_node="check")
+"""
+    (tmp_path / "cli_no_config_mod.py").write_text(module_code)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    final_state = run_graph_module("cli_no_config_mod", agent_id="a1", objective="x")
+    assert final_state.working_memory == {"model_provider_is_none": True}
+
+
+def test_run_graph_module_with_config_wires_a_real_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module_code = """
+from aef.kernel import END, Context, Graph, Node, Route, Services
+from aef.providers.anthropic_provider import AnthropicProvider
+from aef.state import AEFState, StateDelta
+
+
+def check_node(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
+    is_anthropic = isinstance(services.model_provider, AnthropicProvider)
+    return StateDelta(working_memory={"got_anthropic_provider": is_anthropic}), END
+
+
+def build_graph() -> Graph:
+    node = Node(id="check", version="0.1.0", fn=check_node, deterministic=True)
+    return Graph(id="g", version="0.1.0", nodes={"check": node}, edges=[], entry_node="check")
+"""
+    (tmp_path / "cli_with_config_mod.py").write_text(module_code)
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    config_path = tmp_path / "aef.yaml"
+    config_path.write_text(
+        "model_provider:\n  impl: anthropic\n  model: claude-x\n"
+        "memory:\n  impl: in_memory\n"
+        "objectives: test\n"
+    )
+
+    final_state = run_graph_module(
+        "cli_with_config_mod", agent_id="a1", objective="x", config_path=config_path
+    )
+    assert final_state.working_memory == {"got_anthropic_provider": True}
+
+
+def test_run_graph_module_with_config_unsupported_impl_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from aef.config import UnsupportedProviderImplError
+
+    (tmp_path / "cli_unused_mod.py").write_text(
+        "from aef.kernel import Graph, Node, END\n"
+        "def n(s, c, sv):\n    return None, END\n"
+        "def build_graph():\n"
+        "    node = Node(id='n', version='0.1.0', fn=n, deterministic=True)\n"
+        "    return Graph(id='g', version='0.1.0', nodes={'n': node}, edges=[], entry_node='n')\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    config_path = tmp_path / "aef.yaml"
+    config_path.write_text(
+        "model_provider:\n"
+        "  impl: openai\n"
+        "  model: gpt-x\n"
+        "memory:\n"
+        "  impl: in_memory\n"
+        "objectives: test\n"
+    )
+
+    with pytest.raises(UnsupportedProviderImplError, match="openai"):
+        run_graph_module("cli_unused_mod", agent_id="a1", objective="x", config_path=config_path)

@@ -47,7 +47,9 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    state = run_graph_module(args.module, agent_id=args.agent_id, objective=args.objective)
+    state = run_graph_module(
+        args.module, agent_id=args.agent_id, objective=args.objective, config_path=args.config
+    )
     print(state.model_dump_json(indent=2))
     return 0
 
@@ -97,6 +99,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("module", help="importable module path exposing build_graph()")
     p_run.add_argument("--agent-id", default="cli-agent")
     p_run.add_argument("--objective", required=True)
+    p_run.add_argument(
+        "--config", default=None, help="aef.yaml path; wires a real model_provider if given"
+    )
     p_run.set_defaults(handler=_cmd_run)
 
     p_eval = subparsers.add_parser("eval", help="score a checkpointed run")
