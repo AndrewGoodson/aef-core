@@ -64,3 +64,37 @@ def test_fallback_does_not_call_later_providers_once_one_succeeds() -> None:
     result = provider.complete(_request())
     assert result.content == "first"
     assert calls == ["first"]
+
+
+def test_fallback_tries_a_third_provider_after_two_failures() -> None:
+    provider = FallbackProvider(
+        [_FailingProvider("primary"), _FailingProvider("secondary"), _WorkingProvider("tertiary")]
+    )
+    result = provider.complete(_request())
+    assert result.content == "ok"
+
+
+def test_fallback_all_fail_error_names_every_provider_not_just_the_first() -> None:
+    provider = FallbackProvider([_FailingProvider("primary"), _FailingProvider("secondary")])
+    with pytest.raises(ModelProviderError) as exc_info:
+        provider.complete(_request())
+    message = str(exc_info.value)
+    assert "primary" in message and "primary is down" in message
+    assert "secondary" in message and "secondary is down" in message
+
+
+def test_fallback_does_not_catch_non_model_provider_errors() -> None:
+    """A bug in an adapter (a raw exception leaking past the vendor
+    boundary, contradicting ModelProvider's own contract) must surface
+    immediately, not be silently retried against the next provider as if
+    it were an ordinary vendor failure."""
+
+    class _BuggyProvider(ModelProvider):
+        name = "buggy"
+
+        def complete(self, request: CompletionRequest) -> CompletionResult:
+            raise TypeError("adapter bug: forgot to wrap this in ModelProviderError")
+
+    provider = FallbackProvider([_BuggyProvider(), _WorkingProvider("never_reached")])
+    with pytest.raises(TypeError, match="adapter bug"):
+        provider.complete(_request())

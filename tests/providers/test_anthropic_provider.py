@@ -104,3 +104,45 @@ def test_complete_wraps_anthropic_api_error() -> None:
 
     with pytest.raises(ModelProviderError, match="boom"):
         provider.complete(_request())
+
+
+def test_complete_passes_through_user_id_metadata() -> None:
+    response = _FakeResponse(
+        model="claude-x", content=[_FakeTextBlock(text="ok")], usage=_FakeUsage(1, 1)
+    )
+    client = _FakeClient(response=response)
+    provider = AnthropicProvider(client=client)
+
+    provider.complete(_request(metadata={"user_id": "user-123"}))
+
+    call = client.messages.calls[0]
+    assert call["metadata"] == {"user_id": "user-123"}
+
+
+def test_complete_omits_metadata_when_no_user_id() -> None:
+    response = _FakeResponse(
+        model="claude-x", content=[_FakeTextBlock(text="ok")], usage=_FakeUsage(1, 1)
+    )
+    client = _FakeClient(response=response)
+    provider = AnthropicProvider(client=client)
+
+    provider.complete(_request())
+
+    call = client.messages.calls[0]
+    assert call["metadata"] is None
+
+
+def test_complete_ignores_non_user_id_metadata_keys() -> None:
+    """Anthropic's API only accepts `user_id` under metadata — other keys
+    are vendor-neutral fields another provider might use, and are
+    correctly not something this specific adapter can do anything with."""
+    response = _FakeResponse(
+        model="claude-x", content=[_FakeTextBlock(text="ok")], usage=_FakeUsage(1, 1)
+    )
+    client = _FakeClient(response=response)
+    provider = AnthropicProvider(client=client)
+
+    provider.complete(_request(metadata={"session_id": "s-1", "user_id": "user-123"}))
+
+    call = client.messages.calls[0]
+    assert call["metadata"] == {"user_id": "user-123"}

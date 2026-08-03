@@ -37,6 +37,15 @@ class AnthropicProvider(ModelProvider):
         messages = [
             {"role": m.role, "content": m.content} for m in request.messages if m.role != "system"
         ]
+        # CompletionRequest.metadata is vendor-neutral (arbitrary str keys);
+        # Anthropic's own API only accepts a single "user_id" key under
+        # `metadata` (for their abuse-detection tracking). Pass it through
+        # when present rather than silently dropping it — every other
+        # metadata key is meaningless to this specific vendor and is
+        # correctly ignored here, not a place a translation layer can do
+        # anything about it.
+        user_id = request.metadata.get("user_id")
+        anthropic_metadata = {"user_id": user_id} if user_id is not None else None
         try:
             response = self._client.messages.create(
                 model=request.model,
@@ -44,6 +53,7 @@ class AnthropicProvider(ModelProvider):
                 temperature=request.temperature,
                 system=system,
                 messages=messages,
+                metadata=anthropic_metadata,
             )
         except anthropic.APIError as exc:
             raise ModelProviderError(f"anthropic API error: {exc}") from exc
