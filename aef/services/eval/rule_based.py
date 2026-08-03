@@ -41,8 +41,23 @@ class RuleBasedEvaluator(Evaluator):
             tool_call_accuracy=self._tool_call_accuracy(state),
             trajectory_quality=self._trajectory_quality(state),
             cost_tokens=sum(p.token_cost for p in state.provenance),
+            # cost_dollars stays None: no pricing table exists anywhere in
+            # Phase 0/1 to convert cost_tokens into a dollar figure, and a
+            # fabricated number would be worse than an honest "unmeasured."
+            cost_dollars=None,
+            latency_ms=self._latency_ms(state),
             domain_gates={name: gate(state) for name, gate in self.domain_gates.items()},
         )
+
+    @staticmethod
+    def _latency_ms(state: AEFState) -> float | None:
+        """Wall-clock span between the first and last recorded node
+        execution, from Provenance.ts — the only timing data AEFState
+        carries. Needs at least two timestamps to have a span at all."""
+        if len(state.provenance) < 2:
+            return None
+        timestamps = [p.ts for p in state.provenance]
+        return (max(timestamps) - min(timestamps)).total_seconds() * 1000
 
     @staticmethod
     def _tool_call_accuracy(state: AEFState) -> float | None:

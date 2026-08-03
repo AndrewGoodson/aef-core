@@ -58,6 +58,8 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     print(f"tool_call_accuracy={record.tool_call_accuracy}")
     print(f"trajectory_quality={record.trajectory_quality}")
     print(f"cost_tokens={record.cost_tokens}")
+    print(f"cost_dollars={record.cost_dollars}")
+    print(f"latency_ms={record.latency_ms}")
     print(f"domain_gates={record.domain_gates}")
     print(f"passed={record.passed}")
     return 0 if record.passed else 1

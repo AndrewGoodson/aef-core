@@ -92,3 +92,67 @@ def test_domain_gates_all_true_passes() -> None:
     evaluator = RuleBasedEvaluator(domain_gates={"always_true": lambda state: True})
     record = evaluator.evaluate(_state())
     assert record.passed
+
+
+def test_cost_dollars_is_none_not_a_fake_zero() -> None:
+    """No pricing table exists to convert tokens to dollars — cost_dollars
+    must be None (unmeasured), not a silently-wrong 0.0 (which reads as
+    "genuinely free")."""
+    record = RuleBasedEvaluator().evaluate(_state())
+    assert record.cost_dollars is None
+
+
+def test_latency_ms_none_when_fewer_than_two_provenance_entries() -> None:
+    from datetime import UTC, datetime
+
+    from aef.state import Provenance
+
+    prov = [
+        Provenance(
+            node_id="n1", graph_version="1.0.0", ts=datetime.now(UTC), trace_id="t", token_cost=1
+        )
+    ]
+    record = RuleBasedEvaluator().evaluate(_state(provenance=prov))
+    assert record.latency_ms is None
+
+
+def test_latency_ms_computed_from_provenance_timestamp_span() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from aef.state import Provenance
+
+    t0 = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+    prov = [
+        Provenance(node_id="n1", graph_version="1.0.0", ts=t0, trace_id="t", token_cost=1),
+        Provenance(
+            node_id="n2",
+            graph_version="1.0.0",
+            ts=t0 + timedelta(milliseconds=1500),
+            trace_id="t",
+            token_cost=1,
+        ),
+    ]
+    record = RuleBasedEvaluator().evaluate(_state(provenance=prov))
+    assert record.latency_ms == 1500.0
+
+
+def test_latency_ms_uses_min_and_max_not_just_first_and_last_order() -> None:
+    """Provenance entries aren't guaranteed sorted by timestamp — the span
+    must be computed from min/max timestamps, not list order."""
+    from datetime import UTC, datetime, timedelta
+
+    from aef.state import Provenance
+
+    t0 = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+    prov = [
+        Provenance(
+            node_id="late",
+            graph_version="1.0.0",
+            ts=t0 + timedelta(milliseconds=2000),
+            trace_id="t",
+            token_cost=1,
+        ),
+        Provenance(node_id="early", graph_version="1.0.0", ts=t0, trace_id="t", token_cost=1),
+    ]
+    record = RuleBasedEvaluator().evaluate(_state(provenance=prov))
+    assert record.latency_ms == 2000.0

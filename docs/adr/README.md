@@ -19,3 +19,4 @@ side of a conflict.
 | [0010](0010-idempotency-key-is-exposed-not-enforced.md) | Kernel computes/exposes the idempotency key; enforcing it is the node's job, not the kernel's | High |
 | [0011](0011-edge-and-node-observability-fields-wired-up.md) | HITL-approval edges now actually block; emergent-routing and telemetry tags now actually surface | High |
 | [0012](0012-toolcall-tool-name-must-match-the-tool-being-evaluated.md) | PolicyEngine now denies a ToolCall whose tool_name doesn't match the Tool it's evaluated against | High |
+| [0013](0013-eval-record-unmeasured-fields-are-none-not-zero.md) | cost_dollars/latency_ms are None when unmeasured, not a misleading 0.0; latency_ms now actually computed | High |

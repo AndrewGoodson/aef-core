@@ -19,8 +19,13 @@ class EvaluationRecord:
     tool_call_accuracy: float | None = None  # 0..1, None if no tools were called
     trajectory_quality: float | None = None  # 0..1, did the plan DAG execute sanely
     cost_tokens: int = 0
-    cost_dollars: float = 0.0
-    latency_ms: float = 0.0
+    # cost_dollars/latency_ms are None when an Evaluator didn't (or
+    # couldn't) compute them, NOT 0.0 — an evaluator that can't measure
+    # dollar cost (no pricing table configured) or latency (fewer than two
+    # provenance timestamps to diff) must say so with None, not report a
+    # silently-wrong zero indistinguishable from "genuinely free/instant."
+    cost_dollars: float | None = None
+    latency_ms: float | None = None
     domain_gates: dict[str, bool] = field(default_factory=dict)  # e.g. {"sharpe_gate": True}
     metadata: dict[str, Any] = field(default_factory=dict)
 
