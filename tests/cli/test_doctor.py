@@ -11,6 +11,12 @@ def test_doctor_flags_missing_claude_md_and_config(tmp_path: Path) -> None:
     assert not by_name["agent_config"].ok
 
 
+def test_doctor_missing_claude_md_gives_an_actionable_message(tmp_path: Path) -> None:
+    checks = run_doctor(tmp_path)
+    by_name = {c.name: c for c in checks}
+    assert "aef adopt" in by_name["claude_md_present"].detail
+
+
 def test_doctor_passes_on_adopted_repo(tmp_path: Path) -> None:
     from aef.cli.adopt import run_adopt
 

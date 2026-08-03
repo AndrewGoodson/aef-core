@@ -15,6 +15,7 @@ See docs/adr/0014.
 from __future__ import annotations
 
 import importlib
+import sys
 import uuid
 from pathlib import Path
 
@@ -25,9 +26,23 @@ from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.state import AEFState
 
 
+def _ensure_cwd_importable() -> None:
+    """`aef` runs as an installed console script, whose sys.path[0] is the
+    script's own directory (e.g. .venv/bin), NOT the caller's current
+    directory — unlike `python script.py` or `python -m`, where the CWD is
+    on sys.path automatically. Without this, `aef run agents.foo.graph`
+    can never find a module `aef init` just scaffolded one directory below
+    where you're standing: confirmed by actually running `aef init` then
+    `aef run` end-to-end, not inferred from reading the code."""
+    cwd = str(Path.cwd())
+    if cwd not in sys.path:
+        sys.path.insert(0, cwd)
+
+
 def run_graph_module(
     module_path: str, *, agent_id: str, objective: str, config_path: str | Path | None = None
 ) -> AEFState:
+    _ensure_cwd_importable()
     module = importlib.import_module(module_path)
     build_graph = getattr(module, "build_graph", None)
     if build_graph is None:

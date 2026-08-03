@@ -32,7 +32,13 @@ def run_doctor(target_dir: Path) -> list[DoctorCheck]:
     )
 
     claude_md = target_dir / "CLAUDE.md"
-    checks.append(DoctorCheck("claude_md_present", claude_md.exists(), str(claude_md)))
+    claude_md_detail = (
+        str(claude_md)
+        if claude_md.exists()
+        else f"{claude_md} not found — run `aef adopt` to generate one for an existing repo, "
+        f"or add your own if this is a fresh `aef init`-based project"
+    )
+    checks.append(DoctorCheck("claude_md_present", claude_md.exists(), claude_md_detail))
 
     config_candidates = sorted(
         {*target_dir.glob("aef.yaml"), *target_dir.glob("agents/*/aef.yaml")}
