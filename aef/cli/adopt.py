@@ -29,6 +29,16 @@ _LANGGRAPH_RE = re.compile(r"^\s*(?:import|from)\s+langgraph\b", re.MULTILINE)
 _CREWAI_RE = re.compile(r"^\s*(?:import|from)\s+crewai\b", re.MULTILINE)
 _RAW_SDK_RE = re.compile(r"^\s*(?:import|from)\s+(?:openai|anthropic)\b", re.MULTILINE)
 
+# Dependency-manifest signals use a looser word-boundary match (no
+# import/from syntax to anchor on) — a freshly-scaffolded repo that has
+# `langgraph` in requirements.txt/pyproject.toml but hasn't written much
+# code yet is exactly the adoption-path moment `aef adopt` should still
+# get right, not report as "none" until enough code accumulates.
+_LANGGRAPH_MANIFEST_RE = re.compile(r"\blanggraph\b")
+_CREWAI_MANIFEST_RE = re.compile(r"\bcrewai\b")
+_RAW_SDK_MANIFEST_RE = re.compile(r"\b(?:openai|anthropic)\b")
+_MANIFEST_GLOBS = ("requirements*.txt", "pyproject.toml", "Pipfile")
+
 Framework = str  # one of "langgraph", "crewai", "raw_sdk", "none"
 
 
@@ -36,26 +46,41 @@ def _is_ignored(path: Path, root: Path) -> bool:
     return any(part in _IGNORED_DIR_NAMES for part in path.relative_to(root).parts)
 
 
-def detect_framework(repo_root: Path, *, max_files: int = 2000) -> Framework:
-    """Scans `.py` files under `repo_root` for the agent framework in use
-    today. Detection order is deliberate: a repo using LangGraph or CrewAI
-    almost always also imports openai/anthropic underneath, so those two
-    are checked first and raw_sdk only matches when neither is present."""
-    py_files = [p for p in repo_root.rglob("*.py") if not _is_ignored(p, repo_root)][:max_files]
-
-    combined_parts: list[str] = []
-    for path in py_files:
+def _read_all(paths: list[Path]) -> str:
+    parts: list[str] = []
+    for path in paths:
         try:
-            combined_parts.append(path.read_text(errors="ignore"))
+            parts.append(path.read_text(errors="ignore"))
         except OSError:
             continue
-    combined = "\n".join(combined_parts)
+    return "\n".join(parts)
 
-    if _LANGGRAPH_RE.search(combined):
+
+def detect_framework(repo_root: Path, *, max_files: int = 2000) -> Framework:
+    """Scans `.py` files AND dependency manifests (requirements*.txt,
+    pyproject.toml, Pipfile — anywhere in the tree, for monorepos with the
+    framework declared in a subdirectory) under `repo_root` for the agent
+    framework in use today. Detection order is deliberate: a repo using
+    LangGraph or CrewAI almost always also imports openai/anthropic
+    underneath, so those two are checked first and raw_sdk only matches
+    when neither is present — across both signal sources combined, not
+    just imports."""
+    py_files = [p for p in repo_root.rglob("*.py") if not _is_ignored(p, repo_root)][:max_files]
+    manifest_files = [
+        p
+        for pattern in _MANIFEST_GLOBS
+        for p in repo_root.rglob(pattern)
+        if not _is_ignored(p, repo_root)
+    ][:max_files]
+
+    code_text = _read_all(py_files)
+    manifest_text = _read_all(manifest_files)
+
+    if _LANGGRAPH_RE.search(code_text) or _LANGGRAPH_MANIFEST_RE.search(manifest_text):
         return "langgraph"
-    if _CREWAI_RE.search(combined):
+    if _CREWAI_RE.search(code_text) or _CREWAI_MANIFEST_RE.search(manifest_text):
         return "crewai"
-    if _RAW_SDK_RE.search(combined):
+    if _RAW_SDK_RE.search(code_text) or _RAW_SDK_MANIFEST_RE.search(manifest_text):
         return "raw_sdk"
     return "none"
 

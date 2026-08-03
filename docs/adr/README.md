@@ -22,3 +22,4 @@ side of a conflict.
 | [0013](0013-eval-record-unmeasured-fields-are-none-not-zero.md) | cost_dollars/latency_ms are None when unmeasured, not a misleading 0.0; latency_ms now actually computed | High |
 | [0014](0014-config-to-services-wiring-is-partial-by-design.md) | `aef run --config` wires a real model_provider; full config-to-Services wiring needs a plugin registry (Phase 2) | High |
 | [0015](0015-completion-request-metadata-now-passed-to-anthropic.md) | CompletionRequest.metadata.user_id now reaches Anthropic's own abuse-tracking field; FallbackProvider verified already correct | High |
+| [0016](0016-adopt-detects-frameworks-from-manifests-too.md) | aef adopt now detects frameworks from requirements.txt/pyproject.toml, not just .py imports | High |
