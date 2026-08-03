@@ -20,6 +20,10 @@ directional context, not commitments). Each phase lists what's real
   `aef/state/delta.py`
 - [x] Checkpointing: `DurabilityBackend` interface, real `InMemory` and
   `File` (JSON) backends — `aef/kernel/durability.py` (see ADR 0002)
+- [x] Resume: `GraphExecutor.resume(run_id)` continues a crashed/paused
+  run from a persisted per-run cursor instead of restarting at
+  `entry_node` and duplicating already-executed nodes' side effects — a
+  real gap found by testing, not designed in up front; see ADR 0009
 - [x] `ReplayEngine`: asserts `deterministic=True` nodes reproduce
   identical output on replay; non-deterministic nodes are quarantined and
   trusted from the recorded trace — `aef/kernel/replay.py`

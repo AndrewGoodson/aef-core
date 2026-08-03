@@ -29,7 +29,7 @@ satisfied first, not just a flag flip:
   7. Human-in-the-loop approval above a configurable risk threshold, with
      signed release manifests (report §11, constraint #6).
 
-See docs/roadmap.md Phase 4 and docs/adr/0007 for the full gating decision.
+See docs/roadmap.md Phase 4 and docs/adr/0006 for the full gating decision.
 """
 
 from __future__ import annotations

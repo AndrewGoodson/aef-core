@@ -9,6 +9,16 @@ like Temporal is only needed once a run must "survive worker restarts or
 exceed ~1 hour of wall-clock" — not true of anything built here yet. Postgres
 and Temporal backends are declared as typed stubs so swapping them in later
 is a pure adapter addition; see docs/adr/0002.
+
+Beyond the checkpointed `AEFState` itself, a backend also tracks a small
+per-run "cursor" — the id of the node that should run next, or `None` once
+the run has reached `END`. Without this, "resuming" a run means calling
+`GraphExecutor.run()` with the latest checkpointed state, which restarts at
+`graph.entry_node` and silently re-executes every node that already ran
+(duplicating any non-pure side effects) — a real gap found by testing
+resume, not a hypothetical one; see docs/adr/0009. `GraphExecutor.resume()`
+is what actually continues a crashed/paused run correctly, and it depends
+on this cursor.
 """
 
 from __future__ import annotations
@@ -37,6 +47,21 @@ class DurabilityBackend(ABC):
     def list_checkpoints(self, run_id: str) -> list[int]:
         raise NotImplementedError
 
+    @abstractmethod
+    def save_cursor(self, run_id: str, next_node: str | None) -> None:
+        """Record which node should run next for `run_id`, or `None` if the
+        run has reached `END`. Called after every super-step, alongside
+        `save_checkpoint`."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def load_cursor(self, run_id: str) -> str | None:
+        """The node id to resume at, or `None` if the run already completed.
+        Callers distinguish "never started" from "completed" via
+        `load_latest`/`list_checkpoints` returning nothing at all — this
+        method alone cannot tell those two cases apart."""
+        raise NotImplementedError
+
 
 class InMemoryDurabilityBackend(DurabilityBackend):
     """Round-trips every checkpoint through JSON (not just object references)
@@ -45,6 +70,7 @@ class InMemoryDurabilityBackend(DurabilityBackend):
 
     def __init__(self) -> None:
         self._store: dict[str, dict[int, str]] = {}
+        self._cursors: dict[str, str | None] = {}
 
     def save_checkpoint(self, state: AEFState) -> None:
         run = self._store.setdefault(state.run_id, {})
@@ -66,11 +92,18 @@ class InMemoryDurabilityBackend(DurabilityBackend):
     def list_checkpoints(self, run_id: str) -> list[int]:
         return sorted(self._store.get(run_id, {}))
 
+    def save_cursor(self, run_id: str, next_node: str | None) -> None:
+        self._cursors[run_id] = next_node
+
+    def load_cursor(self, run_id: str) -> str | None:
+        return self._cursors.get(run_id)
+
 
 class FileDurabilityBackend(DurabilityBackend):
-    """One JSON file per (run_id, checkpoint_seq) under `root_dir`. Survives
-    process restart without any external service — the honest stand-in for
-    a "Postgres checkpointer suffices" deployment (report Recommendation #1)."""
+    """One JSON file per (run_id, checkpoint_seq) under `root_dir`, plus a
+    `cursor.json` sidecar per run. Survives process restart without any
+    external service — the honest stand-in for a "Postgres checkpointer
+    suffices" deployment (report Recommendation #1)."""
 
     def __init__(self, root_dir: Path) -> None:
         self._root = Path(root_dir)
@@ -101,7 +134,19 @@ class FileDurabilityBackend(DurabilityBackend):
         run_dir = self._root / run_id
         if not run_dir.exists():
             return []
-        return sorted(int(p.stem) for p in run_dir.glob("*.json"))
+        return sorted(int(p.stem) for p in run_dir.glob("*.json") if p.stem != "cursor")
+
+    def save_cursor(self, run_id: str, next_node: str | None) -> None:
+        cursor_path = self._run_dir(run_id) / "cursor.json"
+        cursor_path.write_text(json.dumps({"next_node": next_node}))
+
+    def load_cursor(self, run_id: str) -> str | None:
+        cursor_path = self._root / run_id / "cursor.json"
+        if not cursor_path.exists():
+            return None
+        data = json.loads(cursor_path.read_text())
+        next_node = data.get("next_node")
+        return next_node if isinstance(next_node, str) else None
 
 
 class PostgresDurabilityBackend(DurabilityBackend):
@@ -125,6 +170,12 @@ class PostgresDurabilityBackend(DurabilityBackend):
         raise NotImplementedError
 
     def list_checkpoints(self, run_id: str) -> list[int]:
+        raise NotImplementedError
+
+    def save_cursor(self, run_id: str, next_node: str | None) -> None:
+        raise NotImplementedError
+
+    def load_cursor(self, run_id: str) -> str | None:
         raise NotImplementedError
 
 
@@ -151,4 +202,10 @@ class TemporalDurabilityBackend(DurabilityBackend):
         raise NotImplementedError
 
     def list_checkpoints(self, run_id: str) -> list[int]:
+        raise NotImplementedError
+
+    def save_cursor(self, run_id: str, next_node: str | None) -> None:
+        raise NotImplementedError
+
+    def load_cursor(self, run_id: str) -> str | None:
         raise NotImplementedError

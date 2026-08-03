@@ -6,7 +6,7 @@ attributes under an explicitly *incubating* namespace
 (`opentelemetry.semconv._incubating`) with no stability guarantee — a
 kernel-adjacent observability module churning on every OTel point release is
 a worse outcome than pinning today's stable attribute names ourselves and
-updating them deliberately when the spec stabilizes. See docs/adr/0005.
+updating them deliberately when the spec stabilizes. See docs/adr/0008.
 Values below match the GenAI semconv spec as of this writing
 (github.com/open-telemetry/semantic-conventions, `gen_ai` namespace).
 """

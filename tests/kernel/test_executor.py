@@ -10,6 +10,7 @@ from aef.kernel import (
     InMemoryDurabilityBackend,
     Node,
     RoutingViolationError,
+    ServiceNotConfiguredError,
     Services,
 )
 from aef.observability.in_memory import InMemoryTracer
@@ -196,3 +197,96 @@ def test_node_exception_without_fallback_propagates() -> None:
     executor = GraphExecutor(graph.compile(), Services())
     with pytest.raises(ValueError, match="boom"):
         executor.run(_make_state())
+
+
+def _three_node_graph() -> Graph:
+    def _mk(name: str, next_node):
+        def _fn(state, ctx, services):
+            visited = [*state.working_memory.get("visited", []), name]
+            return StateDelta(working_memory={"visited": visited}), next_node
+
+        return Node(id=name, version="1.0.0", fn=_fn, deterministic=True)
+
+    a, b, c = _mk("a", "b"), _mk("b", "c"), _mk("c", END)
+    return Graph(
+        id="g",
+        version="1.0.0",
+        nodes={"a": a, "b": b, "c": c},
+        edges=[Edge(from_node="a", to_node="b"), Edge(from_node="b", to_node="c")],
+        entry_node="a",
+    )
+
+
+def test_run_does_not_resume_it_restarts_and_duplicates_side_effects() -> None:
+    """Documents the gap resume() exists to fix: calling run() again with a
+    loaded checkpoint's state restarts at entry_node and re-executes nodes
+    that already ran, duplicating their effects. This is not desired
+    behavior — it's the reason resume() exists — but pinning it down in a
+    test means a future change to run()'s semantics is a deliberate,
+    reviewed decision, not an accidental regression discovered in prod."""
+    durability = InMemoryDurabilityBackend()
+    executor = GraphExecutor(
+        _three_node_graph().compile(), Services(durability=durability), max_steps=2
+    )
+    with pytest.raises(GraphExecutionError):
+        executor.run(_make_state("resume-run"))
+
+    partial = durability.load_latest("resume-run")
+    assert partial is not None
+    assert partial.working_memory["visited"] == ["a", "b"]
+
+    executor2 = GraphExecutor(_three_node_graph().compile(), Services(durability=durability))
+    result = executor2.run(partial)
+    assert result.final_state.working_memory["visited"] == ["a", "b", "a", "b", "c"]
+
+
+def test_resume_continues_from_the_saved_cursor_without_duplicating_nodes() -> None:
+    durability = InMemoryDurabilityBackend()
+    executor = GraphExecutor(
+        _three_node_graph().compile(), Services(durability=durability), max_steps=2
+    )
+    with pytest.raises(GraphExecutionError):
+        executor.run(_make_state("resume-2"))
+
+    assert durability.load_cursor("resume-2") == "c"
+
+    executor2 = GraphExecutor(_three_node_graph().compile(), Services(durability=durability))
+    result = executor2.resume("resume-2")
+    assert result.final_state.working_memory["visited"] == ["a", "b", "c"]
+
+
+def test_resume_on_completed_run_is_idempotent_noop() -> None:
+    durability = InMemoryDurabilityBackend()
+    executor = GraphExecutor(_three_node_graph().compile(), Services(durability=durability))
+    executor.run(_make_state("resume-3"))
+    assert durability.load_cursor("resume-3") is None
+
+    result = executor.resume("resume-3")
+    assert result.final_state.working_memory["visited"] == ["a", "b", "c"]
+
+
+def test_resume_unknown_run_id_raises_clearly() -> None:
+    durability = InMemoryDurabilityBackend()
+    executor = GraphExecutor(_three_node_graph().compile(), Services(durability=durability))
+    with pytest.raises(GraphExecutionError, match="no checkpoints found"):
+        executor.resume("never-existed")
+
+
+def test_resume_without_durability_configured_raises() -> None:
+    executor = GraphExecutor(_three_node_graph().compile(), Services())
+    with pytest.raises(ServiceNotConfiguredError):
+        executor.resume("whatever")
+
+
+def test_resume_records_trace_when_requested() -> None:
+    durability = InMemoryDurabilityBackend()
+    executor = GraphExecutor(
+        _three_node_graph().compile(), Services(durability=durability), max_steps=1
+    )
+    with pytest.raises(GraphExecutionError):
+        executor.run(_make_state("resume-4"))
+
+    executor2 = GraphExecutor(_three_node_graph().compile(), Services(durability=durability))
+    result = executor2.resume("resume-4", record_trace=True)
+    assert result.trace is not None
+    assert [r.node_id for r in result.trace] == ["b", "c"]

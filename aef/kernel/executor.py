@@ -5,6 +5,13 @@ bookkeeping over what nodes return, with zero model calls or I/O of its own.
 Every super-step is checkpointed (if a `DurabilityBackend` is configured) and
 traced (if a `Tracer` is configured) — observability and durability are
 opt-in via DI, never hardwired.
+
+`run()` always starts at `graph.entry_node`. Calling it again with a
+previously-checkpointed `AEFState` does NOT resume a crashed/paused run —
+it restarts from the top and re-executes every node again against the
+already-advanced state, duplicating any non-pure side effects. Use
+`resume()` to actually continue from where a run left off; see
+`DurabilityBackend.save_cursor`/`load_cursor` and docs/adr/0009.
 """
 
 from __future__ import annotations
@@ -54,12 +61,39 @@ class GraphExecutor:
         self._max_steps = max_steps
 
     def run(self, initial_state: AEFState, *, record_trace: bool = False) -> ExecutionResult:
+        return self._run_from(initial_state, self._graph.entry_node, record_trace=record_trace)
+
+    def resume(self, run_id: str, *, record_trace: bool = False) -> ExecutionResult:
+        """Continue a previously-checkpointed run from wherever it left off,
+        using the durability backend's saved cursor — unlike `run()`, this
+        does not re-execute nodes that already completed."""
+        durability = self._services.require_durability()
+        state = durability.load_latest(run_id)
+        if state is None:
+            raise GraphExecutionError(
+                f"no checkpoints found for run_id={run_id!r}; nothing to resume"
+            )
+
+        cursor = durability.load_cursor(run_id)
+        if cursor is None:
+            # Either the run already reached END, or it crashed before its
+            # first super-step was ever checkpointed (nothing to resume).
+            return ExecutionResult(final_state=state, trace=() if record_trace else None)
+
+        return self._run_from(state, cursor, record_trace=record_trace)
+
+    def _run_from(
+        self, initial_state: AEFState, start_node: str | _End, *, record_trace: bool
+    ) -> ExecutionResult:
         state = initial_state
-        current: str | _End = self._graph.entry_node
+        current: str | _End = start_node
         trace: list[NodeExecutionRecord] = []
+        durability = self._services.durability
 
         for _ in range(self._max_steps):
             if isinstance(current, _End):
+                if durability is not None:
+                    durability.save_cursor(state.run_id, None)
                 return ExecutionResult(
                     final_state=state, trace=tuple(trace) if record_trace else None
                 )
@@ -85,9 +119,13 @@ class GraphExecutor:
                     )
                 )
             state = new_state
-            if self._services.durability is not None:
-                self._services.durability.save_checkpoint(state)
-            current = self._resolve_route(node, route, state)
+            next_node = self._resolve_route(node, route, state)
+            if durability is not None:
+                durability.save_checkpoint(state)
+                durability.save_cursor(
+                    state.run_id, None if isinstance(next_node, _End) else next_node
+                )
+            current = next_node
 
         raise GraphExecutionError(f"exceeded max_steps={self._max_steps} without reaching END")
 
@@ -141,7 +179,7 @@ class GraphExecutor:
             raise NotImplementedError(
                 "fan-out routes are part of the Edge/Route contract but are not yet "
                 "executed — BSP-style parallel super-steps are deferred to a Phase 2 "
-                "executor; see docs/adr/0004"
+                "executor; see docs/adr/0007"
             )
         candidates = self._graph.edges_from(node.id)
         for edge in candidates:

@@ -134,7 +134,7 @@ END: Final[_End] = _End()
 # `Route` may name one node, several (fan-out), or `END`. Fan-out is part of
 # the *contract* (blueprint §2.2 declares `to_node: str | list[str]`) but the
 # Phase 0/1 `GraphExecutor` only executes single-target routes — see
-# `GraphExecutor.run`'s NotImplementedError and docs/adr/0004. Declaring the
+# `GraphExecutor.run`'s NotImplementedError and docs/adr/0007. Declaring the
 # full contract now means a Phase 2 BSP-style executor is an executor change,
 # not a schema change.
 Route = str | tuple[str, ...] | _End

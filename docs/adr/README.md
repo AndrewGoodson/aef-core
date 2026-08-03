@@ -15,3 +15,4 @@ side of a conflict.
 | [0006](0006-evolution-engine-disabled-by-default.md) | Evolution engine disabled by default, enforced in code not just config | High |
 | [0007](0007-fan-out-declared-not-executed.md) | Fan-out declared in the contract, not executed until Phase 2 | High |
 | [0008](0008-otel-genai-attributes-pinned-locally.md) | OTel GenAI attribute keys pinned locally, not imported from the incubating package | High |
+| [0009](0009-checkpoint-resume-requires-a-cursor.md) | Resuming a run needs a persisted cursor — `run()` alone silently duplicates side effects | High |
