@@ -12,3 +12,4 @@ build/
 htmlcov/
 .DS_Store
 *.aef-checkpoint.json
+.claude/

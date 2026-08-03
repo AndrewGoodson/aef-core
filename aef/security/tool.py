@@ -108,6 +108,20 @@ class PolicyEngine:
         return result
 
     def _decide(self, tool: Tool, call: ToolCall) -> PolicyResult:
+        if call.tool_name != tool.name:
+            # ToolCall.tool_name is the caller's declared intent (e.g. what
+            # an LLM tool-call request named); `tool` is the actual object
+            # about to be invoked. Nothing upstream guarantees these match —
+            # a lookup bug, or a successful prompt injection steering which
+            # Tool gets resolved, could silently evaluate policy against a
+            # different tool than the one that runs. Given this module's own
+            # threat model (contain injection, don't just detect it), that
+            # mismatch must deny, not pass through unnoticed.
+            return PolicyResult(
+                PolicyDecision.DENY,
+                f"tool_name mismatch: call declares {call.tool_name!r} but is being "
+                f"evaluated against tool {tool.name!r}",
+            )
         if tool.name in self._config.forbidden_tool_names:
             return PolicyResult(PolicyDecision.DENY, f"tool {tool.name!r} is explicitly forbidden")
         if not tool.required_scopes:

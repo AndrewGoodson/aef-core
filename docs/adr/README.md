@@ -18,3 +18,4 @@ side of a conflict.
 | [0009](0009-checkpoint-resume-requires-a-cursor.md) | Resuming a run needs a persisted cursor — `run()` alone silently duplicates side effects | High |
 | [0010](0010-idempotency-key-is-exposed-not-enforced.md) | Kernel computes/exposes the idempotency key; enforcing it is the node's job, not the kernel's | High |
 | [0011](0011-edge-and-node-observability-fields-wired-up.md) | HITL-approval edges now actually block; emergent-routing and telemetry tags now actually surface | High |
+| [0012](0012-toolcall-tool-name-must-match-the-tool-being-evaluated.md) | PolicyEngine now denies a ToolCall whose tool_name doesn't match the Tool it's evaluated against | High |

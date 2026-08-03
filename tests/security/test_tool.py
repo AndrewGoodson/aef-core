@@ -92,3 +92,50 @@ def test_audit_log_accumulates_across_multiple_calls() -> None:
     for _ in range(3):
         engine.evaluate(tool, ToolCall(tool_name="mystery", arguments={}))
     assert len(audit_log.entries) == 3
+
+
+def test_tool_name_mismatch_denied_even_with_valid_scope() -> None:
+    """A ToolCall whose declared tool_name doesn't match the Tool object
+    actually being evaluated must be denied outright — this is the case a
+    lookup bug or successful prompt injection could produce: policy gets
+    evaluated against the right scopes for the wrong tool."""
+    config = PolicyConfig(allowed_scopes=frozenset({"az_cli_ro"}))
+    engine = PolicyEngine(config)
+    tool = _StubTool("az_query", required_scopes=("az_cli_ro",))
+    mismatched_call = ToolCall(tool_name="totally_different_tool", arguments={})
+
+    result = engine.evaluate(tool, mismatched_call)
+
+    assert result.decision is PolicyDecision.DENY
+    assert "mismatch" in result.reason
+    assert "totally_different_tool" in result.reason
+    assert "az_query" in result.reason
+
+
+def test_tool_name_mismatch_checked_before_forbidden_and_scope_checks() -> None:
+    """Mismatch must be caught first — a call claiming to be some other,
+    innocuous-sounding tool name should not slip past the forbidden-name
+    check just because that check keys off tool.name, not call.tool_name."""
+    config = PolicyConfig(
+        allowed_scopes=frozenset({"resource_delete"}),
+        forbidden_tool_names=frozenset({"delete_resource"}),
+    )
+    engine = PolicyEngine(config)
+    tool = _StubTool("delete_resource", required_scopes=("resource_delete",))
+    mismatched_call = ToolCall(tool_name="harmless_sounding_name", arguments={})
+
+    result = engine.evaluate(tool, mismatched_call)
+
+    assert result.decision is PolicyDecision.DENY
+    assert "mismatch" in result.reason
+
+
+def test_tool_name_mismatch_is_audit_logged() -> None:
+    audit_log = InMemoryAuditLogWriter()
+    engine = PolicyEngine(audit_log=audit_log)
+    tool = _StubTool("real_tool", required_scopes=("x",))
+    engine.evaluate(tool, ToolCall(tool_name="spoofed_name", arguments={}))
+
+    assert len(audit_log.entries) == 1
+    assert audit_log.entries[0].result.decision is PolicyDecision.DENY
+    assert audit_log.entries[0].tool == "real_tool"
