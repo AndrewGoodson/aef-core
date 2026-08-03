@@ -31,11 +31,48 @@ run_id + agent_id + tags, no free-text query parameter). `Mem0Adapter`
 bridges this by round-tripping AEF's own `kind`/`tags`/`id` through Mem0's
 `metadata` dict and falling back to a tag-derived query string when no
 semantic query is available. This is documented in the adapter's own
-docstring as best-effort for tag-only recall — real semantic recall (the
-actual reason to reach for Mem0) still works when callers pass meaningful
-tags, but this adapter's quality on pure-taxonomy lookups is unverified
-against a live Mem0 backend (constructor takes an injected client
-specifically so the *translation logic* is tested without needing one).
+docstring as best-effort for tag-only recall.
+
+### Update: verified against a real, fully-local mem0 backend
+
+The paragraph above originally ended with "unverified against a live Mem0
+backend." It has since been verified — `mem0.Memory()` can be constructed
+with zero paid/network-dependent services (`fastembed` local embedder +
+`faiss` local vector store; see the new `mem0-integration` extra and
+`tests/services/memory/test_mem0_adapter_integration.py`) — and doing so
+surfaced two real bugs the fake-client unit tests could not, because the
+fake didn't (and couldn't be expected to, without testing against the real
+thing) mirror mem0's actual contract:
+
+1. **mem0 requires an identity on every call.** `Memory.add()` and
+   `Memory.search()` both raise if none of `user_id`/`agent_id`/`run_id`
+   is present — mem0 has no unscoped-memory mode. `Mem0Adapter.write()`
+   and `.query()` now raise a clear `Mem0IdentityRequiredError` up front
+   instead of letting a `MemoryRecord`/query with neither `agent_id` nor
+   `run_id` crash deep inside mem0 with a less legible error.
+2. **`get()` cannot be an empty-query semantic search.** The original
+   implementation called `search("", ...)` to emulate a by-id lookup —
+   real mem0 rejects empty/whitespace-only queries outright. Fixed:
+   `write()` now captures the native memory id mem0's own `add()` returns
+   and stores it in an internal `record.id -> native_id` index; `get()`
+   calls `mem0.Memory.get(native_id)` directly, a real by-id lookup with
+   no query text and no relevance-ranking risk at all.
+3. **A separate, non-bug gotcha worth knowing:** `mem0.Memory()` eagerly
+   constructs an LLM client (default provider `openai`) at construction
+   time, even though `write()` always passes `infer=False` and so never
+   actually invokes it. Deploying `Mem0Adapter` therefore always requires
+   *some* LLM credential (or a local server like Ollama) to be present at
+   startup, even for a pure key-value-style memory use case that never
+   needs LLM-driven fact extraction.
+
+With those two bugs fixed, `test_real_semantic_recall_with_meaningful_tags`
+confirms real semantic recall works correctly end-to-end: three semantically
+distinct facts written, a tag-guided query for "azure, storage" correctly
+retrieves only the one matching record via real vector similarity, not a
+fake's exact-match logic. Retrieval quality for the *tag-only, no-tags-at-all*
+degenerate query path (falling back to the bare `kind` string as the query
+text) remains genuinely best-effort, not a guarantee — that part of the
+original claim stands.
 
 ## Consequences
 - Every memory-consuming node written against `MemoryStore` today works
@@ -45,10 +82,12 @@ specifically so the *translation logic* is tested without needing one).
   prefer a graph-backed store for semantic memory) is not enforced by
   either Phase 1 backend; a semantic-memory consumer that needs "this fact
   was true then, false now" semantics must wait for Phase 2.
-- `Mem0Adapter`'s real-world retrieval quality is unverified — it has
-  never been run against Mem0's live vector/embedding pipeline in this
-  repo, only against an injected fake client that proves the
-  request/response *shape* is handled correctly.
+- Every `MemoryRecord` written through `Mem0Adapter` must carry an
+  `agent_id` or `run_id` — this is a hard mem0 constraint now enforced at
+  the AEF layer, not an AEF design choice; `InMemoryMemoryStore` has no
+  such restriction, so a node written against the interface in a
+  backend-agnostic way should always set one of these two fields if it
+  might ever run against Mem0.
 
 ## Alternatives Considered
 - **Default to Graphiti/Zep now.** Rejected: not named in Phase 1 scope,
@@ -60,6 +99,10 @@ specifically so the *translation logic* is tested without needing one).
   live on PyPI, latest release within days of this build).
 
 ## Confidence
-High on the interface/backend split; Medium on the Mem0 adapter's
-retrieval-quality claims specifically, since those are untested against a
-real Mem0 deployment.
+High on the interface/backend split. High (upgraded from Medium) on the
+Mem0 adapter's core write/query/get correctness, now that it's verified
+against a real, fully-local mem0 backend and two real bugs found that way
+were fixed. Medium remains on retrieval *ranking quality* for the
+degenerate tag-less query path specifically, and on how mem0's behavior
+holds up at a scale/complexity this test doesn't exercise (thousands of
+records, concurrent writers, a non-faiss vector store).

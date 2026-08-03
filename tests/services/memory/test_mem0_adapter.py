@@ -1,13 +1,22 @@
 from typing import Any
 
-from aef.services.memory.adapters.mem0_adapter import Mem0Adapter
+import pytest
+
+from aef.services.memory.adapters.mem0_adapter import Mem0Adapter, Mem0IdentityRequiredError
 from aef.services.memory.base import MemoryRecord
 
 
 class _FakeMem0Client:
+    """Mirrors real mem0's actual contract, confirmed by running the
+    adapter against a real local mem0.Memory() (fastembed + faiss):
+    `add()` returns `{"results": [{"id": <native_id>, ...}]}`, and `.get()`
+    is a real by-id lookup, not a search.
+    """
+
     def __init__(self) -> None:
         self.add_calls: list[dict[str, Any]] = []
-        self._store: list[dict[str, Any]] = []
+        self._store: dict[str, dict[str, Any]] = {}
+        self._next_id = 0
 
     def add(
         self,
@@ -27,21 +36,24 @@ class _FakeMem0Client:
                 "infer": infer,
             }
         )
-        self._store.append(
-            {
-                "memory": messages[0]["content"],
-                "user_id": user_id,
-                "run_id": run_id,
-                "metadata": metadata or {},
-                "id": f"mem0-{len(self._store)}",
-            }
-        )
-        return {"results": [self._store[-1]]}
+        native_id = f"mem0-{self._next_id}"
+        self._next_id += 1
+        self._store[native_id] = {
+            "id": native_id,
+            "memory": messages[0]["content"],
+            "user_id": user_id,
+            "run_id": run_id,
+            "metadata": metadata or {},
+        }
+        return {"results": [{"id": native_id}]}
 
     def search(
         self, query: str, *, top_k: int = 20, filters: dict[str, Any] | None = None
     ) -> dict[str, Any]:
-        return {"results": list(self._store)[:top_k]}
+        return {"results": list(self._store.values())[:top_k]}
+
+    def get(self, memory_id: str) -> dict[str, Any] | None:
+        return self._store.get(memory_id)
 
 
 def test_write_calls_add_with_infer_false_and_metadata() -> None:
@@ -68,23 +80,44 @@ def test_write_calls_add_with_infer_false_and_metadata() -> None:
     assert call["metadata"]["aef_record_id"] == record.id
 
 
+def test_write_without_agent_id_or_run_id_raises() -> None:
+    adapter = Mem0Adapter(_FakeMem0Client())
+    record = MemoryRecord(kind="semantic", content={"text": "orphan"})
+    with pytest.raises(Mem0IdentityRequiredError):
+        adapter.write(record)
+
+
+def test_query_without_agent_id_or_run_id_raises() -> None:
+    adapter = Mem0Adapter(_FakeMem0Client())
+    with pytest.raises(Mem0IdentityRequiredError):
+        adapter.query("semantic")
+
+
 def test_query_filters_out_other_kinds_and_missing_tags() -> None:
     client = _FakeMem0Client()
     adapter = Mem0Adapter(client)
-    adapter.write(MemoryRecord(kind="semantic", content={"text": "fact one"}, tags=("azure",)))
-    adapter.write(MemoryRecord(kind="episodic", content={"text": "trace one"}, tags=("azure",)))
-    adapter.write(MemoryRecord(kind="semantic", content={"text": "fact two"}, tags=("aws",)))
+    adapter.write(
+        MemoryRecord(kind="semantic", content={"text": "fact one"}, agent_id="a1", tags=("azure",))
+    )
+    adapter.write(
+        MemoryRecord(kind="episodic", content={"text": "trace one"}, agent_id="a1", tags=("azure",))
+    )
+    adapter.write(
+        MemoryRecord(kind="semantic", content={"text": "fact two"}, agent_id="a1", tags=("aws",))
+    )
 
-    results = adapter.query("semantic", tags=("azure",))
+    results = adapter.query("semantic", agent_id="a1", tags=("azure",))
 
     assert len(results) == 1
     assert results[0].content["text"] == "fact one"
 
 
-def test_get_round_trips_via_record_id_metadata() -> None:
+def test_get_round_trips_via_native_id_index() -> None:
     client = _FakeMem0Client()
     adapter = Mem0Adapter(client)
-    record = MemoryRecord(kind="procedural", content={"text": "plan template"}, tags=("retry",))
+    record = MemoryRecord(
+        kind="procedural", content={"text": "plan template"}, agent_id="a1", tags=("retry",)
+    )
     adapter.write(record)
 
     fetched = adapter.get(record.id)
@@ -96,8 +129,14 @@ def test_get_round_trips_via_record_id_metadata() -> None:
 
 
 def test_get_missing_id_returns_none() -> None:
-    client = _FakeMem0Client()
-    adapter = Mem0Adapter(client)
-    adapter.write(MemoryRecord(kind="working", content={"text": "irrelevant"}))
+    adapter = Mem0Adapter(_FakeMem0Client())
+    adapter.write(MemoryRecord(kind="working", content={"text": "irrelevant"}, agent_id="a1"))
 
     assert adapter.get("no-such-id") is None
+
+
+def test_get_never_written_id_returns_none_without_calling_client() -> None:
+    """An id this adapter instance never wrote has no native-id mapping —
+    get() must short-circuit rather than call the client with a bogus id."""
+    adapter = Mem0Adapter(_FakeMem0Client())
+    assert adapter.get("never-seen") is None
