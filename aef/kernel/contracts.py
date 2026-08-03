@@ -1,0 +1,191 @@
+"""The fixed node/edge contract (constraint #2) and the DI `Services`
+container (constraint #3) that makes it possible.
+
+Node signature is fixed and non-negotiable:
+
+    (AEFState, Context, Services) -> tuple[StateDelta, Route]
+
+Nodes never reach for globals, never construct their own clients, never read
+env vars. Everything arrives via `Services`.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Final
+
+from aef.kernel.durability import DurabilityBackend
+from aef.observability.base import Tracer
+from aef.providers.base import ModelProvider
+from aef.security.tool import PolicyEngine, Tool
+from aef.services.context.base import Retriever
+from aef.services.eval.base import Evaluator
+from aef.services.kg.base import GraphStore
+from aef.services.memory.base import MemoryStore
+from aef.services.optimizers.base import Optimizer
+from aef.state import AEFState, StateDelta
+
+
+class ServiceNotConfiguredError(RuntimeError):
+    def __init__(self, service_name: str) -> None:
+        super().__init__(
+            f"service {service_name!r} was not configured on this Services container; "
+            f"wire it in via config before any node that depends on it can run"
+        )
+
+
+@dataclass(frozen=True)
+class Services:
+    """Dependency-injection container. Every backend a node might need is a
+    field here; nodes receive an instance and never construct their own."""
+
+    model_provider: ModelProvider | None = None
+    memory: MemoryStore | None = None
+    graph_store: GraphStore | None = None
+    retriever: Retriever | None = None
+    evaluator: Evaluator | None = None
+    tracer: Tracer | None = None
+    tools: Mapping[str, Tool] = field(default_factory=dict)
+    policy_engine: PolicyEngine | None = None
+    optimizer: Optimizer | None = None
+    durability: DurabilityBackend | None = None
+    clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
+
+    def require_model_provider(self) -> ModelProvider:
+        if self.model_provider is None:
+            raise ServiceNotConfiguredError("model_provider")
+        return self.model_provider
+
+    def require_memory(self) -> MemoryStore:
+        if self.memory is None:
+            raise ServiceNotConfiguredError("memory")
+        return self.memory
+
+    def require_evaluator(self) -> Evaluator:
+        if self.evaluator is None:
+            raise ServiceNotConfiguredError("evaluator")
+        return self.evaluator
+
+    def require_tracer(self) -> Tracer:
+        if self.tracer is None:
+            raise ServiceNotConfiguredError("tracer")
+        return self.tracer
+
+    def require_durability(self) -> DurabilityBackend:
+        if self.durability is None:
+            raise ServiceNotConfiguredError("durability")
+        return self.durability
+
+    def require_policy_engine(self) -> PolicyEngine:
+        if self.policy_engine is None:
+            raise ServiceNotConfiguredError("policy_engine")
+        return self.policy_engine
+
+
+@dataclass(frozen=True)
+class Context:
+    """Per-execution, per-node context. `now` is captured once by the
+    executor via `Services.clock` and handed to the node — nodes never call
+    the clock themselves, which is what keeps them replayable."""
+
+    run_id: str
+    graph_version: str
+    trace_id: str
+    node_id: str
+    now: datetime
+    attempt: int = 1
+
+
+class SideEffect(StrEnum):
+    PURE = "pure"
+    IO = "io"
+    EXTERNAL_CALL = "external_call"
+    MUTATING = "mutating"
+
+
+@dataclass(frozen=True)
+class CostModel:
+    tokens: int = 0
+    latency_p50_ms: float = 0.0
+    latency_p99_ms: float = 0.0
+    dollars_per_call: float = 0.0
+
+
+class _End:
+    """Sentinel returned as `Route` to terminate graph execution. A dedicated
+    type (not a string) so it can never collide with a real node id."""
+
+    _instance: _End | None = None
+
+    def __new__(cls) -> _End:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:
+        return "END"
+
+
+END: Final[_End] = _End()
+
+# `Route` may name one node, several (fan-out), or `END`. Fan-out is part of
+# the *contract* (blueprint §2.2 declares `to_node: str | list[str]`) but the
+# Phase 0/1 `GraphExecutor` only executes single-target routes — see
+# `GraphExecutor.run`'s NotImplementedError and docs/adr/0004. Declaring the
+# full contract now means a Phase 2 BSP-style executor is an executor change,
+# not a schema change.
+Route = str | tuple[str, ...] | _End
+
+NodeFn = Callable[[AEFState, Context, Services], "tuple[StateDelta, Route]"]
+IdempotencyKeyFn = Callable[[AEFState], str]
+
+
+class NodeContractError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class Node:
+    id: str
+    version: str  # semver, independent of graph version (blueprint §2.1)
+    fn: NodeFn
+    deterministic: bool  # constraint #1: enforced by the replay engine
+    side_effects: SideEffect = SideEffect.PURE
+    cost_model: CostModel = field(default_factory=CostModel)
+    idempotency_key_fn: IdempotencyKeyFn | None = None
+    telemetry_tags: tuple[str, ...] = ()
+    fallback_node_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.side_effects is not SideEffect.PURE and self.idempotency_key_fn is None:
+            raise NodeContractError(
+                f"node {self.id!r} declares side_effects={self.side_effects.value!r} "
+                f"but has no idempotency_key_fn (blueprint §2.1 requires one whenever "
+                f"side_effects != pure)"
+            )
+
+
+RouteCondition = Callable[[AEFState], bool]
+
+
+def _always(state: AEFState) -> bool:
+    return True
+
+
+@dataclass(frozen=True)
+class Edge:
+    from_node: str
+    to_node: str | tuple[str, ...]  # tuple = fan-out declaration; see Route above
+    condition: RouteCondition = _always
+    priority: int = 0
+    requires_human_approval: bool = False
+    # blueprint §2.2: any edge an LLM-decided route may take without a
+    # deterministic equivalent must say so explicitly and out loud.
+    requires_deterministic_fallback: bool = False
+
+    @property
+    def targets(self) -> tuple[str, ...]:
+        return (self.to_node,) if isinstance(self.to_node, str) else self.to_node

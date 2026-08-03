@@ -1,0 +1,37 @@
+"""`Evaluator` interface and `EvaluationRecord` — the atomic unit consumed by
+the self-improvement loop (report §8/§10, blueprint Part 9.2). Every graph
+execution is scored; nothing about *how* it's scored is hardcoded here.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Any
+
+from aef.state import AEFState
+
+
+@dataclass(frozen=True)
+class EvaluationRecord:
+    run_id: str
+    task_completion: float  # 0..1
+    tool_call_accuracy: float | None = None  # 0..1, None if no tools were called
+    trajectory_quality: float | None = None  # 0..1, did the plan DAG execute sanely
+    cost_tokens: int = 0
+    cost_dollars: float = 0.0
+    latency_ms: float = 0.0
+    domain_gates: dict[str, bool] = field(default_factory=dict)  # e.g. {"sharpe_gate": True}
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def passed(self) -> bool:
+        return all(self.domain_gates.values()) if self.domain_gates else self.task_completion >= 0.5
+
+
+class Evaluator(ABC):
+    @abstractmethod
+    def evaluate(self, state: AEFState) -> EvaluationRecord:
+        """Score a completed (or in-flight) run's state. Pure function of
+        the state it's given — an Evaluator must not mutate `state`."""
+        raise NotImplementedError
