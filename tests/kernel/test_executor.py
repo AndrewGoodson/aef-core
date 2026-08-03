@@ -246,6 +246,31 @@ def test_node_exception_routes_to_fallback_and_records_error() -> None:
     assert result.final_state.working_memory == {"visited_finish": True}
 
 
+def test_node_exception_is_recorded_on_its_span_before_falling_back() -> None:
+    def _boom_fn(state, ctx, services):
+        raise ValueError("boom")
+
+    boom = Node(
+        id="boom", version="1.0.0", fn=_boom_fn, deterministic=True, fallback_node_id="safe"
+    )
+    safe = Node(id="safe", version="1.0.0", fn=_finish_fn, deterministic=True)
+    graph = Graph(
+        id="g",
+        version="1.0.0",
+        nodes={"boom": boom, "safe": safe},
+        edges=[Edge(from_node="boom", to_node="safe")],
+        entry_node="boom",
+    )
+    tracer = InMemoryTracer()
+    executor = GraphExecutor(graph.compile(), Services(tracer=tracer))
+    executor.run(_make_state())
+
+    boom_span = next(s for s in tracer.spans if s.name == "aef.node.boom")
+    assert len(boom_span.exceptions) == 1
+    assert isinstance(boom_span.exceptions[0], ValueError)
+    assert str(boom_span.exceptions[0]) == "boom"
+
+
 def test_node_exception_without_fallback_propagates() -> None:
     def _boom_fn(state, ctx, services):
         raise ValueError("boom")

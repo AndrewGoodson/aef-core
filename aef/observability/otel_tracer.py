@@ -28,8 +28,13 @@ class OtelSpan(Span):
         self._span.set_attribute(key, value)
 
     def record_exception(self, exc: BaseException) -> None:
-        if isinstance(exc, Exception):
-            self._span.record_exception(exc)
+        # The real OTel SDK's Span.record_exception accepts BaseException
+        # directly (confirmed via inspect.signature, not assumed) — no
+        # Exception-only restriction to mirror here. The previous
+        # isinstance(exc, Exception) guard silently dropped recording for
+        # KeyboardInterrupt/SystemExit/etc., inconsistent with both the
+        # real API and InMemorySpan (which has no such filter).
+        self._span.record_exception(exc)
 
     def end(self) -> None:
         self._span.end()

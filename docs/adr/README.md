@@ -23,3 +23,4 @@ side of a conflict.
 | [0014](0014-config-to-services-wiring-is-partial-by-design.md) | `aef run --config` wires a real model_provider; full config-to-Services wiring needs a plugin registry (Phase 2) | High |
 | [0015](0015-completion-request-metadata-now-passed-to-anthropic.md) | CompletionRequest.metadata.user_id now reaches Anthropic's own abuse-tracking field; FallbackProvider verified already correct | High |
 | [0016](0016-adopt-detects-frameworks-from-manifests-too.md) | aef adopt now detects frameworks from requirements.txt/pyproject.toml, not just .py imports | High |
+| [0017](0017-otel-span-record-exception-accepts-baseexception.md) | OtelSpan.record_exception now accepts BaseException, matching the real SDK and InMemorySpan | High |

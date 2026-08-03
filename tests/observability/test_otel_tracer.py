@@ -47,6 +47,23 @@ def test_span_context_manager_records_exception_and_reraises() -> None:
     assert any(e.name == "exception" for e in events)
 
 
+def test_record_exception_accepts_base_exception_not_just_exception() -> None:
+    """The real OTel Span.record_exception accepts BaseException directly
+    (confirmed via inspect.signature) — SystemExit/KeyboardInterrupt-style
+    exceptions must be recorded too, not silently dropped."""
+    provider, exporter = _make_provider()
+    tracer = OtelTracer(provider.get_tracer("aef-test"))
+
+    span = tracer.start_span("aef.node.exiting")
+    span.record_exception(SystemExit("shutting down"))
+    span.end()
+
+    finished = exporter.get_finished_spans()
+    assert len(finished) == 1
+    events = finished[0].events
+    assert any(e.name == "exception" for e in events)
+
+
 def test_graph_executor_emits_gen_ai_span_per_node_with_real_otel_sdk() -> None:
     provider, exporter = _make_provider()
     tracer = OtelTracer(provider.get_tracer("aef-test"))
