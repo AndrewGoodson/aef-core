@@ -22,6 +22,7 @@ dev = [
     "pytest>=8.3,<10",
     "ruff>=0.6,<1",
     "mypy>=1.11,<3",
+    "types-PyYAML>=6.0,<7",
 ]
 
 [project.scripts]
@@ -48,13 +49,9 @@ warn_unused_configs = true
 namespace_packages = true
 explicit_package_bases = true
 
-[[tool.mypy.overrides]]
-module = "aef.kernel.*"
-strict = true
-
-[[tool.mypy.overrides]]
-module = "aef.state.*"
-strict = true
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Multiple test dirs share basenames (e.g. tests/state/test_schema.py and
+# tests/config/test_schema.py); importlib mode keys modules by full path
+# instead of colliding on basename, so no __init__.py-per-dir is needed.
+addopts = "--import-mode=importlib"

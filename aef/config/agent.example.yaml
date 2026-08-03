@@ -1,0 +1,37 @@
+# Template agent config — copy this, then fill in the five fields that are
+# allowed to differ per agent: Knowledge (memory/knowledge_graph), Policies,
+# Tools, Objectives, Evaluation Metrics (evaluator). Everything else is
+# inherited from the scaffold (report §16 / CLAUDE.md).
+
+extends: _base
+
+model_provider:
+  impl: anthropic
+  model: claude-sonnet
+  fallback: []
+
+memory:
+  impl: in_memory
+
+# knowledge_graph: omitted — Phase 2 feature. Uncomment once a GraphStore
+# adapter is wired in (aef/services/kg/base.py):
+# knowledge_graph:
+#   impl: neo4j
+#   ontology: your_domain.ttl
+
+evaluator:
+  suites: []
+
+tools:
+  allow: []
+  # sandbox: gvisor
+  # creds: managed_identity
+
+policies:
+  require_hitl_above_risk: 0.0
+  forbid: []
+
+objectives: "TODO: describe this agent's objective in one or two sentences."
+
+evolution:
+  enabled: false  # must stay false; see docs/roadmap.md Phase 4

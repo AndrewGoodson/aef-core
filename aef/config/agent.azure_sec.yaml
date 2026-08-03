@@ -1,0 +1,36 @@
+# Azure Security posture-review agent: read-only, managed-identity
+# credentials, no destructive tool scopes, HITL required above risk 0.7.
+
+extends: _base
+
+model_provider:
+  impl: anthropic
+  model: claude-sonnet
+  fallback: [local-llama]
+
+memory:
+  impl: in_memory
+
+knowledge_graph:
+  impl: neo4j
+  ontology: azure_security.ttl
+
+evaluator:
+  suites: [private_azure_pentest]
+
+tools:
+  allow: [az_cli_ro, kql_query]
+  sandbox: gvisor
+  creds: managed_identity
+
+policies:
+  require_hitl_above_risk: 0.7
+  forbid: [resource_delete, resource_create, role_assignment_write]
+
+objectives: >
+  Identify misconfigurations and privilege-escalation paths across the
+  target Azure subscription. Read-only: no remediation, no resource
+  mutation, no credential creation.
+
+evolution:
+  enabled: false  # must stay false; see docs/roadmap.md Phase 4
