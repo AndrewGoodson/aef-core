@@ -19,7 +19,7 @@ from __future__ import annotations
 from contextlib import nullcontext
 from dataclasses import dataclass
 
-from aef.kernel.contracts import Context, Node, Route, Services, _End
+from aef.kernel.contracts import Context, Edge, Node, Route, Services, _End, hitl_approval_key
 from aef.kernel.graph import CompiledGraph, Graph
 from aef.observability import semconv
 from aef.state import AEFState, StateDelta
@@ -33,6 +33,13 @@ class RoutingViolationError(RuntimeError):
     """A node returned a route not backed by any declared, currently-true
     edge (report §4 / blueprint §2.2: edges are typed and declared
     statically — a node cannot silently invent a new transition)."""
+
+
+class HumanApprovalRequiredError(RuntimeError):
+    """A node routed across an `Edge` declared `requires_human_approval=True`
+    without that specific edge being pre-approved via
+    `Services.hitl_approvals` (constraint #6: deny-by-default, explicit HITL
+    for consequential actions). See docs/adr/0011."""
 
 
 @dataclass(frozen=True)
@@ -134,18 +141,18 @@ class GraphExecutor:
 
     def _execute_node(self, node: Node, state: AEFState, ctx: Context) -> tuple[StateDelta, Route]:
         tracer = self._services.tracer
+        attributes: dict[str, object] = {
+            semconv.AEF_RUN_ID: ctx.run_id,
+            semconv.AEF_NODE_ID: node.id,
+            semconv.AEF_GRAPH_VERSION: ctx.graph_version,
+            semconv.AEF_NODE_DETERMINISTIC: node.deterministic,
+            semconv.AEF_NODE_SIDE_EFFECTS: node.side_effects.value,
+            semconv.AEF_CHECKPOINT_SEQ: state.checkpoint_seq,
+        }
+        if node.telemetry_tags:
+            attributes[semconv.AEF_NODE_TELEMETRY_TAGS] = node.telemetry_tags
         span_cm = (
-            tracer.span(
-                f"aef.node.{node.id}",
-                {
-                    semconv.AEF_RUN_ID: ctx.run_id,
-                    semconv.AEF_NODE_ID: node.id,
-                    semconv.AEF_GRAPH_VERSION: ctx.graph_version,
-                    semconv.AEF_NODE_DETERMINISTIC: node.deterministic,
-                    semconv.AEF_NODE_SIDE_EFFECTS: node.side_effects.value,
-                    semconv.AEF_CHECKPOINT_SEQ: state.checkpoint_seq,
-                },
-            )
+            tracer.span(f"aef.node.{node.id}", attributes)
             if tracer is not None
             else nullcontext(None)
         )
@@ -187,8 +194,37 @@ class GraphExecutor:
         candidates = self._graph.edges_from(node.id)
         for edge in candidates:
             if route in edge.targets and edge.condition(state):
+                if edge.requires_human_approval and not self._services.has_hitl_approval(
+                    edge.from_node, route
+                ):
+                    key = hitl_approval_key(edge.from_node, route)
+                    raise HumanApprovalRequiredError(
+                        f"edge {edge.from_node!r} -> {route!r} requires human approval; "
+                        f"grant it via Services(hitl_approvals=frozenset({{{key!r}}})) "
+                        f"before calling run()/resume() again"
+                    )
+                if edge.requires_deterministic_fallback:
+                    self._record_emergent_routing(edge, route)
                 return route
         raise RoutingViolationError(
             f"node {node.id!r} routed to {route!r}, but no declared edge from {node.id!r} "
             f"to {route!r} currently has a true condition"
         )
+
+    def _record_emergent_routing(self, edge: Edge, route: str) -> None:
+        """Blueprint §2.2: an edge an LLM-decided route may take without a
+        deterministic equivalent must say so "explicitly and out loud" — a
+        marker span is that "out loud," since `requires_deterministic_fallback`
+        alone (declared on the Edge) was previously never surfaced anywhere."""
+        tracer = self._services.tracer
+        if tracer is None:
+            return
+        with tracer.span(
+            "aef.edge.emergent_routing",
+            {
+                semconv.AEF_EDGE_REQUIRES_DETERMINISTIC_FALLBACK: True,
+                semconv.AEF_NODE_ID: edge.from_node,
+                "aef.edge.to_node": route,
+            },
+        ):
+            pass

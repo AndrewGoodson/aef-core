@@ -10,6 +10,7 @@ from aef.kernel.contracts import (
     ServiceNotConfiguredError,
     Services,
     SideEffect,
+    hitl_approval_key,
 )
 from aef.kernel.durability import (
     DurabilityBackend,
@@ -22,6 +23,7 @@ from aef.kernel.executor import (
     ExecutionResult,
     GraphExecutionError,
     GraphExecutor,
+    HumanApprovalRequiredError,
     NodeExecutionRecord,
     RoutingViolationError,
 )
@@ -43,6 +45,7 @@ __all__ = [
     "GraphExecutionError",
     "GraphExecutor",
     "GraphValidationError",
+    "HumanApprovalRequiredError",
     "InMemoryDurabilityBackend",
     "Node",
     "NodeContractError",
@@ -56,4 +59,5 @@ __all__ = [
     "Services",
     "SideEffect",
     "TemporalDurabilityBackend",
+    "hitl_approval_key",
 ]

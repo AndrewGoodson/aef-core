@@ -37,6 +37,13 @@ class ServiceNotConfiguredError(RuntimeError):
         )
 
 
+def hitl_approval_key(from_node: str, to_node: str) -> str:
+    """Canonical key for a granted human approval to cross a specific edge.
+    `Edge.requires_human_approval` is meaningless without something that
+    actually checks it — see `Services.hitl_approvals` and docs/adr/0011."""
+    return f"{from_node}->{to_node}"
+
+
 @dataclass(frozen=True)
 class Services:
     """Dependency-injection container. Every backend a node might need is a
@@ -52,7 +59,16 @@ class Services:
     policy_engine: PolicyEngine | None = None
     optimizer: Optimizer | None = None
     durability: DurabilityBackend | None = None
+    # Edges the caller has explicitly pre-approved for this run, keyed by
+    # hitl_approval_key(from_node, to_node). GraphExecutor consults this
+    # before crossing any Edge with requires_human_approval=True; an edge
+    # not in this set is refused, not silently allowed (constraint #6:
+    # deny-by-default, explicit HITL approval for consequential actions).
+    hitl_approvals: frozenset[str] = frozenset()
     clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
+
+    def has_hitl_approval(self, from_node: str, to_node: str) -> bool:
+        return hitl_approval_key(from_node, to_node) in self.hitl_approvals
 
     def require_model_provider(self) -> ModelProvider:
         if self.model_provider is None:
@@ -119,6 +135,16 @@ class SideEffect(StrEnum):
 
 @dataclass(frozen=True)
 class CostModel:
+    """A node's declared *predicted* cost (blueprint §2.1) — for the
+    Phase 2 planner's resource budgeting and the Phase 4 evolution engine's
+    Pareto-aware candidate selection (accuracy vs. cost vs. latency), per
+    the report. No Phase 0/1 code reads this yet, unlike `idempotency_key_fn`
+    and `Edge.requires_human_approval`/`requires_deterministic_fallback`
+    (see docs/adr/0010, 0011) — those had a validation or safety story that
+    made an unwired field misleading; this one doesn't, since nothing in
+    Phase 0/1 does planning or evolution to consume it. It's genuinely
+    forward-declared, not a gap."""
+
     tokens: int = 0
     latency_p50_ms: float = 0.0
     latency_p99_ms: float = 0.0

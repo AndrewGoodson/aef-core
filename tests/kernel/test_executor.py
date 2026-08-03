@@ -7,11 +7,13 @@ from aef.kernel import (
     Graph,
     GraphExecutionError,
     GraphExecutor,
+    HumanApprovalRequiredError,
     InMemoryDurabilityBackend,
     Node,
     RoutingViolationError,
     ServiceNotConfiguredError,
     Services,
+    hitl_approval_key,
 )
 from aef.observability.in_memory import InMemoryTracer
 from aef.state import AEFState, Message, Provenance, StateDelta
@@ -167,6 +169,62 @@ def test_tracer_records_token_usage_from_provenance() -> None:
     assert span.attributes["gen_ai.response.model"] == "claude-x"
 
 
+def test_telemetry_tags_land_on_the_span() -> None:
+    node = Node(
+        id="tagged",
+        version="1.0.0",
+        fn=_finish_fn,
+        deterministic=True,
+        telemetry_tags=("azure_sec", "read_only"),
+    )
+    graph = Graph(id="g", version="1.0.0", nodes={"tagged": node}, edges=[], entry_node="tagged")
+    tracer = InMemoryTracer()
+    executor = GraphExecutor(graph.compile(), Services(tracer=tracer))
+    executor.run(_make_state())
+    assert tracer.spans[0].attributes["aef.node.telemetry_tags"] == ("azure_sec", "read_only")
+
+
+def test_no_telemetry_tags_attribute_when_node_declares_none() -> None:
+    node = Node(id="untagged", version="1.0.0", fn=_finish_fn, deterministic=True)
+    graph = Graph(
+        id="g", version="1.0.0", nodes={"untagged": node}, edges=[], entry_node="untagged"
+    )
+    tracer = InMemoryTracer()
+    executor = GraphExecutor(graph.compile(), Services(tracer=tracer))
+    executor.run(_make_state())
+    assert "aef.node.telemetry_tags" not in tracer.spans[0].attributes
+
+
+def test_emergent_routing_edge_emits_a_marker_span() -> None:
+    def _router_fn(state, ctx, services):
+        return StateDelta(), "finish"
+
+    a = Node(id="a", version="1.0.0", fn=_router_fn, deterministic=True)
+    finish = Node(id="finish", version="1.0.0", fn=_finish_fn, deterministic=True)
+    graph = Graph(
+        id="g",
+        version="1.0.0",
+        nodes={"a": a, "finish": finish},
+        edges=[Edge(from_node="a", to_node="finish", requires_deterministic_fallback=True)],
+        entry_node="a",
+    )
+    tracer = InMemoryTracer()
+    executor = GraphExecutor(graph.compile(), Services(tracer=tracer))
+    executor.run(_make_state())
+
+    marker_spans = [s for s in tracer.spans if s.name == "aef.edge.emergent_routing"]
+    assert len(marker_spans) == 1
+    assert marker_spans[0].attributes["aef.edge.requires_deterministic_fallback"] is True
+    assert marker_spans[0].attributes["aef.edge.to_node"] == "finish"
+
+
+def test_normal_edge_emits_no_marker_span() -> None:
+    tracer = InMemoryTracer()
+    executor = GraphExecutor(_two_node_graph().compile(), Services(tracer=tracer))
+    executor.run(_make_state())
+    assert not [s for s in tracer.spans if s.name == "aef.edge.emergent_routing"]
+
+
 def test_node_exception_routes_to_fallback_and_records_error() -> None:
     def _boom_fn(state, ctx, services):
         raise ValueError("boom")
@@ -210,6 +268,51 @@ def test_context_idempotency_key_is_none_for_pure_node() -> None:
     graph = Graph(id="g", version="1.0.0", nodes={"pure": node}, edges=[], entry_node="pure")
     GraphExecutor(graph.compile(), Services()).run(_make_state())
     assert seen["key"] is None
+
+
+def _two_node_hitl_graph() -> Graph:
+    def _router_fn(state, ctx, services):
+        return StateDelta(), "finish"
+
+    a = Node(id="a", version="1.0.0", fn=_router_fn, deterministic=True)
+    finish = Node(id="finish", version="1.0.0", fn=_finish_fn, deterministic=True)
+    return Graph(
+        id="g",
+        version="1.0.0",
+        nodes={"a": a, "finish": finish},
+        edges=[Edge(from_node="a", to_node="finish", requires_human_approval=True)],
+        entry_node="a",
+    )
+
+
+def test_hitl_edge_blocked_without_approval() -> None:
+    executor = GraphExecutor(_two_node_hitl_graph().compile(), Services())
+    with pytest.raises(HumanApprovalRequiredError):
+        executor.run(_make_state())
+
+
+def test_hitl_edge_proceeds_with_approval() -> None:
+    approvals = frozenset({hitl_approval_key("a", "finish")})
+    executor = GraphExecutor(_two_node_hitl_graph().compile(), Services(hitl_approvals=approvals))
+    result = executor.run(_make_state())
+    assert result.final_state.working_memory == {"visited_finish": True}
+
+
+def test_hitl_approval_is_specific_to_the_edge_not_global() -> None:
+    wrong_approval = frozenset({hitl_approval_key("a", "somewhere_else")})
+    executor = GraphExecutor(
+        _two_node_hitl_graph().compile(), Services(hitl_approvals=wrong_approval)
+    )
+    with pytest.raises(HumanApprovalRequiredError):
+        executor.run(_make_state())
+
+
+def test_non_hitl_edges_unaffected_by_missing_approvals() -> None:
+    # _two_node_graph()'s single edge has no requires_human_approval, so an
+    # empty Services() (the default, no approvals at all) must still work.
+    executor = GraphExecutor(_two_node_graph().compile(), Services())
+    result = executor.run(_make_state())
+    assert result.final_state.working_memory == {"visited_start": True, "visited_finish": True}
 
 
 def test_context_idempotency_key_is_computed_from_node_fn() -> None:
