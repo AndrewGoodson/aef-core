@@ -42,6 +42,11 @@ class WebSearchTool(Tool):
     required_scopes = ("web_search_ro",)
 
     def invoke(self, arguments: dict[str, object]) -> dict[str, object]:
+        # A real (write-side or rate-limited) tool would pass
+        # arguments["idempotency_key"] to the downstream API so a retried
+        # call dedupes there — the kernel only computes and hands the key
+        # to the node (see Context.idempotency_key / docs/adr/0010); it
+        # cannot make an arbitrary external call idempotent by itself.
         return {"query": arguments.get("query"), "results": ["result one", "result two"]}
 
 
@@ -87,7 +92,11 @@ def draft_node(state: AEFState, ctx: Context, services: Services) -> tuple[State
 
 def search_node(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
     tool = WebSearchTool()
-    call = ToolCall(tool_name=tool.name, arguments={"query": state.objective}, risk=0.0)
+    arguments: dict[str, object] = {
+        "query": state.objective,
+        "idempotency_key": ctx.idempotency_key,
+    }
+    call = ToolCall(tool_name=tool.name, arguments=arguments, risk=0.0)
     decision = services.require_policy_engine().evaluate(tool, call)
 
     if decision.decision is not PolicyDecision.ALLOW:

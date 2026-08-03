@@ -16,3 +16,4 @@ side of a conflict.
 | [0007](0007-fan-out-declared-not-executed.md) | Fan-out declared in the contract, not executed until Phase 2 | High |
 | [0008](0008-otel-genai-attributes-pinned-locally.md) | OTel GenAI attribute keys pinned locally, not imported from the incubating package | High |
 | [0009](0009-checkpoint-resume-requires-a-cursor.md) | Resuming a run needs a persisted cursor — `run()` alone silently duplicates side effects | High |
+| [0010](0010-idempotency-key-is-exposed-not-enforced.md) | Kernel computes/exposes the idempotency key; enforcing it is the node's job, not the kernel's | High |

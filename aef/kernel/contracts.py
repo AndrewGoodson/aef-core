@@ -89,13 +89,24 @@ class Services:
 class Context:
     """Per-execution, per-node context. `now` is captured once by the
     executor via `Services.clock` and handed to the node — nodes never call
-    the clock themselves, which is what keeps them replayable."""
+    the clock themselves, which is what keeps them replayable.
+
+    `idempotency_key` is `node.idempotency_key_fn(state)`, computed by the
+    executor before calling `node.fn` — without this field a node has no
+    way to reach its own `idempotency_key_fn`, since that's a sibling field
+    on `Node`, not something passed into the function body. The kernel does
+    NOT enforce idempotency on the node's behalf (see docs/adr/0010): it
+    computes and exposes the key so the node can pass it to whatever
+    external system it calls, which is where real deduplication has to
+    happen. `None` for nodes with no `idempotency_key_fn` (i.e. pure nodes).
+    """
 
     run_id: str
     graph_version: str
     trace_id: str
     node_id: str
     now: datetime
+    idempotency_key: str | None = None
     attempt: int = 1
 
 

@@ -199,6 +199,41 @@ def test_node_exception_without_fallback_propagates() -> None:
         executor.run(_make_state())
 
 
+def test_context_idempotency_key_is_none_for_pure_node() -> None:
+    seen: dict[str, object] = {}
+
+    def _fn(state, ctx, services):
+        seen["key"] = ctx.idempotency_key
+        return StateDelta(), END
+
+    node = Node(id="pure", version="1.0.0", fn=_fn, deterministic=True)
+    graph = Graph(id="g", version="1.0.0", nodes={"pure": node}, edges=[], entry_node="pure")
+    GraphExecutor(graph.compile(), Services()).run(_make_state())
+    assert seen["key"] is None
+
+
+def test_context_idempotency_key_is_computed_from_node_fn() -> None:
+    from aef.kernel import SideEffect
+
+    seen: dict[str, object] = {}
+
+    def _fn(state, ctx, services):
+        seen["key"] = ctx.idempotency_key
+        return StateDelta(), END
+
+    node = Node(
+        id="io",
+        version="1.0.0",
+        fn=_fn,
+        deterministic=False,
+        side_effects=SideEffect.EXTERNAL_CALL,
+        idempotency_key_fn=lambda state: f"key-for-{state.run_id}",
+    )
+    graph = Graph(id="g", version="1.0.0", nodes={"io": node}, edges=[], entry_node="io")
+    GraphExecutor(graph.compile(), Services()).run(_make_state("run-xyz"))
+    assert seen["key"] == "key-for-run-xyz"
+
+
 def _three_node_graph() -> Graph:
     def _mk(name: str, next_node):
         def _fn(state, ctx, services):

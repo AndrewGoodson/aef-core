@@ -108,6 +108,9 @@ class GraphExecutor:
                 trace_id=state.provenance[-1].trace_id if state.provenance else state.run_id,
                 node_id=node.id,
                 now=self._services.clock(),
+                idempotency_key=(
+                    node.idempotency_key_fn(state) if node.idempotency_key_fn is not None else None
+                ),
             )
 
             delta, route = self._execute_node(node, state, ctx)
