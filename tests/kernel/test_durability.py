@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from aef.kernel import FileDurabilityBackend, InMemoryDurabilityBackend
+from aef.kernel import CorruptedCheckpointError, FileDurabilityBackend, InMemoryDurabilityBackend
 from aef.kernel.durability import DurabilityBackend
 from aef.state import AEFState
 
@@ -59,3 +59,46 @@ def test_file_backend_cursor_survives_new_instance_same_dir(tmp_path: Path) -> N
     FileDurabilityBackend(root).save_cursor("r1", "node_b")
     reloaded = FileDurabilityBackend(root)
     assert reloaded.load_cursor("r1") == "node_b"
+
+
+def test_file_backend_list_checkpoints_ignores_stray_non_numeric_json_files(
+    tmp_path: Path,
+) -> None:
+    """Reproduces a real, confirmed bug: a single non-numeric-stem `.json`
+    file sharing a run's checkpoint directory (a stray backup, a future
+    sidecar file — anything other than `<int>.json` or `cursor.json`) used
+    to raise ValueError from `int(p.stem)` inside list_checkpoints, which
+    bricked load_latest for that entire run_id, not just the stray file.
+    See docs/adr/0026."""
+    root = tmp_path / "checkpoints"
+    backend = FileDurabilityBackend(root)
+    backend.save_checkpoint(_state(seq=0))
+    (root / "r1" / "some_backup.json").write_text("{}")
+
+    assert backend.list_checkpoints("r1") == [0]
+    assert backend.load_latest("r1") is not None
+
+
+def test_file_backend_load_checkpoint_raises_named_error_on_corrupted_json(
+    tmp_path: Path,
+) -> None:
+    """A truncated/corrupted checkpoint file used to raise a bare
+    json.JSONDecodeError with no indication of which run_id/checkpoint_seq
+    /path was corrupted. See docs/adr/0026."""
+    root = tmp_path / "checkpoints"
+    backend = FileDurabilityBackend(root)
+    backend.save_checkpoint(_state(seq=0))
+    (root / "r1" / "0.json").write_text("{not valid json")
+
+    with pytest.raises(CorruptedCheckpointError, match="r1"):
+        backend.load_checkpoint("r1", 0)
+
+
+def test_file_backend_load_checkpoint_raises_named_error_on_empty_file(tmp_path: Path) -> None:
+    root = tmp_path / "checkpoints"
+    backend = FileDurabilityBackend(root)
+    backend.save_checkpoint(_state(seq=0))
+    (root / "r1" / "0.json").write_text("")
+
+    with pytest.raises(CorruptedCheckpointError):
+        backend.load_checkpoint("r1", 0)

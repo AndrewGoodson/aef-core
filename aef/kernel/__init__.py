@@ -13,6 +13,7 @@ from aef.kernel.contracts import (
     hitl_approval_key,
 )
 from aef.kernel.durability import (
+    CorruptedCheckpointError,
     DurabilityBackend,
     FileDurabilityBackend,
     InMemoryDurabilityBackend,
@@ -28,12 +29,13 @@ from aef.kernel.executor import (
     RoutingViolationError,
 )
 from aef.kernel.graph import CompiledGraph, Graph, GraphDiff, GraphValidationError
-from aef.kernel.replay import DeterminismViolationError, ReplayEngine
+from aef.kernel.replay import DeterminismViolationError, MalformedTraceError, ReplayEngine
 
 __all__ = [
     "END",
     "CompiledGraph",
     "Context",
+    "CorruptedCheckpointError",
     "CostModel",
     "DeterminismViolationError",
     "DurabilityBackend",
@@ -47,6 +49,7 @@ __all__ = [
     "GraphValidationError",
     "HumanApprovalRequiredError",
     "InMemoryDurabilityBackend",
+    "MalformedTraceError",
     "Node",
     "NodeContractError",
     "NodeExecutionRecord",

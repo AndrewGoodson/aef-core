@@ -32,3 +32,4 @@ side of a conflict.
 | [0023](0023-replay-validates-trace-chain-integrity.md) | replay() now validates trace chain integrity — a reordered/corrupted trace was silently replayed into a wrong result with no error | High |
 | [0024](0024-adopt-claude-md-doc-paths-fixed-for-pip-installs.md) | aef adopt's generated CLAUDE.md no longer points pip-installed adopters at docs/roadmap.md, which never ships in the package | High |
 | [0025](0025-numeric-field-sweep-hitl-nan-bypass.md) | ToolCall.risk/PolicyConfig NaN silently bypassed the HITL security gate (risk > NaN is always False) — now rejected at construction | High |
+| [0026](0026-file-durability-backend-checkpoint-corruption-hardening.md) | FileDurabilityBackend: a stray non-numeric .json file bricked list_checkpoints for the whole run; corrupted checkpoints now raise a named, diagnosable error | High |

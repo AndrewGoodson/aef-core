@@ -30,6 +30,14 @@ from pathlib import Path
 from aef.state import AEFState, load_state
 
 
+class CorruptedCheckpointError(RuntimeError):
+    """A checkpoint file exists but its contents aren't valid JSON — a
+    truncated write (e.g. a crash mid-`write_text`), a zero-byte file, or a
+    hand-corrupted file. Reproduced directly: a genuinely truncated
+    checkpoint raises a bare `json.JSONDecodeError` with no indication of
+    which run_id/checkpoint_seq/path it came from. See docs/adr/0026."""
+
+
 class DurabilityBackend(ABC):
     @abstractmethod
     def save_checkpoint(self, state: AEFState) -> None:
@@ -128,13 +136,27 @@ class FileDurabilityBackend(DurabilityBackend):
         path = self._root / run_id / f"{checkpoint_seq}.json"
         if not path.exists():
             return None
-        return load_state(json.loads(path.read_text()))
+        try:
+            raw = json.loads(path.read_text())
+        except json.JSONDecodeError as exc:
+            raise CorruptedCheckpointError(
+                f"checkpoint {path} (run_id={run_id!r}, checkpoint_seq={checkpoint_seq}) "
+                f"is not valid JSON: {exc}"
+            ) from exc
+        return load_state(raw)
 
     def list_checkpoints(self, run_id: str) -> list[int]:
         run_dir = self._root / run_id
         if not run_dir.exists():
             return []
-        return sorted(int(p.stem) for p in run_dir.glob("*.json") if p.stem != "cursor")
+        # Only `<int>.json` files are checkpoints — `cursor.json` and any
+        # other non-checkpoint `.json` file sharing this directory (a stray
+        # backup, a future sidecar file) must not be mistaken for one.
+        # Reproduced directly: a single non-numeric-stem `.json` file here
+        # used to raise ValueError from `int(p.stem)` and take down
+        # list_checkpoints — and therefore load_latest — for the entire
+        # run_id, not just the offending file.
+        return sorted(int(p.stem) for p in run_dir.glob("*.json") if p.stem.isdigit())
 
     def save_cursor(self, run_id: str, next_node: str | None) -> None:
         cursor_path = self._run_dir(run_id) / "cursor.json"
