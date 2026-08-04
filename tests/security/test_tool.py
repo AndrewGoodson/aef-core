@@ -1,4 +1,7 @@
+import math
 from typing import Any
+
+import pytest
 
 from aef.security.tool import (
     InMemoryAuditLogWriter,
@@ -139,3 +142,33 @@ def test_tool_name_mismatch_is_audit_logged() -> None:
     assert len(audit_log.entries) == 1
     assert audit_log.entries[0].result.decision is PolicyDecision.DENY
     assert audit_log.entries[0].tool == "real_tool"
+
+
+def test_toolcall_rejects_nan_risk() -> None:
+    """Reproduces a real, confirmed HITL-gate bypass: `call.risk >
+    threshold` is False for any threshold when risk is NaN (NaN compares
+    False against everything in Python), so a NaN risk silently ALLOWed
+    instead of REQUIRE_HITL, defeating the module's own default-deny
+    design. See docs/adr/0025."""
+    with pytest.raises(ValueError, match="finite"):
+        ToolCall(tool_name="x", arguments={}, risk=math.nan)
+
+
+def test_toolcall_rejects_infinite_risk() -> None:
+    with pytest.raises(ValueError, match="finite"):
+        ToolCall(tool_name="x", arguments={}, risk=math.inf)
+
+
+def test_toolcall_rejects_risk_outside_zero_to_one() -> None:
+    with pytest.raises(ValueError, match="0..1"):
+        ToolCall(tool_name="x", arguments={}, risk=1.5)
+    with pytest.raises(ValueError, match="0..1"):
+        ToolCall(tool_name="x", arguments={}, risk=-0.1)
+
+
+def test_policyconfig_rejects_nan_hitl_threshold() -> None:
+    """Same bypass, from the other side of the `>` comparison: a NaN
+    require_hitl_above_risk threshold would silently disable the HITL gate
+    for every call regardless of risk."""
+    with pytest.raises(ValueError, match="finite"):
+        PolicyConfig(require_hitl_above_risk=math.nan)

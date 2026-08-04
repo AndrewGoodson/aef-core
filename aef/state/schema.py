@@ -31,7 +31,7 @@ class Provenance(_StrictModel):
     model: str | None = None
     ts: datetime
     trace_id: str
-    token_cost: int = 0
+    token_cost: int = Field(default=0, ge=0)
 
 
 class Message(_StrictModel):
@@ -55,7 +55,7 @@ class AEFState(_StrictModel):
     messages: list[Message] = Field(default_factory=list)
     plan: Plan | None = None
     working_memory: dict[str, Any] = Field(default_factory=dict)
-    context_budget_tokens: int = 8000
+    context_budget_tokens: int = Field(default=8000, gt=0)
     retrieved_context: list[dict[str, Any]] = Field(default_factory=list)
     tool_results: list[dict[str, Any]] = Field(default_factory=list)
     reflections: list[str] = Field(default_factory=list)

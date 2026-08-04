@@ -27,7 +27,7 @@ class StateDelta(BaseModel):
     # examples/hello_agent/graph.py's summarize_node for the safe pattern.
     plan: Plan | None = None
     working_memory: dict[str, Any] = Field(default_factory=dict)
-    context_budget_tokens: int | None = None
+    context_budget_tokens: int | None = Field(default=None, gt=0)
     retrieved_context: list[dict[str, Any]] = Field(default_factory=list)
     tool_results: list[dict[str, Any]] = Field(default_factory=list)
     reflections: list[str] = Field(default_factory=list)

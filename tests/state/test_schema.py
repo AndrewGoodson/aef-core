@@ -87,6 +87,26 @@ def test_round_trip_survives_unicode_and_deeply_nested_subgoals() -> None:
     assert restored.working_memory["empty_string"] == ""
 
 
+def test_provenance_rejects_negative_token_cost() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Provenance(
+            node_id="n1", graph_version="1.0.0", ts=datetime.now(UTC), trace_id="t", token_cost=-1
+        )
+
+
+def test_state_rejects_non_positive_context_budget_tokens() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        AEFState(run_id="r1", agent_id="a1", objective="x", context_budget_tokens=0)
+    with pytest.raises(ValidationError):
+        AEFState(run_id="r1", agent_id="a1", objective="x", context_budget_tokens=-100)
+
+
 def test_round_trip_survives_very_large_token_cost() -> None:
     prov = Provenance(
         node_id="n1",

@@ -10,6 +10,7 @@ HITL gates, a full audit trail), not detection.
 
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -22,6 +23,18 @@ class ToolCall:
     tool_name: str
     arguments: dict[str, Any]
     risk: float = 0.0  # 0..1 blast-radius estimate for this specific call
+
+    def __post_init__(self) -> None:
+        # `call.risk > threshold` silently evaluates to False for a NaN
+        # risk (NaN compares False against everything) — a HITL gate this
+        # module's own docstring calls the security-critical default-deny
+        # mechanism would silently ALLOW instead of REQUIRE_HITL. Reproduced
+        # directly. Guard at construction, the one place every ToolCall
+        # passes through regardless of who built it.
+        if not math.isfinite(self.risk):
+            raise ValueError(f"ToolCall.risk must be finite (no inf/-inf/nan) — got {self.risk!r}")
+        if not (0.0 <= self.risk <= 1.0):
+            raise ValueError(f"ToolCall.risk must be within 0..1 — got {self.risk!r}")
 
 
 class Tool(ABC):
@@ -61,6 +74,16 @@ class PolicyConfig:
     # auto-allow high risk": callers must configure this explicitly per
     # constraint #6 ("HITL approval above a configurable risk threshold").
     require_hitl_above_risk: float = 0.0
+
+    def __post_init__(self) -> None:
+        # Same bypass as ToolCall.risk (see its __post_init__): `risk >
+        # threshold` is False for any risk when threshold is NaN, silently
+        # disabling the HITL gate for every call regardless of risk.
+        if not math.isfinite(self.require_hitl_above_risk):
+            raise ValueError(
+                f"PolicyConfig.require_hitl_above_risk must be finite (no inf/-inf/nan) — "
+                f"got {self.require_hitl_above_risk!r}"
+            )
 
 
 @dataclass(frozen=True)

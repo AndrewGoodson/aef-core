@@ -54,6 +54,13 @@ def test_scores_and_context_budget() -> None:
     assert state.context_budget_tokens == 4000
 
 
+def test_context_budget_tokens_rejects_non_positive_override() -> None:
+    with pytest.raises(ValidationError):
+        StateDelta(context_budget_tokens=0)
+    with pytest.raises(ValidationError):
+        StateDelta(context_budget_tokens=-1)
+
+
 def test_apply_is_pure_does_not_mutate_input_state() -> None:
     state = _base_state()
     original_seq = state.checkpoint_seq

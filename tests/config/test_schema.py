@@ -3,7 +3,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from aef.config import AgentConfig, AgentConfigError, EvolutionSettings, load_agent_config
+from aef.config import (
+    AgentConfig,
+    AgentConfigError,
+    EvolutionSettings,
+    PoliciesConfig,
+    load_agent_config,
+)
 
 CONFIG_DIR = Path(__file__).parent.parent.parent / "aef" / "config"
 
@@ -22,6 +28,14 @@ def test_azure_sec_config_loads_with_expected_security_posture() -> None:
     assert config.tools.creds == "managed_identity"
     assert set(config.tools.allow) == {"az_cli_ro", "kql_query"}
     assert config.evolution.enabled is False
+
+
+def test_policies_config_rejects_non_finite_hitl_threshold() -> None:
+    """A NaN require_hitl_above_risk would silently disable the HITL gate
+    for every tool call once wired into aef.security.tool.PolicyConfig
+    (risk > NaN is always False) — see docs/adr/0025."""
+    with pytest.raises(ValidationError, match="finite"):
+        PoliciesConfig(require_hitl_above_risk=float("nan"))
 
 
 def test_unknown_top_level_key_rejected() -> None:

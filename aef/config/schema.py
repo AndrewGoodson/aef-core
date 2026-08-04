@@ -8,6 +8,8 @@ loudly at load time instead of being silently ignored (constraint from the
 
 from __future__ import annotations
 
+import math
+
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
@@ -44,6 +46,19 @@ class ToolsConfig(_StrictModel):
 class PoliciesConfig(_StrictModel):
     require_hitl_above_risk: float = 0.0
     forbid: list[str] = []
+
+    @field_validator("require_hitl_above_risk")
+    @classmethod
+    def _must_be_finite(cls, value: float) -> float:
+        # Mirrors the same guard on aef.security.tool.PolicyConfig — a NaN
+        # threshold makes `risk > threshold` silently False for every risk,
+        # disabling the HITL gate. Fail at config-load time, not wherever
+        # this value eventually feeds the runtime PolicyConfig.
+        if not math.isfinite(value):
+            raise ValueError(
+                f"require_hitl_above_risk must be finite (no inf/-inf/nan) — got {value!r}"
+            )
+        return value
 
 
 class EvolutionSettings(_StrictModel):

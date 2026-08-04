@@ -31,3 +31,4 @@ side of a conflict.
 | [0022](0022-scores-must-be-finite.md) | scores reject inf/nan at construction — was silently corrupted to null on checkpoint write, crashed later on reload | High |
 | [0023](0023-replay-validates-trace-chain-integrity.md) | replay() now validates trace chain integrity — a reordered/corrupted trace was silently replayed into a wrong result with no error | High |
 | [0024](0024-adopt-claude-md-doc-paths-fixed-for-pip-installs.md) | aef adopt's generated CLAUDE.md no longer points pip-installed adopters at docs/roadmap.md, which never ships in the package | High |
+| [0025](0025-numeric-field-sweep-hitl-nan-bypass.md) | ToolCall.risk/PolicyConfig NaN silently bypassed the HITL security gate (risk > NaN is always False) — now rejected at construction | High |
