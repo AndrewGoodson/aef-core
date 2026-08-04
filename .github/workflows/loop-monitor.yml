@@ -1,0 +1,67 @@
+# Post-merge monitoring, auto-rollback, and the weekly digest.
+#
+# This is the clock. Monitoring windows and the digest need something that
+# wakes up, and nothing else in the system does.
+#
+# Same trigger rule as loop-gate.yml: schedule + manual dispatch only, always
+# from main. No pull_request, no pull_request_target — see that file for why,
+# and tests/harness/test_workflows.py for the assertion that keeps it true.
+
+name: loop-monitor
+
+on:
+  schedule:
+    # Hourly: evaluate open monitoring windows and roll back what needs it.
+    # The exposure window is the monitoring window, so this is the thing that
+    # bounds how long a bad change runs live (ADR 0056).
+    - cron: "0 * * * *"
+    # Weekly digest — Q-A4 owner default. Monday 09:00 UTC.
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Restore loop state
+        uses: actions/cache@v4
+        with:
+          path: ~/.aef-loop-state
+          key: loop-state-${{ github.repository }}
+
+      # Rollback-by-default: an ambiguous window reverts rather than waiting
+      # for more data. Exit 2 means the loop halted — a change every gate
+      # passed still regressed, so the gates have a blind spot.
+      - name: Evaluate windows and roll back
+        id: monitor
+        run: aef loop monitor --repo . --state ~/.aef-loop-state
+
+      - name: Weekly digest
+        if: github.event.schedule == '0 9 * * 1' || github.event_name == 'workflow_dispatch'
+        run: |
+          aef loop digest --repo . --state ~/.aef-loop-state | tee "$GITHUB_STEP_SUMMARY"
+
+      # Q-A5 is only PARTLY answered here. A failed job notifies whoever
+      # watches GitHub Actions notifications for this repo, which is better
+      # than nothing and worse than a real channel. It still depends on the
+      # owner noticing an email. A pager, a Linear ticket, or an SMS hook is
+      # the real answer and is NOT configured — recorded as an open question
+      # rather than papered over (ADR 0057).
+      - name: Surface a halt
+        if: failure()
+        run: |
+          echo "## Self-rewiring loop HALTED" >> "$GITHUB_STEP_SUMMARY"
+          aef loop status --repo . --state ~/.aef-loop-state >> "$GITHUB_STEP_SUMMARY" || true
+          exit 1

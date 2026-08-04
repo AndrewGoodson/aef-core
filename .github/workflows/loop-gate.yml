@@ -1,0 +1,90 @@
+# Evaluate one self-rewiring candidate branch.
+#
+# TRIGGERS ARE A SECURITY DECISION, not a convenience one.
+#
+# There is deliberately NO `pull_request` and NO `pull_request_target` here:
+#
+#   * `pull_request` runs the workflow file from the PR's merge commit, so a
+#     candidate branch that edits .github/workflows/ would supply the very
+#     workflow that judges it. That is precisely the trust boundary ADR 0047
+#     exists to prevent, reintroduced at the CI layer.
+#
+#   * `pull_request_target` runs the base branch's workflow — which fixes
+#     that — but it carries full repository secrets, and any step that checks
+#     out and executes candidate code hands those secrets to the candidate.
+#
+# So the loop is dispatched FROM main and reaches out to the candidate branch
+# itself. The candidate is fetched as DATA (`aef loop gate` uses
+# read_candidate / build_candidate_workspace) and is never the context this
+# job runs in. tests/harness/test_workflows.py asserts the forbidden triggers
+# stay absent, because "we remembered not to add it" is not a control.
+
+name: loop-gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      head:
+        description: Candidate branch to evaluate
+        required: true
+        type: string
+
+# Read-only. The gate job must never be able to push, merge, or comment:
+# a judge that can also act is not a judge. Tier-1 auto-merge is off
+# regardless (ADR 0045), and enabling it is an owner action against the
+# source, not a permission grant here.
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    # A container is what makes the sandbox's network-isolation claim true.
+    # `--network-isolated` below is an attestation; passing it without real
+    # isolation would make the recorded capabilities untrue.
+    container:
+      image: python:3.13-slim
+      options: --network none
+
+    steps:
+      # Always main. Never the candidate.
+      - name: Check out the harness (base ref only)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Fetch the candidate as data
+        run: git fetch --no-tags origin "${{ inputs.head }}:refs/loop/candidate"
+
+      # OUTSIDE the checkout, deliberately. State inside the working tree is
+      # swept into candidate diffs by `git add -A`, which makes the audit
+      # trail part of what it audits. The driver refuses it outright.
+      - name: Restore loop state
+        uses: actions/cache@v4
+        with:
+          path: ~/.aef-loop-state
+          key: loop-state-${{ github.repository }}
+
+      - name: Gate
+        run: |
+          aef loop gate \
+            --repo . \
+            --state ~/.aef-loop-state \
+            --base main \
+            --head refs/loop/candidate \
+            --workdir "$RUNNER_TEMP/loop" \
+            --corpus corpus \
+            --network-isolated
+        # exit 0 = passed and escalated to the owner (Tier-1 is off)
+        # exit 1 = a gate rejected it
+        # exit 2 = the loop halted; do not retry, read the ledger
+
+      - name: Report
+        if: always()
+        run: aef loop status --repo . --state ~/.aef-loop-state || true

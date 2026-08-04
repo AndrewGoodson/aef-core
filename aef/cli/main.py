@@ -1,4 +1,4 @@
-"""`aef` CLI entry point: init, adopt, doctor, run, eval, trace."""
+"""`aef` CLI entry point: init, adopt, doctor, run, eval, trace, loop."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from aef.cli.adopt import run_adopt
 from aef.cli.doctor import run_doctor
 from aef.cli.eval import eval_run
 from aef.cli.init import run_init
+from aef.cli.loop import add_loop_parser
 from aef.cli.run import run_graph_module
 from aef.cli.trace import trace_run
 
@@ -128,6 +129,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_trace.add_argument("--checkpoints-dir", required=True)
     p_trace.add_argument("--run-id", required=True)
     p_trace.set_defaults(handler=_cmd_trace)
+
+    add_loop_parser(subparsers)
 
     return parser
 
