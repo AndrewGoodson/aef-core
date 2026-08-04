@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "aef-core"
 version = "0.1.0"
 description = "Agent Engineering Foundation: a repo-agnostic Agent Operating System scaffold"
+readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
