@@ -33,3 +33,4 @@ side of a conflict.
 | [0024](0024-adopt-claude-md-doc-paths-fixed-for-pip-installs.md) | aef adopt's generated CLAUDE.md no longer points pip-installed adopters at docs/roadmap.md, which never ships in the package | High |
 | [0025](0025-numeric-field-sweep-hitl-nan-bypass.md) | ToolCall.risk/PolicyConfig NaN silently bypassed the HITL security gate (risk > NaN is always False) — now rejected at construction | High |
 | [0026](0026-file-durability-backend-checkpoint-corruption-hardening.md) | FileDurabilityBackend: a stray non-numeric .json file bricked list_checkpoints for the whole run; corrupted checkpoints now raise a named, diagnosable error | High |
+| [0027](0027-otel-tracer-nested-spans-now-actually-parented.md) | OtelTracer's nested spans exported as unrelated roots (no parent/child) in a real OTel backend — start_span() never attached the OTel active context | High |

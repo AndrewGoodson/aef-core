@@ -11,11 +11,14 @@ hand it to `OtelTracer`.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
+from opentelemetry import context as otel_context
 from opentelemetry.trace import Span as OtelSpanAPI
 from opentelemetry.trace import Tracer as OtelTracerAPI
-from opentelemetry.trace import get_tracer
+from opentelemetry.trace import get_tracer, set_span_in_context
 
 from aef.observability.base import Span, Tracer
 
@@ -39,6 +42,10 @@ class OtelSpan(Span):
     def end(self) -> None:
         self._span.end()
 
+    @property
+    def raw(self) -> OtelSpanAPI:
+        return self._span
+
 
 class OtelTracer(Tracer):
     def __init__(
@@ -49,3 +56,29 @@ class OtelTracer(Tracer):
     def start_span(self, name: str, attributes: dict[str, Any] | None = None) -> Span:
         span = self._tracer.start_span(name, attributes=attributes)
         return OtelSpan(span)
+
+    @contextmanager
+    def span(self, name: str, attributes: dict[str, Any] | None = None) -> Iterator[Span]:
+        # `Tracer.span()`'s default implementation (aef/observability/base.py)
+        # only calls `start_span()`, which the real OTel SDK never makes the
+        # "current" span in its context — nested `tracer.span()` calls (e.g.
+        # GraphExecutor's per-node span wrapping a nested emergent-routing
+        # span) would export as unrelated root spans with no parent/child
+        # relationship at all, silently discarding the nesting the code
+        # visually has. Confirmed directly with a real TracerProvider +
+        # InMemorySpanExporter before this fix: a span started inside
+        # another's `with` block had `child.parent is None`. Explicitly
+        # attaching/detaching the OTel context around the yield (the same
+        # thing `start_as_current_span` does internally) is what
+        # `start_span()` alone does not do. See docs/adr/0027.
+        s = self.start_span(name, attributes)
+        assert isinstance(s, OtelSpan)
+        token = otel_context.attach(set_span_in_context(s.raw))
+        try:
+            yield s
+        except BaseException as exc:
+            s.record_exception(exc)
+            raise
+        finally:
+            otel_context.detach(token)
+            s.end()

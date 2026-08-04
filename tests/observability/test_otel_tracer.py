@@ -64,6 +64,68 @@ def test_record_exception_accepts_base_exception_not_just_exception() -> None:
     assert any(e.name == "exception" for e in events)
 
 
+def test_nested_spans_are_actually_parented_in_the_real_sdk() -> None:
+    """Reproduces a real, confirmed bug: `start_span()` alone (what the
+    base Tracer.span() default implementation calls) never made the OTel
+    SDK's active context include the new span, so a `tracer.span()` call
+    nested inside another's `with` block exported with no parent/child
+    relationship at all — confirmed directly via a real TracerProvider +
+    InMemorySpanExporter before this fix (child.parent was None). See
+    docs/adr/0027."""
+    provider, exporter = _make_provider()
+    tracer = OtelTracer(provider.get_tracer("aef-test"))
+
+    with tracer.span("parent"):
+        with tracer.span("child"):
+            pass
+
+    finished = {s.name: s for s in exporter.get_finished_spans()}
+    parent_id = finished["parent"].context.span_id
+    assert finished["child"].parent is not None
+    assert finished["child"].parent.span_id == parent_id
+
+
+def test_sibling_spans_after_a_nested_span_closes_reparent_to_the_outer_span() -> None:
+    provider, exporter = _make_provider()
+    tracer = OtelTracer(provider.get_tracer("aef-test"))
+
+    with tracer.span("parent"):
+        with tracer.span("child"):
+            pass
+        with tracer.span("sibling"):
+            pass
+
+    finished = {s.name: s for s in exporter.get_finished_spans()}
+    parent_id = finished["parent"].context.span_id
+    assert finished["sibling"].parent is not None
+    assert finished["sibling"].parent.span_id == parent_id
+
+
+def test_span_context_is_restored_after_exiting_including_on_exception() -> None:
+    """The OTel context attached for a span's `with` block must be detached
+    on exit — including the exception path — or every later span (even
+    ones with no logical relationship) would incorrectly inherit it as a
+    parent."""
+    provider, exporter = _make_provider()
+    tracer = OtelTracer(provider.get_tracer("aef-test"))
+
+    with tracer.span("first_root"):
+        pass
+
+    try:
+        with tracer.span("raises"):
+            raise ValueError("boom")
+    except ValueError:
+        pass
+
+    with tracer.span("second_root"):
+        pass
+
+    finished = {s.name: s for s in exporter.get_finished_spans()}
+    assert finished["first_root"].parent is None
+    assert finished["second_root"].parent is None
+
+
 def test_graph_executor_emits_gen_ai_span_per_node_with_real_otel_sdk() -> None:
     provider, exporter = _make_provider()
     tracer = OtelTracer(provider.get_tracer("aef-test"))
