@@ -69,6 +69,41 @@ def test_edges_from_sorted_by_priority_descending() -> None:
     assert [e.to_node for e in ordered] == ["c", "b"]
 
 
+def test_edges_from_ties_preserve_declaration_order() -> None:
+    """Equal-priority edges must resolve deterministically. Python's sorted()
+    stability guarantee is what makes this correct — verified directly
+    rather than assumed, since this was previously untested."""
+    graph = Graph(
+        id="g1",
+        version="1.0.0",
+        nodes={"a": _node("a"), "b": _node("b"), "c": _node("c"), "d": _node("d")},
+        edges=[
+            Edge(from_node="a", to_node="b", priority=5),
+            Edge(from_node="a", to_node="c", priority=5),
+            Edge(from_node="a", to_node="d", priority=5),
+        ],
+        entry_node="a",
+    )
+    ordered = graph.edges_from("a")
+    assert [e.to_node for e in ordered] == ["b", "c", "d"]
+
+
+def test_edges_from_mixed_priorities_and_ties() -> None:
+    graph = Graph(
+        id="g1",
+        version="1.0.0",
+        nodes={"a": _node("a"), "b": _node("b"), "c": _node("c"), "d": _node("d")},
+        edges=[
+            Edge(from_node="a", to_node="b", priority=1),
+            Edge(from_node="a", to_node="c", priority=5),
+            Edge(from_node="a", to_node="d", priority=5),
+        ],
+        entry_node="a",
+    )
+    ordered = graph.edges_from("a")
+    assert [e.to_node for e in ordered] == ["c", "d", "b"]
+
+
 def test_nodes_mapping_is_immutable() -> None:
     graph = Graph(id="g1", version="1.0.0", nodes={"a": _node("a")}, edges=[], entry_node="a")
     with pytest.raises(TypeError):
@@ -100,6 +135,46 @@ def test_diff_detects_added_removed_and_version_changed_nodes() -> None:
 def test_diff_of_identical_graph_is_empty() -> None:
     graph = Graph(id="g", version="1.0.0", nodes={"a": _node("a")}, edges=[], entry_node="a")
     assert graph.diff(graph).is_empty
+
+
+def test_diff_of_freshly_rebuilt_graph_with_custom_edge_conditions_is_empty() -> None:
+    """Calling the same build function twice produces different lambda
+    objects for any edge condition — diff() must not treat that as a real
+    change. Regression test for a real bug: it did, before this fix
+    (docs/adr/0020)."""
+
+    def build() -> Graph:
+        return Graph(
+            id="g",
+            version="1.0.0",
+            nodes={"a": _node("a"), "b": _node("b")},
+            edges=[Edge(from_node="a", to_node="b", condition=lambda state: True)],
+            entry_node="a",
+        )
+
+    g1, g2 = build(), build()
+    assert g1.diff(g2).is_empty
+
+
+def test_diff_detects_a_genuinely_different_edge_condition() -> None:
+    g1 = Graph(
+        id="g",
+        version="1.0.0",
+        nodes={"a": _node("a"), "b": _node("b")},
+        edges=[Edge(from_node="a", to_node="b", condition=lambda state: True)],
+        entry_node="a",
+    )
+    g2 = Graph(
+        id="g",
+        version="1.0.0",
+        nodes={"a": _node("a"), "b": _node("b")},
+        edges=[Edge(from_node="a", to_node="b", condition=lambda state: False)],
+        entry_node="a",
+    )
+    diff = g1.diff(g2)
+    assert not diff.is_empty
+    assert len(diff.edges_added) == 1
+    assert len(diff.edges_removed) == 1
 
 
 def test_visualize_produces_mermaid_flowchart() -> None:

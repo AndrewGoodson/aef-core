@@ -53,7 +53,11 @@ class Graph:
 
     def edges_from(self, node_id: str) -> list[Edge]:
         """Declared outgoing edges for `node_id`, highest priority first —
-        the deterministic tie-break blueprint §2.2 requires."""
+        the deterministic tie-break blueprint §2.2 requires. Equal-priority
+        edges are returned in the order they were declared in `edges=[...]`
+        at construction time: Python's `sorted()` is guaranteed stable, so
+        this is a real, well-defined tie-break, not incidental behavior —
+        see test_edges_from_ties_preserve_declaration_order."""
         return sorted((e for e in self.edges if e.from_node == node_id), key=lambda e: -e.priority)
 
     def compile(self) -> CompiledGraph:

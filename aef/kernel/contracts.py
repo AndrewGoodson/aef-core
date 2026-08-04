@@ -212,7 +212,7 @@ def _always(state: AEFState) -> bool:
     return True
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class Edge:
     from_node: str
     to_node: str | tuple[str, ...]  # tuple = fan-out declaration; see Route above
@@ -226,3 +226,39 @@ class Edge:
     @property
     def targets(self) -> tuple[str, ...]:
         return (self.to_node,) if isinstance(self.to_node, str) else self.to_node
+
+    def _condition_key(self) -> object:
+        # Two lambdas/functions defined at the same source location produce
+        # equal (in CPython, often the literal same) __code__ objects across
+        # separate calls that (re)define them — e.g. every call to a
+        # build_graph() function. Comparing __code__ instead of the raw
+        # callable's object identity lets Graph.diff() correctly treat a
+        # freshly-rebuilt, structurally-identical graph as unchanged instead
+        # of reporting every edge with a non-default condition as both added
+        # and removed on every rebuild — a real, demonstrated bug (see
+        # docs/adr/0020), not a hypothetical one.
+        return getattr(self.condition, "__code__", self.condition)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Edge):
+            return NotImplemented
+        return (
+            self.from_node == other.from_node
+            and self.to_node == other.to_node
+            and self._condition_key() == other._condition_key()
+            and self.priority == other.priority
+            and self.requires_human_approval == other.requires_human_approval
+            and self.requires_deterministic_fallback == other.requires_deterministic_fallback
+        )
+
+    def __hash__(self) -> int:
+        return hash(
+            (
+                self.from_node,
+                self.to_node,
+                self._condition_key(),
+                self.priority,
+                self.requires_human_approval,
+                self.requires_deterministic_fallback,
+            )
+        )

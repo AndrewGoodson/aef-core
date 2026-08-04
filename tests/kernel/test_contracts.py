@@ -71,3 +71,46 @@ def test_cost_model_defaults() -> None:
     cm = CostModel()
     assert cm.tokens == 0
     assert cm.dollars_per_call == 0.0
+
+
+def test_edges_with_default_condition_are_equal() -> None:
+    assert Edge(from_node="a", to_node="b") == Edge(from_node="a", to_node="b")
+
+
+def test_edges_with_separately_defined_but_source_identical_conditions_are_equal() -> None:
+    """Two lambdas defined at the same source location (e.g. two separate
+    calls to the same build_graph() function) must compare equal even
+    though they're different objects — this is what makes Graph.diff()
+    correctly treat a rebuilt-but-unchanged graph as unchanged instead of
+    reporting a phantom edge change on every rebuild (docs/adr/0020)."""
+
+    def build_edge() -> Edge:
+        return Edge(from_node="a", to_node="b", condition=lambda state: True)
+
+    e1 = build_edge()
+    e2 = build_edge()
+    assert e1.condition is not e2.condition  # genuinely different objects
+    assert e1 == e2
+    assert hash(e1) == hash(e2)
+
+
+def test_edges_with_genuinely_different_conditions_are_not_equal() -> None:
+    e1 = Edge(from_node="a", to_node="b", condition=lambda state: True)
+    e2 = Edge(from_node="a", to_node="b", condition=lambda state: False)
+    assert e1 != e2
+
+
+def test_edges_differing_only_by_priority_are_not_equal() -> None:
+    assert Edge(from_node="a", to_node="b", priority=1) != Edge(
+        from_node="a", to_node="b", priority=2
+    )
+
+
+def test_edge_not_equal_to_non_edge() -> None:
+    assert Edge(from_node="a", to_node="b") != "not an edge"
+
+
+def test_edges_are_usable_in_a_set() -> None:
+    e1 = Edge(from_node="a", to_node="b")
+    e2 = Edge(from_node="a", to_node="b")
+    assert len({e1, e2}) == 1
