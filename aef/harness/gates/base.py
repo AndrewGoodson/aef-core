@@ -26,6 +26,7 @@ from aef.harness.candidate import CandidateVerdict
 from aef.harness.git import GitRepo
 from aef.harness.sandbox import SandboxPolicy
 from aef.harness.zones import ZonePolicy
+from aef.observability.base import Tracer
 
 # The order gates run in. A gate absent from this tuple never runs; a gate
 # present but unimplemented is simply not registered yet.
@@ -64,6 +65,10 @@ class GateContext:
     zone_policy: ZonePolicy = field(default_factory=ZonePolicy)
     sandbox_policy: SandboxPolicy | None = None
     limits: dict[str, Any] = field(default_factory=dict)
+    # Optional: one span per gate run. Injected rather than constructed, for
+    # the same reason nodes take a Tracer via Services — a gate that built
+    # its own exporter would be reaching outside its inputs.
+    tracer: Tracer | None = None
 
 
 class Gate(ABC):
@@ -109,8 +114,20 @@ def run_pipeline(gates: list[Gate] | tuple[Gate, ...], ctx: GateContext) -> Pipe
     ordered = sorted(gates, key=lambda g: CANONICAL_ORDER.index(g.id))
     results: list[GateResult] = []
     for gate in ordered:
-        result = gate.run(ctx)
+        result = _run_traced(gate, ctx)
         results.append(result)
         if not result.passed:
             break
     return PipelineResult(results=tuple(results))
+
+
+def _run_traced(gate: Gate, ctx: GateContext) -> GateResult:
+    if ctx.tracer is None:
+        return gate.run(ctx)
+    with ctx.tracer.span(f"aef.harness.gate.{gate.id}", {"aef.gate.id": gate.id}) as span:
+        result = gate.run(ctx)
+        span.set_attribute("aef.gate.outcome", result.outcome.value)
+        span.set_attribute("aef.gate.security_event", result.security_event)
+        if result.reason:
+            span.set_attribute("aef.gate.reason", result.reason)
+        return result
