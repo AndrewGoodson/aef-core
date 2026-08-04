@@ -49,10 +49,44 @@ def test_run_adopt_writes_all_artifacts(tmp_path: Path) -> None:
         "AEF_MIGRATION_CHECKLIST.md",
         "AGENT_INTEGRATION.md",
         "AUTONOMY.md",
+        "AGENTS.md",
+        "copilot-instructions.md",
+        "aef.mdc",
     }
     for path in result.written_files:
         assert path.exists()
     assert (tmp_path / "CLAUDE.md").read_text().startswith("#")
+
+
+def test_run_adopt_emits_native_entry_file_for_each_harness(tmp_path: Path) -> None:
+    """Every major coding-agent harness reads a different instructions file.
+    adopt emits a native entry file for each so the scaffold is usable from
+    Claude, Codex, Copilot, or Cursor — not Claude-only (docs/adr/0040).
+    AGENTS.md carries the full contract (identical to CLAUDE.md); the Copilot
+    and Cursor files are thin pointers that still inline the safety contract
+    and point at the canonical guide."""
+    run_adopt(tmp_path)
+    # Codex (and the cross-tool AGENTS.md convention): full contract.
+    assert (tmp_path / "AGENTS.md").read_text() == (tmp_path / "CLAUDE.md").read_text()
+    # GitHub Copilot.
+    copilot = (tmp_path / ".github" / "copilot-instructions.md").read_text()
+    assert "AGENT_INTEGRATION.md" in copilot
+    assert "HARD-STOP" in copilot
+    # Cursor (modern .cursor/rules/*.mdc format).
+    cursor = (tmp_path / ".cursor" / "rules" / "aef.mdc").read_text()
+    assert "AGENT_INTEGRATION.md" in cursor
+    assert "HARD-STOP" in cursor
+
+
+def test_run_adopt_never_overwrites_harness_files(tmp_path: Path) -> None:
+    (tmp_path / "AGENTS.md").write_text("# my own agents file\n")
+    (tmp_path / ".github").mkdir()
+    (tmp_path / ".github" / "copilot-instructions.md").write_text("# mine\n")
+    result = run_adopt(tmp_path)
+    assert (tmp_path / "AGENTS.md").read_text() == "# my own agents file\n"
+    assert (tmp_path / ".github" / "copilot-instructions.md").read_text() == "# mine\n"
+    skipped = {p.name for p in result.skipped_files}
+    assert {"AGENTS.md", "copilot-instructions.md"} <= skipped
 
 
 def test_run_adopt_emits_onboarding_kit_content(tmp_path: Path) -> None:
@@ -98,9 +132,9 @@ def test_run_adopt_never_overwrites_existing_aef_yaml(tmp_path: Path) -> None:
 def test_run_adopt_is_idempotent_on_second_run(tmp_path: Path) -> None:
     first = run_adopt(tmp_path)
     second = run_adopt(tmp_path)
-    assert len(first.written_files) == 6
+    assert len(first.written_files) == 9
     assert len(second.written_files) == 0
-    assert len(second.skipped_files) == 6
+    assert len(second.skipped_files) == 9
 
 
 def test_checklist_nonempty_for_every_framework() -> None:

@@ -6,9 +6,28 @@ emits a repo-tailored copy of this into every adopted repo (see
 root copy is what that template mirrors, and what to read when working in
 aef-core itself.
 
-If you are a fresh agent or Claude Code session: read this top to bottom and
-you can install aef-core, run its example, wire a node, and safely start the
-self-improving loop with no other context.
+If you are a fresh coding agent — **Claude, Codex, Cursor, GitHub Copilot, or
+any other** — read this top to bottom and you can install aef-core, run its
+example, wire a node, and safely start the self-improving loop with no other
+context. aef-core is harness-agnostic: the scaffold is plain Python plus the
+`aef` CLI, so any agent that writes Python can use it.
+
+## Which file your agent reads
+`aef adopt` emits a native entry file for each major harness, all pointing
+back to this guide — so the scaffold is never tied to one tool:
+
+| Agent / harness | Entry file it reads |
+|---|---|
+| Claude / Claude Code | `CLAUDE.md` |
+| OpenAI Codex (+ the cross-tool convention) | `AGENTS.md` (identical to `CLAUDE.md`) |
+| GitHub Copilot | `.github/copilot-instructions.md` |
+| Cursor | `.cursor/rules/aef.mdc` |
+| any other | this file (`AGENT_INTEGRATION.md`) + `AUTONOMY.md` |
+
+The self-improving-loop prompt below is written for Claude Code's `/loop`
+command; on another harness, paste the same prompt body into that tool's
+agent/chat and run it as an ordinary instruction — the phases and the
+HARD-STOP gates are identical regardless of harness.
 
 ## What aef-core is
 A repo-agnostic Agent Operating System scaffold: it is the thing dropped into

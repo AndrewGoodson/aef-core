@@ -1,7 +1,7 @@
 """`aef adopt` — run inside an existing, unrelated repo to start migrating it
 onto the AEF scaffold. This is the adoption path the scaffold exists for:
 detect what's there today, generate the artifacts a future session (in that
-repo, possibly a different Claude Code session with no other context) needs
+repo, possibly a different coding-agent session with no other context) needs
 to continue the migration, and never silently overwrite anything already
 in the target repo.
 """
@@ -124,8 +124,11 @@ def render_claude_md(framework: Framework, repo_name: str) -> str:
     return f"""# {repo_name} — AEF scaffold contract
 
 This repo is being migrated onto AEF (Agent Engineering Foundation), a
-repo-agnostic Agent Operating System scaffold. This file is written so a
-Claude Code session with **no other context** can pick up the migration.
+repo-agnostic Agent Operating System scaffold. This file is written so any
+coding agent (Claude, Codex, Cursor, GitHub Copilot, …) with **no other
+context** can pick up the migration. `AGENTS.md` is an identical copy for
+harnesses that read that filename; Copilot/Cursor entry files
+(`.github/copilot-instructions.md`, `.cursor/rules/aef.mdc`) point here.
 
 ## What AEF is
 
@@ -309,8 +312,9 @@ evolution:
 def render_agent_integration_md(repo_name: str) -> str:
     return f"""# AEF Agent Integration — ingest & start here ({repo_name})
 
-You are an agent (or a Claude Code session) in a repo adopting **aef-core**,
-a repo-agnostic Agent Operating System scaffold. This file is self-contained:
+You are a coding agent (Claude, Codex, Cursor, GitHub Copilot, or any other)
+in a repo adopting **aef-core**, a repo-agnostic Agent Operating System
+scaffold. This file is self-contained:
 read it top to bottom and you can install aef-core, wire your first node, and
 safely run the self-improving loop with no other context.
 
@@ -424,6 +428,45 @@ deliberately-started loop.
 """
 
 
+_HARNESS_POINTER_BODY = """This repo uses **aef-core**, a repo-agnostic Agent Operating System
+scaffold. It works with any coding agent (Claude, Codex, Cursor, GitHub
+Copilot, …) — the scaffold is plain Python + the `aef` CLI; only the entry
+file each agent reads differs.
+
+**Read first (in this repo):** `AGENT_INTEGRATION.md` (ingest-and-start guide)
+and `AUTONOMY.md` (the autonomy safety contract). `CLAUDE.md` / `AGENTS.md`
+hold the full scaffold contract.
+
+Two always-on invariants:
+- Two-plane determinism — the kernel is pure bookkeeping; every LLM/
+  nondeterministic call lives in a node declared `deterministic=False`.
+- Vendor isolation — `anthropic`/`openai`/`mem0`/`neo4j` imports only in
+  `aef/providers/` and `aef/services/*/adapters/`.
+
+Green bar (all four must pass before any change is done):
+`pytest -q` · `mypy --strict <pkg>` · `ruff check .` · `ruff format --check <dirs>`
+
+HARD-STOP gates — pause and ask a human for any of: a push to another repo or
+any external publish; enabling `aef/evolution/`, weakening the PolicyEngine, or
+removing a HITL gate; deleting/overwriting a user file; a breaking
+public-contract change you're unsure of. Everything else: decide and proceed.
+"""
+
+
+def render_harness_pointer(repo_name: str) -> str:
+    """A thin, harness-neutral instructions file pointing at the canonical
+    guide and inlining the safety contract — used for GitHub Copilot's
+    `.github/copilot-instructions.md`."""
+    return f"# {repo_name} — agent instructions (aef-core)\n\n{_HARNESS_POINTER_BODY}"
+
+
+def render_cursor_rule(repo_name: str) -> str:
+    """Cursor `.cursor/rules/*.mdc` — same pointer body, with the minimal
+    frontmatter Cursor uses to always apply a rule."""
+    frontmatter = "---\ndescription: aef-core scaffold contract\nalwaysApply: true\n---\n\n"
+    return f"{frontmatter}# {repo_name} — agent instructions (aef-core)\n\n{_HARNESS_POINTER_BODY}"
+
+
 @dataclass(frozen=True)
 class AdoptResult:
     framework: Framework
@@ -445,10 +488,12 @@ def run_adopt(target_dir: Path) -> AdoptResult:
         if path.exists():
             skipped.append(path)
             return
+        path.parent.mkdir(parents=True, exist_ok=True)  # for .github/, .cursor/rules/
         path.write_text(content)
         written.append(path)
 
-    _write_if_absent("CLAUDE.md", render_claude_md(framework, repo_name))
+    claude_md = render_claude_md(framework, repo_name)
+    _write_if_absent("CLAUDE.md", claude_md)
     _write_if_absent("aef.yaml", render_aef_yaml(repo_name))
     _write_if_absent("aef_adapter.py", render_adapter_shim(framework, repo_name))
 
@@ -462,6 +507,14 @@ def run_adopt(target_dir: Path) -> AdoptResult:
     # safety contract, so a new repo agent inherits both (see docs/adr/0034).
     _write_if_absent("AGENT_INTEGRATION.md", render_agent_integration_md(repo_name))
     _write_if_absent("AUTONOMY.md", render_autonomy_md(repo_name))
+
+    # Cross-harness entry files (docs/adr/0040): every major coding-agent reads
+    # a different instructions file. AGENTS.md carries the full contract
+    # (Codex + the cross-tool convention); Copilot and Cursor get thin native
+    # pointers into the canonical guide. All never-overwrite.
+    _write_if_absent("AGENTS.md", claude_md)
+    _write_if_absent(".github/copilot-instructions.md", render_harness_pointer(repo_name))
+    _write_if_absent(".cursor/rules/aef.mdc", render_cursor_rule(repo_name))
 
     return AdoptResult(
         framework=framework, written_files=written, skipped_files=skipped, checklist=checklist

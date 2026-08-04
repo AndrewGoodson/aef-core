@@ -1,9 +1,15 @@
 # New-repo bootstrap loop — copy-paste prompt
 
-This is the ready-to-paste `/loop` prompt for a **new repo adopting aef-core**.
-It takes a fresh repo from zero to a green, aef-core-wired agent running the
-self-improving loop under the HARD-STOP safety gates. Copy the fenced block
-below into a Claude Code session opened in the target repo.
+This is the ready-to-paste prompt for a **new repo adopting aef-core**. It
+takes a fresh repo from zero to a green, aef-core-wired agent running the
+self-improving loop under the HARD-STOP safety gates.
+
+**Any harness.** The `/loop` prefix is Claude Code's self-scheduling command;
+the prompt body is harness-agnostic. Use it as:
+- **Claude Code** — paste the whole block (keep the `/loop` prefix).
+- **Codex / Cursor / GitHub Copilot / other** — drop the `/loop ` prefix and
+  paste the rest as an ordinary agent instruction; run the phases in order.
+  The green bar and HARD-STOP gates are identical regardless of harness.
 
 Prereq: the target repo has (or will `pip install`) `aef-core`, and you have
 push rights to that repo's own remote only.

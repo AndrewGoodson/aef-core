@@ -8,8 +8,10 @@ re-improvised per session. `aef adopt` emits a short pointer to this file
 into every adopted repo (see `AGENT_INTEGRATION.md`).
 
 Status: **adopted project practice** (see docs/adr/0033). Applies to any
-agent or Claude Code session doing unattended work in this repo or a repo
-that adopted aef-core.
+coding agent — Claude, Codex, Cursor, GitHub Copilot, or other — doing
+unattended work in this repo or a repo that adopted aef-core. The protocol is
+harness-agnostic; only the file the agent reads to find it differs (see the
+harness table in `AGENT_INTEGRATION.md`).
 
 ---
 

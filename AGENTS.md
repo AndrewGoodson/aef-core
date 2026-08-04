@@ -114,10 +114,14 @@ Run `aef adopt --dir <path>` inside the target repo. It detects the
 current framework (LangGraph/CrewAI/raw SDK/none), and writes — without
 ever overwriting an existing file — a `CLAUDE.md` for that repo, an
 `aef.yaml` stub, an `aef_adapter.py` shim, `AEF_MIGRATION_CHECKLIST.md`,
-plus the onboarding kit: `AGENT_INTEGRATION.md` (the self-contained
-ingest-and-start guide) and `AUTONOMY.md` (the inlined autonomy safety
-contract — HARD-STOP gates + green bar, pointing at
-`docs/autonomy/self-improving-loop.md` for the full spec, see ADR 0034).
-The generated `CLAUDE.md` is self-contained: a fresh Claude Code session in
-that other repo, with no memory of this conversation, can pick up the
+the onboarding kit (`AGENT_INTEGRATION.md` — the self-contained
+ingest-and-start guide, and `AUTONOMY.md` — the inlined autonomy safety
+contract with HARD-STOP gates + green bar, see ADR 0034), and a native
+entry file for every major coding-agent harness so the scaffold isn't
+tied to one tool (ADR 0040): `AGENTS.md` (Codex + the cross-tool
+convention; identical to `CLAUDE.md`), `.github/copilot-instructions.md`
+(GitHub Copilot), and `.cursor/rules/aef.mdc` (Cursor) — the last two are
+thin pointers into `AGENT_INTEGRATION.md`.
+The generated `CLAUDE.md` is self-contained: a fresh coding-agent session
+in that other repo, with no memory of this conversation, can pick up the
 migration from it alone.
