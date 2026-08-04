@@ -55,8 +55,17 @@ class AnthropicProvider(ModelProvider):
                 messages=messages,
                 metadata=anthropic_metadata,
             )
-        except anthropic.APIError as exc:
-            raise ModelProviderError(f"anthropic API error: {exc}") from exc
+        except anthropic.AnthropicError as exc:
+            # Catch the TRUE base, not just APIError: the SDK has
+            # AnthropicError subclasses that are NOT APIError (e.g.
+            # WorkloadIdentityError from the auth/credentials token-fetch path,
+            # RetryableError on retry exhaustion). Catching only APIError let
+            # those leak past this adapter as raw vendor types, violating this
+            # module's no-vendor-exceptions-escape contract and defeating
+            # FallbackProvider (which only catches ModelProviderError, so a
+            # leaked vendor exception aborts the whole fallback chain instead
+            # of falling through to a healthy provider). See docs/adr/0037.
+            raise ModelProviderError(f"anthropic error: {exc}") from exc
 
         content = "".join(
             block.text for block in response.content if getattr(block, "type", None) == "text"

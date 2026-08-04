@@ -106,6 +106,36 @@ def test_complete_wraps_anthropic_api_error() -> None:
         provider.complete(_request())
 
 
+def test_complete_wraps_non_apierror_anthropic_exceptions() -> None:
+    """Reproduces a real leak (docs/adr/0037): the SDK has AnthropicError
+    subclasses that are NOT APIError (e.g. WorkloadIdentityError from the
+    auth/credentials path, RetryableError on retry exhaustion). Catching only
+    APIError let those propagate raw past the adapter, violating the base.py
+    contract and — worse — defeating FallbackProvider, which only catches
+    ModelProviderError. The adapter must wrap the true base, AnthropicError."""
+    error = anthropic.WorkloadIdentityError("token fetch failed")
+    provider = AnthropicProvider(client=_FakeClient(error=error))
+
+    with pytest.raises(ModelProviderError, match="token fetch failed"):
+        provider.complete(_request())
+
+
+def test_fallbackprovider_recovers_when_primary_raises_a_non_apierror() -> None:
+    from aef.providers.base import CompletionResult, FallbackProvider, ModelProvider
+
+    class _Good(ModelProvider):
+        name = "good"
+
+        def complete(self, request: CompletionRequest) -> CompletionResult:
+            return CompletionResult(content="recovered", model="m", input_tokens=1, output_tokens=1)
+
+    primary = AnthropicProvider(
+        client=_FakeClient(error=anthropic.WorkloadIdentityError("auth down"))
+    )
+    result = FallbackProvider([primary, _Good()]).complete(_request())
+    assert result.content == "recovered"  # fell through instead of aborting on a raw vendor exc
+
+
 def test_complete_passes_through_user_id_metadata() -> None:
     response = _FakeResponse(
         model="claude-x", content=[_FakeTextBlock(text="ok")], usage=_FakeUsage(1, 1)
