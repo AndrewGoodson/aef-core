@@ -83,6 +83,21 @@ Interfaces only, no implementation:
 - `Optimizer` (`aef/services/optimizers/base.py`) — GEPA/DSPy-style
   offline prompt/program optimization, not implemented
 
+## Self-rewiring harness (Zone B) — **M0/M1 REAL**
+
+`aef/harness/` is the structurally-isolated harness that judges
+agent-authored candidates (ADR 0044, ADR 0047). Real and tested:
+`zones.py` (three-zone write scope, deny-by-default), `candidate.py`
+(`git diff base...head` with the rename/symlink/submodule escapes closed),
+`trust.py` (gates execute from the base ref — the load-bearing property),
+`sandbox.py` (env scrubbing, timeouts, rlimits; declares what it cannot
+enforce and refuses to run without attested network isolation).
+
+Not built yet: the gates themselves (M3-M7), the corpus (M2), the proposer
+(M8), and post-merge monitoring (M10). **Tier-1 auto-merge is not
+implemented and must not be enabled before M10** — see
+`docs/design/self-rewiring/05-approval-policy.md`.
+
 ## Phase 4 — Evolution engine with full safety rails — **STUBBED, DISABLED**
 
 `aef/evolution/engine.py`: `MutationProposer`, `ArchiveStore`, `EvalGate`,
