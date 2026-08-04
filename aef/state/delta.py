@@ -19,6 +19,11 @@ from aef.state.schema import AEFState, Message, Plan, Provenance
 
 class StateDelta(BaseModel):
     messages: list[Message] = Field(default_factory=list)
+    # Full REPLACE, not merge, when set — unlike the list/dict fields below.
+    # A node updating one field of an existing plan (e.g. just its status)
+    # must start from `state.plan.model_copy(update={...})`, not construct a
+    # fresh `Plan(...)`, or it will silently drop subgoals/reusable_key. See
+    # examples/hello_agent/graph.py's summarize_node for the safe pattern.
     plan: Plan | None = None
     working_memory: dict[str, Any] = Field(default_factory=dict)
     context_budget_tokens: int | None = None

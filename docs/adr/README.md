@@ -25,3 +25,4 @@ side of a conflict.
 | [0016](0016-adopt-detects-frameworks-from-manifests-too.md) | aef adopt now detects frameworks from requirements.txt/pyproject.toml, not just .py imports | High |
 | [0017](0017-otel-span-record-exception-accepts-baseexception.md) | OtelSpan.record_exception now accepts BaseException, matching the real SDK and InMemorySpan | High |
 | [0018](0018-aef-run-adds-cwd-to-syspath.md) | aef run adds CWD to sys.path — aef init's own output couldn't be run before this | High |
+| [0019](0019-plan-replacement-footgun-in-the-shipped-example.md) | StateDelta.plan replaces not merges; the shipped example was silently dropping subgoals/reusable_key | High |

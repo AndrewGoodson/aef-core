@@ -1,14 +1,15 @@
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 
-from aef.kernel import GraphExecutor, InMemoryDurabilityBackend, Services
+from aef.kernel import END, Context, GraphExecutor, InMemoryDurabilityBackend, Services
 from aef.observability.in_memory import InMemoryTracer
 from aef.security.tool import PolicyConfig, PolicyEngine
 from aef.services.eval.rule_based import RuleBasedEvaluator
 from aef.services.memory.in_memory import InMemoryMemoryStore
-from aef.state import AEFState
-from examples.hello_agent.graph import EchoModelProvider, build_graph
+from aef.state import AEFState, Plan
+from examples.hello_agent.graph import EchoModelProvider, build_graph, summarize_node
 from examples.hello_agent.main import main
 
 
@@ -85,3 +86,35 @@ def test_main_runs_without_raising(capsys: pytest.CaptureFixture[str]) -> None:
     out = capsys.readouterr().out
     assert "final messages" in out
     assert "evaluation" in out
+
+
+def test_summarize_node_preserves_existing_plan_subgoals_and_reusable_key() -> None:
+    """StateDelta.plan fully replaces, never merges (see aef/state/delta.py).
+    summarize_node must update status via Plan.model_copy(), not reconstruct
+    a fresh Plan(...) — the naive version would silently drop subgoals and
+    reusable_key. This is exactly the bug that shipped in this example
+    before it was caught and fixed."""
+    existing_plan = Plan(
+        goal="find the answer",
+        subgoals=[Plan(goal="search", status="done")],
+        status="active",
+        reusable_key="template-42",
+    )
+    state = AEFState(run_id="r1", agent_id="a1", objective="find the answer", plan=existing_plan)
+    ctx = Context(
+        run_id=state.run_id,
+        graph_version="0.1.0",
+        trace_id="t1",
+        node_id="summarize",
+        now=datetime.now(UTC),
+    )
+    services = Services(model_provider=EchoModelProvider())
+
+    delta, route = summarize_node(state, ctx, services)
+
+    assert route is END
+    assert delta.plan is not None
+    assert delta.plan.status == "done"
+    assert delta.plan.subgoals == existing_plan.subgoals
+    assert delta.plan.reusable_key == "template-42"
+    assert delta.plan.goal == "find the answer"

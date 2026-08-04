@@ -111,8 +111,16 @@ def summarize_node(state: AEFState, ctx: Context, services: Services) -> tuple[S
     result = _complete(services, f"summarize: {state.tool_results}")
     prov = _provenance(ctx, result)
 
-    prior_goal = state.plan.goal if state.plan is not None else state.objective
-    plan = Plan(goal=prior_goal, status="done")
+    # StateDelta.plan fully REPLACES state.plan (see aef/state/delta.py) —
+    # it never merges. Reconstructing `Plan(goal=..., status="done")` from
+    # scratch here would silently drop subgoals/reusable_key if the plan
+    # had ever accumulated any. model_copy(update=...) is the safe pattern
+    # for "change one field, keep everything else."
+    plan = (
+        state.plan.model_copy(update={"status": "done"})
+        if state.plan is not None
+        else Plan(goal=state.objective, status="done")
+    )
 
     delta = StateDelta(
         messages=[Message(role="assistant", content=result.content, prov=prov)],
