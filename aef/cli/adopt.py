@@ -12,6 +12,14 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from aef.cli.adopt_loop import (
+    render_agents_zone_readme,
+    render_corpus_readme,
+    render_loop_gate_workflow,
+    render_loop_md,
+    render_loop_monitor_workflow,
+)
+
 _IGNORED_DIR_NAMES = frozenset(
     {
         ".git",
@@ -515,6 +523,16 @@ def run_adopt(target_dir: Path) -> AdoptResult:
     _write_if_absent("AGENTS.md", claude_md)
     _write_if_absent(".github/copilot-instructions.md", render_harness_pointer(repo_name))
     _write_if_absent(".cursor/rules/aef.mdc", render_cursor_rule(repo_name))
+
+    # The self-rewiring loop kit (ADR 0057/0058). LOOP.md leads with what does
+    # NOT work yet: an adopting repo whose agents produce candidates against an
+    # empty corpus sees every one rejected, and that reads as "the loop is
+    # broken" rather than "the loop has nothing to judge against".
+    _write_if_absent("LOOP.md", render_loop_md(repo_name))
+    _write_if_absent("agents/README.md", render_agents_zone_readme(repo_name))
+    _write_if_absent("corpus/README.md", render_corpus_readme(repo_name))
+    _write_if_absent(".github/workflows/loop-gate.yml", render_loop_gate_workflow(repo_name))
+    _write_if_absent(".github/workflows/loop-monitor.yml", render_loop_monitor_workflow(repo_name))
 
     return AdoptResult(
         framework=framework, written_files=written, skipped_files=skipped, checklist=checklist

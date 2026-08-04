@@ -1,6 +1,13 @@
 from pathlib import Path
 
-from aef.cli.adopt import detect_framework, render_migration_checklist, run_adopt
+import pytest
+
+from aef.cli.adopt import (
+    AdoptResult,
+    detect_framework,
+    render_migration_checklist,
+    run_adopt,
+)
 
 
 def test_detect_langgraph(tmp_path: Path) -> None:
@@ -41,17 +48,27 @@ def test_run_adopt_writes_all_artifacts(tmp_path: Path) -> None:
     result = run_adopt(tmp_path)
 
     assert result.framework == "raw_sdk"
-    written_names = {p.name for p in result.written_files}
-    assert written_names == {
+    # Relative paths, not bare names: the loop kit adds two files both called
+    # README.md, and a name-set would silently collapse them into one.
+    written = {str(p.relative_to(tmp_path)) for p in result.written_files}
+    assert written == {
+        # onboarding kit
         "CLAUDE.md",
         "aef.yaml",
         "aef_adapter.py",
         "AEF_MIGRATION_CHECKLIST.md",
         "AGENT_INTEGRATION.md",
         "AUTONOMY.md",
+        # cross-harness entry files (ADR 0040)
         "AGENTS.md",
-        "copilot-instructions.md",
-        "aef.mdc",
+        ".github/copilot-instructions.md",
+        ".cursor/rules/aef.mdc",
+        # self-rewiring loop kit (ADR 0057/0058)
+        "LOOP.md",
+        "agents/README.md",
+        "corpus/README.md",
+        ".github/workflows/loop-gate.yml",
+        ".github/workflows/loop-monitor.yml",
     }
     for path in result.written_files:
         assert path.exists()
@@ -132,9 +149,9 @@ def test_run_adopt_never_overwrites_existing_aef_yaml(tmp_path: Path) -> None:
 def test_run_adopt_is_idempotent_on_second_run(tmp_path: Path) -> None:
     first = run_adopt(tmp_path)
     second = run_adopt(tmp_path)
-    assert len(first.written_files) == 9
+    assert len(first.written_files) == 14
     assert len(second.written_files) == 0
-    assert len(second.skipped_files) == 9
+    assert len(second.skipped_files) == 14
 
 
 def test_checklist_nonempty_for_every_framework() -> None:
@@ -196,3 +213,125 @@ def test_detect_code_signal_and_manifest_signal_combine_not_override(tmp_path: P
     (tmp_path / "agent.py").write_text("import crewai\n")
     (tmp_path / "requirements.txt").write_text("langgraph\n")
     assert detect_framework(tmp_path) == "langgraph"
+
+
+# --------------------------------------------------------------------------
+# The self-rewiring loop kit (ADR 0057/0058)
+# --------------------------------------------------------------------------
+
+
+def _adopt(tmp_path: Path) -> AdoptResult:
+    (tmp_path / "README.md").write_text("# target\n")
+    return run_adopt(tmp_path)
+
+
+LOOP_KIT = (
+    "LOOP.md",
+    "agents/README.md",
+    "corpus/README.md",
+    ".github/workflows/loop-gate.yml",
+    ".github/workflows/loop-monitor.yml",
+)
+
+
+@pytest.mark.parametrize("name", LOOP_KIT)
+def test_adopt_emits_the_loop_kit(tmp_path: Path, name: str) -> None:
+    _adopt(tmp_path)
+    assert (tmp_path / name).is_file()
+
+
+@pytest.mark.parametrize("name", LOOP_KIT)
+def test_the_loop_kit_never_overwrites(tmp_path: Path, name: str) -> None:
+    target = tmp_path / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("MINE\n")
+
+    result = _adopt(tmp_path)
+
+    assert target.read_text() == "MINE\n"
+    assert target in result.skipped_files
+
+
+@pytest.mark.parametrize(
+    "name", [".github/workflows/loop-gate.yml", ".github/workflows/loop-monitor.yml"]
+)
+def test_the_emitted_workflows_carry_no_pull_request_trigger(tmp_path: Path, name: str) -> None:
+    """The same trap the aef-core workflows avoid, carried into every repo
+    that adopts: `pull_request` would let a candidate editing
+    .github/workflows/ supply the workflow that judges it."""
+    import yaml
+
+    _adopt(tmp_path)
+    document = yaml.safe_load((tmp_path / name).read_text())
+    triggers = document.get(True, document.get("on"))
+    assert "pull_request" not in triggers
+    assert "pull_request_target" not in triggers
+    assert set(triggers) <= {"workflow_dispatch", "schedule"}
+
+
+@pytest.mark.parametrize(
+    "name", [".github/workflows/loop-gate.yml", ".github/workflows/loop-monitor.yml"]
+)
+def test_the_emitted_workflows_are_read_only(tmp_path: Path, name: str) -> None:
+    import yaml
+
+    _adopt(tmp_path)
+    document = yaml.safe_load((tmp_path / name).read_text())
+    assert document["permissions"] == {"contents": "read"}
+
+
+def test_the_emitted_gate_workflow_checks_out_main(tmp_path: Path) -> None:
+    import yaml
+
+    _adopt(tmp_path)
+    document = yaml.safe_load((tmp_path / ".github/workflows/loop-gate.yml").read_text())
+    checkouts = [
+        s
+        for s in document["jobs"]["gate"]["steps"]
+        if str(s.get("uses", "")).startswith("actions/checkout")
+    ]
+    assert checkouts
+    assert all(s["with"]["ref"] == "main" for s in checkouts)
+
+
+def test_the_emitted_workflows_keep_state_outside_the_checkout(tmp_path: Path) -> None:
+    _adopt(tmp_path)
+    for name in (".github/workflows/loop-gate.yml", ".github/workflows/loop-monitor.yml"):
+        text = (tmp_path / name).read_text()
+        assert "--state ~/" in text
+        assert "--state ." not in text
+
+
+def test_loop_md_leads_with_what_does_not_work_yet(tmp_path: Path) -> None:
+    # An adopting repo whose agents produce candidates against an empty corpus
+    # sees every one rejected, and that reads as "the loop is broken" unless
+    # the doc says otherwise first.
+    _adopt(tmp_path)
+    text = (tmp_path / "LOOP.md").read_text()
+    assert text.index("Nothing merges automatically") < text.index("Running it")
+    assert "must supply before the loop can approve anything" in text
+
+
+def test_loop_md_states_tier1_is_off(tmp_path: Path) -> None:
+    _adopt(tmp_path)
+    assert "Tier-1 auto-merge is OFF" in (tmp_path / "LOOP.md").read_text()
+
+
+def test_loop_md_names_all_three_owner_obligations(tmp_path: Path) -> None:
+    _adopt(tmp_path)
+    text = (tmp_path / "LOOP.md").read_text()
+    assert "A corpus" in text
+    assert "Observations" in text
+    assert "Halt notification" in text
+
+
+def test_the_corpus_readme_says_empty_is_deliberate(tmp_path: Path) -> None:
+    _adopt(tmp_path)
+    assert "Empty on purpose" in (tmp_path / "corpus/README.md").read_text()
+
+
+def test_the_agents_readme_marks_the_zone(tmp_path: Path) -> None:
+    _adopt(tmp_path)
+    text = (tmp_path / "agents/README.md").read_text()
+    assert "Zone A" in text
+    assert "Nothing here is auto-merged" in text
