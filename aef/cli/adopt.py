@@ -164,11 +164,17 @@ requires human approval until you explicitly raise that threshold.
 
 ## Where to look in aef-core
 
+These paths are inside the `aef-core` package/repository, not this one — if
+`aef-core` was installed via pip, find its on-disk location with
+`python -c "import aef; print(aef.__path__[0])"`; `docs/` is only present
+if you have the `aef-core` source checked out (it isn't bundled into the
+pip package), so `docs/roadmap.md` below requires that checkout.
+
 - `aef/kernel/` — graph engine, Node/Edge contracts, Services, checkpointing, replay
 - `aef/state/` — the shared `AEFState` schema every agent uses
 - `aef/providers/`, `aef/services/*/` — pluggable backends behind stable interfaces
 - `aef/security/tool.py` — the policy engine every tool call goes through
-- `docs/roadmap.md` — what's implemented vs. stubbed, phase by phase
+- `docs/roadmap.md` (source checkout only) — what's implemented vs. stubbed, phase by phase
 """
 
 
