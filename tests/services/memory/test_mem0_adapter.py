@@ -140,3 +140,25 @@ def test_get_never_written_id_returns_none_without_calling_client() -> None:
     get() must short-circuit rather than call the client with a bogus id."""
     adapter = Mem0Adapter(_FakeMem0Client())
     assert adapter.get("never-seen") is None
+
+
+def test_get_propagates_a_genuine_client_failure_instead_of_returning_none() -> None:
+    """Reproduces a real, confirmed bug: get() previously wrapped
+    self._client.get() in a bare `except Exception: return None`. Real
+    mem0.Memory.get() already returns None cleanly for a not-found id
+    (confirmed by reading its source — never raises for that case), so
+    the broad catch only ever suppressed genuine failures (a downed
+    vector store, an internal mem0 bug, a malformed native_id) and made
+    them indistinguishable from "record legitimately doesn't exist." See
+    docs/adr/0030."""
+
+    class _FailingClient(_FakeMem0Client):
+        def get(self, memory_id: str) -> dict[str, Any] | None:
+            raise ConnectionError("vector store unreachable")
+
+    adapter = Mem0Adapter(_FailingClient())
+    record = MemoryRecord(kind="working", content={"text": "x"}, agent_id="a1")
+    adapter.write(record)
+
+    with pytest.raises(ConnectionError, match="vector store unreachable"):
+        adapter.get(record.id)

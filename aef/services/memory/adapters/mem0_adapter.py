@@ -161,10 +161,16 @@ class Mem0Adapter(MemoryStore):
         native_id = self._native_ids.get(record_id)
         if native_id is None:
             return None
-        try:
-            hit = self._client.get(native_id)
-        except Exception:
-            return None
+        # No try/except here: real mem0.Memory.get() already returns None
+        # cleanly for a not-found id (confirmed by reading its source — it
+        # checks `if not memory: return None` internally, never raises for
+        # that case) — the `if not hit` check below is what "not found"
+        # actually means. A blanket except-Exception here previously
+        # caught genuine failures too (a downed vector store, an internal
+        # mem0 bug, a malformed native_id) and silently returned None for
+        # those as well, indistinguishable from a legitimately absent
+        # record. See docs/adr/0030.
+        hit = self._client.get(native_id)
         if not hit:
             return None
         hit_metadata = hit.get("metadata") or {}

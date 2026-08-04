@@ -36,3 +36,4 @@ side of a conflict.
 | [0027](0027-otel-tracer-nested-spans-now-actually-parented.md) | OtelTracer's nested spans exported as unrelated roots (no parent/child) in a real OTel backend — start_span() never attached the OTel active context | High |
 | [0028](0028-graph-visualize-mermaid-injection-fix.md) | Graph.visualize(): a node id containing Mermaid syntax could break out of its label and inject extra flowchart statements — now uses synthetic ids + label escaping | High |
 | [0029](0029-init-agent-name-path-traversal-fix.md) | aef init's agent_name had zero path validation — "../../evil" and absolute paths wrote files outside the intended agents/ directory | High |
+| [0030](0030-mem0-adapter-get-no-longer-swallows-real-failures.md) | Mem0Adapter.get()'s bare except Exception silently turned genuine backend failures into indistinguishable-from-not-found — removed | High |
