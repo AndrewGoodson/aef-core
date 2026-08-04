@@ -214,7 +214,17 @@ class FileDurabilityBackend(DurabilityBackend):
         cursor_path = self._root / run_id / "cursor.json"
         if not cursor_path.exists():
             return None
-        data = json.loads(cursor_path.read_text())
+        # Same read-side corruption guard as load_checkpoint (ADR 0026):
+        # atomic writes (ADR 0031) stop this backend producing a torn cursor,
+        # but external corruption (disk fault, manual edit, a pre-atomic-write
+        # legacy crash) must surface as a diagnosable error naming the run,
+        # not a bare JSONDecodeError that bricks resume() opaquely.
+        try:
+            data = json.loads(cursor_path.read_text())
+        except json.JSONDecodeError as exc:
+            raise CorruptedCheckpointError(
+                f"cursor {cursor_path} (run_id={run_id!r}) is not valid JSON: {exc}"
+            ) from exc
         next_node = data.get("next_node")
         return next_node if isinstance(next_node, str) else None
 

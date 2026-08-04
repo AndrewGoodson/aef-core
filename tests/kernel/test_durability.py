@@ -135,6 +135,21 @@ def test_load_latest_raises_when_every_checkpoint_is_corrupt(tmp_path: Path) -> 
         backend.load_latest("r1")
 
 
+def test_load_cursor_raises_named_error_on_corrupted_cursor_file(tmp_path: Path) -> None:
+    """load_cursor lacked the corruption guard load_checkpoint has (ADR 0026):
+    an externally-corrupted cursor.json raised a bare json.JSONDecodeError
+    naming no run_id. Atomic writes (0031) stop THIS backend producing a torn
+    cursor, but external corruption (disk fault, manual edit) is exactly what
+    the read-side guard is for. See docs/adr/0031 (follow-up)."""
+    root = tmp_path / "checkpoints"
+    backend = FileDurabilityBackend(root)
+    backend.save_cursor("r1", "node_b")
+    (root / "r1" / "cursor.json").write_text("{not valid json")
+
+    with pytest.raises(CorruptedCheckpointError, match="r1"):
+        backend.load_cursor("r1")
+
+
 def test_save_checkpoint_is_atomic_no_torn_file_visible(tmp_path: Path) -> None:
     """A completed save_checkpoint must leave a fully-valid file — never a
     temp/partial artifact visible in the run dir. Verifies the temp+replace
