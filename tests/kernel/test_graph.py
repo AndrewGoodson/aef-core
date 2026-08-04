@@ -54,6 +54,16 @@ def test_compile_returns_validated_graph() -> None:
     assert compiled.graph is graph
 
 
+def test_compile_rejects_an_invalid_graph() -> None:
+    """compile() must run validate() — a mutation removing that call would
+    let an invalid graph compile silently and only misbehave at execution.
+    This pins the compile-validates guarantee through .compile() itself, not
+    just via a direct .validate() call."""
+    graph = Graph(id="g1", version="1.0.0", nodes={"a": _node("a")}, edges=[], entry_node="missing")
+    with pytest.raises(GraphValidationError):
+        graph.compile()
+
+
 def test_edges_from_sorted_by_priority_descending() -> None:
     graph = Graph(
         id="g1",

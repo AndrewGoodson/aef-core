@@ -49,14 +49,21 @@ class PoliciesConfig(_StrictModel):
 
     @field_validator("require_hitl_above_risk")
     @classmethod
-    def _must_be_finite(cls, value: float) -> float:
-        # Mirrors the same guard on aef.security.tool.PolicyConfig — a NaN
-        # threshold makes `risk > threshold` silently False for every risk,
-        # disabling the HITL gate. Fail at config-load time, not wherever
-        # this value eventually feeds the runtime PolicyConfig.
+    def _must_be_in_range(cls, value: float) -> float:
+        # Mirrors the runtime guard on aef.security.tool.PolicyConfig at
+        # config-load time (a config that loads clean must not construct an
+        # invalid runtime PolicyConfig once policies are wired — Phase 2, ADR
+        # 0014). A NaN threshold makes `risk > threshold` silently False for
+        # every risk; a threshold >= 1.0 makes the gate unreachable since risk
+        # is capped at 1.0 (ADR 0025/0035). Bound to [0.0, 1.0).
         if not math.isfinite(value):
             raise ValueError(
                 f"require_hitl_above_risk must be finite (no inf/-inf/nan) — got {value!r}"
+            )
+        if not (0.0 <= value < 1.0):
+            raise ValueError(
+                f"require_hitl_above_risk must be within [0.0, 1.0) so the HITL gate stays "
+                f"reachable (risk is capped at 1.0) — got {value!r}"
             )
         return value
 

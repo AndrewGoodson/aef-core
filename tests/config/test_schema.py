@@ -38,6 +38,19 @@ def test_policies_config_rejects_non_finite_hitl_threshold() -> None:
         PoliciesConfig(require_hitl_above_risk=float("nan"))
 
 
+def test_policies_config_rejects_threshold_at_or_above_one() -> None:
+    """Mirrors the runtime PolicyConfig [0.0, 1.0) bound (ADR 0035) at
+    config-load time: a threshold >= 1.0 makes the HITL gate unreachable
+    since risk is capped at 1.0. A config that loads clean must not build an
+    invalid runtime PolicyConfig once policies are wired (ADR 0014)."""
+    with pytest.raises(ValidationError, match="1.0"):
+        PoliciesConfig(require_hitl_above_risk=1.0)
+    with pytest.raises(ValidationError, match="1.0"):
+        PoliciesConfig(require_hitl_above_risk=1.5)
+    with pytest.raises(ValidationError, match="1.0"):
+        PoliciesConfig(require_hitl_above_risk=-0.1)
+
+
 def test_unknown_top_level_key_rejected() -> None:
     raw = {
         "model_provider": {"impl": "anthropic", "model": "claude-sonnet"},

@@ -57,30 +57,45 @@ def test_evolution_cannot_be_enabled_without_the_gate_criteria() -> None:
         EvolutionConfig(enabled=True)
 
 
-def _stub_subclass_calling_super(interface: type, method_name: str, *args: Any) -> None:
-    namespace = {
-        method_name: lambda self, *a, **kw: getattr(interface, method_name)(self, *a, **kw)
+def _stub_subclass_calling_super(
+    interface: type, method_name: str, args: tuple[Any, ...], kwargs: dict[str, Any]
+) -> None:
+    # Override EVERY abstract method so the subclass is concrete (interfaces
+    # with more than one abstract method would otherwise stay abstract and
+    # fail to instantiate) — but only the method under test forwards to the
+    # base implementation, so it's the one whose NotImplementedError we check.
+    namespace: dict[str, Any] = {
+        name: (lambda self, *a, **kw: None) for name in interface.__abstractmethods__
     }
+    namespace[method_name] = lambda self, *a, **kw: getattr(interface, method_name)(self, *a, **kw)
     concrete = type(f"_{interface.__name__}Stub", (interface,), namespace)
     instance = concrete()
-    getattr(instance, method_name)(*args)
+    getattr(instance, method_name)(*args, **kwargs)
 
 
-def test_mutation_proposer_stub_raises_when_super_is_called() -> None:
-    with pytest.raises(NotImplementedError, match="Phase 4"):
-        _stub_subclass_calling_super(MutationProposer, "propose", "graph-1")
+# (interface, representative abstract method, positional args, kwargs, phase substring).
+# Covers ALL 13 interfaces — a stub calling through to any base method must hit
+# NotImplementedError, not a body that quietly grew a real return value.
+STUB_SUPER_CALLS: list[tuple[type, str, tuple[Any, ...], dict[str, Any], str]] = [
+    (Coordinator, "handoff", (None,), {}, "Phase 5"),
+    (ArchiveStore, "archive", ("g", "v"), {}, "Phase 4"),
+    (CanaryController, "promote", ("g", "v"), {}, "Phase 4"),
+    (EvalGate, "check", (None,), {}, "Phase 4"),
+    (MutationProposer, "propose", ("graph-1",), {}, "Phase 4"),
+    (PlanValidator, "validate", (None, None), {}, "Phase 2"),
+    (Planner, "plan", (None,), {}, "Phase 2"),
+    (Critic, "critique", (None,), {}, "Phase 3"),
+    (Judge, "judge", (None,), {}, "Phase 3"),
+    (Retriever, "retrieve", ("q",), {"token_budget": 100}, "Phase 2"),
+    (GraphStore, "upsert_entity", (None,), {}, "Phase 2"),
+    (Optimizer, "propose", ([],), {}, "Phase 3"),
+    (TokenOptimizer, "compress", ("text",), {"token_budget": 100}, "Phase 2"),
+]
 
 
-def test_coordinator_stub_raises_when_super_is_called() -> None:
-    with pytest.raises(NotImplementedError, match="Phase 5"):
-        _stub_subclass_calling_super(Coordinator, "handoff", None)
-
-
-def test_planner_stub_raises_when_super_is_called() -> None:
-    with pytest.raises(NotImplementedError, match="Phase 2"):
-        _stub_subclass_calling_super(Planner, "plan", None)
-
-
-def test_critic_stub_raises_when_super_is_called() -> None:
-    with pytest.raises(NotImplementedError, match="Phase 3"):
-        _stub_subclass_calling_super(Critic, "critique", None)
+@pytest.mark.parametrize(("interface", "method", "args", "kwargs", "phase"), STUB_SUPER_CALLS)
+def test_stub_raises_notimplemented_when_super_is_called(
+    interface: type, method: str, args: tuple[Any, ...], kwargs: dict[str, Any], phase: str
+) -> None:
+    with pytest.raises(NotImplementedError, match=phase):
+        _stub_subclass_calling_super(interface, method, args, kwargs)
