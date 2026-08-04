@@ -177,7 +177,8 @@ resolving to one canonical guide (`AGENT_INTEGRATION.md`):
 |---|---|---|
 | **Phase 0 — Foundation** | ✅ Real & tested | Graph kernel, `AEFState` + migrations, checkpoint/replay, provider + fallback, OTel tracing |
 | **Phase 1 — Durability & Services** | ✅ Real & tested | File durability, memory (`InMemory` + Mem0), security policy engine, eval harness, the CLI |
-| **Phase 2/3/5** | 🧩 Typed stubs | Knowledge graph, context engine, token optimizer, planner, reflection, optimization, coordination — real interfaces, `NotImplementedError` bodies, **no fake behavior** |
+| **Phase 3 — Reflection** | 🟡 Partially real | `RuleBasedCritic`/`RuleBasedJudge` + `make_reflect_node` write failure/success memory from a real run, grounded only in recorded signals (ADR 0046). LLM-backed critic/judge still stubbed |
+| **Phase 2/3/5** | 🧩 Typed stubs | Knowledge graph, context engine, token optimizer, planner, offline optimization, coordination — real interfaces, `NotImplementedError` bodies, **no fake behavior** |
 | **Phase 4 — Evolution** | 🔒 Built but gated | Self-modification interfaces exist and are hard-disabled in code (`EvolutionConfig(enabled=True)` raises) |
 
 Every design decision and deviation is recorded as a numbered ADR in

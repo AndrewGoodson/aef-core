@@ -74,11 +74,12 @@ criteria first (see `docs/roadmap.md` Phase 4 and `docs/adr/0006`).
 `docs/roadmap.md` is the authoritative, currently-accurate answer. In
 short: kernel, state, checkpointing/replay, provider+fallback, security
 policy engine, memory (in-memory + Mem0), OTel tracing, and the eval
-harness are real and tested (Phase 0/1). Knowledge graph, context engine,
-token optimizer, planner, reflection, offline optimization, and
-multi-agent coordination are typed interfaces with `NotImplementedError`
-bodies (Phase 2/3/5). The evolution engine is a typed interface, disabled
-(Phase 4).
+harness are real and tested (Phase 0/1), as is the rule-based
+reflection slice (`RuleBasedCritic`/`RuleBasedJudge` + `make_reflect_node`,
+ADR 0046). Knowledge graph, context engine, token optimizer, planner,
+LLM-backed reflection, offline optimization, and multi-agent coordination
+are typed interfaces with `NotImplementedError` bodies (Phase 2/3/5). The
+evolution engine is a typed interface, disabled (Phase 4).
 
 ## Decisions and deviations
 

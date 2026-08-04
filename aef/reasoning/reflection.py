@@ -1,9 +1,14 @@
-"""Phase 3 interface stubs: Critic/Judge separation (report §9, blueprint
-Part 4.1 layer L1). Critic gives verbal feedback (Reflexion-style,
-grounded in external signals — tool errors, eval failures); Judge gives
-scores against an explicit rubric. Output from both is meant to be written
-to failure/success memory (`aef.services.memory`) so lessons persist across
-runs, not just within one — that wiring is also Phase 3.
+"""Critic/Judge separation (report §9, blueprint Part 4.1 layer L1). Critic
+gives verbal feedback (Reflexion-style, grounded in external signals — tool
+errors, eval failures); Judge gives scores against an explicit rubric.
+Output from both is written to failure/success memory
+(`aef.services.memory`) so lessons persist across runs, not just within one.
+
+These are the interfaces. The real rule-based implementations live in
+`rule_based_reflection.py`, and `nodes.make_reflect_node` is the wiring that
+runs them through `Services` and persists the result (ADR 0046). An
+LLM-backed Critic/Judge remains a legitimate later addition; it changes no
+interface here.
 """
 
 from __future__ import annotations

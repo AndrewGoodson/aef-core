@@ -68,10 +68,18 @@ Interfaces only, no implementation:
 - `Planner`/`PlanValidator` (`aef/reasoning/planner.py`) — hierarchical
   goal decomposition, not implemented
 
-## Phase 3 — Reflection, offline optimization, private evals — **STUBBED**
+## Phase 3 — Reflection, offline optimization, private evals — **PARTIALLY REAL**
 
 - `Critic`/`Judge` (`aef/reasoning/reflection.py`) — Reflexion-style
-  verbal feedback and rubric-scored judgment, not implemented
+  verbal feedback and rubric-scored judgment. **Real and tested** in the
+  rule-based form: `RuleBasedCritic`/`RuleBasedJudge`
+  (`aef/reasoning/rule_based_reflection.py`) plus `make_reflect_node`
+  (`aef/reasoning/nodes.py`), which writes `MemoryRecord(kind=
+  "failure"|"success")` from a real graph run. Grounded strictly in
+  recorded signals (`state.errors`, `state.tool_results`, `state.scores`)
+  — no model call. See ADR 0046.
+  **Still stubbed:** an LLM-backed Critic/Judge, and any use of a
+  `Judgment` to gate or re-plan.
 - `Optimizer` (`aef/services/optimizers/base.py`) — GEPA/DSPy-style
   offline prompt/program optimization, not implemented
 

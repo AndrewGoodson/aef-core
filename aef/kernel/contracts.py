@@ -20,6 +20,7 @@ from typing import Final
 from aef.kernel.durability import DurabilityBackend
 from aef.observability.base import Tracer
 from aef.providers.base import ModelProvider
+from aef.reasoning.reflection import Critic, Judge
 from aef.security.tool import PolicyEngine, Tool
 from aef.services.context.base import Retriever
 from aef.services.eval.base import Evaluator
@@ -54,6 +55,12 @@ class Services:
     graph_store: GraphStore | None = None
     retriever: Retriever | None = None
     evaluator: Evaluator | None = None
+    # Reflection backends. Constraint #2 (fixed node signature, DI-only, no
+    # globals) means a Critic/Judge cannot be reached from a node at all
+    # without a slot here — these two were the only pluggable backends
+    # missing one, which is why `aef/reasoning/reflection.py` sat unwireable.
+    critic: Critic | None = None
+    judge: Judge | None = None
     tracer: Tracer | None = None
     tools: Mapping[str, Tool] = field(default_factory=dict)
     policy_engine: PolicyEngine | None = None
@@ -84,6 +91,16 @@ class Services:
         if self.evaluator is None:
             raise ServiceNotConfiguredError("evaluator")
         return self.evaluator
+
+    def require_critic(self) -> Critic:
+        if self.critic is None:
+            raise ServiceNotConfiguredError("critic")
+        return self.critic
+
+    def require_judge(self) -> Judge:
+        if self.judge is None:
+            raise ServiceNotConfiguredError("judge")
+        return self.judge
 
     def require_tracer(self) -> Tracer:
         if self.tracer is None:
