@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from aef.cli.init import run_init
+import pytest
+
+from aef.cli.init import InvalidAgentNameError, run_init
 
 
 def test_run_init_writes_three_files(tmp_path: Path) -> None:
@@ -43,3 +45,28 @@ def test_run_init_does_not_overwrite_existing_files(tmp_path: Path) -> None:
 
     assert (agent_dir / "aef.yaml").read_text() == "custom: true\n"
     assert any(p.name == "aef.yaml" for p in result.skipped_files)
+
+
+def test_run_init_rejects_path_traversal_in_agent_name(tmp_path: Path) -> None:
+    """Reproduces a real, confirmed path-traversal bug: agent_name was
+    joined into a filesystem path with zero validation. "../../evil" wrote
+    files two directories above the intended <dir>/agents/ tree; an
+    absolute path discarded base_dir entirely (pathlib's `/` operator
+    silently drops everything left of an absolute right-hand component).
+    See docs/adr/0029."""
+    with pytest.raises(InvalidAgentNameError):
+        run_init("../../evil", tmp_path)
+    # Confirm nothing escaped: no file was written anywhere outside tmp_path.
+    escaped = tmp_path.parent / "evil"
+    assert not escaped.exists()
+
+
+def test_run_init_rejects_absolute_path_as_agent_name(tmp_path: Path) -> None:
+    with pytest.raises(InvalidAgentNameError):
+        run_init("/etc/evil", tmp_path)
+
+
+def test_run_init_rejects_non_identifier_agent_names(tmp_path: Path) -> None:
+    for bad in ["has space", "has-hyphen", "", "123startswithdigit", 'has"quote']:
+        with pytest.raises(InvalidAgentNameError):
+            run_init(bad, tmp_path)
