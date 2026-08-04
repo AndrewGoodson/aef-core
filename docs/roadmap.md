@@ -104,3 +104,17 @@ in code, not just documented. Re-enabling requires implementing ALL of:
   reference layout) but has no implementation beyond
   `config/agent.azure_sec.yaml` — building the actual Azure Security
   Agent is Phase 5+ vertical work, out of this build's scope.
+
+## Self-rewiring agents — planning program (design only, not built)
+
+A separate, owner-gated program: agents propose changes to their own graph
+**wiring** as reviewable diffs, validated by automated gates, with the
+owner's merge to `main` as the only promotion mechanism. **This is not the
+Phase 4 evolution engine** — that stays disabled (ADR 0006/0042); the
+owner's commit review replaces unsupervised auto-promotion.
+
+Planning artifacts (no implementation yet):
+`docs/design/self-rewiring/` — `00-current-state.md` (ground truth,
+cited), `01-architecture.md` (the wiring-manifest design + Mermaid
+pipeline), `gates/` (six gate specs), `02-risks.md`, `03-roadmap.md`
+(milestones M0–M9). Decisions recorded in ADRs 0041–0043.

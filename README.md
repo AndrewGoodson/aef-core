@@ -249,6 +249,7 @@ PolicyEngine or remove a HITL gate. Never overwrite a user file.
 | [`docs/autonomy/new-repo-bootstrap-loop.md`](docs/autonomy/new-repo-bootstrap-loop.md) | Copy-paste prompt to bootstrap a new adopting repo |
 | [`docs/roadmap.md`](docs/roadmap.md) | Authoritative real-vs-stubbed status, phase by phase |
 | [`docs/adr/README.md`](docs/adr/README.md) | Every design decision, with rationale |
+| [`docs/design/self-rewiring/`](docs/design/self-rewiring/03-roadmap.md) | Planning program: owner-gated self-rewiring agents (design only) |
 
 ---
 
