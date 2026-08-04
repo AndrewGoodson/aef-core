@@ -8,6 +8,10 @@ graph access, observability, security, telemetry, token optimization,
 context engineering, and continuous learning, without rebuilding any of it
 per agent.
 
+New here? Read `AGENT_INTEGRATION.md` (canonical ingest-and-start guide) and
+`docs/autonomy/self-improving-loop.md` (the autonomous-loop safety contract)
+first.
+
 ## Prime directive
 
 Only five things are allowed to differ per agent: **Knowledge, Policies,
