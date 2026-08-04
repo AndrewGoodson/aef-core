@@ -1,9 +1,19 @@
 """`aef run` — execute a graph module's `build_graph()` against an
-objective. memory/tracer/durability are always in-memory backends; the
-model provider is real (built from `--config`'s `model_provider.impl`) if
+objective. memory/tracer are always in-memory backends; the model
+provider is real (built from `--config`'s `model_provider.impl`) if
 config is given, otherwise unconfigured — a graph module that calls
 `services.require_model_provider()` without `--config` gets a clear
 `ServiceNotConfiguredError`, not a silent no-op.
+
+Durability defaults to in-memory (a one-off run, nothing persisted) but
+`checkpoints_dir` switches it to `FileDurabilityBackend` — this is what
+makes `aef run --checkpoints-dir X` followed by `aef eval`/`aef trace
+--checkpoints-dir X --run-id <id>` an actually-chainable workflow. Before
+this, `aef run` always used `InMemoryDurabilityBackend`, whose data is
+discarded the instant the process exits — `aef eval`/`aef trace` could
+never find anything a prior `aef run` produced, confirmed by actually
+running the two in sequence, not inferred from reading the code. See
+docs/adr/0021.
 
 Only `model_provider` is config-driven so far: `memory`/`knowledge_graph`/
 `tools`/`policies` need a real plugin-registry design this repo doesn't
@@ -20,7 +30,13 @@ import uuid
 from pathlib import Path
 
 from aef.config import build_model_provider, load_agent_config
-from aef.kernel import GraphExecutor, InMemoryDurabilityBackend, Services
+from aef.kernel import (
+    DurabilityBackend,
+    FileDurabilityBackend,
+    GraphExecutor,
+    InMemoryDurabilityBackend,
+    Services,
+)
 from aef.observability.in_memory import InMemoryTracer
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.state import AEFState
@@ -40,7 +56,12 @@ def _ensure_cwd_importable() -> None:
 
 
 def run_graph_module(
-    module_path: str, *, agent_id: str, objective: str, config_path: str | Path | None = None
+    module_path: str,
+    *,
+    agent_id: str,
+    objective: str,
+    config_path: str | Path | None = None,
+    checkpoints_dir: str | Path | None = None,
 ) -> AEFState:
     _ensure_cwd_importable()
     module = importlib.import_module(module_path)
@@ -53,12 +74,18 @@ def run_graph_module(
         config = load_agent_config(config_path)
         model_provider = build_model_provider(config.model_provider)
 
+    durability: DurabilityBackend = (
+        FileDurabilityBackend(Path(checkpoints_dir))
+        if checkpoints_dir is not None
+        else InMemoryDurabilityBackend()
+    )
+
     graph = build_graph()
     services = Services(
         model_provider=model_provider,
         memory=InMemoryMemoryStore(),
         tracer=InMemoryTracer(),
-        durability=InMemoryDurabilityBackend(),
+        durability=durability,
     )
     state = AEFState(run_id=str(uuid.uuid4()), agent_id=agent_id, objective=objective)
     executor = GraphExecutor(graph.compile(), services)

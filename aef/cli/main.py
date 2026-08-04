@@ -48,7 +48,11 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 
 def _cmd_run(args: argparse.Namespace) -> int:
     state = run_graph_module(
-        args.module, agent_id=args.agent_id, objective=args.objective, config_path=args.config
+        args.module,
+        agent_id=args.agent_id,
+        objective=args.objective,
+        config_path=args.config,
+        checkpoints_dir=args.checkpoints_dir,
     )
     print(state.model_dump_json(indent=2))
     return 0
@@ -101,6 +105,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--objective", required=True)
     p_run.add_argument(
         "--config", default=None, help="aef.yaml path; wires a real model_provider if given"
+    )
+    p_run.add_argument(
+        "--checkpoints-dir",
+        default=None,
+        help="persist checkpoints here (FileDurabilityBackend) so `aef eval`/`aef trace` "
+        "can find this run afterward; omit for a one-off in-memory run",
     )
     p_run.set_defaults(handler=_cmd_run)
 

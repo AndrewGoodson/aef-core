@@ -162,3 +162,49 @@ def test_run_graph_module_finds_a_package_relative_to_cwd_alone(
 
     final_state = run_graph_module("agents.my_agent.graph", agent_id="a1", objective="x")
     assert final_state.working_memory == {"greeted": True}
+
+
+def test_run_without_checkpoints_dir_writes_no_files(
+    graph_module: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The default (no --checkpoints-dir) must stay in-memory-only — no
+    stray files written for a quick one-off run. `graph_module` already
+    wrote its own .py file into `tmp_path` (same fixture instance, shared
+    across both fixture params) and Python's own import machinery creates
+    `__pycache__` regardless of durability backend — snapshot before/after
+    and ignore both, so only files `run_graph_module` itself might write
+    (e.g. a stray checkpoints dir) would fail this."""
+    monkeypatch.chdir(tmp_path)
+    before = {p for p in tmp_path.iterdir() if p.name != "__pycache__"}
+    run_graph_module(graph_module, agent_id="a1", objective="x")
+    after = {p for p in tmp_path.iterdir() if p.name != "__pycache__"}
+    assert after == before
+
+
+def test_run_with_checkpoints_dir_persists_to_a_real_file_backend_readable_by_eval_and_trace(
+    graph_module: str, tmp_path: Path
+) -> None:
+    """Reproduces the real bug: before this fix, aef run always used
+    InMemoryDurabilityBackend, whose data vanished the instant the process
+    exited — aef eval/aef trace could never find anything a prior aef run
+    produced. Confirmed with the real installed `aef` console script in a
+    scratch directory before writing this test, not just here."""
+    from aef.cli.eval import eval_run
+    from aef.cli.trace import trace_run
+    from aef.kernel import FileDurabilityBackend
+
+    checkpoints_dir = tmp_path / "checkpoints"
+    final_state = run_graph_module(
+        graph_module, agent_id="a1", objective="chained", checkpoints_dir=checkpoints_dir
+    )
+
+    backend = FileDurabilityBackend(checkpoints_dir)
+    reloaded = backend.load_latest(final_state.run_id)
+    assert reloaded is not None
+    assert reloaded.run_id == final_state.run_id
+
+    record = eval_run(checkpoints_dir, final_state.run_id)
+    assert record.run_id == final_state.run_id
+
+    provenance = trace_run(checkpoints_dir, final_state.run_id)
+    assert provenance == []  # this graph makes no model calls; empty is correct, not broken

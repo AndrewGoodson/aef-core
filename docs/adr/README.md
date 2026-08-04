@@ -27,3 +27,4 @@ side of a conflict.
 | [0018](0018-aef-run-adds-cwd-to-syspath.md) | aef run adds CWD to sys.path — aef init's own output couldn't be run before this | High |
 | [0019](0019-plan-replacement-footgun-in-the-shipped-example.md) | StateDelta.plan replaces not merges; the shipped example was silently dropping subgoals/reusable_key | High |
 | [0020](0020-edge-equality-uses-condition-code-not-identity.md) | Edge equality compares condition by __code__ not identity — diff() falsely flagged every rebuilt graph as changed | High |
+| [0021](0021-aef-run-checkpoints-dir-enables-eval-and-trace-chaining.md) | aef run --checkpoints-dir — before this, run/eval/trace could never be chained at all | High |
