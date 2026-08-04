@@ -252,7 +252,13 @@ Judge before judged, now including the control baseline:
 | **M7** | G5 rate/drift/budget |
 | **M8** | Proposer (rule-based first) |
 | **M9** | Review surface + proposal ledger + loop observability |
-| **M10** | Post-merge monitoring + auto-rollback |
+| **M10** | Post-merge monitoring + auto-rollback + kill switch + weekly digest |
+
+**Approval policy:** per-change owner review is replaced by tiered
+auto-merge — see `05-approval-policy.md` and ADR 0045. This makes **M10
+load-bearing rather than optional**: with no human in the merge path,
+post-merge monitoring is the primary safety net. M10 must ship before Tier-1
+auto-merge is enabled; until then every candidate escalates (Tier 2).
 
 **Recommended first build remains M0** — it is a genuine prerequisite,
 carries no self-modification risk, and delivers standalone value.

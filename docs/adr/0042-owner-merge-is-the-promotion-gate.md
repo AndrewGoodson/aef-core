@@ -12,6 +12,13 @@ exists to prevent. Criteria 1 and 6 are therefore *unmet*, not *unnecessary*;
 auto-rollback as partial compensation. The core decision (owner merge is the
 sole promotion gate; evolution stays disabled) stands.
 
+**Amended by ADR 0045** (2026-08-04): per-change owner review is replaced by
+tiered auto-merge. The owner stated review would be a rubber stamp, making
+it a nominal control. Merges are now automatic when the gates have genuine
+evidence, and escalate only where they have none. The evolution engine
+remains disabled and unattended *runtime* self-modification is still
+prohibited — what changed is who approves a merge.
+
 ## Context
 aef-core already declares an evolution engine for *unsupervised runtime
 auto-promotion* of graph mutations, disabled in code at two layers:
