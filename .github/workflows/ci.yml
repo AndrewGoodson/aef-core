@@ -25,13 +25,13 @@ jobs:
           pip install -e ".[dev,anthropic,mem0]"
 
       - name: Lint (ruff check)
-        run: ruff check aef tests
+        run: ruff check .
 
       - name: Format check (ruff format)
-        run: ruff format --check aef tests
+        run: ruff format --check aef tests examples
 
       - name: Type-check (mypy --strict)
-        run: mypy aef
+        run: mypy aef examples
 
       - name: Vendor isolation (constraint #3)
         run: pytest tests/test_vendor_isolation.py -v

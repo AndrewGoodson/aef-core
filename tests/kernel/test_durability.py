@@ -2,9 +2,26 @@ from pathlib import Path
 
 import pytest
 
-from aef.kernel import CorruptedCheckpointError, FileDurabilityBackend, InMemoryDurabilityBackend
+from aef.kernel import (
+    CorruptedCheckpointError,
+    FileDurabilityBackend,
+    InMemoryDurabilityBackend,
+    PostgresDurabilityBackend,
+    TemporalDurabilityBackend,
+)
 from aef.kernel.durability import DurabilityBackend
 from aef.state import AEFState
+
+
+def test_phase2_durability_stubs_fail_loudly_on_construction() -> None:
+    """Postgres/Temporal backends are exported public symbols, so a user can
+    import and instantiate them. Their one promised Phase-0/1 behavior — fail
+    loudly with a Phase-2 pointer, never silently half-work — must be pinned,
+    or a deleted `raise` / half-built backend would ship uncaught."""
+    with pytest.raises(NotImplementedError, match="Phase 2"):
+        PostgresDurabilityBackend(dsn="postgres://ignored")
+    with pytest.raises(NotImplementedError, match="Phase 2"):
+        TemporalDurabilityBackend(task_queue="ignored")
 
 
 @pytest.fixture(params=["in_memory", "file"])
