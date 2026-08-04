@@ -1,3 +1,8 @@
+> **⚠ REVISED — read `04-review-and-self-coding-redesign.md` first.** Three-reviewer
+> audit disproved this document's premise (edges authorize routes; nodes choose them)
+> and found the gate pipeline admitted only no-ops. Scope is now self-coding with a
+> structurally isolated harness (ADR 0044). Retained for provenance.
+
 # The gate pipeline
 
 Ordered, fail-fast. A candidate must pass **every** gate to be surfaced to

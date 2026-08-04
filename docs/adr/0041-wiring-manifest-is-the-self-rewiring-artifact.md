@@ -1,7 +1,17 @@
 # ADR 0041: A declarative wiring manifest is the artifact agents rewire
 
 ## Status
-Accepted (planning decision; no implementation yet)
+**Superseded by ADR 0044** (2026-08-04). Two claims in this ADR were
+disproved by review:
+1. **Premise invalidated.** The ADR assumes wiring edits can redirect
+   control flow. They cannot: `_resolve_route` (`executor.py:233-260`)
+   returns the route the *node* supplied; edges only authorize it. Routing
+   lives in node code, so a wiring-only manifest is substantially inert for
+   self-improvement.
+2. **"Cannot author new behaviour" is false.** `params` (which does not
+   exist in the kernel — zero hits in `aef/kernel/`) would carry prompts,
+   and a prompt is behaviour.
+Retained for provenance. See `docs/design/self-rewiring/04-review-and-self-coding-redesign.md` §1.1-1.2.
 
 ## Context
 The self-rewiring program requires agents to propose changes to their own

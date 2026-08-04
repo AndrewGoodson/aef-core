@@ -1,7 +1,16 @@
 # ADR 0042: The owner's merge to `main` is the promotion gate; the evolution engine stays disabled
 
 ## Status
-Accepted (planning decision; no implementation yet)
+Accepted, **with a correction** (2026-08-04): the claim that owner-merge is
+"strictly stronger" than Phase-4 criterion 7 is **false**. It is *broader in
+authority* (every change is reviewed, at any risk level) but **weaker in
+evidence**: it drops signed release manifests, and has no shadow execution
+against the real traffic distribution and no canary — post-merge a change is
+100% live, and rollback requires a process reload, the cold start criterion 6
+exists to prevent. Criteria 1 and 6 are therefore *unmet*, not *unnecessary*;
+`04-review-and-self-coding-redesign.md` §2.6 adds post-merge monitoring and
+auto-rollback as partial compensation. The core decision (owner merge is the
+sole promotion gate; evolution stays disabled) stands.
 
 ## Context
 aef-core already declares an evolution engine for *unsupervised runtime
