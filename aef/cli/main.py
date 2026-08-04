@@ -38,12 +38,17 @@ def _cmd_adopt(args: argparse.Namespace) -> int:
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
     checks = run_doctor(Path(args.dir))
-    all_ok = True
+    ok = True
     for check in checks:
-        status = "OK" if check.ok else "FAIL"
+        if check.ok:
+            status = "OK"
+        elif check.level == "advisory":
+            status = "WARN"  # surfaced but never fails the exit code
+        else:
+            status = "FAIL"
+            ok = False
         print(f"[{status}] {check.name}: {check.detail}")
-        all_ok = all_ok and check.ok
-    return 0 if all_ok else 1
+    return 0 if ok else 1
 
 
 def _cmd_run(args: argparse.Namespace) -> int:

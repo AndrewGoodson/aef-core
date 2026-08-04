@@ -33,3 +33,42 @@ def test_doctor_flags_invalid_config(tmp_path: Path) -> None:
     config_checks = [c for c in checks if c.name.startswith("agent_config:")]
     assert len(config_checks) == 1
     assert not config_checks[0].ok
+
+
+def _write_config(
+    tmp_path: Path, *, fallback: str = "[]", objectives: str = "do the thing"
+) -> None:
+    (tmp_path / "aef.yaml").write_text(
+        "model_provider:\n"
+        "  impl: anthropic\n"
+        "  model: claude-x\n"
+        f"  fallback: {fallback}\n"
+        "memory:\n"
+        "  impl: in_memory\n"
+        f'objectives: "{objectives}"\n'
+    )
+
+
+def test_doctor_advises_on_fallback_duplicating_the_primary_impl(tmp_path: Path) -> None:
+    """Review Finding 4: a fallback naming the SAME impl as primary is a
+    pointless same-vendor fallback (fails identically on a vendor outage).
+    Advisory only — not a hard failure, since pydantic can't judge intent."""
+    _write_config(tmp_path, fallback="[anthropic]")
+    checks = run_doctor(tmp_path)
+    advisories = [c for c in checks if c.level == "advisory" and not c.ok]
+    assert any("fallback" in c.detail for c in advisories)
+    # Advisory must NOT flip the overall doctor result to failure.
+    assert all(c.ok for c in checks if c.level == "error" and c.name.startswith("agent_config:"))
+
+
+def test_doctor_advises_on_empty_objectives(tmp_path: Path) -> None:
+    _write_config(tmp_path, objectives="   ")
+    checks = run_doctor(tmp_path)
+    advisories = [c for c in checks if c.level == "advisory" and not c.ok]
+    assert any("objectives" in c.detail for c in advisories)
+
+
+def test_doctor_no_advisories_on_a_clean_config(tmp_path: Path) -> None:
+    _write_config(tmp_path, fallback="[]", objectives="summarize incident tickets")
+    checks = run_doctor(tmp_path)
+    assert not [c for c in checks if c.level == "advisory" and not c.ok]
