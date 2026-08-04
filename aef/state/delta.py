@@ -10,9 +10,10 @@ the delta sets them.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from aef.state.schema import AEFState, Message, Plan, Provenance
 
@@ -33,6 +34,32 @@ class StateDelta(BaseModel):
     scores: dict[str, float] = Field(default_factory=dict)
     errors: list[dict[str, Any]] = Field(default_factory=list)
     provenance: list[Provenance] = Field(default_factory=list)
+
+    @field_validator("scores")
+    @classmethod
+    def _scores_must_be_finite(cls, value: dict[str, float]) -> dict[str, float]:
+        # AEFState.scores is exactly where a Financial Agent's Sharpe/PF/
+        # MaxDD-style domain gates land (report §16) — a division-by-zero
+        # in a real metric calculation (e.g. zero volatility) produces inf
+        # or nan. `model_dump_json()` silently rewrites both as JSON `null`
+        # on the very first checkpoint write (confirmed directly, not
+        # assumed — standard JSON has no Infinity/NaN literal), so a
+        # corrupted score would look like a perfectly valid, merely-absent
+        # one on every subsequent load: a domain gate reading
+        # `state.scores.get("sharpe", 0)` would silently see a default
+        # instead of an error, potentially flipping a pass/fail decision
+        # with no signal anything went wrong. Reject at construction time
+        # instead — the node that computed the bad value is what should
+        # fail loudly, not a checkpoint several steps later. See docs/adr/0022.
+        non_finite = {k: v for k, v in value.items() if not math.isfinite(v)}
+        if non_finite:
+            raise ValueError(
+                f"scores must be finite (no inf/-inf/nan) — got non-finite values for: "
+                f"{sorted(non_finite)}. A non-finite score usually means a division by "
+                f"zero upstream (e.g. zero volatility in a Sharpe ratio) — fix the "
+                f"computation, don't pass the result through."
+            )
+        return value
 
     def apply(self, state: AEFState) -> AEFState:
         return state.model_copy(

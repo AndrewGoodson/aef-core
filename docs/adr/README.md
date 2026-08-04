@@ -28,3 +28,4 @@ side of a conflict.
 | [0019](0019-plan-replacement-footgun-in-the-shipped-example.md) | StateDelta.plan replaces not merges; the shipped example was silently dropping subgoals/reusable_key | High |
 | [0020](0020-edge-equality-uses-condition-code-not-identity.md) | Edge equality compares condition by __code__ not identity — diff() falsely flagged every rebuilt graph as changed | High |
 | [0021](0021-aef-run-checkpoints-dir-enables-eval-and-trace-chaining.md) | aef run --checkpoints-dir — before this, run/eval/trace could never be chained at all | High |
+| [0022](0022-scores-must-be-finite.md) | scores reject inf/nan at construction — was silently corrupted to null on checkpoint write, crashed later on reload | High |

@@ -1,5 +1,8 @@
 from datetime import UTC, datetime
 
+import pytest
+from pydantic import ValidationError
+
 from aef.state import AEFState, Message, Plan, Provenance, StateDelta
 
 
@@ -69,3 +72,36 @@ def test_apply_deterministic_same_inputs_same_output() -> None:
     out1 = delta.apply(state)
     out2 = delta.apply(state)
     assert out1 == out2
+
+
+def test_scores_with_infinity_rejected_at_construction() -> None:
+    """AEFState.scores is exactly where a Financial Agent's Sharpe/PF/MaxDD
+    domain gates land (report §16). A division-by-zero upstream (e.g. zero
+    volatility) produces inf/nan; model_dump_json() silently rewrites both
+    as JSON null on the very first checkpoint write (confirmed directly —
+    standard JSON has no Infinity/NaN literal). Rejecting at StateDelta
+    construction catches this at its true origin instead of as a mysterious
+    validation crash several steps later, at an unrelated checkpoint-load
+    site (docs/adr/0022)."""
+    with pytest.raises(ValidationError, match="finite"):
+        StateDelta(scores={"sharpe": float("inf")})
+
+
+def test_scores_with_negative_infinity_rejected() -> None:
+    with pytest.raises(ValidationError, match="finite"):
+        StateDelta(scores={"max_dd": float("-inf")})
+
+
+def test_scores_with_nan_rejected() -> None:
+    with pytest.raises(ValidationError, match="finite"):
+        StateDelta(scores={"pf": float("nan")})
+
+
+def test_scores_error_names_every_offending_key() -> None:
+    with pytest.raises(ValidationError, match=r"sharpe.*max_dd|max_dd.*sharpe"):
+        StateDelta(scores={"sharpe": float("inf"), "max_dd": float("nan"), "pf": 1.5})
+
+
+def test_normal_finite_scores_still_accepted() -> None:
+    delta = StateDelta(scores={"sharpe": 0.9, "max_dd": -0.15, "pf": 1.3})
+    assert delta.scores == {"sharpe": 0.9, "max_dd": -0.15, "pf": 1.3}

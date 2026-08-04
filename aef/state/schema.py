@@ -9,10 +9,11 @@ Evaluation Metrics) — never in new top-level fields on this model.
 
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 CURRENT_SCHEMA_VERSION = "1.0.0"
 
@@ -62,6 +63,23 @@ class AEFState(_StrictModel):
     errors: list[dict[str, Any]] = Field(default_factory=list)
     checkpoint_seq: int = 0
     provenance: list[Provenance] = Field(default_factory=list)
+
+    @field_validator("scores")
+    @classmethod
+    def _scores_must_be_finite(cls, value: dict[str, float]) -> dict[str, float]:
+        # Same guard as StateDelta._scores_must_be_finite (aef/state/delta.py)
+        # — kept here too since AEFState can be constructed directly, not
+        # only via StateDelta.apply(). Belt-and-suspenders: apply() uses
+        # model_copy(), which does NOT re-run validators, so this alone
+        # would not have caught the bug StateDelta's validator exists for
+        # (docs/adr/0022) — the two together close both entry points.
+        non_finite = {k: v for k, v in value.items() if not math.isfinite(v)}
+        if non_finite:
+            raise ValueError(
+                f"scores must be finite (no inf/-inf/nan) — got non-finite values for: "
+                f"{sorted(non_finite)}"
+            )
+        return value
 
 
 Plan.model_rebuild()
