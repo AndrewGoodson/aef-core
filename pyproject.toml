@@ -43,10 +43,11 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "TID"]
-# TID251 (banned-api) enforces vendor-SDK import isolation; see
-# scripts/check_vendor_isolation.py / tests/test_vendor_isolation.py for the
-# authoritative, path-aware check. This flake8-tidy-imports rule is a coarse
-# global backstop only (it cannot express "banned except under providers/").
+# Vendor-SDK import isolation (constraint #3) is enforced ONLY by the
+# path-aware AST scan in tests/test_vendor_isolation.py (run in CI). Ruff's
+# TID rules are enabled for general import hygiene, NOT for vendor isolation:
+# TID251 (banned-api) needs an explicit banned-api mapping (none is set) and
+# is global anyway, so it cannot express "banned except under providers/".
 
 [tool.mypy]
 python_version = "3.11"
