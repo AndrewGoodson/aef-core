@@ -121,7 +121,7 @@ class GraphExecutor:
                 ),
             )
 
-            delta, route = self._execute_node(node, state, ctx)
+            delta, route, fallback_target = self._execute_node(node, state, ctx)
             new_state = delta.apply(state)
             if record_trace:
                 trace.append(
@@ -130,6 +130,19 @@ class GraphExecutor:
                     )
                 )
             state = new_state
+            if fallback_target is not None:
+                # The node raised and declared a fallback. A fallback is an
+                # error handler — it fires unconditionally, bypassing normal
+                # edge-condition resolution (which would otherwise mask the
+                # original error with a RoutingViolationError when no
+                # true-condition edge to the fallback exists). The target is
+                # validated as a real node by the loop's own node lookup next
+                # iteration. See docs/adr/0036.
+                if durability is not None:
+                    durability.save_checkpoint(state)
+                    durability.save_cursor(state.run_id, fallback_target)
+                current = fallback_target
+                continue
             try:
                 next_node = self._resolve_route(node, route, state)
             except HumanApprovalRequiredError:
@@ -156,7 +169,13 @@ class GraphExecutor:
 
         raise GraphExecutionError(f"exceeded max_steps={self._max_steps} without reaching END")
 
-    def _execute_node(self, node: Node, state: AEFState, ctx: Context) -> tuple[StateDelta, Route]:
+    def _execute_node(
+        self, node: Node, state: AEFState, ctx: Context
+    ) -> tuple[StateDelta, Route, str | None]:
+        """Returns (delta, route, fallback_target). `fallback_target` is the
+        node id to route to unconditionally because the node raised and
+        declared a `fallback_node_id`; `None` on the normal (no-exception)
+        path, where `route` is what the node returned."""
         tracer = self._services.tracer
         attributes: dict[str, object] = {
             semconv.AEF_RUN_ID: ctx.run_id,
@@ -189,7 +208,7 @@ class GraphExecutor:
                             }
                         ]
                     )
-                    return error_delta, node.fallback_node_id
+                    return error_delta, node.fallback_node_id, node.fallback_node_id
                 raise
             if span is not None and delta.provenance:
                 total_tokens = sum(p.token_cost for p in delta.provenance)
@@ -197,7 +216,7 @@ class GraphExecutor:
                 last_model = delta.provenance[-1].model
                 if last_model is not None:
                     span.set_attribute(semconv.GEN_AI_RESPONSE_MODEL, last_model)
-            return delta, route
+            return delta, route, None
 
     def _resolve_route(self, node: Node, route: Route, state: AEFState) -> str | _End:
         if isinstance(route, _End):

@@ -246,6 +246,48 @@ def test_node_exception_routes_to_fallback_and_records_error() -> None:
     assert result.final_state.working_memory == {"visited_finish": True}
 
 
+def test_fallback_fires_even_with_no_declared_edge_to_it() -> None:
+    """Review/round-1 High finding (docs/adr/0036): a fallback is an error
+    handler — it must fire on exception regardless of edge conditions. Before
+    the fix, the fallback route was resolved through _resolve_route, which
+    required a declared true-condition edge; with none, the original error
+    was masked by a misleading RoutingViolationError and the handler never
+    ran. The fallback now bypasses edge resolution."""
+
+    def _boom_fn(state, ctx, services):
+        raise ValueError("ORIGINAL boom")
+
+    boom = Node(
+        id="boom", version="1.0.0", fn=_boom_fn, deterministic=True, fallback_node_id="safe"
+    )
+    safe = Node(id="safe", version="1.0.0", fn=_finish_fn, deterministic=True)
+    graph = Graph(  # NO edge from boom to safe
+        id="g", version="1.0.0", nodes={"boom": boom, "safe": safe}, edges=[], entry_node="boom"
+    )
+    result = GraphExecutor(graph.compile(), Services()).run(_make_state())
+    assert result.final_state.working_memory == {"visited_finish": True}
+    assert result.final_state.errors[0]["error"] == "ORIGINAL boom"
+
+
+def test_fallback_fires_even_when_the_edge_condition_is_false() -> None:
+    def _boom_fn(state, ctx, services):
+        raise ValueError("boom")
+
+    boom = Node(
+        id="boom", version="1.0.0", fn=_boom_fn, deterministic=True, fallback_node_id="safe"
+    )
+    safe = Node(id="safe", version="1.0.0", fn=_finish_fn, deterministic=True)
+    graph = Graph(
+        id="g",
+        version="1.0.0",
+        nodes={"boom": boom, "safe": safe},
+        edges=[Edge(from_node="boom", to_node="safe", condition=lambda state: False)],
+        entry_node="boom",
+    )
+    result = GraphExecutor(graph.compile(), Services()).run(_make_state())
+    assert result.final_state.working_memory == {"visited_finish": True}
+
+
 def test_node_exception_is_recorded_on_its_span_before_falling_back() -> None:
     def _boom_fn(state, ctx, services):
         raise ValueError("boom")

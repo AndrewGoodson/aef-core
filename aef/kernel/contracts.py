@@ -123,6 +123,11 @@ class Context:
     node_id: str
     now: datetime
     idempotency_key: str | None = None
+    # Forward-declared, not yet wired: the executor always constructs Context
+    # with attempt=1 and nothing increments it — a node CANNOT currently tell
+    # a first run from an at-least-once resume/HITL re-execution (ADR 0032)
+    # via this field. A retry/attempt-tracking loop is a later addition; until
+    # then, do not read `attempt` expecting it to reflect re-execution count.
     attempt: int = 1
 
 
