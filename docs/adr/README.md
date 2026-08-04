@@ -38,3 +38,4 @@ side of a conflict.
 | [0029](0029-init-agent-name-path-traversal-fix.md) | aef init's agent_name had zero path validation — "../../evil" and absolute paths wrote files outside the intended agents/ directory | High |
 | [0030](0030-mem0-adapter-get-no-longer-swallows-real-failures.md) | Mem0Adapter.get()'s bare except Exception silently turned genuine backend failures into indistinguishable-from-not-found — removed | High |
 | [0031](0031-atomic-durability-writes-and-load-latest-recovery.md) | Durability writes are atomic (temp+fsync+os.replace); load_latest recovers past a torn checkpoint instead of bricking resume — completes ADR 0026's read-only story | High |
+| [0032](0032-hitl-pause-is-always-resumable.md) | A HITL pause now persists a checkpoint+cursor before raising, so a run gated before its first checkpoint is resumable; gated node re-execution kept as documented at-least-once | High |

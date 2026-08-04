@@ -109,6 +109,7 @@ class GraphExecutor:
             if node is None:
                 raise GraphExecutionError(f"no such node {current!r}")
 
+            input_state = state  # the node's input, needed if a HITL gate blocks below
             ctx = Context(
                 run_id=state.run_id,
                 graph_version=self._graph.version,
@@ -129,7 +130,23 @@ class GraphExecutor:
                     )
                 )
             state = new_state
-            next_node = self._resolve_route(node, route, state)
+            try:
+                next_node = self._resolve_route(node, route, state)
+            except HumanApprovalRequiredError:
+                # The gate blocks AFTER this node ran but the run must stay
+                # resumable. Persist a checkpoint of the node's INPUT state and
+                # a cursor pointing back at this node, so resume() re-executes
+                # it from the same input once approval is granted. Without this,
+                # a gate on the entry node's edge left nothing checkpointed and
+                # resume() raised "nothing to resume" (review Finding 2 / ADR
+                # 0032). Re-execution of the gated node on resume is deliberate
+                # at-least-once semantics (matches LangGraph interrupt() /
+                # Temporal activities); the node's idempotency_key is the
+                # mitigation and the kernel does NOT dedupe (ADR 0010).
+                if durability is not None:
+                    durability.save_checkpoint(input_state)
+                    durability.save_cursor(input_state.run_id, current)
+                raise
             if durability is not None:
                 durability.save_checkpoint(state)
                 durability.save_cursor(

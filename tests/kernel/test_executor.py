@@ -453,3 +453,84 @@ def test_resume_records_trace_when_requested() -> None:
     result = executor2.resume("resume-4", record_trace=True)
     assert result.trace is not None
     assert [r.node_id for r in result.trace] == ["b", "c"]
+
+
+def test_hitl_block_on_the_entry_node_is_still_resumable() -> None:
+    """Review Finding 2, Reproduction A (docs/adr/0032): when the HITL gate
+    is on the entry node's outgoing edge, the block used to happen before
+    any checkpoint was ever written, so resume() raised 'nothing to
+    resume' — the paused run was unrecoverable. After the fix, a checkpoint
+    + cursor is persisted at the block, so resume() with approval
+    completes."""
+    durability = InMemoryDurabilityBackend()
+    executor = GraphExecutor(_two_node_hitl_graph().compile(), Services(durability=durability))
+    with pytest.raises(HumanApprovalRequiredError):
+        executor.run(_make_state("hitl-entry"))
+
+    # A checkpoint and a cursor now exist despite blocking on the entry node.
+    assert durability.load_latest("hitl-entry") is not None
+    assert durability.load_cursor("hitl-entry") == "a"
+
+    approvals = frozenset({hitl_approval_key("a", "finish")})
+    resumed = GraphExecutor(
+        _two_node_hitl_graph().compile(), Services(durability=durability, hitl_approvals=approvals)
+    ).resume("hitl-entry")
+    assert resumed.final_state.working_memory == {"visited_finish": True}
+
+
+def test_hitl_block_resume_reexecutes_the_gated_node_at_least_once() -> None:
+    """Review Finding 2, Reproduction B (docs/adr/0032): the node whose
+    outgoing edge is gated has already run by the time approval is checked,
+    and resume re-executes it. This is at-least-once semantics (matching
+    LangGraph interrupt() / Temporal activities), mitigated by the node's
+    idempotency_key — the kernel does NOT dedupe (ADR 0010). This test pins
+    the accepted behavior: resume completes, and the gated node ran twice."""
+    calls = {"b": 0}
+
+    def _a_fn(state, ctx, services):
+        return StateDelta(working_memory={"a": True}), "b"
+
+    def _b_fn(state, ctx, services):
+        calls["b"] += 1
+        return StateDelta(working_memory={"b": calls["b"]}), "c"
+
+    def _c_fn(state, ctx, services):
+        return StateDelta(working_memory={"c": True}), END
+
+    from aef.kernel import SideEffect
+
+    def _graph() -> Graph:
+        a = Node(id="a", version="1.0.0", fn=_a_fn, deterministic=True)
+        b = Node(
+            id="b",
+            version="1.0.0",
+            fn=_b_fn,
+            deterministic=False,
+            side_effects=SideEffect.EXTERNAL_CALL,
+            idempotency_key_fn=lambda s: "b-key",
+        )
+        c = Node(id="c", version="1.0.0", fn=_c_fn, deterministic=False)
+        return Graph(
+            id="g",
+            version="1.0.0",
+            nodes={"a": a, "b": b, "c": c},
+            edges=[
+                Edge(from_node="a", to_node="b"),
+                Edge(from_node="b", to_node="c", requires_human_approval=True),
+            ],
+            entry_node="a",
+        )
+
+    durability = InMemoryDurabilityBackend()
+    with pytest.raises(HumanApprovalRequiredError):
+        GraphExecutor(_graph().compile(), Services(durability=durability)).run(
+            _make_state("hitl-b")
+        )
+    assert calls["b"] == 1  # ran once before the gate
+
+    approvals = frozenset({hitl_approval_key("b", "c")})
+    resumed = GraphExecutor(
+        _graph().compile(), Services(durability=durability, hitl_approvals=approvals)
+    ).resume("hitl-b")
+    assert resumed.final_state.working_memory["c"] is True
+    assert calls["b"] == 2  # re-executed on resume (at-least-once, idempotency-key mitigated)
