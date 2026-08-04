@@ -102,3 +102,46 @@ def test_file_backend_load_checkpoint_raises_named_error_on_empty_file(tmp_path:
 
     with pytest.raises(CorruptedCheckpointError):
         backend.load_checkpoint("r1", 0)
+
+
+def test_load_latest_recovers_from_a_torn_final_checkpoint(tmp_path: Path) -> None:
+    """Reproduces the review's Finding 1 (docs/adr/0031): a crash mid-write
+    of the newest checkpoint leaves a truncated max-seq file. Before the
+    fix, load_latest picked max(seq) and raised CorruptedCheckpointError,
+    bricking resume even though earlier checkpoints were intact on disk.
+    After the fix it must fall back to the highest *loadable* checkpoint."""
+    root = tmp_path / "checkpoints"
+    backend = FileDurabilityBackend(root)
+    backend.save_checkpoint(_state(seq=0))
+    backend.save_checkpoint(_state(seq=1))
+    # Simulate a crash mid-write of seq 2: a truncated file left behind.
+    (root / "r1" / "2.json").write_text('{"run_id": "r1", "agent_id"')
+
+    recovered = backend.load_latest("r1")
+    assert recovered is not None
+    assert recovered.checkpoint_seq == 1  # fell back past the torn seq-2 file
+
+
+def test_load_latest_raises_when_every_checkpoint_is_corrupt(tmp_path: Path) -> None:
+    """Fallback recovers past *some* torn files, but if none are loadable
+    there is genuinely nothing to recover — that must still surface loudly,
+    not return None (which would be indistinguishable from 'never ran')."""
+    root = tmp_path / "checkpoints"
+    backend = FileDurabilityBackend(root)
+    backend.save_checkpoint(_state(seq=0))
+    (root / "r1" / "0.json").write_text("{torn")
+
+    with pytest.raises(CorruptedCheckpointError):
+        backend.load_latest("r1")
+
+
+def test_save_checkpoint_is_atomic_no_torn_file_visible(tmp_path: Path) -> None:
+    """A completed save_checkpoint must leave a fully-valid file — never a
+    temp/partial artifact visible in the run dir. Verifies the temp+replace
+    write leaves exactly one json per seq and no leftover temp files."""
+    root = tmp_path / "checkpoints"
+    backend = FileDurabilityBackend(root)
+    backend.save_checkpoint(_state(seq=0))
+    files = sorted(p.name for p in (root / "r1").iterdir())
+    assert files == ["0.json"]  # no leftover *.tmp / partial file
+    assert backend.load_checkpoint("r1", 0) is not None

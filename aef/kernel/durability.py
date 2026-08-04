@@ -24,10 +24,41 @@ on this cursor.
 from __future__ import annotations
 
 import json
+import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 
 from aef.state import AEFState, load_state
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Crash-consistent file write: write to a temp file in the SAME
+    directory (same filesystem, so the final rename is atomic on POSIX),
+    flush + fsync the data to disk, then os.replace() over the target — and
+    fsync the containing directory so the rename itself is durable. A
+    process crash at any point leaves either the old file fully intact or
+    the new file fully intact, never a torn/truncated file. This is the
+    write-side counterpart to ADR 0026's read-side hardening; see ADR 0031.
+
+    Plain `path.write_text()` (the previous implementation) is NOT atomic:
+    a crash mid-write leaves a truncated file, which for the newest
+    checkpoint bricked `load_latest`, and for the in-place `cursor.json`
+    rewrite corrupted the resume pointer itself."""
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+    try:
+        os.write(fd, text.encode("utf-8"))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    os.replace(tmp, path)
+    # Durably record the rename in the directory entry, so a crash right
+    # after replace() can't lose the just-renamed file.
+    dir_fd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
 
 
 class CorruptedCheckpointError(RuntimeError):
@@ -124,13 +155,27 @@ class FileDurabilityBackend(DurabilityBackend):
 
     def save_checkpoint(self, state: AEFState) -> None:
         path = self._run_dir(state.run_id) / f"{state.checkpoint_seq}.json"
-        path.write_text(state.model_dump_json())
+        _atomic_write_text(path, state.model_dump_json())
 
     def load_latest(self, run_id: str) -> AEFState | None:
+        # Walk newest-first, falling back past any corrupt checkpoint to the
+        # highest *loadable* one (ADR 0031). Atomic writes (see
+        # _atomic_write_text) mean a torn file should never exist in the
+        # first place — but a file corrupted by something outside this
+        # backend (disk fault, manual edit, a pre-atomic-write legacy crash)
+        # must not brick resume when an earlier good checkpoint is right
+        # there. If EVERY checkpoint is corrupt, the last error propagates —
+        # returning None would be indistinguishable from "never ran".
         checkpoints = self.list_checkpoints(run_id)
-        if not checkpoints:
-            return None
-        return self.load_checkpoint(run_id, max(checkpoints))
+        last_error: CorruptedCheckpointError | None = None
+        for seq in sorted(checkpoints, reverse=True):
+            try:
+                return self.load_checkpoint(run_id, seq)
+            except CorruptedCheckpointError as exc:
+                last_error = exc
+        if last_error is not None:
+            raise last_error
+        return None
 
     def load_checkpoint(self, run_id: str, checkpoint_seq: int) -> AEFState | None:
         path = self._root / run_id / f"{checkpoint_seq}.json"
@@ -159,8 +204,11 @@ class FileDurabilityBackend(DurabilityBackend):
         return sorted(int(p.stem) for p in run_dir.glob("*.json") if p.stem.isdigit())
 
     def save_cursor(self, run_id: str, next_node: str | None) -> None:
+        # Highest-priority atomic write: cursor.json is overwritten IN PLACE
+        # every super-step, so a torn write here corrupts the resume pointer
+        # itself (not just one checkpoint). See _atomic_write_text / ADR 0031.
         cursor_path = self._run_dir(run_id) / "cursor.json"
-        cursor_path.write_text(json.dumps({"next_node": next_node}))
+        _atomic_write_text(cursor_path, json.dumps({"next_node": next_node}))
 
     def load_cursor(self, run_id: str) -> str | None:
         cursor_path = self._root / run_id / "cursor.json"

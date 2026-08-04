@@ -37,3 +37,4 @@ side of a conflict.
 | [0028](0028-graph-visualize-mermaid-injection-fix.md) | Graph.visualize(): a node id containing Mermaid syntax could break out of its label and inject extra flowchart statements — now uses synthetic ids + label escaping | High |
 | [0029](0029-init-agent-name-path-traversal-fix.md) | aef init's agent_name had zero path validation — "../../evil" and absolute paths wrote files outside the intended agents/ directory | High |
 | [0030](0030-mem0-adapter-get-no-longer-swallows-real-failures.md) | Mem0Adapter.get()'s bare except Exception silently turned genuine backend failures into indistinguishable-from-not-found — removed | High |
+| [0031](0031-atomic-durability-writes-and-load-latest-recovery.md) | Durability writes are atomic (temp+fsync+os.replace); load_latest recovers past a torn checkpoint instead of bricking resume — completes ADR 0026's read-only story | High |
