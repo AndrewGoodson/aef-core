@@ -172,3 +172,28 @@ def test_policyconfig_rejects_nan_hitl_threshold() -> None:
     for every call regardless of risk."""
     with pytest.raises(ValueError, match="finite"):
         PolicyConfig(require_hitl_above_risk=math.nan)
+
+
+def test_policyconfig_rejects_threshold_at_or_above_one() -> None:
+    """Reproduces the residual half of the 0025 asymmetry (see docs/adr/0035):
+    ToolCall.risk is bounded 0..1, so a require_hitl_above_risk threshold of
+    1.0 (or higher) makes `call.risk > threshold` unreachable — the single
+    most dangerous call (risk exactly 1.0) auto-ALLOWs instead of routing to
+    REQUIRE_HITL. The threshold must stay strictly below 1.0 so the gate is
+    always reachable."""
+    with pytest.raises(ValueError, match="0.0.*1.0"):
+        PolicyConfig(require_hitl_above_risk=1.0)
+    with pytest.raises(ValueError, match="0.0.*1.0"):
+        PolicyConfig(require_hitl_above_risk=1.5)
+    with pytest.raises(ValueError, match="0.0.*1.0"):
+        PolicyConfig(require_hitl_above_risk=-0.1)
+
+
+def test_max_risk_call_routes_to_hitl_not_allow_at_the_highest_valid_threshold() -> None:
+    """The highest valid threshold (just below 1.0) must still gate a
+    max-risk call — proving the bound closes the bypass end to end."""
+    config = PolicyConfig(allowed_scopes=frozenset({"net"}), require_hitl_above_risk=0.999)
+    engine = PolicyEngine(config)
+    tool = _StubTool("t", required_scopes=("net",))
+    result = engine.evaluate(tool, ToolCall(tool_name="t", arguments={}, risk=1.0))
+    assert result.decision is PolicyDecision.REQUIRE_HITL

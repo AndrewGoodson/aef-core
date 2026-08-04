@@ -84,6 +84,18 @@ class PolicyConfig:
                 f"PolicyConfig.require_hitl_above_risk must be finite (no inf/-inf/nan) — "
                 f"got {self.require_hitl_above_risk!r}"
             )
+        # ToolCall.risk is bounded 0..1, so a threshold >= 1.0 makes
+        # `call.risk > threshold` unreachable — the max-risk call (1.0) would
+        # auto-ALLOW instead of routing to REQUIRE_HITL, silently disabling
+        # the gate for exactly the most dangerous call. The threshold must
+        # stay in [0.0, 1.0) so the gate is always reachable (docs/adr/0035).
+        # To hard-deny rather than gate, use forbidden_tool_names / scopes.
+        if not (0.0 <= self.require_hitl_above_risk < 1.0):
+            raise ValueError(
+                f"PolicyConfig.require_hitl_above_risk must be within [0.0, 1.0) so the HITL "
+                f"gate stays reachable (risk is capped at 1.0) — got "
+                f"{self.require_hitl_above_risk!r}"
+            )
 
 
 @dataclass(frozen=True)
