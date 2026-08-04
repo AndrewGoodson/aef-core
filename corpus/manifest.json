@@ -1,0 +1,13 @@
+{
+  "scenarios": {
+    "boundary-3": "train",
+    "easy-1": "train",
+    "easy-2": "train",
+    "hard-both-4": "train",
+    "hard-both-5": "train",
+    "val-boundary": "validation",
+    "val-easy": "validation",
+    "val-hard-4": "validation",
+    "val-hard-5": "validation"
+  }
+}

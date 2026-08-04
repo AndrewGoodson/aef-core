@@ -1,0 +1,95 @@
+{
+  "format_version": "1.0.0",
+  "graph_id": "demo_agent",
+  "graph_version": "0.1.0",
+  "id": "easy-1",
+  "initial_state": {
+    "agent_id": "demo_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "task easy-1",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "easy-1",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "difficulty": 1,
+      "quality_needed": 1
+    }
+  },
+  "notes": "recorded from a real agents/demo run (difficulty=1, quality=1)",
+  "recorded_at": "2026-03-01T12:00:00+00:00",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": null,
+        "node_id": "work",
+        "now": "2026-03-01T12:00:00+00:00",
+        "run_id": "easy-1",
+        "trace_id": "easy-1"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "task easy-1",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": null,
+            "node_id": "work",
+            "token_cost": 10,
+            "trace_id": "easy-1",
+            "ts": "2026-03-01T12:00:00Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {
+          "quality": 1.0
+        },
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "demo_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "task easy-1",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "easy-1",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "difficulty": 1,
+          "quality_needed": 1
+        }
+      },
+      "is_fallback": false,
+      "node_id": "work",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

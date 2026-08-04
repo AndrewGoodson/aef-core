@@ -1,0 +1,100 @@
+{
+  "format_version": "1.0.0",
+  "graph_id": "demo_agent",
+  "graph_version": "0.1.0",
+  "id": "hard-both-4",
+  "initial_state": {
+    "agent_id": "demo_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "task hard-both-4",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "hard-both-4",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "difficulty": 4,
+      "quality_needed": 4
+    }
+  },
+  "notes": "recorded from a real agents/demo run (difficulty=4, quality=4)",
+  "recorded_at": "2026-03-01T12:00:00+00:00",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": null,
+        "node_id": "work",
+        "now": "2026-03-01T12:03:00+00:00",
+        "run_id": "hard-both-4",
+        "trace_id": "hard-both-4"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [
+          {
+            "error": "gave up: difficulty 4 vs budget 3, quality 4 vs threshold 3",
+            "node_id": "work"
+          }
+        ],
+        "messages": [],
+        "plan": {
+          "goal": "task hard-both-4",
+          "reusable_key": null,
+          "status": "failed",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": null,
+            "node_id": "work",
+            "token_cost": 40,
+            "trace_id": "hard-both-4",
+            "ts": "2026-03-01T12:03:00Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {
+          "quality": 0.0
+        },
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "demo_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "task hard-both-4",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "hard-both-4",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "difficulty": 4,
+          "quality_needed": 4
+        }
+      },
+      "is_fallback": false,
+      "node_id": "work",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

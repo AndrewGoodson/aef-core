@@ -55,6 +55,36 @@ def _ensure_cwd_importable() -> None:
         sys.path.insert(0, cwd)
 
 
+def load_graph_module(module_path: str):  # type: ignore[no-untyped-def]
+    """Import a module and call its `build_graph()`.
+
+    Shared with `aef loop record`, which needs the same graph the runner
+    would execute — recording against a different graph than production runs
+    would make the corpus describe something nobody ships.
+    """
+    _ensure_cwd_importable()
+    module = importlib.import_module(module_path)
+    build_graph = getattr(module, "build_graph", None)
+    if build_graph is None:
+        raise ValueError(f"module {module_path!r} has no build_graph() function")
+    return build_graph()
+
+
+def append_observation(path: Path, *, at: str, passed: bool, cost_tokens: int) -> None:
+    """One JSON line per live run, for post-merge monitoring.
+
+    Nothing wrote this file before M12, so every monitoring window reported
+    as unobserved — which, correctly, rolled everything back. Monitoring with
+    no input is not monitoring; it is a very expensive way to revert.
+    """
+    import json
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps({"at": at, "passed": passed, "cost_tokens": cost_tokens})
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(line + "\n")
+
+
 def run_graph_module(
     module_path: str,
     *,

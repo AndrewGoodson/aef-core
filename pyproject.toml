@@ -58,6 +58,7 @@ namespace_packages = true
 explicit_package_bases = true
 
 [tool.pytest.ini_options]
+markers = ["slow: end-to-end pipeline runs (N+2 corpus passes in subprocesses)"]
 testpaths = ["tests"]
 # Multiple test dirs share basenames (e.g. tests/state/test_schema.py and
 # tests/config/test_schema.py); importlib mode keys modules by full path

@@ -1,0 +1,95 @@
+{
+  "format_version": "1.0.0",
+  "graph_id": "demo_agent",
+  "graph_version": "0.1.0",
+  "id": "val-boundary",
+  "initial_state": {
+    "agent_id": "demo_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "task val-boundary",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "val-boundary",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "difficulty": 3,
+      "quality_needed": 2
+    }
+  },
+  "notes": "recorded from a real agents/demo run (difficulty=3, quality=2)",
+  "recorded_at": "2026-03-01T12:00:00+00:00",
+  "split": "validation",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": null,
+        "node_id": "work",
+        "now": "2026-03-01T12:06:00+00:00",
+        "run_id": "val-boundary",
+        "trace_id": "val-boundary"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "task val-boundary",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": null,
+            "node_id": "work",
+            "token_cost": 30,
+            "trace_id": "val-boundary",
+            "ts": "2026-03-01T12:06:00Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {
+          "quality": 1.0
+        },
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "demo_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "task val-boundary",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "val-boundary",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "difficulty": 3,
+          "quality_needed": 2
+        }
+      },
+      "is_fallback": false,
+      "node_id": "work",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

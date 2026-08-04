@@ -60,6 +60,19 @@ def _cmd_run(args: argparse.Namespace) -> int:
         config_path=args.config,
         checkpoints_dir=args.checkpoints_dir,
     )
+    if args.observations:
+        from datetime import UTC, datetime
+
+        from aef.cli.run import append_observation
+        from aef.services.eval.rule_based import RuleBasedEvaluator
+
+        record = RuleBasedEvaluator().evaluate(state)
+        append_observation(
+            Path(args.observations),
+            at=datetime.now(UTC).isoformat(),
+            passed=record.passed,
+            cost_tokens=record.cost_tokens,
+        )
     print(state.model_dump_json(indent=2))
     return 0
 
@@ -117,6 +130,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="persist checkpoints here (FileDurabilityBackend) so `aef eval`/`aef trace` "
         "can find this run afterward; omit for a one-off in-memory run",
+    )
+    p_run.add_argument(
+        "--observations",
+        default=None,
+        help="append one JSON line per run here, for post-merge monitoring. Without this "
+        "the monitor sees no live runs and every window rolls back for lack of evidence.",
     )
     p_run.set_defaults(handler=_cmd_run)
 

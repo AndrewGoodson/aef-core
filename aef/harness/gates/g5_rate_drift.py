@@ -12,6 +12,17 @@ started; measuring distance from the baseline correctly reports zero. But
 that round trip **still consumes rate**, because the cost of churn is real
 even when the net displacement is not.
 
+**Drift is measured in lines, not files.** ADR 0053 originally counted the
+fraction of *files* that differ, on the reasoning that a line-level metric
+would invite spreading a change thinly across many files. That reasoning was
+wrong, and running it proved so: spreading affects a *file-count* budget (a
+file counts once however small the change), not a line-count one, where the
+denominator is the same either way. Worse, file-level granularity is
+degenerate for a small agent — a two-line change to a one-file agent scored
+1.0, identical to a total rewrite, so no budget below 1.0 could admit
+anything at all. G0's `max_changed_files` covers the spreading concern
+directly (ADR 0049); drift measures magnitude. See ADR 0058.
+
 **Rebaselining is rate-limited, not merely owner-only.** The superseded G5
 made rebaselining an owner decision and stopped there, which leaves a
 standing-pressure hole (04 §1.9): once the drift budget binds, *every*
@@ -63,19 +74,48 @@ class DriftBudget:
             raise ValueError("window must be positive")
 
 
-def structural_drift(baseline: dict[str, bytes], current: dict[str, bytes]) -> float:
-    """Fraction of files that differ between the baseline and the current
-    state, over the union of both.
+def _lines(blob: bytes | None) -> list[bytes]:
+    return blob.splitlines() if blob else []
 
-    Distance, not path length: a file changed and changed back contributes
+
+def structural_drift(baseline: dict[str, bytes], current: dict[str, bytes]) -> float:
+    """Fraction of LINES that differ between the baseline and the current
+    state, over the larger of the two line counts.
+
+    Distance, not path length: a line changed and changed back contributes
     nothing, which is the correct reading of "how far have we drifted from
     what the owner blessed".
+
+    Line-level rather than file-level (ADR 0058): a two-line change to a
+    one-file agent is not the same as rewriting it, and the file-level
+    metric could not tell them apart — it scored both 1.0, so no budget
+    below 1.0 admitted anything. Found by running the pipeline against a
+    real single-file agent, not by inspection.
     """
     paths = set(baseline) | set(current)
     if not paths:
         return 0.0
-    differing = sum(1 for path in paths if baseline.get(path) != current.get(path))
-    return differing / len(paths)
+
+    differing = 0
+    total = 0
+    for path in paths:
+        before = _lines(baseline.get(path))
+        after = _lines(current.get(path))
+        # Position-wise comparison over the longer side: an added or removed
+        # line counts, and so does a changed one, without needing a diff.
+        span = max(len(before), len(after))
+        total += span
+        for i in range(span):
+            b = before[i] if i < len(before) else None
+            a = after[i] if i < len(after) else None
+            if b != a:
+                differing += 1
+
+    if total == 0:
+        # Both sides are empty files. Nothing changed, and dividing would
+        # raise rather than say so.
+        return 0.0
+    return differing / total
 
 
 @dataclass(frozen=True)

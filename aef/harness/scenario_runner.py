@@ -6,10 +6,16 @@ base ref's** (`workspace.py`), so the code loading and running agent-authored
 code is the harness's own, not the candidate's. The candidate supplies only
 the graph.
 
-Emits `{scenario_id: outcome_payload}` on stdout. A scenario that raises is
-recorded as a non-terminating outcome rather than aborting the batch: one
-broken scenario is a result about that scenario, and losing the other
-ninety-nine to it would hide more than it reveals.
+Emits `{scenario_id: {"outcome": ..., "score": ...}}` on stdout. A scenario
+that raises is recorded as a non-terminating, zero-scoring result rather than
+aborting the batch: one broken scenario is a result about that scenario, and
+losing the other ninety-nine to it would hide more than it reveals.
+
+The **score** is emitted alongside the outcome deliberately. G2 (outcome
+non-regression) and G3 (improvement) both need a full pass over the corpus,
+and a variant is expensive to materialise and load. Running the graph twice
+to answer two questions about the same execution would double the cost of
+the most expensive gate in the pipeline for nothing.
 """
 
 from __future__ import annotations
@@ -20,9 +26,11 @@ import sys
 from typing import Any
 
 from aef.harness.corpus import Scenario, fixed_clock
+from aef.harness.evaluation import score_of
 from aef.harness.outcome import classify
 from aef.kernel import GraphExecutor, Services
 from aef.kernel.graph import Graph
+from aef.services.eval.rule_based import RuleBasedEvaluator
 
 
 class EntrypointError(RuntimeError):
@@ -53,6 +61,7 @@ def load_graph(entrypoint: str) -> Graph:
 
 
 def run_scenario(scenario: Scenario, graph: Graph) -> dict[str, Any]:
+    """One scenario, answering both gates' questions from one execution."""
     services = Services(clock=fixed_clock(scenario))
     try:
         result = GraphExecutor(graph.compile(), services).run(
@@ -60,14 +69,24 @@ def run_scenario(scenario: Scenario, graph: Graph) -> dict[str, Any]:
         )
     except Exception as exc:  # noqa: BLE001 - any failure is an outcome, not a crash
         return {
-            "terminated": False,
-            "plan_status": None,
-            "error_count": 1,
-            "policy_denials": 0,
-            "node_path": [],
+            "outcome": {
+                "terminated": False,
+                "plan_status": None,
+                "error_count": 1,
+                "policy_denials": 0,
+                "node_path": [],
+            },
+            "score": 0.0,
+            "cost_tokens": 0,
             "failure": f"{type(exc).__name__}: {exc}",
         }
-    return classify(result.final_state, result.trace, terminated=True).to_payload()
+
+    record = RuleBasedEvaluator().evaluate(result.final_state)
+    return {
+        "outcome": classify(result.final_state, result.trace, terminated=True).to_payload(),
+        "score": score_of(record),
+        "cost_tokens": record.cost_tokens,
+    }
 
 
 def main(argv: list[str]) -> int:

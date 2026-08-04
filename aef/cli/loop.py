@@ -18,7 +18,7 @@ import argparse
 from datetime import UTC, datetime
 from pathlib import Path
 
-from aef.harness.corpus import load_corpus
+from aef.harness.corpus import Split, load_corpus
 from aef.harness.git import GitRepo
 from aef.harness.loop import (
     EXIT_HALTED,
@@ -32,6 +32,7 @@ from aef.harness.loop import gate as loop_gate
 from aef.harness.loop import monitor as loop_monitor
 from aef.harness.loop import status as loop_status
 from aef.harness.monitoring import LoopHaltedError
+from aef.harness.recorder import record_to_corpus
 
 
 def _config(args: argparse.Namespace) -> LoopConfig:
@@ -106,6 +107,29 @@ def cmd_status(args: argparse.Namespace) -> int:
     return EXIT_HALTED if (status.halted or not status.ledger_ok) else EXIT_OK
 
 
+def cmd_record(args: argparse.Namespace) -> int:
+    from aef.cli.run import load_graph_module
+
+    graph = load_graph_module(args.module)
+    from aef.kernel import Services
+    from aef.state import AEFState
+
+    recorded = record_to_corpus(
+        Path(args.corpus),
+        graph,
+        AEFState(run_id=args.scenario_id, agent_id=args.agent_id, objective=args.objective),
+        Services(),
+        scenario_id=args.scenario_id,
+        split=Split(args.split),
+        recorded_at=datetime.now(UTC),
+        notes=args.notes,
+        allow_holdout=args.i_am_spending_the_holdout,
+    )
+    print(f"recorded {recorded.scenario.id} ({recorded.scenario.split.value}) -> {recorded.path}")
+    print(f"  {len(recorded.scenario.trace)} node execution(s) pinned")
+    return EXIT_OK
+
+
 def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = subparsers.add_parser("loop", help="drive the self-rewiring loop (gate/monitor/digest)")
     loop_subs = p.add_subparsers(dest="loop_command", required=True)
@@ -145,3 +169,20 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_status = loop_subs.add_parser("status", help="kill switch, ledger integrity, open windows")
     _common(p_status)
     p_status.set_defaults(handler=cmd_status)
+
+    p_record = loop_subs.add_parser("record", help="promote a real run into a corpus scenario")
+    p_record.add_argument("module", help="importable module exposing build_graph()")
+    p_record.add_argument("--corpus", required=True)
+    p_record.add_argument("--scenario-id", required=True)
+    p_record.add_argument("--objective", required=True)
+    p_record.add_argument("--agent-id", default="recorder")
+    p_record.add_argument("--split", default="train", choices=[s.value for s in Split])
+    p_record.add_argument("--notes", default="")
+    p_record.add_argument(
+        "--i-am-spending-the-holdout",
+        action="store_true",
+        help="required to write to the holdout split. It is the owner's only independent "
+        "read of whether the loop improves anything; filling it casually destroys that "
+        "independence silently.",
+    )
+    p_record.set_defaults(handler=cmd_record)

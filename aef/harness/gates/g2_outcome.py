@@ -48,6 +48,12 @@ class G2OutcomeNonRegression(Gate):
     corpus: Corpus | None = None
     entrypoint: str = "agents.graph:build_graph"
     splits: tuple[Split, ...] = field(default_factory=lambda: GATED_SPLITS)
+    # Supplied by the driver when the cohort run already executed the
+    # candidate over this corpus. Materialising a variant and loading its
+    # graph is the expensive step; re-running it to ask a second question
+    # about the same execution would double the cost of the most expensive
+    # gate for nothing.
+    precomputed: dict[str, Outcome] | None = None
 
     def run(self, ctx: GateContext) -> GateResult:
         if self.corpus is None or not self.corpus.scenarios:
@@ -74,10 +80,13 @@ class G2OutcomeNonRegression(Gate):
                 ),
             )
 
-        workspace = build_candidate_workspace(
-            ctx.repo, ctx.verdict.diff, ctx.workdir / "workspace", ctx.zone_policy
-        )
-        candidate_outcomes = self._execute(ctx, workspace, scenarios)
+        if self.precomputed is not None:
+            candidate_outcomes = self.precomputed
+        else:
+            workspace = build_candidate_workspace(
+                ctx.repo, ctx.verdict.diff, ctx.workdir / "workspace", ctx.zone_policy
+            )
+            candidate_outcomes = self._execute(ctx, workspace, scenarios)
 
         comparisons: list[Comparison] = []
         missing: list[str] = []
@@ -153,7 +162,12 @@ class G2OutcomeNonRegression(Gate):
             raise G2ExecutionError(
                 f"scenario runner emitted invalid JSON: {exc}; stdout was {result.stdout[:500]!r}"
             ) from exc
-        return {sid: Outcome.from_payload(body) for sid, body in raw.items()}
+        # The runner emits {"outcome": ..., "score": ...} so one pass serves
+        # both G2 and G3; tolerate the bare-outcome shape for robustness.
+        return {
+            sid: Outcome.from_payload(body["outcome"] if "outcome" in body else body)
+            for sid, body in raw.items()
+        }
 
 
 def recorded_outcome(scenario: Scenario) -> Outcome:

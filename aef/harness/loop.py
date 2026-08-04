@@ -31,15 +31,15 @@ from pathlib import Path
 from typing import Any
 
 from aef.harness import archive, ledger
-from aef.harness.candidate import inspect_candidate
+from aef.harness.candidate import CandidateVerdict, inspect_candidate
 from aef.harness.corpus import Corpus
 from aef.harness.gates.base import Gate, GateContext, PipelineResult, run_pipeline
 from aef.harness.gates.g0_static_safety import G0StaticSafety
 from aef.harness.gates.g1_builds import G1Builds
-from aef.harness.gates.g2_outcome import G2OutcomeNonRegression
+from aef.harness.gates.g2_outcome import GATED_SPLITS, G2OutcomeNonRegression
 from aef.harness.gates.g3_improvement import G3Improvement
 from aef.harness.gates.g4_separation import G4SeparationOfPowers
-from aef.harness.gates.g5_rate_drift import G5RateAndDrift
+from aef.harness.gates.g5_rate_drift import AcceptedChange, G5RateAndDrift
 from aef.harness.git import GitRepo
 from aef.harness.monitoring import (
     Action,
@@ -54,6 +54,7 @@ from aef.harness.monitoring import (
 )
 from aef.harness.review import Decision, Disposition, decide, render_report
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
+from aef.harness.suite import CohortBuilder, SuiteError
 from aef.harness.zones import ZonePolicy
 
 OBSERVATIONS_FILENAME = "observations.jsonl"
@@ -102,6 +103,10 @@ class LoopConfig:
     # HARD-STOP. Present so the merge path is reachable in a test; no caller
     # in this repo passes True. Turning it on is an owner action (ADR 0045).
     tier1_enabled: bool = False
+    entrypoint: str = "agents.graph:build_graph"
+    cohort_size: int = 5
+    cohort_seed: int = 0
+    now_for_gates: datetime | None = None
     gates: tuple[Gate, ...] | None = None
 
     def sandbox_policy(self) -> SandboxPolicy:
@@ -112,12 +117,12 @@ class LoopConfig:
         return SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED)
 
     def default_gates(self) -> tuple[Gate, ...]:
-        """All six, always registered.
+        """All six, always registered, with no evidence attached.
 
-        A gate with no evidence configured **fails** rather than being
-        omitted — G2 without a corpus, G3 without a control cohort, G5
-        without a blessed baseline all refuse. Omitting them instead would
-        make a candidate look gated when it was not.
+        A gate with no evidence **fails** rather than being omitted —
+        omitting would make a candidate look gated when it was not. Real
+        evidence is attached by `_gates_with_evidence` at gate time, because
+        building it requires the candidate diff.
         """
         return (
             G0StaticSafety(),
@@ -188,6 +193,100 @@ def _halt(config: LoopConfig, *, at: datetime, proposal_id: str, reasons: tuple[
     )
 
 
+def _gates_with_evidence(
+    config: LoopConfig, verdict: CandidateVerdict, workdir: Path
+) -> tuple[tuple[Gate, ...], str]:
+    """Attach real evidence to G2, G3 and G5.
+
+    Without this, G3 returns FAIL on every run because nothing constructs a
+    `CohortVerdict` (ADR 0051), and G5 returns FAIL because nothing supplies
+    a blessed baseline. The gates were built and tested; they had no caller
+    feeding them, which meant the pipeline could not pass a candidate even
+    with a perfect corpus.
+
+    Building the cohort costs N+2 corpus passes and is skipped when the
+    candidate is already going to be rejected by a cheaper gate — but it is
+    NOT skipped merely because it is expensive. A gate that is dropped when
+    it is inconvenient is not a gate.
+    """
+    if config.gates is not None:
+        return config.gates, "gates supplied explicitly"
+
+    gates = list(config.default_gates())
+    if config.corpus is None or not config.corpus.scenarios:
+        return tuple(gates), "no corpus: G2/G3 will refuse for lack of evidence"
+
+    scenarios = tuple(s for s in config.corpus.scenarios if s.split in GATED_SPLITS)
+    if not scenarios:
+        return tuple(gates), "no gated-split scenarios: G2/G3 will refuse"
+
+    builder = CohortBuilder(
+        repo=config.repo,
+        entrypoint=config.entrypoint,
+        policy=config.sandbox_policy(),
+        zone_policy=config.zone_policy,
+        cohort_size=config.cohort_size,
+        seed=config.cohort_seed,
+    )
+    try:
+        cohort_verdict, candidate_run, note = builder.build(
+            verdict.diff, scenarios, workdir / "variants"
+        )
+    except SuiteError as exc:
+        # Reported, not swallowed: G2/G3 stay in the pipeline and refuse,
+        # so the candidate escalates rather than slipping through ungated.
+        return tuple(gates), f"could not build evidence ({exc}); G2/G3 will refuse"
+
+    baseline = _blessed_baseline(config)
+    rebuilt: list[Gate] = []
+    for g in gates:
+        if isinstance(g, G2OutcomeNonRegression):
+            rebuilt.append(
+                G2OutcomeNonRegression(corpus=config.corpus, precomputed=candidate_run.outcomes)
+            )
+        elif isinstance(g, G3Improvement):
+            rebuilt.append(
+                G3Improvement(verdict=cohort_verdict, min_cohort_size=config.cohort_size)
+            )
+        elif isinstance(g, G5RateAndDrift) and baseline is not None:
+            rebuilt.append(
+                G5RateAndDrift(
+                    baseline_files=baseline,
+                    candidate_files=_candidate_files(config, verdict),
+                    history=_accepted_history(config),
+                    now=config.now_for_gates,
+                )
+            )
+        else:
+            rebuilt.append(g)
+    return tuple(rebuilt), note
+
+
+def _blessed_baseline(config: LoopConfig) -> dict[str, bytes] | None:
+    """The owner-blessed archive version G5 measures drift against."""
+    existing = archive.versions(config.paths.archive_dir, config.graph_id)
+    if not existing:
+        return None
+    return archive.read_files(config.paths.archive_dir, config.graph_id, existing[0])
+
+
+def _candidate_files(config: LoopConfig, verdict: CandidateVerdict) -> dict[str, bytes]:
+    return {
+        e.path: config.repo.run_bytes("show", f"{verdict.diff.head_sha}:{e.path}")
+        for e in verdict.diff.entries
+        if not e.is_deletion
+    }
+
+
+def _accepted_history(config: LoopConfig) -> tuple[AcceptedChange, ...]:
+    entries = ledger.read(config.paths.ledger_dir)
+    return tuple(
+        AcceptedChange(version=int(e.detail.get("archive_version", 0)), at=e.at)
+        for e in entries
+        if e.kind is ledger.EventKind.MERGED
+    )
+
+
 def gate(config: LoopConfig, head_ref: str, *, now: datetime, workdir: Path) -> GateRun:
     """Evaluate one candidate branch end to end."""
     _preflight(config)
@@ -213,7 +312,8 @@ def gate(config: LoopConfig, head_ref: str, *, now: datetime, workdir: Path) -> 
         zone_policy=config.zone_policy,
         sandbox_policy=config.sandbox_policy(),
     )
-    result = run_pipeline(config.gates or config.default_gates(), ctx)
+    gates, evidence_note = _gates_with_evidence(config, verdict, workdir)
+    result = run_pipeline(gates, ctx)
 
     ledger.append(
         config.paths.ledger_dir,
@@ -227,6 +327,7 @@ def gate(config: LoopConfig, head_ref: str, *, now: datetime, workdir: Path) -> 
                 for r in result.results
             ],
             "security_event": bool(result.security_events),
+            "evidence": evidence_note,
         },
     )
 
