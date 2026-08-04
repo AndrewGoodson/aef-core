@@ -40,3 +40,4 @@ side of a conflict.
 | [0031](0031-atomic-durability-writes-and-load-latest-recovery.md) | Durability writes are atomic (temp+fsync+os.replace); load_latest recovers past a torn checkpoint instead of bricking resume — completes ADR 0026's read-only story | High |
 | [0032](0032-hitl-pause-is-always-resumable.md) | A HITL pause now persists a checkpoint+cursor before raising, so a run gated before its first checkpoint is resumable; gated node re-execution kept as documented at-least-once | High |
 | [0033](0033-autonomy-protocol-is-a-versioned-artifact.md) | The autonomous self-improving loop + its HARD-STOP safety gates are a versioned repo artifact (docs/autonomy/self-improving-loop.md), not a chat prompt; adopt emits a pointer | High |
+| [0034](0034-adopt-emits-the-onboarding-kit.md) | aef adopt now emits AGENT_INTEGRATION.md (ingest-and-start guide) + AUTONOMY.md (inlined safety contract) into adopted repos, never-overwrite | High |

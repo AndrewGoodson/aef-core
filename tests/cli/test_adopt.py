@@ -36,7 +36,7 @@ def test_detect_ignores_venv_directory(tmp_path: Path) -> None:
     assert detect_framework(tmp_path) == "none"
 
 
-def test_run_adopt_writes_all_four_artifacts(tmp_path: Path) -> None:
+def test_run_adopt_writes_all_artifacts(tmp_path: Path) -> None:
     (tmp_path / "agent.py").write_text("import openai\n")
     result = run_adopt(tmp_path)
 
@@ -47,10 +47,37 @@ def test_run_adopt_writes_all_four_artifacts(tmp_path: Path) -> None:
         "aef.yaml",
         "aef_adapter.py",
         "AEF_MIGRATION_CHECKLIST.md",
+        "AGENT_INTEGRATION.md",
+        "AUTONOMY.md",
     }
     for path in result.written_files:
         assert path.exists()
     assert (tmp_path / "CLAUDE.md").read_text().startswith("#")
+
+
+def test_run_adopt_emits_onboarding_kit_content(tmp_path: Path) -> None:
+    """Review/Phase-C: adopt emits the ingest-and-start guide and the
+    inlined safety contract so a new repo agent inherits both. AUTONOMY.md
+    must carry the HARD-STOP gates and point at the canonical spec; the
+    integration guide must be self-contained enough to start from."""
+    run_adopt(tmp_path)
+    autonomy = (tmp_path / "AUTONOMY.md").read_text()
+    assert "HARD-STOP" in autonomy
+    assert "evolution" in autonomy  # the gated boundary must be named
+    assert "self-improving-loop.md" in autonomy  # points at the canonical aef-core spec
+    integration = (tmp_path / "AGENT_INTEGRATION.md").read_text()
+    assert "aef doctor" in integration
+    assert "(AEFState, Context, Services)" in integration
+
+
+def test_run_adopt_never_overwrites_the_onboarding_kit(tmp_path: Path) -> None:
+    (tmp_path / "AGENT_INTEGRATION.md").write_text("# my own guide\n")
+    (tmp_path / "AUTONOMY.md").write_text("# my own rules\n")
+    result = run_adopt(tmp_path)
+    assert (tmp_path / "AGENT_INTEGRATION.md").read_text() == "# my own guide\n"
+    assert (tmp_path / "AUTONOMY.md").read_text() == "# my own rules\n"
+    skipped_names = {p.name for p in result.skipped_files}
+    assert {"AGENT_INTEGRATION.md", "AUTONOMY.md"} <= skipped_names
 
 
 def test_run_adopt_never_overwrites_existing_claude_md(tmp_path: Path) -> None:
@@ -71,9 +98,9 @@ def test_run_adopt_never_overwrites_existing_aef_yaml(tmp_path: Path) -> None:
 def test_run_adopt_is_idempotent_on_second_run(tmp_path: Path) -> None:
     first = run_adopt(tmp_path)
     second = run_adopt(tmp_path)
-    assert len(first.written_files) == 4
+    assert len(first.written_files) == 6
     assert len(second.written_files) == 0
-    assert len(second.skipped_files) == 4
+    assert len(second.skipped_files) == 6
 
 
 def test_checklist_nonempty_for_every_framework() -> None:

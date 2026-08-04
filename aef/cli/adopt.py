@@ -306,6 +306,124 @@ evolution:
 """
 
 
+def render_agent_integration_md(repo_name: str) -> str:
+    return f"""# AEF Agent Integration — ingest & start here ({repo_name})
+
+You are an agent (or a Claude Code session) in a repo adopting **aef-core**,
+a repo-agnostic Agent Operating System scaffold. This file is self-contained:
+read it top to bottom and you can install aef-core, wire your first node, and
+safely run the self-improving loop with no other context.
+
+## What you inherit (and what you don't)
+aef-core gives every agent, for free: a deterministic graph kernel, shared
+`AEFState`, checkpoint/replay durability, a deny-by-default security policy +
+HITL gates, memory, OTel tracing, and an eval harness. **Only five things
+differ per agent:** Knowledge, Policies, Tools, Objectives, Evaluation
+Metrics. An agent-specific branch anywhere else means the abstraction is
+wrong, not the agent.
+
+Two always-on invariants:
+- **Two-plane determinism.** The kernel is pure bookkeeping. Every
+  LLM/nondeterministic call lives inside a node declared
+  `deterministic=False`. Never call a model from the kernel.
+- **Vendor isolation.** `anthropic`/`openai`/`mem0`/`neo4j` imports live ONLY
+  in `aef/providers/` and `aef/services/*/adapters/`. CI fails otherwise.
+
+## Start (5 steps)
+1. `pip install -e ".[dev]"` (add `anthropic`/`mem0` extras only when wiring
+   those backends — the base package imports without them).
+2. `aef doctor` — confirms Python >=3.11, CLAUDE.md present, aef.yaml valid.
+   Fix any `[FAIL]`; `[WARN]` advisories are optional.
+3. Fill `aef.yaml`: objectives, tools.allow, policies, evaluator.suites.
+4. Write one node with the fixed signature and wire it in `aef_adapter.py`:
+   `(AEFState, Context, Services) -> tuple[StateDelta, Route]`. Nodes take
+   everything via `Services` (dependency injection) — no globals, no env
+   reads, no self-constructed clients.
+5. `aef run <your.module>` then `aef eval` / `aef trace` to execute, score,
+   and replay.
+
+## The node contract (non-negotiable)
+- Declare `deterministic: bool`. `True` means the replay engine WILL
+  re-execute it and assert identical output — never declare it on anything
+  that calls a model, clock, or RNG.
+- Declare `side_effects` (`pure`/`io`/`external_call`/`mutating`). Anything
+  non-pure REQUIRES an `idempotency_key_fn` (enforced by the `Node`
+  constructor). Resume is at-least-once — your key is what makes a
+  re-executed side effect safe; the kernel does not dedupe for you.
+
+## Running the self-improving loop (autonomously, safely)
+See `AUTONOMY.md` (generated alongside this file) for the safety contract,
+and aef-core's `docs/autonomy/self-improving-loop.md` for the full spec.
+The loop in one line: **audit by adversarial construction -> reproduce
+failing -> fix -> verify -> ADR -> commit -> repeat until a bounded work-list
+is done.** Green bar every step:
+
+    pytest -q    mypy --strict aef    ruff check .    ruff format --check aef tests
+
+"Self-learning" means writing reflections into memory (rule-based
+critic/judge first). It does NOT mean self-modification: `aef/evolution/` is
+gated by design and stays off.
+
+## Guardrails you cannot route around
+- Security is deny-by-default: a tool with no declared scopes is denied; any
+  positive-risk call routes to REQUIRE_HITL until explicitly approved.
+- Every state change is a `StateDelta`; state is append-mostly; `plan`
+  REPLACES on set. Scores/tokens/budgets are range-validated. Durability
+  writes are atomic and resume recovers past a torn checkpoint; HITL pauses
+  are always resumable.
+
+## Where to look (inside the aef-core package, not necessarily this repo)
+Locate an installed copy: `python -c "import aef; print(aef.__path__[0])"`.
+`docs/` ships only in a source checkout.
+- `aef/kernel/` — graph engine, Node/Edge, Services, checkpoint/replay
+- `aef/state/` — the shared AEFState schema + migrations
+- `aef/security/tool.py` — the policy engine every tool call passes through
+- `docs/autonomy/self-improving-loop.md` — the full autonomy protocol
+- `docs/adr/README.md` — every design decision, with rationale
+"""
+
+
+def render_autonomy_md(repo_name: str) -> str:
+    return f"""# Autonomy contract for {repo_name} (inherited from aef-core)
+
+This repo adopted aef-core, which is developed with an autonomous
+self-improving loop. If you run that loop here, you inherit the SAME safety
+contract. Full spec: aef-core `docs/autonomy/self-improving-loop.md`.
+
+## Green bar (every step, all four must pass)
+
+    pytest -q
+    mypy --strict aef
+    ruff check .
+    ruff format --check aef tests
+
+## Reproduce-first
+Never write a fix before a test/command that reproduces the defect and fails
+as reported. This is the single most load-bearing rule.
+
+## HARD-STOP gates — the only things that require a human
+Run unattended, but pause and ask a human for any of:
+1. Any push to a repo other than this one, or any external publish (package
+   upload, sending data off-box) beyond `git push` on this repo.
+2. Enabling `aef/evolution/`, weakening the deny-by-default PolicyEngine, or
+   removing/loosening a HITL approval gate.
+3. Deleting or overwriting an existing user file.
+4. A breaking public-contract change you are not confident about.
+
+Everything else: decide and proceed.
+
+## Self-learning is bounded
+"Self-learning" = writing reflections/critiques into memory. It does NOT mean
+self-modification. `aef/evolution/` is disabled in code and stays that way —
+that boundary is what makes unattended autonomy safe rather than reckless.
+
+## Bounded, not open-ended
+Every loop run starts from a finite work-list and STOPS when it is shipped.
+Do not manufacture new findings to keep running. A fresh audit is a new,
+deliberately-started loop.
+"""
+
+
 @dataclass(frozen=True)
 class AdoptResult:
     framework: Framework
@@ -339,6 +457,11 @@ def run_adopt(target_dir: Path) -> AdoptResult:
         "AEF_MIGRATION_CHECKLIST.md",
         "# AEF migration checklist\n\n" + "\n".join(f"- [ ] {item}" for item in checklist),
     )
+
+    # Onboarding kit: the ingest-and-start guide plus the inlined autonomy
+    # safety contract, so a new repo agent inherits both (see docs/adr/0034).
+    _write_if_absent("AGENT_INTEGRATION.md", render_agent_integration_md(repo_name))
+    _write_if_absent("AUTONOMY.md", render_autonomy_md(repo_name))
 
     return AdoptResult(
         framework=framework, written_files=written, skipped_files=skipped, checklist=checklist
