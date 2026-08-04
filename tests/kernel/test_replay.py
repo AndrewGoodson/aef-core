@@ -19,6 +19,31 @@ def _finish_fn(state, ctx, services):
     return StateDelta(working_memory={"done": True}), END
 
 
+def test_replay_reconstructs_a_deterministic_node_fallback_trace() -> None:
+    """Regression for a seam ADR 0036 exposed (fixed in ADR 0039): a
+    deterministic=True node that raises and falls back records a legitimate
+    trace, but replay used to re-execute that node's fn to verify
+    determinism — which raised the original exception again, with no guard,
+    so a valid trace was unreplayable. A fallback record must be trusted
+    (like a non-deterministic node's output), not re-executed."""
+
+    def _boom(state, ctx, services):
+        raise ValueError("boom detonated")
+
+    boom = Node(id="boom", version="1.0.0", fn=_boom, deterministic=True, fallback_node_id="safe")
+    safe = Node(id="safe", version="1.0.0", fn=_finish_fn, deterministic=True)
+    graph = Graph(
+        id="g", version="1.0.0", nodes={"boom": boom, "safe": safe}, edges=[], entry_node="boom"
+    ).compile()
+    result = GraphExecutor(graph, Services()).run(_make_state(), record_trace=True)
+    assert result.trace is not None
+
+    replayed = ReplayEngine(graph, Services()).replay(result.trace)
+    assert replayed == result.final_state
+    assert replayed.working_memory == {"done": True}
+    assert replayed.errors[0]["error"] == "boom detonated"
+
+
 def test_replay_matches_for_genuinely_deterministic_node() -> None:
     start = Node(id="start", version="1.0.0", fn=_pure_increment_fn, deterministic=True)
     finish = Node(id="finish", version="1.0.0", fn=_finish_fn, deterministic=True)

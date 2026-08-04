@@ -49,6 +49,18 @@ unchanged.
   before — this fixes the control-flow masking, not the error recording.
 - 305/305 tests (two new: fallback fires with no edge, and with a
   false-condition edge), mypy --strict clean, ruff clean.
+- **HITL interaction (by design, flagged for awareness):** because the
+  fallback bypasses *all* edge resolution, an `Edge` to the fallback target
+  declared `requires_human_approval=True` is also bypassed when that target
+  is reached via the exception path. This is consistent — a
+  `fallback_node_id` is a `Node` property, not an edge, so the HITL gate
+  (an edge property) doesn't apply to it; an error handler firing without
+  blocking on human approval mid-error is the intended behavior. Do NOT rely
+  on a fallback-edge HITL gate to protect a security-critical handler; gate
+  it inside the handler node itself, or via scopes/`forbidden_tool_names` on
+  whatever tool it calls. (A determinism-replay seam this ADR exposed — a
+  deterministic node's fallback trace being unreplayable — was fixed
+  separately in ADR 0039.)
 
 ## Alternatives Considered
 - **Make `Graph.validate()` require a declared edge to the fallback.**

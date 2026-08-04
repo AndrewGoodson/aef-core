@@ -49,7 +49,12 @@ class ReplayEngine:
                 raise DeterminismViolationError(
                     f"trace references node {record.node_id!r}, which is not in this graph"
                 )
-            if node.deterministic:
+            if node.deterministic and not record.is_fallback:
+                # A fallback record (node raised, fell back — ADR 0036) is
+                # trusted, not re-executed: re-running `fn` would raise the
+                # original exception again. The recorded error-delta + fallback
+                # route are replayed verbatim, exactly as a non-deterministic
+                # node's output is (ADR 0039).
                 replayed_delta, replayed_route = node.fn(
                     record.input_state, record.context, self._services
                 )

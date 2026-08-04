@@ -51,6 +51,13 @@ class NodeExecutionRecord:
     context: Context
     delta: StateDelta
     route: Route
+    # True when this record is the error/fallback path: the node's `fn`
+    # raised and it declared a `fallback_node_id` (ADR 0036), so `delta` is
+    # a synthesized error-delta and `route` is the fallback target. Replay
+    # MUST trust such a record rather than re-executing `fn` to verify
+    # determinism — re-execution would just raise the original exception
+    # again (ADR 0039). `False` for the normal path.
+    is_fallback: bool = False
 
 
 @dataclass(frozen=True)
@@ -126,7 +133,12 @@ class GraphExecutor:
             if record_trace:
                 trace.append(
                     NodeExecutionRecord(
-                        node_id=node.id, input_state=state, context=ctx, delta=delta, route=route
+                        node_id=node.id,
+                        input_state=state,
+                        context=ctx,
+                        delta=delta,
+                        route=route,
+                        is_fallback=fallback_target is not None,
                     )
                 )
             state = new_state
