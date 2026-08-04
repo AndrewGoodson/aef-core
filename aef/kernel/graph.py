@@ -20,6 +20,15 @@ class GraphValidationError(ValueError):
     pass
 
 
+def _mermaid_escape_label(text: str) -> str:
+    """Escape text embedded inside a Mermaid quoted label (`["..."]`). `"`
+    would otherwise close the label early; Mermaid decodes `#quot;` back to
+    a literal double quote when rendered. Newlines/carriage returns would
+    otherwise break a flowchart line (one statement per line) — collapsed
+    to a space since there's no multi-line-safe quoting for this context."""
+    return text.replace('"', "#quot;").replace("\n", " ").replace("\r", " ")
+
+
 @dataclass(frozen=True)
 class Graph:
     id: str
@@ -83,15 +92,30 @@ class Graph:
         )
 
     def visualize(self) -> str:
-        """Mermaid flowchart source — pasted straight into docs/PRs."""
+        """Mermaid flowchart source — pasted straight into docs/PRs.
+
+        Node ids are declared in code today, not derived from untrusted
+        runtime input — but this still generates syntactically-safe output
+        regardless of what a node id contains, rather than assuming it's
+        always a bare identifier. Reproduced directly: a node id containing
+        `"]` followed by more Mermaid syntax used to break out of its own
+        label and inject arbitrary extra statements into the diagram (the
+        previous version interpolated `node_id` directly as both the raw
+        Mermaid node identifier AND inside a quoted label with no
+        escaping). See docs/adr/0028.
+        """
+        safe_ids = {node_id: f"n{i}" for i, node_id in enumerate(self.nodes)}
         lines = ["flowchart TD"]
         for node_id in self.nodes:
             marker = " (entry)" if node_id == self.entry_node else ""
-            lines.append(f'  {node_id}["{node_id}{marker}"]')
+            label = _mermaid_escape_label(f"{node_id}{marker}")
+            lines.append(f'  {safe_ids[node_id]}["{label}"]')
         for edge in self.edges:
             label = f"|p{edge.priority}|" if edge.priority else ""
+            from_id = safe_ids.get(edge.from_node, edge.from_node)
             for target in edge.targets:
-                lines.append(f"  {edge.from_node} -->{label} {target}")
+                target_id = safe_ids.get(target, target)
+                lines.append(f"  {from_id} -->{label} {target_id}")
         return "\n".join(lines)
 
 

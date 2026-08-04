@@ -187,5 +187,62 @@ def test_visualize_produces_mermaid_flowchart() -> None:
     )
     mermaid = graph.visualize()
     assert mermaid.startswith("flowchart TD")
-    assert "a -->" in mermaid
-    assert "b" in mermaid
+    assert '["a (entry)"]' in mermaid
+    assert '["b"]' in mermaid
+    assert "n0 --> n1" in mermaid
+
+
+def test_visualize_escapes_a_node_id_that_would_break_mermaid_syntax() -> None:
+    """Reproduces a real, confirmed bug: a node id containing `"]` followed
+    by more Mermaid syntax used to break out of its own label and inject
+    arbitrary extra flowchart statements — this module's own docstring
+    says the output gets "pasted straight into docs/PRs." See docs/adr/0028."""
+    evil_id = 'node"]; evil_injection --> pwned'
+    graph = Graph(
+        id="g1",
+        version="1.0.0",
+        nodes={evil_id: _node(evil_id), "b": _node("b")},
+        edges=[Edge(from_node=evil_id, to_node="b")],
+        entry_node=evil_id,
+    )
+    mermaid = graph.visualize()
+    lines = mermaid.splitlines()
+
+    # Exactly 4 lines: header, 2 node declarations, 1 edge — no extra
+    # statement injected from inside the malicious node id.
+    assert len(lines) == 4
+    assert "evil_injection" not in [line.split('"', 1)[0].strip() for line in lines]
+    # The raw double quote never appears unescaped inside a label.
+    assert "#quot;" in mermaid
+    assert 'node"]' not in mermaid
+
+
+def test_visualize_escapes_newlines_in_a_node_id() -> None:
+    multiline_id = "line1\nline2"
+    graph = Graph(
+        id="g1",
+        version="1.0.0",
+        nodes={multiline_id: _node(multiline_id)},
+        edges=[],
+        entry_node=multiline_id,
+    )
+    mermaid = graph.visualize()
+    assert len(mermaid.splitlines()) == 2  # header + one node line, not split by the embedded \n
+    assert "\n" not in mermaid.splitlines()[1]
+
+
+def test_visualize_gives_the_same_two_nodes_the_same_id_across_node_and_edge_lines() -> None:
+    """The synthetic Mermaid id assigned per real node id must be
+    consistent between a node's own declaration line and every edge line
+    referencing it — otherwise the diagram silently disconnects."""
+    graph = Graph(
+        id="g1",
+        version="1.0.0",
+        nodes={"a": _node("a"), "b": _node("b")},
+        edges=[Edge(from_node="a", to_node="b")],
+        entry_node="a",
+    )
+    mermaid = graph.visualize()
+    node_lines = [line for line in mermaid.splitlines() if line.strip().startswith("n0[")]
+    assert len(node_lines) == 1
+    assert "n0 --> n1" in mermaid
