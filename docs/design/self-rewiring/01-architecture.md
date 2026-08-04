@@ -88,10 +88,22 @@ constructs a `Graph`, which then goes through the existing
 | Add/remove/reorder edges | Author or edit any `fn` / `condition` source |
 | Edge `condition` ref (from the existing palette) | Introduce a new import ref that doesn't already exist |
 | Edge `priority`, `requires_human_approval` | The eval suite or golden corpus (Gate 4) |
-| Add/remove a node from the palette; change `entry_node` | `deterministic` / `side_effects` declarations (safety metadata — owner-only) |
+| Add/remove a node from the palette; change `entry_node` | **Owner-only safety metadata** — the full list is below |
 | Node `params` (prompts, temperature, budgets) | Anything under `aef/` itself |
 
-The two "may not" rows on declarations matter: letting a proposer flip
+**Owner-only field list (expanded per 04 §1.9 — this table originally named
+only the first two, which was incomplete):**
+
+| Field | What flipping it would defeat |
+|---|---|
+| `deterministic` | Replay determinism enforcement (`replay.py:52`) |
+| `side_effects` | The `NodeContractError` requirement for an idempotency key |
+| `idempotency_key_fn` | Swapping it to a constant defeats downstream dedup entirely |
+| `fallback_node_id` | An added fallback both swallows errors *and* makes replay trust records verbatim rather than re-executing them (`is_fallback`, ADR 0039) |
+| `requires_deterministic_fallback` | Clearing it silences the emergent-routing marker |
+| `requires_human_approval` | Removal of an existing flag is forbidden outright (Q4) |
+
+The rows on declarations matter: letting a proposer flip
 `deterministic` or `side_effects` would let it route around replay
 enforcement and the idempotency contract (`contracts.py:204-210`).
 
@@ -130,7 +142,9 @@ flowchart TB
         G3["G3 · Eval non-regression<br/>beats or ties incumbent"]
         G4["G4 · Separation of powers<br/>suite/corpus untouched"]
         G5["G5 · Drift + rate budget"]
-        G0 --> G1 --> G2 --> G3 --> G4 --> G5
+        %% CORRECTED (04 §2.4): canonical order runs all four cheap gates
+        %% before the expensive corpus re-execution in G2.
+        G0 --> G1 --> G4 --> G5 --> G2 --> G3
     end
 
     subgraph REVIEW["4 · Human gate — the only one"]

@@ -9,9 +9,12 @@ The containment boundary that makes self-rewiring ≠ self-coding.
 1. references an `fn`, `condition`, or `idempotency_key_fn` import ref that
    is **not in the palette** (the set of refs that already exist in the
    repo and have been human-reviewed);
-2. modifies an **owner-only field**: `deterministic`, `side_effects`, or a
-   removal of `requires_human_approval: true`
-   (`../01-architecture.md` §2.2);
+2. modifies an **owner-only field** — the full list (expanded per 04 §1.9;
+   this gate originally named only the first two and the
+   `requires_human_approval` removal): `deterministic`, `side_effects`,
+   `idempotency_key_fn`, `fallback_node_id`,
+   `requires_deterministic_fallback`, or a removal of
+   `requires_human_approval: true` (`../01-architecture.md` §2.2);
 3. is not a valid manifest per the schema (unknown keys, wrong types).
 
 **Accept** otherwise.

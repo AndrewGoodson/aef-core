@@ -47,6 +47,11 @@ protected set (§1), **or** any manifest field in the owner-only list, **or**
 the diff modifies a file the candidate's own validation run reads as
 evidence.
 
+**Owner-only field list** (expanded per 04 §1.9; canonical copy in
+`../01-architecture.md` §2.2): `deterministic`, `side_effects`,
+`idempotency_key_fn`, `fallback_node_id`, `requires_deterministic_fallback`,
+and removal of any `requires_human_approval: true`.
+
 **Accept** otherwise — G4 says nothing about the *quality* of a change,
 only about its *scope*.
 

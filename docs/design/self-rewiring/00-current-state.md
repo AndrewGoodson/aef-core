@@ -166,7 +166,7 @@ checkpoint (`:160-178`). `list_checkpoints` ignores non-numeric stems
 
 **Nothing stores a graph or a wiring artifact.** `Graph.version` exists only
 as a passive string inside checkpointed state (`Context.graph_version`,
-`executor.py:122`; `Provenance.graph_version`, `schema.py:31`). Postgres and
+`executor.py:122`; `Provenance.graph_version`, `state/schema.py:30`). Postgres and
 Temporal backends are `NotImplementedError` stubs (`:232-291`).
 
 **Reusable seam:** `_atomic_write_text` and the per-run directory layout are
