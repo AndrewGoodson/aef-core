@@ -31,7 +31,14 @@ class EvaluationRecord:
 
     @property
     def passed(self) -> bool:
-        return all(self.domain_gates.values()) if self.domain_gates else self.task_completion >= 0.5
+        # A run passes only if the task actually completed AND every domain
+        # gate holds. Domain gates are ADDITIONAL hard constraints on top of
+        # task completion, not a replacement for it — the previous
+        # `all(gates) if gates else task_completion >= 0.5` silently dropped
+        # task_completion (and the errors driving it to 0.0) the moment any
+        # gate was configured, so an errored run could be marked passed just
+        # because a Sharpe gate happened to hold (docs/adr/0038).
+        return self.task_completion >= 0.5 and all(self.domain_gates.values())
 
 
 class Evaluator(ABC):

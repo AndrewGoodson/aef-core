@@ -94,6 +94,31 @@ def test_domain_gates_all_true_passes() -> None:
     assert record.passed
 
 
+def test_passing_gates_do_not_mark_an_errored_run_as_passed() -> None:
+    """Reproduces a real latent bug (docs/adr/0038): `passed` used to be
+    `all(gates) if gates else task_completion >= 0.5` — so once ANY domain
+    gate is configured, task_completion (and the errors that drive it to 0.0)
+    were ignored entirely. An errored/incomplete run was marked passed just
+    because a Sharpe gate happened to hold. `passed` must require BOTH a
+    completed task AND all gates."""
+    from aef.services.eval.base import EvaluationRecord
+
+    errored_but_gate_holds = EvaluationRecord(
+        run_id="r", task_completion=0.0, domain_gates={"sharpe_gate": True}
+    )
+    assert not errored_but_gate_holds.passed
+
+    completed_and_gate_holds = EvaluationRecord(
+        run_id="r", task_completion=1.0, domain_gates={"sharpe_gate": True}
+    )
+    assert completed_and_gate_holds.passed
+
+    completed_but_gate_fails = EvaluationRecord(
+        run_id="r", task_completion=1.0, domain_gates={"sharpe_gate": False}
+    )
+    assert not completed_but_gate_fails.passed
+
+
 def test_cost_dollars_is_none_not_a_fake_zero() -> None:
     """No pricing table exists to convert tokens to dollars — cost_dollars
     must be None (unmeasured), not a silently-wrong 0.0 (which reads as
