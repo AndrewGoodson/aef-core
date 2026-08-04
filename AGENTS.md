@@ -8,6 +8,10 @@ graph access, observability, security, telemetry, token optimization,
 context engineering, and continuous learning, without rebuilding any of it
 per agent.
 
+New here? Read `AGENT_INTEGRATION.md` (canonical ingest-and-start guide) and
+`docs/autonomy/self-improving-loop.md` (the autonomous-loop safety contract)
+first.
+
 ## Prime directive
 
 Only five things are allowed to differ per agent: **Knowledge, Policies,
@@ -109,7 +113,11 @@ pytest -q                     # full test suite
 Run `aef adopt --dir <path>` inside the target repo. It detects the
 current framework (LangGraph/CrewAI/raw SDK/none), and writes — without
 ever overwriting an existing file — a `CLAUDE.md` for that repo, an
-`aef.yaml` stub, an `aef_adapter.py` shim, and `AEF_MIGRATION_CHECKLIST.md`.
+`aef.yaml` stub, an `aef_adapter.py` shim, `AEF_MIGRATION_CHECKLIST.md`,
+plus the onboarding kit: `AGENT_INTEGRATION.md` (the self-contained
+ingest-and-start guide) and `AUTONOMY.md` (the inlined autonomy safety
+contract — HARD-STOP gates + green bar, pointing at
+`docs/autonomy/self-improving-loop.md` for the full spec, see ADR 0034).
 The generated `CLAUDE.md` is self-contained: a fresh Claude Code session in
 that other repo, with no memory of this conversation, can pick up the
 migration from it alone.
