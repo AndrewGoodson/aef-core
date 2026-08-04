@@ -7,11 +7,18 @@ attributes under an explicitly *incubating* namespace
 kernel-adjacent observability module churning on every OTel point release is
 a worse outcome than pinning today's stable attribute names ourselves and
 updating them deliberately when the spec stabilizes. See docs/adr/0008.
-Values below match the GenAI semconv spec as of this writing
-(github.com/open-telemetry/semantic-conventions, `gen_ai` namespace).
+Values below match the GenAI semconv spec as of 2026-08 (the conventions
+remain experimental/incubating — no stable release — so pinning per ADR
+0008 still holds). Only the two attributes AEF actually emits today
+(`gen_ai.response.model`, `gen_ai.usage.output_tokens`) are load-bearing;
+the rest are forward-declared for the reasoning plane. `gen_ai.provider.name`
+is the current name for what was `gen_ai.system` (renamed in semconv
+v1.37.0, Aug 2025) — updated here per ADR 0008's "update deliberately when
+the spec moves."
 """
 
-GEN_AI_SYSTEM = "gen_ai.system"
+# Renamed from `gen_ai.system` in semconv v1.37.0 (Aug 2025).
+GEN_AI_PROVIDER_NAME = "gen_ai.provider.name"
 GEN_AI_REQUEST_MODEL = "gen_ai.request.model"
 GEN_AI_RESPONSE_MODEL = "gen_ai.response.model"
 GEN_AI_USAGE_INPUT_TOKENS = "gen_ai.usage.input_tokens"
