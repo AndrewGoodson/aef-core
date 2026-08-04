@@ -94,3 +94,41 @@ def test_scanner_ignores_relative_imports(tmp_path: Path) -> None:
     ok_file = tmp_path / "ok.py"
     ok_file.write_text("from . import sibling\nfrom .base import Thing\n")
     assert _find_violations(ok_file) == []
+
+
+def test_scanner_catches_aliased_import(tmp_path: Path) -> None:
+    bad_file = tmp_path / "aliased.py"
+    bad_file.write_text("import anthropic as anthro\n")
+    assert len(_find_violations(bad_file)) == 1
+
+
+def test_scanner_catches_import_nested_inside_a_function(tmp_path: Path) -> None:
+    """`ast.walk` traverses the whole tree, not just module-level
+    statements — a lazy/deferred import hidden inside a function body must
+    be caught too, not just an obvious top-of-file import."""
+    bad_file = tmp_path / "nested.py"
+    bad_file.write_text("def build():\n    import anthropic\n    return anthropic\n")
+    assert len(_find_violations(bad_file)) == 1
+
+
+def test_scanner_catches_import_inside_try_except(tmp_path: Path) -> None:
+    bad_file = tmp_path / "lazy.py"
+    bad_file.write_text(
+        "def build():\n    try:\n        import openai\n    except ImportError:\n        "
+        "openai = None\n    return openai\n"
+    )
+    assert len(_find_violations(bad_file)) == 1
+
+
+def test_scanner_catches_import_inside_type_checking_block(tmp_path: Path) -> None:
+    """Deliberately stricter than the constraint needs to be: a
+    TYPE_CHECKING-only vendor import has no runtime cost, but nothing in
+    this repo currently needs one (confirmed: no banned zone uses
+    TYPE_CHECKING today), and banning it too keeps the rule simple — a
+    type hint needing a vendor type should reference it through
+    aef/providers/'s own types, not the vendor SDK directly."""
+    bad_file = tmp_path / "typecheck.py"
+    bad_file.write_text(
+        "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import anthropic\n"
+    )
+    assert len(_find_violations(bad_file)) == 1
