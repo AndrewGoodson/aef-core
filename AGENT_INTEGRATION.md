@@ -93,4 +93,5 @@ first — `docs/design/phase3-reflection-critic-judge-brainstorm.md`). It does
 - `aef/security/tool.py` — the policy engine every tool call passes through
 - `examples/hello_agent/` — a real, runnable end-to-end agent
 - `docs/autonomy/self-improving-loop.md` — the full autonomy protocol
+- `docs/autonomy/new-repo-bootstrap-loop.md` — copy-paste `/loop` prompt to bootstrap a new adopting repo
 - `docs/adr/README.md` — every design decision, with rationale
