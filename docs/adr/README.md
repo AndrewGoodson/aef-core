@@ -29,3 +29,4 @@ side of a conflict.
 | [0020](0020-edge-equality-uses-condition-code-not-identity.md) | Edge equality compares condition by __code__ not identity — diff() falsely flagged every rebuilt graph as changed | High |
 | [0021](0021-aef-run-checkpoints-dir-enables-eval-and-trace-chaining.md) | aef run --checkpoints-dir — before this, run/eval/trace could never be chained at all | High |
 | [0022](0022-scores-must-be-finite.md) | scores reject inf/nan at construction — was silently corrupted to null on checkpoint write, crashed later on reload | High |
+| [0023](0023-replay-validates-trace-chain-integrity.md) | replay() now validates trace chain integrity — a reordered/corrupted trace was silently replayed into a wrong result with no error | High |

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from aef.kernel.contracts import Services
+from aef.kernel.contracts import Services, _End
 from aef.kernel.executor import NodeExecutionRecord
 from aef.kernel.graph import CompiledGraph
 from aef.state import AEFState
@@ -20,6 +20,16 @@ from aef.state import AEFState
 
 class DeterminismViolationError(RuntimeError):
     pass
+
+
+class MalformedTraceError(RuntimeError):
+    """A trace whose records don't form a legitimate chain — record N's
+    route doesn't match record N+1's node_id, or a record routes to `END`
+    with more records still to come. `GraphExecutor.run(record_trace=True)`
+    can never produce a trace like this (routing is validated live), but
+    `replay()` accepts any `Sequence[NodeExecutionRecord]`, and nothing
+    stops a hand-assembled, reordered, or corrupted trace from being passed
+    in — reproduced directly (see docs/adr/0023), not hypothetical."""
 
 
 class ReplayEngine:
@@ -30,6 +40,7 @@ class ReplayEngine:
     def replay(self, trace: Sequence[NodeExecutionRecord]) -> AEFState:
         if not trace:
             raise ValueError("cannot replay an empty trace")
+        self._validate_chain(trace)
 
         state: AEFState | None = None
         for record in trace:
@@ -60,3 +71,35 @@ class ReplayEngine:
 
         assert state is not None  # non-empty trace guarantees at least one iteration
         return state
+
+    def _validate_chain(self, trace: Sequence[NodeExecutionRecord]) -> None:
+        """A legitimate trace's records form a path: record[i].route names
+        record[i+1].node_id, for every record except the last. `END` (or a
+        fan-out route — not supported by replay, same as the live executor
+        per docs/adr/0007) may only appear on the final record."""
+        last_index = len(trace) - 1
+        for i, record in enumerate(trace):
+            route = record.route
+            is_last = i == last_index
+            if isinstance(route, tuple):
+                raise MalformedTraceError(
+                    f"trace record {i} ({record.node_id!r}) has a fan-out route {route!r} — "
+                    f"replay does not support fan-out traces (see docs/adr/0007)"
+                )
+            if isinstance(route, _End):
+                if not is_last:
+                    raise MalformedTraceError(
+                        f"trace record {i} ({record.node_id!r}) routes to END, but the trace "
+                        f"continues afterward with {trace[i + 1].node_id!r} — malformed trace"
+                    )
+                continue
+            if is_last:
+                continue  # a trailing non-END route is fine: this may be a
+                # partial trace (e.g. captured up to a crash) rather than a
+                # complete run — replay doesn't require every trace to reach END.
+            next_node_id = trace[i + 1].node_id
+            if route != next_node_id:
+                raise MalformedTraceError(
+                    f"trace record {i} ({record.node_id!r}) routes to {route!r}, but the next "
+                    f"trace record is {next_node_id!r} — malformed or reordered trace"
+                )
