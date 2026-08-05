@@ -17,8 +17,9 @@ a `model_provider` at all (see docs/adr/0014).
 
 from __future__ import annotations
 
-from aef.config.schema import ModelProviderConfig
+from aef.config.schema import ModelProviderConfig, PoliciesConfig, ToolsConfig
 from aef.providers.base import FallbackProvider, ModelProvider
+from aef.security.tool import PolicyConfig
 
 _SUPPORTED_IMPLS = ("anthropic",)
 
@@ -54,3 +55,28 @@ def build_model_provider(config: ModelProviderConfig) -> ModelProvider:
     if len(providers) == 1:
         return providers[0]
     return FallbackProvider(providers)
+
+
+def build_policy_config(tools: ToolsConfig, policies: PoliciesConfig) -> PolicyConfig:
+    """The runtime policy an adopter's `aef.yaml` asks for.
+
+    Until this existed, `policies.require_hitl_above_risk` and `tools.allow`
+    validated and were then ignored — an adopter setting a HITL threshold
+    believed it enforced and got the engine's own default instead (ADR 0014,
+    ADR 0079).
+
+    **`tools.allow` is a list of SCOPES, not of tool names.** The engine gates
+    on `tool.required_scopes`, so an allowlist of names could not authorise
+    anything: every tool would still be denied for missing scopes and the
+    field would do nothing. Names are the *deny* axis — `policies.forbid` —
+    because a name is the right handle for "never this one" and a scope is
+    the right handle for "this capability is permitted".
+
+    Deny-by-default survives: an empty `tools.allow` allows nothing, which is
+    the same answer an unconfigured engine gives.
+    """
+    return PolicyConfig(
+        allowed_scopes=frozenset(tools.allow),
+        forbidden_tool_names=frozenset(policies.forbid),
+        require_hitl_above_risk=policies.require_hitl_above_risk,
+    )

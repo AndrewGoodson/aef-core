@@ -30,6 +30,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from aef.config import build_policy_config
+from aef.config.loader import load_agent_config_text
 from aef.harness import archive, ledger
 from aef.harness.candidate import CandidateVerdict, inspect_candidate
 from aef.harness.corpus import Corpus
@@ -57,6 +59,7 @@ from aef.harness.review import Decision, Disposition, decide, render_report
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
 from aef.harness.suite import CohortBuilder, SuiteError
 from aef.harness.zones import ZonePolicy
+from aef.security.tool import PolicyConfig
 
 OBSERVATIONS_FILENAME = "observations.jsonl"
 
@@ -111,6 +114,9 @@ class LoopConfig:
     build_commands: tuple[tuple[str, ...], ...] | None = None
     cohort_size: int = 5
     cohort_seed: int = 0
+    # Path to the agent config, READ FROM THE BASE REF. `None` means
+    # deny-by-default, which is what an unconfigured production run gets.
+    config_path: str | None = None
     gates: tuple[Gate, ...] | None = None
 
     def __post_init__(self) -> None:
@@ -215,6 +221,30 @@ def _halt(config: LoopConfig, *, at: datetime, proposal_id: str, reasons: tuple[
     )
 
 
+def _policy_from_base_ref(config: LoopConfig) -> PolicyConfig | None:
+    """The adopter's configured policy, as of the BASE REF.
+
+    Not from the workspace and not from the working tree. `aef.yaml` is Zone
+    C — not agent-writable — but the gate must still read it the way it reads
+    every other rule it judges by, or a candidate that edited it would be
+    judged under rules it supplied. Same reason `trust.py` exists: if an agent
+    can modify what judges it, the judgement carries no information
+    (ADR 0044, ADR 0082).
+
+    A missing or unreadable config is deny-by-default, never a pass.
+    """
+    if config.config_path is None:
+        return None
+    if not config.repo.path_exists_at(config.base_ref, config.config_path):
+        return None
+    try:
+        raw = config.repo.show(config.base_ref, config.config_path)
+        agent_config = load_agent_config_text(raw, source=f"{config.base_ref}:{config.config_path}")
+    except Exception:  # noqa: BLE001 - an unreadable policy is deny-by-default
+        return PolicyConfig()
+    return build_policy_config(agent_config.tools, agent_config.policies)
+
+
 def _gates_with_evidence(
     config: LoopConfig, verdict: CandidateVerdict, workdir: Path, now: datetime
 ) -> tuple[tuple[Gate, ...], str]:
@@ -258,6 +288,7 @@ def _gates_with_evidence(
     if not scenarios:
         return tuple(gates), "no gated-split scenarios: G2/G3 will refuse"
 
+    policy_config = _policy_from_base_ref(config)
     builder = CohortBuilder(
         repo=config.repo,
         entrypoint=config.entrypoint,
@@ -265,6 +296,7 @@ def _gates_with_evidence(
         zone_policy=config.zone_policy,
         cohort_size=config.cohort_size,
         seed=config.cohort_seed,
+        policy_config=policy_config,
     )
     try:
         cohort_verdict, candidate_run, note = builder.build(
@@ -280,7 +312,11 @@ def _gates_with_evidence(
     for g in gates:
         if isinstance(g, G2OutcomeNonRegression):
             rebuilt.append(
-                G2OutcomeNonRegression(corpus=config.corpus, precomputed=candidate_run.outcomes)
+                G2OutcomeNonRegression(
+                    corpus=config.corpus,
+                    precomputed=candidate_run.outcomes,
+                    policy_config=policy_config,
+                )
             )
         elif isinstance(g, G3Improvement):
             # G3's cohort floor is deliberately left at its own default.

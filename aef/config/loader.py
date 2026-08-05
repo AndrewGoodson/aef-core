@@ -26,24 +26,34 @@ def _format_validation_error(exc: ValidationError, source: str) -> str:
     return "\n".join(lines)
 
 
+def load_agent_config_text(raw_text: str, *, source: str) -> AgentConfig:
+    """Validate config that is already in hand, from wherever it came.
+
+    Split out from `load_agent_config` so the gate can validate the config as
+    of the BASE REF — `git show <base>:aef.yaml` returns text, not a path,
+    and reading the path would read the candidate's version of the rules it
+    is being judged by (ADR 0082).
+    """
+    try:
+        raw = yaml.safe_load(raw_text)
+    except yaml.YAMLError as exc:
+        raise AgentConfigError(f"invalid YAML in agent config at {source}: {exc}") from exc
+
+    if not isinstance(raw, dict):
+        raise AgentConfigError(
+            f"agent config at {source} must be a YAML mapping, got {type(raw).__name__}"
+        )
+
+    try:
+        return AgentConfig.model_validate(raw)
+    except ValidationError as exc:
+        raise AgentConfigError(_format_validation_error(exc, source)) from exc
+
+
 def load_agent_config(path: str | Path) -> AgentConfig:
     path = Path(path)
     try:
         raw_text = path.read_text()
     except OSError as exc:
         raise AgentConfigError(f"cannot read agent config at {path}: {exc}") from exc
-
-    try:
-        raw = yaml.safe_load(raw_text)
-    except yaml.YAMLError as exc:
-        raise AgentConfigError(f"invalid YAML in agent config at {path}: {exc}") from exc
-
-    if not isinstance(raw, dict):
-        raise AgentConfigError(
-            f"agent config at {path} must be a YAML mapping, got {type(raw).__name__}"
-        )
-
-    try:
-        return AgentConfig.model_validate(raw)
-    except ValidationError as exc:
-        raise AgentConfigError(_format_validation_error(exc, str(path))) from exc
+    return load_agent_config_text(raw_text, source=str(path))

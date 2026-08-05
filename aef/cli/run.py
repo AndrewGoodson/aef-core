@@ -29,7 +29,7 @@ import sys
 import uuid
 from pathlib import Path
 
-from aef.config import build_model_provider, load_agent_config
+from aef.config import build_model_provider, build_policy_config, load_agent_config
 from aef.harness.memory_store import FileMemoryStore
 from aef.kernel import (
     DurabilityBackend,
@@ -108,9 +108,14 @@ def run_graph_module(
         raise ValueError(f"module {module_path!r} has no build_graph() function")
 
     model_provider = None
+    policy_config = None
     if config_path is not None:
         config = load_agent_config(config_path)
         model_provider = build_model_provider(config.model_provider)
+        # `policies` and `tools.allow` now reach a run. They validated and were
+        # ignored before, so an adopter setting require_hitl_above_risk got the
+        # engine's own default instead of the one they wrote (ADR 0014, 0082).
+        policy_config = build_policy_config(config.tools, config.policies)
 
     durability: DurabilityBackend = (
         FileDurabilityBackend(Path(checkpoints_dir))
@@ -137,10 +142,11 @@ def run_graph_module(
         durability=durability,
         critic=RuleBasedCritic(),
         judge=RuleBasedJudge(rubric=dict(judge_rubric or {"quality": 1.0})),
-        # Deny-by-default. Without it an agent whose tool calls go through
-        # `aef.security.tool.Tool` — which the generated CLAUDE.md instructs —
-        # dies with ServiceNotConfiguredError (ADR 0079).
-        policy_engine=PolicyEngine(),
+        # The adopter's configured policy when `--config` is given,
+        # deny-by-default otherwise. Without an engine at all, an agent whose
+        # tool calls go through `aef.security.tool.Tool` — which the generated
+        # CLAUDE.md instructs — dies with ServiceNotConfiguredError (ADR 0079).
+        policy_engine=PolicyEngine(policy_config),
     )
     # Without this an adopter cannot produce a FAILING run from the CLI, so the
     # workflow LOOP.md documents ("record scenarios that fail as well as ones

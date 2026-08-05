@@ -30,6 +30,7 @@ from aef.harness.outcome import Comparison, Outcome
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy, run_sandboxed
 from aef.harness.trace_codec import dumps
 from aef.harness.workspace import build_candidate_workspace
+from aef.security.tool import PolicyConfig
 
 RUNNER_MODULE = "aef.harness.scenario_runner"
 
@@ -80,6 +81,7 @@ class G2OutcomeNonRegression(Gate):
     # about the same execution would double the cost of the most expensive
     # gate for nothing.
     precomputed: dict[str, Outcome] | None = None
+    policy_config: PolicyConfig | None = None
 
     def run(self, ctx: GateContext) -> GateResult:
         if self.corpus is None or not self.corpus.scenarios:
@@ -195,10 +197,26 @@ class G2OutcomeNonRegression(Gate):
             )
         payload = workspace / "_scenarios.json"
         payload.write_text(dumps([s.to_payload() for s in scenarios]))
+        argv = ["python", "-m", RUNNER_MODULE, str(payload), self.entrypoint]
+        if self.policy_config is not None:
+            # From the base ref, written by the harness — never read from the
+            # candidate's workspace, or it would supply its own rules
+            # (ADR 0082).
+            policy_payload = workspace / "_policy.json"
+            policy_payload.write_text(
+                json.dumps(
+                    {
+                        "allowed_scopes": sorted(self.policy_config.allowed_scopes),
+                        "forbidden_tool_names": sorted(self.policy_config.forbidden_tool_names),
+                        "require_hitl_above_risk": (self.policy_config.require_hitl_above_risk),
+                    }
+                )
+            )
+            argv.append(str(policy_payload))
 
         policy = ctx.sandbox_policy or SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED)
         result = run_sandboxed(
-            ("python", "-m", RUNNER_MODULE, str(payload), self.entrypoint),
+            tuple(argv),
             workdir=workspace,
             policy=policy,
         )

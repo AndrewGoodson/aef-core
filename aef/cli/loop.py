@@ -61,6 +61,7 @@ def _config(args: argparse.Namespace) -> LoopConfig:
         network_isolated=bool(getattr(args, "network_isolated", False)),
         build_commands=_build_commands(args),
         entrypoint=getattr(args, "entrypoint", None),
+        config_path=getattr(args, "config", None),
         # Never wired to a flag. Enabling Tier-1 auto-merge is an owner
         # action against the source, not something a CI invocation can do by
         # passing an argument (ADR 0045).
@@ -333,6 +334,15 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_gate.add_argument("--workdir", required=True, help="scratch dir for gate execution")
     p_gate.add_argument("--corpus", default=None)
     p_gate.add_argument(
+        "--config",
+        default=None,
+        help=(
+            "path to aef.yaml, whose `policies` and `tools.allow` become the policy "
+            "engine the corpus runs under. READ FROM THE BASE REF, never from the "
+            "candidate — otherwise a candidate could widen the rules it is judged by."
+        ),
+    )
+    p_gate.add_argument(
         "--entrypoint",
         default=None,
         help=(
@@ -450,6 +460,15 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_cycle.add_argument("--module", default=None, help="module exposing build_graph()")
     p_cycle.add_argument("--runs", default=None, help="dir from `aef run --record-runs`")
     p_cycle.add_argument("--corpus", default=None)
+    p_cycle.add_argument(
+        "--config",
+        default=None,
+        help=(
+            "path to aef.yaml, whose `policies` and `tools.allow` become the policy "
+            "engine the corpus runs under. READ FROM THE BASE REF, never from the "
+            "candidate — otherwise a candidate could widen the rules it is judged by."
+        ),
+    )
     p_cycle.add_argument(
         "--entrypoint",
         default=None,

@@ -34,6 +34,7 @@ from aef.harness.sandbox import SandboxPolicy, run_sandboxed
 from aef.harness.trace_codec import dumps
 from aef.harness.workspace import build_candidate_workspace
 from aef.harness.zones import ZonePolicy
+from aef.security.tool import PolicyConfig
 
 RUNNER_MODULE = "aef.harness.scenario_runner"
 
@@ -78,6 +79,14 @@ def _parse(label: str, stdout: str) -> VariantRun:
     )
 
 
+def _policy_payload(config: PolicyConfig) -> dict[str, object]:
+    return {
+        "allowed_scopes": sorted(config.allowed_scopes),
+        "forbidden_tool_names": sorted(config.forbidden_tool_names),
+        "require_hitl_above_risk": config.require_hitl_above_risk,
+    }
+
+
 def run_variant(
     workspace: Path,
     scenarios: list[Scenario] | tuple[Scenario, ...],
@@ -85,13 +94,21 @@ def run_variant(
     label: str,
     entrypoint: str,
     policy: SandboxPolicy,
+    policy_config: PolicyConfig | None = None,
 ) -> VariantRun:
     """Score one already-materialised workspace over the corpus, in the sandbox."""
     payload = workspace / "_scenarios.json"
     payload.write_text(dumps([s.to_payload() for s in scenarios]))
+    argv = ["python", "-m", RUNNER_MODULE, str(payload), entrypoint]
+    if policy_config is not None:
+        # Written into the workspace by the HARNESS, from the base ref. The
+        # candidate never supplies the rules it is judged under (ADR 0082).
+        policy_payload = workspace / "_policy.json"
+        policy_payload.write_text(json.dumps(_policy_payload(policy_config)))
+        argv.append(str(policy_payload))
 
     result = run_sandboxed(
-        ("python", "-m", RUNNER_MODULE, str(payload), entrypoint),
+        tuple(argv),
         workdir=workspace,
         policy=policy,
     )
@@ -144,6 +161,7 @@ class CohortBuilder:
     zone_policy: ZonePolicy = ZonePolicy()
     cohort_size: int = 5
     seed: int = 0
+    policy_config: PolicyConfig | None = None
 
     def plan(self, scenarios: tuple[Scenario, ...]) -> CohortPlan:
         return CohortPlan(cohort_size=self.cohort_size, scenarios=len(scenarios))
@@ -171,6 +189,7 @@ class CohortBuilder:
             label="candidate",
             entrypoint=self.entrypoint,
             policy=self.policy,
+            policy_config=self.policy_config,
         )
 
         incumbent_ws = _materialise_base(self.repo, diff, workroot / "incumbent")
@@ -180,11 +199,17 @@ class CohortBuilder:
             label="incumbent",
             entrypoint=self.entrypoint,
             policy=self.policy,
+            policy_config=self.policy_config,
         )
 
         cohort = tuple(
             run_variant(
-                ws, scenarios, label=label, entrypoint=self.entrypoint, policy=self.policy
+                ws,
+                scenarios,
+                label=label,
+                entrypoint=self.entrypoint,
+                policy=self.policy,
+                policy_config=self.policy_config,
             ).scores
             for label, ws in self._control_workspaces(diff, workroot)
         )

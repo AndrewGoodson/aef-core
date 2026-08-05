@@ -31,7 +31,7 @@ from aef.harness.outcome import classify
 from aef.kernel import GraphExecutor, HumanApprovalRequiredError, Services
 from aef.kernel.graph import Graph
 from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
-from aef.security.tool import PolicyEngine
+from aef.security.tool import PolicyConfig, PolicyEngine
 from aef.services.eval.rule_based import RuleBasedEvaluator
 from aef.services.memory.in_memory import InMemoryMemoryStore
 
@@ -68,7 +68,27 @@ def load_graph(entrypoint: str) -> Graph:
     return graph
 
 
-def run_scenario(scenario: Scenario, graph: Graph) -> dict[str, Any]:
+def policy_config_from_payload(payload: dict[str, Any] | None) -> PolicyConfig:
+    """The policy the HARNESS supplies, never one the candidate provides.
+
+    Passed in as data, read by the caller from the BASE REF. Reading
+    `aef.yaml` from the workspace here would let a candidate widen its own
+    policy by editing a Zone C file — the gate would then be judging it under
+    rules it wrote (ADR 0082). An absent payload means deny-by-default, which
+    is what an unconfigured production run also gets.
+    """
+    if not payload:
+        return PolicyConfig()
+    return PolicyConfig(
+        allowed_scopes=frozenset(payload.get("allowed_scopes", ())),
+        forbidden_tool_names=frozenset(payload.get("forbidden_tool_names", ())),
+        require_hitl_above_risk=float(payload.get("require_hitl_above_risk", 0.0)),
+    )
+
+
+def run_scenario(
+    scenario: Scenario, graph: Graph, policy: PolicyConfig | None = None
+) -> dict[str, Any]:
     """One scenario, answering both gates' questions from one execution.
 
     `critic` and `judge` are wired here for the same reason `aef run` and
@@ -102,7 +122,7 @@ def run_scenario(scenario: Scenario, graph: Graph) -> dict[str, Any]:
         # `Outcome.policy_denials` a real regression signal: a candidate that
         # starts tripping the policy engine more than the incumbent did is
         # visible to G2.
-        policy_engine=PolicyEngine(),
+        policy_engine=PolicyEngine(policy),
     )
     try:
         result = GraphExecutor(graph.compile(), services).run(
@@ -157,16 +177,21 @@ def run_scenario(scenario: Scenario, graph: Graph) -> dict[str, Any]:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 3:
+    if len(argv) not in (3, 4):
         print(
-            f"usage: python -m {__package__}.scenario_runner <scenarios.json> <entrypoint>",
+            f"usage: python -m {__package__}.scenario_runner <scenarios.json> "
+            f"<entrypoint> [<policy.json>]",
             file=sys.stderr,
         )
         return 2
 
     scenarios = [Scenario.from_payload(p) for p in json.loads(open(argv[1]).read())]
     graph = load_graph(argv[2])
-    outcomes = {s.id: run_scenario(s, graph) for s in scenarios}
+    # Optional third argument, written by the harness from the base ref.
+    policy = policy_config_from_payload(
+        json.loads(open(argv[3]).read()) if len(argv) == 4 else None
+    )
+    outcomes = {s.id: run_scenario(s, graph, policy) for s in scenarios}
     print(json.dumps(outcomes))
     return 0
 

@@ -493,8 +493,12 @@ def test_the_config_stub_says_which_fields_actually_reach_a_run() -> None:
 
     text = render_aef_yaml("adoptee")
     assert yaml.safe_load(text), "the stub must still be valid YAML"
-    assert "DO NOT REACH A RUN" in text
+    assert "STILL NOT WIRED" in text
     assert "ADR 0014" in text
+    # The two that ARE wired must be named as wired, or the stub understates
+    # itself and an adopter leaves working config unset.
+    assert "WHAT IS WIRED TODAY" in text
+    assert "tools.allow" in text
 
 
 def test_the_documented_eval_sequence_includes_the_flag_it_needs() -> None:

@@ -295,16 +295,21 @@ def render_aef_yaml(repo_name: str) -> str:
 # Fill in the five fields allowed to differ per agent: objectives,
 # policies, tools.allow, evaluator.suites, and memory/knowledge_graph.
 #
-# WHAT IS WIRED TODAY: `model_provider` only. `aef/config/factory.py` ships
-# one builder, `build_model_provider`, and `aef run` wires that and nothing
-# else. objectives / policies / tools / evaluator.suites / knowledge_graph
-# VALIDATE BUT DO NOT REACH A RUN — they are the Phase 2 config surface
-# (aef-core ADR 0014). Set them so they are ready, and do not rely on them:
-#   - `objectives` here is NOT the objective a run uses; pass --objective.
-#   - `policies.require_hitl_above_risk` here is NOT enforced. The engine's
-#     own default (deny-by-default, HITL above 0.0 risk) is what applies.
+# WHAT IS WIRED TODAY: `model_provider`, `policies` and `tools.allow`.
+#   - `tools.allow` is a list of SCOPES, not tool names. The policy engine
+#     gates on a tool's required_scopes, so an allowlist of names could not
+#     authorise anything. Names are the DENY axis: `policies.forbid`.
+#   - Empty `tools.allow` allows nothing. That is deny-by-default, on purpose.
+#   - Pass `--config aef.yaml` to `aef run`, and `--config` to `aef loop
+#     gate`/`cycle`, or the engine falls back to its own deny-by-default.
+#     The gate reads this file FROM THE BASE REF, so editing it on a
+#     candidate branch cannot widen the rules that candidate is judged by.
+#
+# STILL NOT WIRED — these validate and are IGNORED (aef-core ADR 0014):
+#   - `objectives` is NOT the objective a run uses; pass --objective.
 #   - `evaluator.suites` is read by nothing; `aef eval` uses the rule-based
 #     evaluator regardless.
+#   - `knowledge_graph` has no builder.
 # `extends` is likewise declarative only — nothing resolves a base config.
 
 extends: _base
@@ -494,12 +499,18 @@ not, your tripwire is not a tripwire. Revert the hack afterwards.
 Finally, edit `.github/workflows/loop-gate.yml` and set `AEF_ENTRYPOINT` and
 `AEF_BUILD_COMMAND` to your values. The generated ones are placeholders.
 
-### Know what is NOT wired
-In `aef.yaml` only `model_provider` reaches a run. `objectives`, `policies`,
-`tools`, `evaluator.suites` and `knowledge_graph` validate and are **ignored**
-(aef-core ADR 0014). In particular `policies.require_hitl_above_risk` is not
-enforced from config — the engine's own deny-by-default applies instead. The
-stub says this field by field; believe the stub, not the field names.
+### Know what is and is not wired
+`model_provider`, `policies` and `tools.allow` reach a run — but only when you
+pass `--config aef.yaml` to `aef run`, and `--config` to `aef loop
+gate`/`cycle`. Without the flag the engine falls back to its own
+deny-by-default, which denies every tool call.
+
+`tools.allow` is a list of **scopes**, not tool names; `policies.forbid` is
+the name-based deny axis. An empty `tools.allow` allows nothing, on purpose.
+
+`objectives`, `evaluator.suites` and `knowledge_graph` still validate and are
+**ignored** (aef-core ADR 0014), as is `extends`. The stub says which is
+which, field by field; believe the stub, not the field names.
 
 **Nothing merges automatically.** Tier-1 auto-merge is off and no flag, config
 or environment variable enables it. A candidate passing all six gates is
