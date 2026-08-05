@@ -189,7 +189,17 @@ def _preflight(config: LoopConfig) -> tuple[ledger.LedgerEntry, ...]:
     """
     _check_state_is_outside_the_repo(config)
     config.paths.kill_switch.check()  # raises LoopHaltedError
-    return ledger.read(config.paths.ledger_dir)
+    entries = ledger.read(config.paths.ledger_dir)
+    # The ledger's hash chain was verified on every command and the
+    # ARCHIVE's append-only property never was — so a deleted version left
+    # `status` reporting healthy while the rollback target it names no longer
+    # existed. Both are the audit trail; both get checked (ADR 0075).
+    archive.check_never_shrinks(
+        config.paths.archive_dir,
+        config.graph_id,
+        tuple(v for _, v in ledger.merged_versions(config.paths.ledger_dir)),
+    )
+    return entries
 
 
 def _halt(config: LoopConfig, *, at: datetime, proposal_id: str, reasons: tuple[str, ...]) -> None:

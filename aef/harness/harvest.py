@@ -42,6 +42,7 @@ from aef.harness.corpus import (
     save_scenario,
 )
 from aef.harness.corpus import fixed_clock as _fixed_clock
+from aef.harness.outcome import is_recovered
 from aef.harness.trace_codec import decode_trace, dumps, encode_trace, loads
 from aef.kernel import GraphExecutor, Services
 from aef.kernel.executor import NodeExecutionRecord
@@ -68,10 +69,18 @@ class RecordedRun:
 
     @property
     def failed(self) -> bool:
+        """Did this run fail, as opposed to recovering from something?
+
+        Errors the agent explicitly marked recovered do not count. Before
+        that distinction existed, harvest promoted every recovered run into
+        the corpus as a failure — so the corpus recorded successful recovery
+        as the thing the loop should learn to stop doing (ADR 0076).
+        """
         final = self.initial_state
         for record in self.trace:
             final = record.delta.apply(final)
-        return bool(final.errors) or (final.plan is not None and final.plan.status == "failed")
+        unrecovered = [e for e in final.errors if not is_recovered(e)]
+        return bool(unrecovered) or (final.plan is not None and final.plan.status == "failed")
 
     def to_payload(self) -> dict[str, Any]:
         return {

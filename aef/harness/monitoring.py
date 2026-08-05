@@ -315,6 +315,7 @@ class Digest:
     escalated: int = 0
     rolled_back: int = 0
     halts: int = 0
+    blessed: int = 0
     security_events: int = 0
     scenarios_added: int = 0
     drift: float = 0.0
@@ -369,7 +370,8 @@ class Digest:
             f"- Security events: {self.security_events}",
             f"- Halts: {self.halts}",
             f"- Scenarios added to the corpus: {self.scenarios_added}",
-            f"- Drift from the blessed baseline: {self.drift:.3f}",
+            f"- Drift from the blessed baseline: {self.drift:.3f}"
+            + ("" if self.blessed else " (no baseline blessed in this window)"),
             f"- Out-performing you editing code directly: {benefit}",
             f"- Production runs recorded: {self.runs_recorded}",
             f"- Halt channel configured: {'yes' if self.halt_channel_configured else 'NO'}",
@@ -428,6 +430,10 @@ _COUNTED: dict[EventKind, str] = {
     EventKind.ESCALATED: "escalated",
     EventKind.ROLLED_BACK: "rolled_back",
     EventKind.HALTED: "halts",
+    # Absent before, so the owner's weekly report never mentioned that a
+    # baseline had been set — the one event every drift number is measured
+    # against (ADR 0075).
+    EventKind.BLESSED: "blessed",
 }
 
 

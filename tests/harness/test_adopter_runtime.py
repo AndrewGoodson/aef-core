@@ -270,3 +270,76 @@ def test_a_grounded_proposals_citations_reach_the_report() -> None:
     assert "proposal" in inspect.signature(gate).parameters
     assert "proposal" in inspect.signature(_render).parameters
     assert "proposal=proposal" in inspect.getsource(cycle)
+
+
+# --------------------------------------------------------------------------
+# The other half of the audit trail
+# --------------------------------------------------------------------------
+
+
+def test_a_hole_in_the_archive_is_detected(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The ledger's hash chain was verified on every command and the
+    ARCHIVE's append-only property never was — `check_never_shrinks` had
+    tests and no production caller. So a deleted version left `status`
+    reporting healthy while the rollback target it names no longer existed.
+
+    Verified against a planted fault, not just asserted on the happy path.
+    """
+    import shutil
+    import subprocess
+
+    from aef.harness import archive, ledger
+    from aef.harness.git import GitRepo
+    from aef.harness.loop import LoopConfig, LoopPaths, _preflight
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True, capture_output=True)
+    state = tmp_path / "state"
+
+    for version in (1, 2, 3):
+        archive.record(
+            state / "archive",
+            "g",
+            files={f"a{version}.py": b"x"},
+            base_sha="0" * 40,
+            head_sha="0" * 40,
+            recorded_at=NOW,
+            notes="n",
+        )
+        ledger.append(
+            state,
+            kind=ledger.EventKind.MERGED,
+            at=NOW,
+            proposal_id=f"p{version}",
+            summary="s",
+            detail={"archive_version": version},
+        )
+
+    config = LoopConfig(repo=GitRepo(root=repo), paths=LoopPaths(root=state), graph_id="g")
+    _preflight(config)  # intact: does not raise
+
+    shutil.rmtree(state / "archive" / "g" / "v000002")
+    with pytest.raises(archive.ArchiveError, match=r"lost version\(s\) \[2\]"):
+        _preflight(config)
+
+
+def test_the_digest_reports_that_a_baseline_was_blessed(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Every drift number is measured against the baseline, and the owner's
+    weekly report never mentioned one had been set."""
+    from aef.harness import ledger
+    from aef.harness.monitoring import build_digest
+
+    ledger.append(
+        tmp_path,
+        kind=ledger.EventKind.BLESSED,
+        at=NOW,
+        proposal_id="baseline@g",
+        summary="owner-blessed baseline archived",
+        detail={"archive_version": 1, "blessed": True},
+    )
+    digest = build_digest(
+        ledger.read(tmp_path), since=NOW.replace(year=2025), until=NOW.replace(year=2027)
+    )
+    assert digest.blessed == 1
+    assert "no baseline blessed" not in digest.render()

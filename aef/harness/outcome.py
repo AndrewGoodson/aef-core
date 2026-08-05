@@ -40,6 +40,22 @@ from aef.state import AEFState
 # worse than no signal, because it is acted on (ADR 0064).
 POLICY_DENIED_KEY = "policy_denied"
 
+# The key a node sets when it hit an error and then RECOVERED from it. Same
+# shape as POLICY_DENIED_KEY and for the same reason: explicit, never
+# inferred from error text.
+#
+# Without it, a run that recovered from a transient failure was
+# indistinguishable from one that failed outright — both had
+# `Outcome.passed == False`, because any error at all disqualified the run.
+# So a candidate that taught the agent to recover scored exactly like one
+# that changed nothing, and graceful recovery, one of the more valuable
+# things an agent can learn, was unrewardable by the objective the loop
+# optimises. Harvest also promoted recovered runs as failures (ADR 0076).
+#
+# Absent means not recovered, so an agent that sets nothing behaves exactly
+# as before.
+RECOVERED_KEY = "recovered"
+
 
 @dataclass(frozen=True)
 class Outcome:
@@ -50,6 +66,15 @@ class Outcome:
     error_count: int
     policy_denials: int
     node_path: tuple[str, ...]
+    # Errors the agent recovered from. Counted separately rather than
+    # subtracted at classify time so the distinction survives into the
+    # report: "recovered from 2" and "had 0 errors" are different facts
+    # about an agent and an owner reading a gate report needs both.
+    recovered_errors: int = 0
+
+    @property
+    def unrecovered_errors(self) -> int:
+        return max(0, self.error_count - self.recovered_errors)
 
     @property
     def passed(self) -> bool:
@@ -57,7 +82,7 @@ class Outcome:
         errors. Deliberately strict: G2's job is to notice a regression, and
         a generous definition of "passed" would shrink the set of scenarios
         that hold the candidate to anything."""
-        return self.terminated and self.plan_status == "done" and self.error_count == 0
+        return self.terminated and self.plan_status == "done" and self.unrecovered_errors == 0
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -66,6 +91,7 @@ class Outcome:
             "error_count": self.error_count,
             "policy_denials": self.policy_denials,
             "node_path": list(self.node_path),
+            "recovered_errors": self.recovered_errors,
         }
 
     @classmethod
@@ -76,7 +102,15 @@ class Outcome:
             error_count=int(payload["error_count"]),
             policy_denials=int(payload["policy_denials"]),
             node_path=tuple(payload.get("node_path", [])),
+            # Absent in payloads written before this field existed, which
+            # correctly reads as "nothing was recovered".
+            recovered_errors=int(payload.get("recovered_errors", 0)),
         )
+
+
+def is_recovered(entry: dict[str, Any]) -> bool:
+    """Exact, not inferred — see `RECOVERED_KEY`."""
+    return entry.get(RECOVERED_KEY) is True
 
 
 def _is_policy_denial(entry: dict[str, Any]) -> bool:
@@ -98,6 +132,7 @@ def classify(
         plan_status=final_state.plan.status if final_state.plan is not None else None,
         error_count=len(final_state.errors),
         policy_denials=sum(1 for e in final_state.errors if _is_policy_denial(e)),
+        recovered_errors=sum(1 for e in final_state.errors if is_recovered(e)),
         node_path=tuple(r.node_id for r in (trace or ())),
     )
 
