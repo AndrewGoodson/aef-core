@@ -45,13 +45,19 @@ DEFAULT_RUBRIC: dict[str, float] = {"quality": 1.0}
 # made the candidate the author of the evidence judging it (ADR 0085).
 #
 # The harness supplies a per-run NONCE and requires the marker to appear
-# EXACTLY ONCE. A fixed string is readable from this source, so a candidate
-# could print it; a nonce is readable from argv, so a candidate could still
-# print it — but printing it a second time is what the harness counts. The
-# only way to emit exactly one forged marker is to stop the runner emitting
-# its own, which needs `os._exit`, which needs an import G0 rejects — and G0
-# now runs before any candidate code executes. Three independent layers, and
-# none of them is "the candidate did not think of it".
+# EXACTLY ONCE. That catches a candidate that prints a forgery and lets the
+# runner also print its own — two markers, and two is not one.
+#
+# IT DOES NOT MAKE THIS CHANNEL TRUSTWORTHY, and an earlier version of this
+# comment claimed it did ("the only way to emit exactly one forged marker
+# ... needs an import G0 rejects"). That claim was false twice over: first
+# via `aef.harness.scenario_runner.sys` (ADR 0088), then via
+# `getattr(module, "os")`, which G0's attribute denial cannot see at all
+# (ADR 0093).
+#
+# The candidate's code and this code share an interpreter. Any channel this
+# module can write, agent code can write. What is here is a cost barrier
+# whose cost is currently one token — read ADR 0093 before relying on it.
 RESULT_MARKER_PREFIX = "\x00AEF-SCENARIO-RESULT:"
 RESULT_MARKER_SUFFIX = "\x00"
 
@@ -213,12 +219,11 @@ def main(argv: list[str]) -> int:
     )
     graph = load_graph(argv[2])
     outcomes = {s.id: run_scenario(s, graph, policy) for s in scenarios}
-    # RESULT_SENTINEL first, then the payload, both on the LAST line. The
-    # harness parses only what follows the final sentinel, so anything the
-    # candidate printed before this point — including a complete forged
-    # payload — is not the result. Combined with the BaseException guard
-    # above, a candidate cannot both print a forgery and stop this line from
-    # being written (ADR 0085).
+    # The marker, then the payload, on the LAST line. The harness parses only
+    # what follows it, so anything the candidate printed before this point is
+    # not the result — which stops accidental corruption and naive forgery.
+    # It does not stop a candidate that suppresses this line; see the module
+    # docstring and ADR 0093.
     print(result_marker(nonce) + json.dumps(outcomes))
     return 0
 

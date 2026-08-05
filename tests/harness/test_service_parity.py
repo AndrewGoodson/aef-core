@@ -121,12 +121,25 @@ def test_the_gate_does_not_write_to_the_adopters_stores() -> None:
     """Memory and durability are satisfiable but THROWAWAY. A gate
     re-execution that wrote to the adopter's memory store would mutate the
     evidence a later proposal is built from."""
-    from aef.kernel import InMemoryDurabilityBackend
+    import threading
+
     from aef.services.memory.in_memory import InMemoryMemoryStore
+    from aef.services.runtime import _EphemeralDurability
 
     services = agent_services()
     assert isinstance(services.memory, InMemoryMemoryStore)
-    assert isinstance(services.durability, InMemoryDurabilityBackend)
+    assert isinstance(services.durability, _EphemeralDurability)
+
+    # And non-serialising. `InMemoryDurabilityBackend` JSON-encodes every
+    # checkpoint, so making it the default re-killed the state ADR 0089 had
+    # just made legal — a Lock in working_memory raised on the first
+    # super-step and became a uniform 0.0 (ADR 0093). Nothing reads these
+    # checkpoints; encoding them bought a constraint and no capability.
+    from aef.state import AEFState
+
+    services.durability.save_checkpoint(  # type: ignore[union-attr]
+        AEFState(run_id="r", agent_id="a", objective="o", working_memory={"l": threading.Lock()})
+    )
 
 
 # --------------------------------------------------------------------------

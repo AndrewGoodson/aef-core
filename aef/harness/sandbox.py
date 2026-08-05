@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import os
 import resource
+import signal
 import subprocess
 import time
 from collections.abc import Mapping, Sequence
@@ -79,7 +80,19 @@ class SandboxPolicy:
     timeout_s: float = 120.0
     max_address_space_bytes: int = 2 * _GIB
     max_file_size_bytes: int = 64 * _MIB
-    max_processes: int = 256
+    # `RLIMIT_NPROC` is a PER-UID total, not a per-run allowance. 256 read as
+    # "this run may spawn 256 processes" and means "this user may have 256
+    # processes in total" — so on any host where the operator already has
+    # more (a developer laptop: 538 when this was measured), every build
+    # command that forks fails with `BlockingIOError: Resource temporarily
+    # unavailable`, which G1 reports as an ordinary build failure. ADR 0069's
+    # shape: a harness default that rejects every candidate in the adopting
+    # environment, silently, and is invisible in a container (ADR 0093).
+    #
+    # `None` means "do not set it", which is what a limit nobody can choose
+    # correctly should default to. An operator who wants a ceiling sets one
+    # knowing it counts their own shell.
+    max_processes: int | None = None
     env_allowlist: frozenset[str] = field(default_factory=lambda: DEFAULT_ENV_ALLOWLIST)
     extra_env: Mapping[str, str] = field(default_factory=dict)
     network: NetworkPolicy = NetworkPolicy.REQUIRE_ISOLATED
@@ -129,7 +142,11 @@ def _apply_rlimits(policy: SandboxPolicy) -> tuple[str, ...]:
     applied: list[str] = []
     wanted = [
         ("RLIMIT_FSIZE", getattr(resource, "RLIMIT_FSIZE", None), policy.max_file_size_bytes),
-        ("RLIMIT_NPROC", getattr(resource, "RLIMIT_NPROC", None), policy.max_processes),
+        *(
+            [("RLIMIT_NPROC", getattr(resource, "RLIMIT_NPROC", None), policy.max_processes)]
+            if policy.max_processes is not None
+            else []
+        ),
         ("RLIMIT_CORE", getattr(resource, "RLIMIT_CORE", None), 0),
         ("RLIMIT_AS", getattr(resource, "RLIMIT_AS", None), policy.max_address_space_bytes),
     ]
@@ -159,6 +176,22 @@ def probe_rlimits(policy: SandboxPolicy | None = None) -> tuple[str, ...]:
     return names[: max(count, 0)]
 
 
+def _kill_process_group(pid: int) -> None:
+    """SIGKILL the timed-out child's whole process group.
+
+    Best-effort: the group may already be gone, and on a platform without
+    `killpg` there is nothing to do. Reported as unenforced rather than
+    pretended — `timeout_enforced` still means the wall clock was applied to
+    the direct child, which is what it always meant.
+    """
+    if not hasattr(os, "killpg"):
+        return
+    try:
+        os.killpg(os.getpgid(pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        return
+
+
 def run_sandboxed(
     argv: Sequence[str],
     *,
@@ -178,20 +211,33 @@ def run_sandboxed(
     started = time.monotonic()
     timed_out = False
     try:
-        completed = subprocess.run(
+        # `Popen`, not `subprocess.run`, so the pid is in hand when the
+        # timeout fires. `run(timeout=...)` calls `Popen.kill()` — the DIRECT
+        # CHILD only — and `_preexec` calls `setsid()`, so descendants sit in
+        # a group nothing ever signalled: a grandchild outlived the timeout
+        # by six seconds and touched a marker file after the gate reported
+        # finished (ADR 0093). Two comments in this module asserted the group
+        # was killed; neither was true.
+        proc = subprocess.Popen(
             list(argv),
             cwd=str(workdir),
             env=_scrubbed_env(policy),
-            capture_output=True,
-            timeout=policy.timeout_s,
-            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             preexec_fn=_preexec,
         )
-        returncode, out, err = completed.returncode, completed.stdout, completed.stderr
-    except subprocess.TimeoutExpired as exc:
-        timed_out = True
+        try:
+            out, err = proc.communicate(timeout=policy.timeout_s)
+            returncode = proc.returncode
+        except subprocess.TimeoutExpired:
+            _kill_process_group(proc.pid)
+            out, err = proc.communicate()
+            timed_out = True
+            returncode = -1
+    except OSError as exc:
+        timed_out = False
         returncode = -1
-        out, err = exc.stdout or b"", exc.stderr or b""
+        out, err = b"", str(exc).encode()
     duration = time.monotonic() - started
 
     return SandboxResult(

@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 
-from aef.kernel import DurabilityBackend, InMemoryDurabilityBackend, Services
+from aef.kernel import DurabilityBackend, Services
 from aef.observability.base import Tracer
 from aef.observability.in_memory import InMemoryTracer
 from aef.providers.base import ModelProvider
@@ -31,8 +31,40 @@ from aef.security.tool import PolicyConfig, PolicyEngine
 from aef.services.eval.rule_based import RuleBasedEvaluator
 from aef.services.memory.base import MemoryStore
 from aef.services.memory.in_memory import InMemoryMemoryStore
+from aef.state import AEFState
 
 DEFAULT_RUBRIC: dict[str, float] = {"quality": 1.0}
+
+
+class _EphemeralDurability(DurabilityBackend):
+    """Satisfies `require_durability()` without imposing serialisability.
+
+    The gate discards these checkpoints, so the only thing JSON-encoding them
+    achieves is rejecting agent state that a production run accepts (ADR 0093).
+    """
+
+    def __init__(self) -> None:
+        self._states: dict[str, dict[int, AEFState]] = {}
+        self._cursors: dict[str, str | None] = {}
+
+    def save_checkpoint(self, state: AEFState) -> None:
+        self._states.setdefault(state.run_id, {})[state.checkpoint_seq] = state
+
+    def load_latest(self, run_id: str) -> AEFState | None:
+        run = self._states.get(run_id)
+        return run[max(run)] if run else None
+
+    def load_checkpoint(self, run_id: str, checkpoint_seq: int) -> AEFState | None:
+        return self._states.get(run_id, {}).get(checkpoint_seq)
+
+    def list_checkpoints(self, run_id: str) -> list[int]:
+        return sorted(self._states.get(run_id, {}))
+
+    def save_cursor(self, run_id: str, next_node: str | None) -> None:
+        self._cursors[run_id] = next_node
+
+    def load_cursor(self, run_id: str) -> str | None:
+        return self._cursors.get(run_id)
 
 
 def agent_services(
@@ -67,7 +99,16 @@ def agent_services(
         # gate — the same divergence in the last service still standing
         # (ADR 0091). Throwaway for the same reason memory is: a gate
         # re-execution must not write to the adopter's checkpoint store.
-        durability=durability if durability is not None else InMemoryDurabilityBackend(),
+        #
+        # NON-SERIALISING. `InMemoryDurabilityBackend` JSON-encodes every
+        # checkpoint, so making it the default re-killed the state ADR 0089
+        # had just made legal: a `threading.Lock` or open handle in
+        # `working_memory` raised `PydanticSerializationError` on the first
+        # super-step, and `scenario_runner` turned that into a uniform 0.0 —
+        # the ADR 0075/0079/0089 shape a fourth time (ADR 0093). Nothing
+        # reads these checkpoints; encoding them bought a constraint and no
+        # capability.
+        durability=durability if durability is not None else _EphemeralDurability(),
         critic=RuleBasedCritic(),
         judge=RuleBasedJudge(rubric=dict(judge_rubric or DEFAULT_RUBRIC)),
         evaluator=RuleBasedEvaluator(),

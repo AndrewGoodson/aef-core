@@ -52,6 +52,9 @@ class VariantRun:
     label: str
     outcomes: dict[str, Outcome]
     scores: ScoreSet
+    # Why individual scenarios produced nothing, as the runner reported it.
+    # Carried so a harness fault is distinguishable from a bad candidate.
+    failures: tuple[str, ...] = ()
 
     @property
     def scenario_ids(self) -> frozenset[str]:
@@ -106,8 +109,25 @@ def _parse(label: str, stdout: str, nonce: str) -> VariantRun:
 
     outcomes: dict[str, Outcome] = {}
     per_scenario: dict[str, float] = {}
+    failures: list[str] = []
     cost = 0
     for scenario_id, body in raw.items():
+        if "outcome" not in body:
+            # A payload without an outcome is a malformed runner result, not
+            # a scenario that failed. Raising a bare KeyError from here
+            # escaped `_gates_with_evidence`'s `except SuiteError` and left
+            # the run with no ledger entry at all (ADR 0093).
+            raise SuiteError(
+                f"variant {label!r} emitted a result for {scenario_id!r} with no outcome; "
+                f"the runner's output is malformed, which is a harness fault and not a "
+                f"verdict on the candidate"
+            )
+        # The runner reports WHY a scenario produced nothing. Discarding it
+        # turned a harness crash — an unserialisable value, a missing
+        # service — into "5 previously-passing scenario(s) no longer pass",
+        # a behavioural regression with a fabricated error count (ADR 0093).
+        if body.get("failure"):
+            failures.append(f"{scenario_id}: {body['failure']}")
         outcomes[scenario_id] = Outcome.from_payload(body["outcome"])
         per_scenario[scenario_id] = float(body.get("score", 0.0))
         cost += int(body.get("cost_tokens", 0))
@@ -116,6 +136,7 @@ def _parse(label: str, stdout: str, nonce: str) -> VariantRun:
         label=label,
         outcomes=outcomes,
         scores=ScoreSet(label=label, per_scenario=per_scenario, cost_tokens=cost),
+        failures=tuple(failures),
     )
 
 

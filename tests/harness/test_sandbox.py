@@ -7,6 +7,7 @@ the claim is what downstream decisions trust.
 
 import os
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from aef.harness.sandbox import (
     SandboxPolicy,
     SandboxUnavailableError,
     _scrubbed_env,
+    probe_rlimits,
     run_sandboxed,
 )
 
@@ -213,3 +215,86 @@ def test_a_runaway_write_hits_the_file_size_limit(tmp_path: Path) -> None:
     if "RLIMIT_FSIZE" not in result.capabilities.rlimits_applied:
         pytest.skip("platform did not accept RLIMIT_FSIZE")
     assert not result.ok
+
+
+# --------------------------------------------------------------------------
+# ADR 0093 — two claims this module made and did not keep
+# --------------------------------------------------------------------------
+
+
+def test_a_build_command_that_forks_is_not_rejected(tmp_path: Path) -> None:
+    """`RLIMIT_NPROC` is a PER-UID total, not a per-run allowance.
+    `max_processes=256` read as "this run may spawn 256" and meant "this user
+    may have 256 in total" — so on any host where the operator already has
+    more (538 on the laptop where this was found), every build command that
+    forks failed with `BlockingIOError`, which G1 reports as an ordinary
+    build failure.
+
+    ADR 0069's shape: a harness default that rejects every candidate in the
+    adopting environment, silently, and invisibly in a container.
+    """
+    script = tmp_path / "fork.py"
+    script.write_text(
+        "import subprocess, sys\n"
+        "print(subprocess.run([sys.executable, '-c', 'print(1)'], "
+        "capture_output=True, text=True).stdout.strip())\n"
+    )
+    result = run_sandboxed(
+        ("python", "fork.py"),
+        workdir=tmp_path,
+        policy=SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED),
+    )
+    assert result.ok, result.stderr
+    assert result.stdout.strip() == "1"
+
+
+def test_an_operator_can_still_set_a_process_ceiling(tmp_path: Path) -> None:
+    """Unsetting the default must not remove the capability — an operator who
+    wants a ceiling, knowing it counts their own shell, can have one."""
+    policy = SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED, max_processes=100_000)
+    assert "RLIMIT_NPROC" in probe_rlimits(policy)
+
+
+def test_the_timeout_kills_descendants(tmp_path: Path) -> None:
+    """`subprocess.run(timeout=...)` calls `Popen.kill()` — the direct child
+    only — and `_preexec` calls `setsid()`, so descendants sat in a group
+    nothing ever signalled. A grandchild outlived the timeout by six seconds
+    and touched a marker file after the gate reported finished.
+
+    Two comments in this module asserted the group was killed. Neither was
+    true, and the existing test asserted `setsid()` had run rather than the
+    consequence it claimed.
+    """
+    marker = tmp_path / "GRANDCHILD_SURVIVED"
+    script = tmp_path / "slow.py"
+    script.write_text(
+        "import subprocess, sys, time\n"
+        f"subprocess.Popen([sys.executable, '-c', \"import time; time.sleep(6); "
+        f"open({str(marker)!r}, 'w').write('x')\"])\n"
+        "time.sleep(30)\n"
+    )
+
+    result = run_sandboxed(
+        ("python", "slow.py"),
+        workdir=tmp_path,
+        policy=SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED, timeout_s=2.0),
+    )
+    assert result.timed_out
+    assert not marker.exists()
+
+    time.sleep(7)
+    assert not marker.exists(), "a descendant outlived the timeout that reported killing it"
+
+
+def test_an_ordinary_command_still_reports_its_exit_code(tmp_path: Path) -> None:
+    """Control for the Popen rewrite: the non-timeout path must be unchanged."""
+    script = tmp_path / "fail.py"
+    script.write_text("import sys; sys.stderr.write('boom'); sys.exit(3)\n")
+    result = run_sandboxed(
+        ("python", "fail.py"),
+        workdir=tmp_path,
+        policy=SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED),
+    )
+    assert result.returncode == 3
+    assert "boom" in result.stderr
+    assert not result.timed_out

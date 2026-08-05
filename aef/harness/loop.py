@@ -57,7 +57,7 @@ from aef.harness.monitoring import (
 from aef.harness.proposer import Proposal
 from aef.harness.review import Decision, Disposition, decide, render_report
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
-from aef.harness.suite import CohortBuilder, SuiteError
+from aef.harness.suite import CohortBuilder
 from aef.harness.zones import ZonePolicy
 from aef.observability.base import Tracer
 from aef.security.tool import PolicyConfig
@@ -357,7 +357,14 @@ def _gates_with_evidence(
         cohort_verdict, candidate_run, note = builder.build(
             verdict.diff, scenarios, workdir / "variants"
         )
-    except SuiteError as exc:
+    except Exception as exc:  # noqa: BLE001 - see below
+        # ANY exception, not just SuiteError. `_gates_with_evidence` sits
+        # BETWEEN the two `run_pipeline` calls, so `_run_traced`'s
+        # raise-to-FAIL conversion (ADR 0090) does not cover it — a KeyError
+        # from `_parse`, a GitError from workspace materialisation, anything
+        # at all escaped `gate()` and left the proposal with a PROPOSED
+        # ledger entry and no verdict. The exact hole ADR 0090 §1 says was
+        # closed, on the one path that executes candidate code (ADR 0093).
         # Reported, not swallowed: G2/G3 stay in the pipeline and refuse,
         # so the candidate escalates rather than slipping through ungated.
         # G5 keeps its evidence — see the docstring.
