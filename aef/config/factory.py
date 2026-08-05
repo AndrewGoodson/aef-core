@@ -17,9 +17,17 @@ a `model_provider` at all (see docs/adr/0014).
 
 from __future__ import annotations
 
-from aef.config.schema import ModelProviderConfig, PoliciesConfig, ToolsConfig
+from aef.config.schema import (
+    CONTEXT_IMPLS,
+    ContextConfig,
+    ModelProviderConfig,
+    PoliciesConfig,
+    ToolsConfig,
+)
 from aef.providers.base import FallbackProvider, ModelProvider
 from aef.security.tool import PolicyConfig
+from aef.services.context.base import Retriever
+from aef.services.memory.base import MemoryStore
 
 _SUPPORTED_IMPLS = ("anthropic",)
 
@@ -80,3 +88,35 @@ def build_policy_config(tools: ToolsConfig, policies: PoliciesConfig) -> PolicyC
         forbidden_tool_names=frozenset(policies.forbid),
         require_hitl_above_risk=policies.require_hitl_above_risk,
     )
+
+
+def build_retriever(
+    config: ContextConfig | None, *, memory: MemoryStore, agent_id: str | None = None
+) -> Retriever | None:
+    """The retriever an `aef.yaml` asks for, or `None` when it asks for none.
+
+    Takes the already-built `MemoryStore` rather than constructing one: a
+    retriever reading a DIFFERENT store than the one its agent writes to
+    would retrieve nothing and look like an empty memory. Two constructions
+    of the same dependency drifting apart is the failure ADR 0091 records.
+    """
+    if config is None:
+        return None
+    if config.impl == "memory":
+        from aef.services.context.memory_retriever import MemoryRetriever
+
+        return MemoryRetriever(
+            memory=memory, agent_id=agent_id, max_token_budget=config.token_budget
+        )
+    # Unreachable while `ContextConfig` validates against the same set, and
+    # kept anyway: the two would otherwise be a pair that must agree with
+    # nothing checking that they do (ADR 0091).
+    raise UnsupportedRetrieverImplError(config.impl)
+
+
+class UnsupportedRetrieverImplError(NotImplementedError):
+    def __init__(self, impl: str) -> None:
+        super().__init__(
+            f"no Retriever for context.impl={impl!r}; implemented: "
+            f"{', '.join(sorted(CONTEXT_IMPLS))}"
+        )

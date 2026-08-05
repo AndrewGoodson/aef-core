@@ -3,6 +3,7 @@ from aef.config.factory import (
     UnsupportedProviderImplError,
     build_model_provider,
     build_policy_config,
+    build_retriever,  # noqa: F401
 )
 from aef.config.loader import AgentConfigError, load_agent_config
 from aef.config.schema import (
@@ -30,6 +31,7 @@ __all__ = [
     "DomainGateError",
     "build_domain_gates",
     "build_model_provider",
+    "build_retriever",
     "build_policy_config",
     "load_agent_config",
 ]

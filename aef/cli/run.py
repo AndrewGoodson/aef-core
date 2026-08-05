@@ -33,6 +33,7 @@ from aef.config import (
     build_domain_gates,
     build_model_provider,
     build_policy_config,
+    build_retriever,
     load_agent_config,
 )
 from aef.harness.memory_store import FileMemoryStore
@@ -113,6 +114,7 @@ def run_graph_module(
 
     model_provider = None
     policy_config = None
+    context_config = None
     if config_path is not None:
         config = load_agent_config(config_path)
         model_provider = build_model_provider(config.model_provider)
@@ -129,6 +131,7 @@ def run_graph_module(
         # ignored before, so an adopter setting require_hitl_above_risk got the
         # engine's own default instead of the one they wrote (ADR 0014, 0082).
         policy_config = build_policy_config(config.tools, config.policies)
+        context_config = config.context
 
     durability: DurabilityBackend = (
         FileDurabilityBackend(Path(checkpoints_dir))
@@ -151,9 +154,13 @@ def run_graph_module(
     # Same list the gate path uses (aef/services/runtime.py, ADR 0091), so
     # an agent that runs here can be re-executed there. Four separate defects
     # were the two lists drifting apart.
+    # Built from the SAME memory store the agent writes to. A retriever over
+    # a different store retrieves nothing and reads as an empty memory.
+    retriever = build_retriever(context_config, memory=memory, agent_id=agent_id)
     services = agent_services(
         model_provider=model_provider,
         memory=memory,
+        retriever=retriever,
         durability=durability,
         policy=policy_config,
         judge_rubric=dict(judge_rubric or {"quality": 1.0}),

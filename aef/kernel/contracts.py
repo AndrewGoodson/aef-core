@@ -24,7 +24,6 @@ from aef.reasoning.reflection import Critic, Judge
 from aef.security.tool import PolicyEngine, Tool
 from aef.services.context.base import Retriever
 from aef.services.eval.base import Evaluator
-from aef.services.kg.base import GraphStore
 from aef.services.memory.base import MemoryStore
 from aef.services.optimizers.base import Optimizer
 from aef.state import AEFState, StateDelta
@@ -52,7 +51,9 @@ class Services:
 
     model_provider: ModelProvider | None = None
     memory: MemoryStore | None = None
-    graph_store: GraphStore | None = None
+    # `graph_store` was here, unread, from Phase 0 until ADR 0101 deleted it.
+    # A slot no code fills and no config can configure is a promise, and the
+    # config already refuses `knowledge_graph` outright (ADR 0100).
     retriever: Retriever | None = None
     evaluator: Evaluator | None = None
     # Reflection backends. Constraint #2 (fixed node signature, DI-only, no

@@ -28,6 +28,7 @@ from aef.observability.in_memory import InMemoryTracer
 from aef.providers.base import ModelProvider
 from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
 from aef.security.tool import PolicyConfig, PolicyEngine
+from aef.services.context.base import Retriever
 from aef.services.eval.rule_based import RuleBasedEvaluator
 from aef.services.memory.base import MemoryStore
 from aef.services.memory.in_memory import InMemoryMemoryStore
@@ -77,6 +78,7 @@ def agent_services(
     judge_rubric: dict[str, float] | None = None,
     clock: Callable[[], datetime] | None = None,
     audit_log: object | None = None,
+    retriever: Retriever | None = None,
 ) -> Services:
     """Everything a Zone A node may `require_*`, with working defaults.
 
@@ -92,6 +94,10 @@ def agent_services(
     """
     return Services(
         model_provider=model_provider,
+        # `None` unless configured. A retriever is per-agent Knowledge, so an
+        # unconfigured agent gets no retriever rather than a default one whose
+        # ranking it never chose (ADR 0101).
+        retriever=retriever,
         memory=memory if memory is not None else InMemoryMemoryStore(),
         tracer=tracer if tracer is not None else InMemoryTracer(),
         # In-memory by default, not absent. A node calling

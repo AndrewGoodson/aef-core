@@ -63,17 +63,36 @@ directional context, not commitments). Each phase lists what's real
 execution (BSP super-steps) — declared in the `Edge`/`Route` contract,
 not executed.
 
-## Phase 2 — Knowledge graph, context engine, token optimizer, planner — **STUBBED**
+## Phase 2 — Context engine — **PARTIALLY REAL**. The rest was **DELETED**.
 
-Interfaces only, no implementation:
-- `GraphStore` (`aef/services/kg/base.py`) — see ADR 0003 for the
-  Neo4j/FalkorDB-vs-Apache-AGE decision, deferred
-- `Retriever` (`aef/services/context/base.py`) — retrieve/rank/prune/
-  compress/assemble cascade (report §12) not implemented
-- `TokenOptimizer` (`aef/services/tokens/base.py`) — compression beyond
-  provider-native prompt caching, not implemented
-- `Planner`/`PlanValidator` (`aef/reasoning/planner.py`) — hierarchical
-  goal decomposition, not implemented
+ADR 0101 triaged the four named-but-unbuilt interfaces and deleted three of
+them plus one more from Phase 3's neighbourhood. A stub unimplemented across
+five phases is a promise, and an unkept promise in a typed signature is worse
+than an honest absence — every reference to them outside their own modules was
+either an unread `Services` slot or a test asserting they still raise.
+
+- `Retriever` (`aef/services/context/base.py`) — **REAL** in the
+  memory-backed form: `MemoryRetriever`
+  (`aef/services/context/memory_retriever.py`), configured by an `aef.yaml`
+  `context:` block and injected via `Services.retriever`. It is the first
+  thing in this repo that enforces `AEFState.context_budget_tokens`, which
+  had shipped since Phase 0 with nothing reading it. Ranking is lexical
+  (deterministic, so replay holds); retrieve/rank/prune is real, and
+  compress/assemble is deliberately absent — see below.
+- `GraphStore` — **DELETED** (ADR 0101). A knowledge graph needs a query
+  interface, a budgetable result shape, and a provenance story for retrieved
+  facts; the node signature carries none of them, and the config refuses a
+  `knowledge_graph` block outright (ADR 0100). The contract is recorded in
+  ADR 0101 for whenever it returns; ADR 0003's backend decision still stands
+  unmade.
+- `TokenOptimizer` — **DELETED** (ADR 0101). `compress` cannot be built
+  honestly without a model, and a truncating compressor is a lossy edit
+  wearing the word. The honest half — bounding a budget by pruning whole
+  units rather than damaging them — is what `MemoryRetriever` does.
+- `Planner`/`PlanValidator` — **DELETED** (ADR 0101). `PlanValidator` was
+  redundant with `RuleBasedEvaluator.domain_gates`, which Milestone 2 built
+  and wired (same report §16, same worked examples, same `-> bool` shape).
+  `Planner` was design ambition the loop never invoked.
 
 ## Phase 3 — Reflection, offline optimization, private evals — **PARTIALLY REAL**
 

@@ -17,6 +17,11 @@ class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+# The retrievers that exist. Named here so `ContextConfig` can refuse anything
+# else at LOAD time rather than at first use (ADR 0101).
+CONTEXT_IMPLS: frozenset[str] = frozenset({"memory"})
+
+
 class ModelProviderConfig(_StrictModel):
     impl: str
     model: str
@@ -58,6 +63,42 @@ class KnowledgeGraphConfig(_StrictModel):
             f"(Phase 2), so this block would be silently ignored. Remove it until a "
             f"knowledge graph is wired; see docs/adr/0100."
         )
+
+
+class ContextConfig(_StrictModel):
+    """Retrieval, the one Phase-2 interface Milestone 3's triage kept.
+
+    `impl` is refused unless it names something that exists, for the same
+    reason `knowledge_graph` is (ADR 0100): a block that validates while
+    nothing reads it lets an owner believe retrieval is configured.
+    """
+
+    impl: str
+    # Defaults to the run's own `AEFState.context_budget_tokens` when unset,
+    # so the budget has ONE source unless an owner deliberately overrides it
+    # for retrieval specifically.
+    token_budget: int | None = None
+
+    @field_validator("impl")
+    @classmethod
+    def _must_name_a_real_retriever(cls, value: str) -> str:
+        if value not in CONTEXT_IMPLS:
+            raise ValueError(
+                f"context.impl={value!r} names no retriever. Implemented: "
+                f"{', '.join(sorted(CONTEXT_IMPLS))}. A block naming an unbuilt backend "
+                f"would validate and be ignored; see docs/adr/0101."
+            )
+        return value
+
+    @field_validator("token_budget")
+    @classmethod
+    def _must_be_positive(cls, value: int | None) -> int | None:
+        if value is not None and value <= 0:
+            raise ValueError(
+                f"context.token_budget must be positive; got {value}. A zero budget admits "
+                f"no chunk, so retrieval would silently return nothing."
+            )
+        return value
 
 
 class EvaluatorConfig(_StrictModel):
@@ -138,6 +179,7 @@ class AgentConfig(_StrictModel):
     model_provider: ModelProviderConfig
     memory: MemoryConfig
     knowledge_graph: KnowledgeGraphConfig | None = None
+    context: ContextConfig | None = None
     evaluator: EvaluatorConfig = EvaluatorConfig()
     tools: ToolsConfig = ToolsConfig()
     policies: PoliciesConfig = PoliciesConfig()

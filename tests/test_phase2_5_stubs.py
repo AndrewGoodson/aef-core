@@ -1,8 +1,14 @@
-"""Every Phase 2-5 interface must be a real ABC (cannot be instantiated
-without implementing its contract) and must raise NotImplementedError with
-a message pointing at the phase/roadmap when a stub subclass calls through
-to the base implementation. This file exercises that contract across all of
-them in one place rather than duplicating boilerplate per module."""
+"""Every REMAINING Phase 2-5 interface must be a real ABC and must raise
+NotImplementedError when a stub subclass calls through to the base.
+
+This file used to cover thirteen. Milestone 3's triage (ADR 0101) deleted four
+— `GraphStore`, `TokenOptimizer`, `Planner`, `PlanValidator` — because a stub
+unimplemented across five phases is a promise, and a test asserting that a
+promise still raises is the most a promise can ever be tested for.
+
+`Retriever` stays in the list and is no longer only that: it now has a real
+implementation, exercised by `tests/services/test_memory_retriever.py`
+against a running node. The list below is what has NOT yet earned that."""
 
 from __future__ import annotations
 
@@ -18,12 +24,9 @@ from aef.evolution.engine import (
     EvolutionConfig,
     MutationProposer,
 )
-from aef.reasoning.planner import Planner, PlanValidator
 from aef.reasoning.reflection import Critic, Judge
 from aef.services.context.base import Retriever
-from aef.services.kg.base import GraphStore
 from aef.services.optimizers.base import Optimizer
-from aef.services.tokens.base import TokenOptimizer
 
 ABSTRACT_INTERFACES: list[type] = [
     Coordinator,
@@ -31,14 +34,10 @@ ABSTRACT_INTERFACES: list[type] = [
     CanaryController,
     EvalGate,
     MutationProposer,
-    PlanValidator,
-    Planner,
     Critic,
     Judge,
     Retriever,
-    GraphStore,
     Optimizer,
-    TokenOptimizer,
 ]
 
 
@@ -74,7 +73,7 @@ def _stub_subclass_calling_super(
 
 
 # (interface, representative abstract method, positional args, kwargs, phase substring).
-# Covers ALL 13 interfaces — a stub calling through to any base method must hit
+# Covers ALL 9 remaining interfaces — a stub calling through to any base method must hit
 # NotImplementedError, not a body that quietly grew a real return value.
 STUB_SUPER_CALLS: list[tuple[type, str, tuple[Any, ...], dict[str, Any], str]] = [
     (Coordinator, "handoff", (None,), {}, "Phase 5"),
@@ -82,14 +81,10 @@ STUB_SUPER_CALLS: list[tuple[type, str, tuple[Any, ...], dict[str, Any], str]] =
     (CanaryController, "promote", ("g", "v"), {}, "Phase 4"),
     (EvalGate, "check", (None,), {}, "Phase 4"),
     (MutationProposer, "propose", ("graph-1",), {}, "Phase 4"),
-    (PlanValidator, "validate", (None, None), {}, "Phase 2"),
-    (Planner, "plan", (None,), {}, "Phase 2"),
     (Critic, "critique", (None,), {}, "Phase 3"),
     (Judge, "judge", (None,), {}, "Phase 3"),
     (Retriever, "retrieve", ("q",), {"token_budget": 100}, "Phase 2"),
-    (GraphStore, "upsert_entity", (None,), {}, "Phase 2"),
     (Optimizer, "propose", ([],), {}, "Phase 3"),
-    (TokenOptimizer, "compress", ("text",), {"token_budget": 100}, "Phase 2"),
 ]
 
 

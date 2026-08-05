@@ -76,10 +76,17 @@ short: kernel, state, checkpointing/replay, provider+fallback, security
 policy engine, memory (in-memory + Mem0), OTel tracing, and the eval
 harness are real and tested (Phase 0/1), as is the rule-based
 reflection slice (`RuleBasedCritic`/`RuleBasedJudge` + `make_reflect_node`,
-ADR 0046). Knowledge graph, context engine, token optimizer, planner,
+ADR 0046), and the memory-backed context retriever (`MemoryRetriever`, ADR
+0101 — the first thing here that enforces `context_budget_tokens`).
 LLM-backed reflection, offline optimization, and multi-agent coordination
-are typed interfaces with `NotImplementedError` bodies (Phase 2/3/5). The
+remain typed interfaces with `NotImplementedError` bodies (Phase 3/5). The
 evolution engine is a typed interface, disabled (Phase 4).
+
+The knowledge graph, token optimizer and planner interfaces were **deleted**
+(ADR 0101), not deferred: a stub unimplemented across five phases is a
+promise, and an unkept promise in a typed signature is worse than an honest
+absence. `PlanValidator` in particular was redundant with the domain gates
+Milestone 2 wired.
 
 ## Development pod
 
