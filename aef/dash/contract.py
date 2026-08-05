@@ -59,7 +59,11 @@ class UnknownReason(StrEnum):
 
     NO_LEDGER = "no_ledger"
     LEDGER_EMPTY = "ledger_empty"
-    LEDGER_UNVERIFIED = "ledger_unverified"
+    # "The chain was not checked", NOT "the chain failed". A failed
+    # verification is something we KNOW — it is `Known(..., DEGRADED)`, and
+    # loudly. Collapsing the two would let a detected forgery render as an
+    # absence, which is the quieter and worse of the two.
+    LEDGER_NOT_VERIFIED = "ledger_not_verified"
     NO_RUNS_RECORDED = "no_runs_recorded"
     MONITOR_NEVER_RAN = "monitor_never_ran"
     WINDOW_TOO_YOUNG = "window_too_young"
@@ -67,9 +71,12 @@ class UnknownReason(StrEnum):
     CORPUS_EMPTY = "corpus_empty"
     NO_GRAPH = "no_graph"
     NO_LOOP_STATE = "no_loop_state"
-    EXPORT_MISSING = "export_missing"
-    EXPORT_STALE = "export_stale"
-    EXPORT_UNREADABLE = "export_unreadable"
+    # The fleet page's reasons (EXPORT_MISSING / STALE / UNREADABLE) are NOT
+    # declared here. They were, and no panel used them — which is ADR 0101's
+    # rule turned on this module's own code: a forward-declared member with no
+    # caller reads as a present feature. They arrive in Milestone 4 with the
+    # fleet panels that consume them, and `test_every_unknown_reason_has_a_home`
+    # makes adding one without a panel fail.
 
 
 @dataclass(frozen=True)
@@ -221,6 +228,31 @@ class Panel:
                 f"Reading is a closed union of two cases; anything else reaching here "
                 f"renders whatever `.state` it happens to carry."
             )
+        # Round 2: `unknown_when` was documentation. Every panel listed the
+        # reasons it could be unknown for, and nothing checked — so the halt
+        # panel cheerfully reported `corpus_empty`, which sends the operator to
+        # fix the corpus while the loop is halted. ADR 0092's defect class
+        # ("a declared thing with no enforcement reads as an enforced thing"),
+        # and ADR 0074's ("a refusal that misnames its own cause sends the
+        # operator to fix the wrong thing") in the same line of code.
+        if isinstance(self.reading, Unknown) and self.reading.reason not in self.spec.unknown_when:
+            raise ValueError(
+                f"panel {self.spec.key!r} cannot be unknown for reason "
+                f"{self.reading.reason.value!r}; it declares "
+                f"{[r.value for r in self.spec.unknown_when]}. Either the reason is wrong — "
+                f"and it is what the operator will act on — or the spec never anticipated "
+                f"this case and should say so explicitly."
+            )
+        # Defence in depth against a `Known` subclass that skips its own
+        # __post_init__. Not because a malicious subclass is the threat model,
+        # but because the zone rule survived three defeats of the allowlist by
+        # not being the only check (ADR 0093).
+        if isinstance(self.reading, Known) and self.reading.value is None:
+            raise ValueError(
+                f"panel {self.spec.key!r} holds Known(value=None) — no data, rendered as "
+                f"though there were. Known refuses this at construction; reaching it here "
+                f"means the guard was bypassed."
+            )
 
     @property
     def state(self) -> PanelState:
@@ -248,7 +280,15 @@ PANELS: tuple[PanelSpec, ...] = (
         key="ledger_integrity",
         title="Ledger integrity",
         watches="the hash chain over every loop event",
-        unknown_when=(UnknownReason.NO_LEDGER, UnknownReason.NO_LOOP_STATE),
+        unknown_when=(
+            UnknownReason.NO_LEDGER,
+            UnknownReason.NO_LOOP_STATE,
+            # Round 2 found this missing: the most security-relevant reason in
+            # the enum had no panel to appear on. A chain nobody checked and a
+            # chain that passed are different claims, and the export exists in
+            # part to stop them being rendered the same.
+            UnknownReason.LEDGER_NOT_VERIFIED,
+        ),
     ),
     PanelSpec(
         key="halt_channel",

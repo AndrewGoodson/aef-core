@@ -57,16 +57,38 @@ def test_known_refuses_to_hold_the_unknown_state() -> None:
         Known(value=1, state=PanelState.UNKNOWN)
 
 
-def test_no_panel_and_no_reason_combination_renders_green() -> None:
-    """Exhaustive over the actual product, not a sample. 10 panels x 13
-    reasons — cheap enough to do properly, and the whole program's stated
-    lesson is that a sampled check is the one that misses."""
-    combinations = list(product(PANELS, UnknownReason))
-    assert len(combinations) == len(PANELS) * len(UnknownReason)
-    for spec, reason in combinations:
-        panel = Panel(spec=spec, reading=Unknown(reason=reason))
-        assert panel.state is PanelState.UNKNOWN, (spec.key, reason)
-        assert panel.is_green is False, (spec.key, reason)
+def test_no_panel_and_no_declared_reason_combination_renders_green() -> None:
+    """Exhaustive over every panel and every reason that panel declares — not
+    a sample. The whole program's stated lesson is that the sampled check is
+    the one that misses.
+
+    Scoped to DECLARED reasons since round 2, because an undeclared reason is
+    now refused outright; the test below covers that half.
+    """
+    checked = 0
+    for spec in PANELS:
+        for reason in spec.unknown_when:
+            panel = Panel(spec=spec, reading=Unknown(reason=reason))
+            assert panel.state is PanelState.UNKNOWN, (spec.key, reason)
+            assert panel.is_green is False, (spec.key, reason)
+            checked += 1
+    assert checked == sum(len(spec.unknown_when) for spec in PANELS)
+    assert checked >= len(PANELS), "every panel contributed at least one case"
+
+
+def test_every_undeclared_pairing_is_refused_rather_than_rendered() -> None:
+    """The other half of the product. Together these two cover all
+    len(PANELS) x len(UnknownReason) pairs with no gap."""
+    refused = 0
+    for spec, reason in product(PANELS, UnknownReason):
+        if reason in spec.unknown_when:
+            continue
+        with pytest.raises(ValueError, match="cannot be unknown for reason"):
+            Panel(spec=spec, reading=Unknown(reason=reason))
+        refused += 1
+    total = len(PANELS) * len(UnknownReason)
+    declared = sum(len(spec.unknown_when) for spec in PANELS)
+    assert refused + declared == total, "the two tests must partition the product exactly"
 
 
 def test_known_panels_do_report_their_state() -> None:
@@ -272,6 +294,60 @@ def test_a_panel_claiming_it_cannot_be_unknown_is_refused() -> None:
 def test_panel_keys_are_unique() -> None:
     keys = [spec.key for spec in PANELS]
     assert len(keys) == len(set(keys))
+
+
+def test_a_panel_refuses_an_unknown_reason_its_spec_never_declared() -> None:
+    """Round 2: `unknown_when` was documentation and nothing checked it, so
+    the halt panel reported `corpus_empty` — sending the operator to fix the
+    corpus while the loop was halted."""
+    spec = panel_spec("halt")
+    assert UnknownReason.CORPUS_EMPTY not in spec.unknown_when, "precondition"
+    with pytest.raises(ValueError, match="cannot be unknown for reason"):
+        Panel(spec=spec, reading=Unknown(reason=UnknownReason.CORPUS_EMPTY))
+
+    # ...and the reason it DOES declare still works.
+    ok = Panel(spec=spec, reading=Unknown(reason=UnknownReason.NO_LOOP_STATE))
+    assert ok.state is PanelState.UNKNOWN
+
+
+def test_every_unknown_reason_has_a_panel_that_can_show_it() -> None:
+    """Round 2 found four members no panel declared, including the most
+    security-relevant one. A reason with no home is a case that can be
+    computed and never displayed — ADR 0101's rule ("a declared thing with no
+    caller reads as a present feature") applied to this module's own enum."""
+    declared = {reason for spec in PANELS for reason in spec.unknown_when}
+    orphans = sorted(r.value for r in UnknownReason if r not in declared)
+    assert not orphans, (
+        f"UnknownReason members no panel can display: {orphans}. Either give one a panel "
+        f"or delete it until the milestone that needs it — the fleet reasons were removed "
+        f"for exactly this and return in Milestone 4."
+    )
+
+
+def test_a_chain_nobody_checked_is_not_a_chain_that_passed() -> None:
+    """The ledger panel must be able to say "not verified" — distinct from a
+    verification that FAILED, which is Known(DEGRADED) and loud."""
+    spec = panel_spec("ledger_integrity")
+    assert UnknownReason.LEDGER_NOT_VERIFIED in spec.unknown_when
+    panel = Panel(spec=spec, reading=Unknown(reason=UnknownReason.LEDGER_NOT_VERIFIED))
+    assert panel.is_green is False
+
+    failed = Panel(spec=spec, reading=Known(value=False, state=PanelState.DEGRADED))
+    assert failed.state is PanelState.DEGRADED
+    assert failed.is_green is False
+
+
+def test_a_known_subclass_that_skips_its_guard_is_still_caught_at_the_panel() -> None:
+    """Defence in depth. Not because a malicious subclass is the threat model,
+    but because the zone rule survived three defeats of the allowlist by not
+    being the only check (ADR 0093)."""
+
+    class Unguarded(Known[object]):
+        def __post_init__(self) -> None:
+            return None
+
+    with pytest.raises(ValueError, match="holds Known\\(value=None\\)"):
+        Panel(spec=panel_spec("runs"), reading=Unguarded(value=None, state=PanelState.HEALTHY))
 
 
 def test_unknown_reason_must_be_an_enum_member() -> None:

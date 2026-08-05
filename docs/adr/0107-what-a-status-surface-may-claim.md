@@ -138,6 +138,55 @@ does not mention.
 recorded errors is a real, healthy answer, and refusing `[]` the way `None` is
 refused would force UNKNOWN for a question the source can actually answer.
 
+## The second adversarial round
+
+Round 1 found three, so a fresh round was owed before the milestone could
+close. It found three more, on angles round 1 did not touch.
+
+**B1 — `unknown_when` was documentation.** Every panel listed the reasons it
+could be unknown for, and nothing checked. The halt panel cheerfully reported
+`corpus_empty`, which sends the operator to fix the corpus while the loop is
+halted. This is ADR 0092's defect class ("a declared thing with no enforcement
+reads as an enforced thing") and ADR 0074's ("a refusal that misnames its own
+cause sends the operator to fix the wrong thing") in the same line of code —
+and the milestone's own instruction 1a was to specify exactly this per panel.
+`Panel.__post_init__` now refuses an undeclared reason.
+
+**B4 — four `UnknownReason` members no panel could display**, including the
+most security-relevant one. `LEDGER_UNVERIFIED` had no home: the ledger panel
+could not say "nobody checked this chain." It is now declared there, and
+renamed `LEDGER_NOT_VERIFIED` because the old name blurred two different
+claims — a chain that was **not checked** is UNKNOWN; a chain that **failed**
+verification is `Known(..., DEGRADED)` and loud. Collapsing them would let a
+detected forgery render as an absence, which is the quieter and worse of the
+two.
+
+The other three (`EXPORT_MISSING`/`STALE`/`UNREADABLE`) belonged to the fleet
+page, which does not exist until Milestone 4. They were **deleted**, not
+deferred — ADR 0101's rule turned on this module's own code. They return with
+the panels that consume them, and `test_every_unknown_reason_has_a_home` makes
+adding one without a panel fail.
+
+**B3 — a `Known` subclass overriding `__post_init__`** renders green over
+`None`. A malicious subclass is not the threat model, so this is low severity;
+the fix is a re-check at `Panel`, on the same reasoning that kept the zone rule
+alive through three defeats of the allowlist (ADR 0093) — being the only check
+is the problem.
+
+### What round 2 left open, deliberately
+
+**The disclosure registry has no production caller.** `disclosure_of` is called
+by nothing outside `contract.py` — which is ADR 0092's defect class pointed
+straight at rule 3 above. It is *expected* at Milestone 1, which is
+contract-only by construction, but "expected" is how an unkept promise starts.
+It is therefore **Milestone 2's acceptance criterion**: the export must route
+every field through `disclosure_of`, and a test must fail if it does not.
+
+Worth recording that the AST check which found this initially reported a
+caller — it had matched `emittable`'s own internal call inside `contract.py`.
+A detector that counts the definition site as a caller would report "wired" for
+every dead registry in any codebase.
+
 ## Consequences
 
 Milestone 2's export must map every optional source through `Known.optional`
