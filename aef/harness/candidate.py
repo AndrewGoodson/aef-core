@@ -49,6 +49,11 @@ class DiffEntry:
     dst_mode: str
     added_lines: int = 0
     removed_lines: int = 0
+    # git reports "-" for line counts it will not compute (binary files, or
+    # anything a `.gitattributes` marks binary). Defaulting that to 0 made a
+    # 5,050-line rewrite report as 1 changed line and sail past the size
+    # budget — measured, not hypothesised. Unmeasurable must deny.
+    size_unknown: bool = False
 
     @property
     def is_deletion(self) -> bool:
@@ -84,6 +89,13 @@ class CandidateDiff:
         return sum(e.added_lines + e.removed_lines for e in self.entries)
 
     @property
+    def unmeasurable(self) -> tuple[str, ...]:
+        """Paths whose change size git would not compute. A size budget
+        cannot be applied to these, so they are rejected rather than counted
+        as zero."""
+        return tuple(e.path for e in self.entries if e.size_unknown and not e.is_deletion)
+
+    @property
     def is_empty(self) -> bool:
         return not self.entries
 
@@ -116,7 +128,7 @@ def _split_z(raw: bytes) -> list[str]:
     return [part for part in text.split("\0") if part]
 
 
-def _parse_numstat(raw: bytes) -> dict[str, tuple[int, int]]:
+def _parse_numstat(raw: bytes) -> dict[str, tuple[int, int, bool]]:
     """One NUL-terminated record per file: `added\\tremoved\\tpath`.
 
     Note this is NOT the `--raw -z` shape (which puts the path in its own
@@ -124,7 +136,7 @@ def _parse_numstat(raw: bytes) -> dict[str, tuple[int, int]]:
     assumed. Only the first two tabs delimit, so a tab inside a filename
     stays in the path. Binary files report `-` for both counts.
     """
-    counts: dict[str, tuple[int, int]] = {}
+    counts: dict[str, tuple[int, int, bool]] = {}
     for record in _split_z(raw):
         added, _, rest = record.partition("\t")
         removed, _, path = rest.partition("\t")
@@ -133,6 +145,7 @@ def _parse_numstat(raw: bytes) -> dict[str, tuple[int, int]]:
         counts[path] = (
             int(added) if added.isdigit() else 0,
             int(removed) if removed.isdigit() else 0,
+            not (added.isdigit() and removed.isdigit()),
         )
     return counts
 
@@ -147,7 +160,7 @@ def read_candidate(repo: GitRepo, base_ref: str, head_ref: str) -> CandidateDiff
         parts = meta.lstrip(":").split()
         if len(parts) < 5:  # pragma: no cover - git does not emit this
             continue
-        added, removed = counts.get(path, (0, 0))
+        added, removed, unknown = counts.get(path, (0, 0, True))
         entries.append(
             DiffEntry(
                 path=path,
@@ -156,6 +169,7 @@ def read_candidate(repo: GitRepo, base_ref: str, head_ref: str) -> CandidateDiff
                 dst_mode=parts[1],
                 added_lines=added,
                 removed_lines=removed,
+                size_unknown=unknown,
             )
         )
 
