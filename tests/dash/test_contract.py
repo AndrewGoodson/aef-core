@@ -22,6 +22,7 @@ from aef.dash.contract import (
     FIELD_DISCLOSURE,
     FORBIDDEN_HTML_CONSTRUCTS,
     PANELS,
+    PANELS_BY_KEY,
     Disclosure,
     DisclosureError,
     Known,
@@ -31,8 +32,8 @@ from aef.dash.contract import (
     Unknown,
     UnknownReason,
     disclosure_of,
-    emittable,
     panel_spec,
+    prepare,
 )
 from aef.harness.monitoring import Digest, evaluate_window
 
@@ -389,7 +390,8 @@ def test_the_secrets_are_excluded() -> None:
         "state_dir",
     ):
         assert disclosure_of(field) is Disclosure.EXCLUDED, field
-        assert emittable(field) is False, field
+        with pytest.raises(DisclosureError, match="EXCLUDED"):
+            prepare(field, "whatever")
 
 
 def test_the_salt_fingerprint_is_excluded_and_the_salt_is_too() -> None:
@@ -421,6 +423,75 @@ def test_tenant_tags_are_redacted() -> None:
 def test_every_registered_field_has_a_real_disclosure() -> None:
     for field, value in FIELD_DISCLOSURE.items():
         assert isinstance(value, Disclosure), field
+
+
+# --------------------------------------------------------------------------
+# Round 3. Two mutable registries, and an API whose name lied.
+# --------------------------------------------------------------------------
+
+
+def test_the_disclosure_registry_cannot_be_rewritten_at_runtime() -> None:
+    """It was a plain dict, so `FIELD_DISCLOSURE["signing_key"] =
+    Disclosure.PUBLIC` flipped an EXCLUDED field to PUBLIC. Deciding a
+    disclosure and leaving the decision writable is most of the way back to
+    not having decided."""
+    assert disclosure_of("signing_key") is Disclosure.EXCLUDED
+    with pytest.raises((TypeError, AttributeError)):
+        FIELD_DISCLOSURE["signing_key"] = Disclosure.PUBLIC  # type: ignore[index]
+    assert disclosure_of("signing_key") is Disclosure.EXCLUDED
+
+
+def test_the_panel_registry_cannot_be_widened_at_runtime() -> None:
+    """One assignment switched off the enforcement round 2 had just added."""
+    with pytest.raises((TypeError, AttributeError)):
+        PANELS_BY_KEY["halt"] = PanelSpec(  # type: ignore[index]
+            key="halt", title="t", watches="w", unknown_when=tuple(UnknownReason)
+        )
+    assert panel_spec("halt").unknown_when == (UnknownReason.NO_LOOP_STATE,)
+
+
+def test_prepare_refuses_an_excluded_field_outright() -> None:
+    with pytest.raises(DisclosureError, match="EXCLUDED and must not be emitted"):
+        prepare("signing_key", "sk-live-abc123")
+
+
+def test_prepare_redacts_the_two_fields_that_carry_secrets() -> None:
+    """The defect this replaced: `emittable()` returned True for REDACTED, so
+    the obvious caller — `if emittable(f): payload[f] = value` — emitted the
+    raw error message and the raw tenant tag. Built from a connection string
+    of the exact shape a traceback stringifies, not a paraphrase."""
+    secret = "postgres://user:hunter2@db.internal/prod"
+    out = prepare("error_message", secret)
+    assert secret not in str(out)
+    assert "hunter2" not in str(out)
+    assert str(out).startswith("sha256:")
+
+    tag = prepare("tenant_tag", "acme-corp")
+    assert "acme" not in str(tag)
+
+
+def test_prepare_passes_public_values_through_unchanged() -> None:
+    """The control. A `prepare` that redacted everything would pass every
+    assertion above and make the export useless."""
+    assert prepare("merged", 7) == 7
+    assert prepare("ledger_verified", True) is True
+    assert prepare("graph_id", "billing-agent") == "billing-agent"
+
+
+def test_redaction_is_stable_so_the_fleet_page_can_still_count() -> None:
+    """Grouping identical errors and counting distinct tenants is the whole
+    reason this is a digest rather than a constant placeholder."""
+    assert prepare("tenant_tag", "acme") == prepare("tenant_tag", "acme")
+    assert prepare("tenant_tag", "acme") != prepare("tenant_tag", "globex")
+
+
+def test_emittable_is_gone() -> None:
+    """It is not deprecated, it is removed. A boolean over a three-valued
+    policy reads as 'safe to emit' at every call site, and leaving it importable
+    would keep that reading available."""
+    import aef.dash.contract as contract
+
+    assert not hasattr(contract, "emittable")
 
 
 # --------------------------------------------------------------------------

@@ -28,8 +28,11 @@ Three decisions live here, each with an ADR (0107) behind it:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from hashlib import sha256
+from types import MappingProxyType
 from typing import Generic, TypeVar
 
 T = TypeVar("T")
@@ -348,7 +351,10 @@ PANELS: tuple[PanelSpec, ...] = (
     ),
 )
 
-PANELS_BY_KEY: dict[str, PanelSpec] = {spec.key: spec for spec in PANELS}
+# A read-only view. Round 3: this was a plain dict, so `PANELS_BY_KEY["halt"]
+# = PanelSpec(..., unknown_when=tuple(UnknownReason))` widened the enforcement
+# B1 had just installed — a control one assignment away from being switched off.
+PANELS_BY_KEY: Mapping[str, PanelSpec] = MappingProxyType({spec.key: spec for spec in PANELS})
 
 
 def panel_spec(key: str) -> PanelSpec:
@@ -407,7 +413,7 @@ class DisclosureError(RuntimeError):
 # Every field the export may carry, with the decision and its reason. An
 # unregistered field raises rather than defaulting — a default here would be a
 # policy applied to fields nobody looked at, which is the opposite of the point.
-FIELD_DISCLOSURE: dict[str, Disclosure] = {
+_FIELD_DISCLOSURE: dict[str, Disclosure] = {
     # Identity and provenance of the export itself.
     "schema_version": Disclosure.PUBLIC,
     "generated_at": Disclosure.PUBLIC,
@@ -496,6 +502,13 @@ FIELD_DISCLOSURE: dict[str, Disclosure] = {
     "environment": Disclosure.EXCLUDED,
 }
 
+# Read-only view. Round 3: the registry was a plain dict, so
+# `FIELD_DISCLOSURE["signing_key"] = Disclosure.PUBLIC` flipped an EXCLUDED
+# field to PUBLIC at runtime — a security policy that any imported module
+# could rewrite. Deciding a disclosure and then leaving the decision
+# writable is most of the way back to not having decided.
+FIELD_DISCLOSURE: Mapping[str, Disclosure] = MappingProxyType(_FIELD_DISCLOSURE)
+
 
 def disclosure_of(field: str) -> Disclosure:
     """The decided disclosure for `field`, or raise.
@@ -514,6 +527,49 @@ def disclosure_of(field: str) -> Disclosure:
         ) from None
 
 
-def emittable(field: str) -> bool:
-    """Whether `field` may appear in the export at all, in any form."""
-    return disclosure_of(field) is not Disclosure.EXCLUDED
+def redacted_form(value: object) -> str:
+    """The emittable stand-in for a REDACTED value: a stable, truncated digest.
+
+    Stable so the fleet page can count distinct tenants and group identical
+    errors without ever holding either. Truncated because the full digest buys
+    nothing here and invites being treated as an identifier.
+
+    **What this does and does not buy, stated rather than implied.** It stops
+    the value being *read*. It does not make it unguessable: a digest over a
+    low-entropy domain — a tenant tag, a known error string — is confirmable by
+    anyone holding a candidate list. That is strictly better than emitting the
+    tag, and it is not anonymity. Making it unguessable would need a key, and a
+    key in the export is the ADR 0106 mistake with the serial numbers filed off.
+    """
+    return "sha256:" + sha256(repr(value).encode("utf-8")).hexdigest()[:16]
+
+
+def prepare(field: str, value: object) -> object:
+    """The only sanctioned way to put a value into the export.
+
+    Replaces a boolean `emittable()` that this milestone's third adversarial
+    round showed to be a trap: it returned `True` for REDACTED, so the obvious
+    caller —
+
+        if emittable(field):
+            payload[field] = value
+
+    — emitted the raw `error_message` and the raw `tenant_tag`, which are
+    precisely the two fields the registry marks as needing redaction. The
+    function was correct against its own docstring ("may appear in the export at
+    all, in any form") and wrong against every way anyone would use it, which is
+    the more dangerous kind of correct.
+
+    So there is no boolean any more. A three-valued policy gets a three-way
+    function that applies the policy itself, and the safe path is the only path.
+    """
+    disclosure = disclosure_of(field)
+    if disclosure is Disclosure.EXCLUDED:
+        raise DisclosureError(
+            f"field {field!r} is EXCLUDED and must not be emitted in any form. If the "
+            f"export needs something about it, emit a different field with its own "
+            f"disclosure decision — a count, a boolean, a type name."
+        )
+    if disclosure is Disclosure.REDACTED:
+        return redacted_form(value)
+    return value

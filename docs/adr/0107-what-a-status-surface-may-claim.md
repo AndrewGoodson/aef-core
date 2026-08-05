@@ -187,6 +187,56 @@ caller — it had matched `emittable`'s own internal call inside `contract.py`.
 A detector that counts the definition site as a caller would report "wired" for
 every dead registry in any codebase.
 
+## The third adversarial round
+
+Four more, all reproduced. Round 3 aimed at the registries and at whether the
+API's own names would mislead the caller Milestone 2 was about to be.
+
+**C4 — `emittable()` was a trap, and the trap was aimed at the next
+milestone.** It returned `True` for `REDACTED`, so the obvious caller —
+
+```python
+if emittable(field):
+    payload[field] = value
+```
+
+— emitted the raw `error_message` and the raw `tenant_tag`, which are exactly
+the two fields the registry marks as needing redaction. The function was
+correct against its own docstring ("may appear in the export at all, in any
+form") and wrong against every way anyone would use it. That is the more
+dangerous kind of correct, and rule 3 above would have been decoration the
+first time the export was written.
+
+`emittable` is **removed**, not deprecated: leaving it importable keeps the
+"safe to emit" reading available at every call site. A three-valued policy now
+gets a three-way function that applies the policy itself:
+
+```python
+prepare("signing_key", ...)      -> DisclosureError
+prepare("error_message", conn)   -> 'sha256:572c286c4416fdf6'
+prepare("merged", 7)             -> 7
+```
+
+The safe path is the only path. `redacted_form` is a stable truncated digest so
+the fleet page can still count distinct tenants and group identical errors —
+and its limit is stated rather than implied: it stops the value being *read*,
+it does not make it unguessable. A digest over a low-entropy domain is
+confirmable by anyone holding a candidate list. Fixing that needs a key, and a
+key in the export is the ADR 0106 mistake with the serial numbers filed off.
+
+**C1 and C3 — both registries were plain dicts.** One assignment
+(`PANELS_BY_KEY["halt"] = PanelSpec(..., unknown_when=tuple(UnknownReason))`)
+switched off the enforcement round 2 had just installed, and
+`FIELD_DISCLOSURE["signing_key"] = Disclosure.PUBLIC` flipped an EXCLUDED field
+to PUBLIC at runtime. Deciding a disclosure and then leaving the decision
+writable is most of the way back to not having decided. Both are
+`MappingProxyType` now.
+
+**Not a defect: `Panel` accepts a `PanelSpec` outside the catalogue.** Checked
+and deliberately left. `PANELS` is a default, not a whitelist — an adopting
+repo will want panels this repo has never heard of — and the `unknown_when`
+enforcement is per-spec, so it still holds for any spec anyone brings.
+
 ## Consequences
 
 Milestone 2's export must map every optional source through `Known.optional`
