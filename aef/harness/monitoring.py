@@ -28,6 +28,7 @@ cannot say so is a status page rather than an oversight surface.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -227,6 +228,76 @@ class KillSwitch:
             )
 
 
+@dataclass(frozen=True)
+class HaltNotifier:
+    """Getting a halt in front of the owner (Q-A5).
+
+    A halt that only fails a CI job depends on someone reading GitHub email,
+    which `05-approval-policy.md` §7 says it must not. Three channels, in
+    increasing order of reach:
+
+    1. `HALT.md` at the repo root — impossible to miss on the next checkout
+    2. a ledger entry — durable and bisectable
+    3. a POST to a webhook the owner configures **outside the repo**
+
+    The URL is passed in, never read here and never committed: no secret
+    ships in this repository. If it is unset the digest says so **loudly on
+    every run** — an unconfigured alarm that stays quiet is worse than none,
+    because it looks like a working one.
+    """
+
+    webhook_url: str | None = None
+    # Injected so the notifier is testable without a network, and so the
+    # harness is not the thing that decides how to reach the outside world.
+    poster: Callable[[str, str], None] | None = None
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.webhook_url)
+
+    def notify(self, reason: str, *, repo_root: Path, at: datetime) -> tuple[str, ...]:
+        """Returns what it actually managed to do, not what it attempted."""
+        done: list[str] = []
+
+        halt_file = repo_root / "HALT.md"
+        halt_file.write_text(
+            f"# The self-rewiring loop is HALTED\n\n"
+            f"**{at.isoformat()}**\n\n{reason}\n\n"
+            f"Nothing will run until this is resolved. Read the ledger, then remove the\n"
+            f"kill-switch file to resume — resuming is a decision, not a formality.\n"
+        )
+        done.append(f"wrote {halt_file}")
+
+        if not self.configured:
+            done.append(
+                "NO HALT CHANNEL CONFIGURED — nothing was sent to anyone. Set the halt "
+                "webhook so a halt reaches you without you looking for it."
+            )
+            return tuple(done)
+
+        assert self.webhook_url is not None
+        try:
+            self._post(self.webhook_url, f"aef loop HALTED at {at.isoformat()}: {reason}")
+            done.append("posted to the configured halt webhook")
+        except Exception as exc:  # noqa: BLE001 - a failed notification must not hide the halt
+            done.append(f"halt webhook POST FAILED ({type(exc).__name__}); the halt still stands")
+        return tuple(done)
+
+    def _post(self, url: str, body: str) -> None:
+        if self.poster is not None:
+            self.poster(url, body)
+            return
+        import json as _json
+        import urllib.request
+
+        request = urllib.request.Request(
+            url,
+            data=_json.dumps({"text": body}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(request, timeout=10).close()  # noqa: S310 - owner-supplied URL
+
+
 # --------------------------------------------------------------------------
 # The digest
 # --------------------------------------------------------------------------
@@ -248,6 +319,11 @@ class Digest:
     scenarios_added: int = 0
     drift: float = 0.0
     owner_edits: int = 0
+    # Two ways this loop can be quietly inert. Both are reported every run,
+    # because a system that reports nothing looks identical to one with
+    # nothing to report.
+    halt_channel_configured: bool = False
+    runs_recorded: int = 0
 
     @property
     def acceptance_rate(self) -> float | None:
@@ -295,7 +371,22 @@ class Digest:
             f"- Scenarios added to the corpus: {self.scenarios_added}",
             f"- Drift from the blessed baseline: {self.drift:.3f}",
             f"- Out-performing you editing code directly: {benefit}",
+            f"- Production runs recorded: {self.runs_recorded}",
+            f"- Halt channel configured: {'yes' if self.halt_channel_configured else 'NO'}",
         ]
+        if not self.halt_channel_configured:
+            lines += [
+                "",
+                "**No halt channel is configured.** If the loop halts, nothing will tell "
+                "you — you will find out by noticing it stopped. Set the halt webhook.",
+            ]
+        if self.runs_recorded == 0:
+            lines += [
+                "",
+                "**No production runs were recorded**, so the corpus cannot grow and the "
+                "gates keep measuring what the agent used to do. Pass `--record-runs` "
+                "from your deployment.",
+            ]
         if self.security_events:
             lines += ["", "**A proposal reached for the harness. Read the ledger.**"]
         if self.beating_manual_editing is False:
@@ -348,6 +439,8 @@ def build_digest(
     drift: float = 0.0,
     scenarios_added: int = 0,
     owner_edits: int = 0,
+    halt_channel_configured: bool = False,
+    runs_recorded: int = 0,
 ) -> Digest:
     counts = dict.fromkeys(_COUNTED.values(), 0)
     security_events = 0
@@ -368,6 +461,8 @@ def build_digest(
         scenarios_added=scenarios_added,
         drift=drift,
         owner_edits=owner_edits,
+        halt_channel_configured=halt_channel_configured,
+        runs_recorded=runs_recorded,
         **counts,
     )
 
