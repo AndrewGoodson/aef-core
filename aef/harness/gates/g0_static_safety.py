@@ -54,6 +54,22 @@ DEFAULT_IMPORT_ALLOWLIST: frozenset[str] = frozenset(
     }
 )
 
+# `aef` subpackages agent-authored code may NOT import, checked before the
+# allowlist. `aef` is on the allowlist because a Zone A graph legitimately
+# needs `aef.kernel` and `aef.state` — and root-module matching then let a
+# candidate import `aef.harness.scenario_runner`, read the per-run nonce out
+# of its `sys.argv`, write a forged result to `sys.__stdout__`, and point the
+# runner's own `sys.stdout` at stderr. Three lines, zero G0 findings, all six
+# gates passed on a broken agent (ADR 0088).
+#
+# A module object is shared process-wide, so importing the harness hands
+# agent code every module the harness imports. The harness is the thing
+# judging it; there is no legitimate reason for a graph to reach it.
+FORBIDDEN_AEF_SUBPACKAGES: tuple[str, ...] = (
+    "aef.harness",
+    "aef.cli",
+)
+
 # Names that grant arbitrary execution or reflection regardless of imports.
 FORBIDDEN_CALLS: frozenset[str] = frozenset(
     {"eval", "exec", "compile", "__import__", "breakpoint", "memoryview"}
@@ -62,7 +78,35 @@ FORBIDDEN_CALLS: frozenset[str] = frozenset(
 # Attribute access that reaches the interpreter's own machinery. `__globals__`
 # on any function reaches its module namespace, which is a general escape.
 FORBIDDEN_ATTRIBUTES: frozenset[str] = frozenset(
-    {"__globals__", "__builtins__", "__subclasses__", "__bases__", "__mro__", "__code__"}
+    {
+        "__globals__",
+        "__builtins__",
+        "__subclasses__",
+        "__bases__",
+        "__mro__",
+        "__code__",
+        # Reached through any module object the candidate can import. These
+        # are the interpreter's process-wide handles: argv carries the
+        # harness's per-run nonce, __stdout__ is the real fd 1 regardless of
+        # what sys.stdout has been pointed at, and modules reaches every
+        # loaded module including the one being run as __main__ (ADR 0088).
+        "__stdout__",
+        "__stderr__",
+        "__stdin__",
+        "argv",
+        "modules",
+        # A module object exposes everything IT imported. `aef.kernel.
+        # durability` imports `os`, so `durability.os` reaches the filesystem
+        # without `os` ever appearing in an import statement. Denying the
+        # ATTRIBUTE closes the reach without removing the allowlisted package
+        # the agent legitimately needs (ADR 0088).
+        "os",
+        "sys",
+        "subprocess",
+        "shutil",
+        "socket",
+        "importlib",
+    }
 )
 
 DEFAULT_MAX_CHANGED_LINES = 200
@@ -191,6 +235,27 @@ class G0StaticSafety(Gate):
         return tuple(findings)
 
 
+def _forbidden_subpackage(name: str) -> str | None:
+    """The denied `aef` subpackage `name` sits under, if any."""
+    for denied in FORBIDDEN_AEF_SUBPACKAGES:
+        if name == denied or name.startswith(f"{denied}."):
+            return denied
+    return None
+
+
+def _subpackage_finding(path: str, line: int, name: str, denied: str) -> StaticFinding:
+    return StaticFinding(
+        path=path,
+        line=line,
+        problem=(
+            f"import of {name!r} reaches {denied!r}, which agent-authored code may not "
+            f"import. A module object is shared process-wide, so importing the harness "
+            f"hands this code every module the harness imports — including the one that "
+            f"reports on it (ADR 0088)"
+        ),
+    )
+
+
 def _root_module(name: str) -> str:
     return name.split(".", 1)[0]
 
@@ -209,6 +274,10 @@ def scan_source(
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
+                forbidden = _forbidden_subpackage(alias.name)
+                if forbidden is not None:
+                    findings.append(_subpackage_finding(path, node.lineno, alias.name, forbidden))
+                    continue
                 root = _root_module(alias.name)
                 if root not in allowlist:
                     findings.append(
@@ -223,6 +292,12 @@ def scan_source(
                     )
         elif isinstance(node, ast.ImportFrom):
             if node.level:  # relative import, stays inside Zone A
+                continue
+            forbidden = _forbidden_subpackage(node.module or "")
+            if forbidden is not None:
+                findings.append(
+                    _subpackage_finding(path, node.lineno, node.module or "", forbidden)
+                )
                 continue
             root = _root_module(node.module or "")
             if root not in allowlist:

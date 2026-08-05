@@ -232,3 +232,85 @@ def test_the_cheap_gates_run_before_any_candidate_code_executes(tmp_path: Path) 
 
     assert not marker.exists(), "the rejected candidate's module-level code executed"
     assert run.result.ran == ("G0",), f"gates ran: {run.result.ran}"
+
+
+# --------------------------------------------------------------------------
+# ADR 0088 — the claim ADR 0085 made, and why it was false
+# --------------------------------------------------------------------------
+
+
+_HIJACK = (
+    "from aef.harness import scenario_runner as _m\n"
+    "_m.sys.__stdout__.write(_m.result_marker(_m.sys.argv[3]) + '{}')\n"
+    "_m.sys.stdout = _m.sys.stderr\n"
+)
+
+
+def test_the_marker_hijack_is_rejected_by_g0() -> None:
+    """ADR 0085 claimed: "the only way to emit exactly one forged marker is
+    to stop the runner emitting its own, which needs os._exit, which needs an
+    import G0 rejects."
+
+    That was FALSE. `aef` is on the allowlist — a Zone A graph legitimately
+    needs `aef.kernel` — and root-module matching let a candidate import
+    `aef.harness.scenario_runner`, read the per-run nonce out of its
+    `sys.argv`, write a forged result to `sys.__stdout__`, and point the
+    runner's own `sys.stdout` at stderr. Three lines, zero G0 findings, all
+    six gates passing on a broken agent.
+
+    The counting defence and the G0 defence were not independent, as the ADR
+    asserted. They shared the assumption that `sys` was unreachable.
+    """
+    from aef.harness.gates.g0_static_safety import DEFAULT_IMPORT_ALLOWLIST, scan_source
+
+    assert scan_source("agents/graph.py", _HIJACK, DEFAULT_IMPORT_ALLOWLIST)
+
+
+@pytest.mark.parametrize(
+    ("name", "source"),
+    [
+        ("import aef.harness", "import aef.harness.suite\n"),
+        ("from aef.cli", "from aef.cli.loop import _config\n"),
+        ("shadow __main__", "from aef.harness import scenario_runner as _m\n_m.sys.modules\n"),
+        ("os via a module object", "from aef.kernel import durability as _d\n_ = _d.os\n"),
+        ("sys via a module object", "from aef.kernel import executor as _e\n_e.sys.argv\n"),
+    ],
+)
+def test_reaching_the_interpreter_through_an_allowlisted_package_is_rejected(
+    name: str, source: str
+) -> None:
+    """A module object is shared process-wide, so importing anything hands
+    agent code every module THAT module imported. `aef.kernel.durability`
+    imports `os`, so `durability.os` reaches the filesystem without `os` ever
+    appearing in an import statement."""
+    from aef.harness.gates.g0_static_safety import DEFAULT_IMPORT_ALLOWLIST, scan_source
+
+    assert scan_source("agents/graph.py", source, DEFAULT_IMPORT_ALLOWLIST), name
+
+
+@pytest.mark.parametrize(
+    ("name", "source"),
+    [
+        (
+            "kernel types",
+            "from aef.kernel import END, Graph, Node\nfrom aef.state import StateDelta\n",
+        ),
+        ("reflect node", "from aef.reasoning.nodes import make_reflect_node\n"),
+        ("the policy engine", "from aef.security.tool import Tool\n"),
+    ],
+)
+def test_the_imports_a_zone_a_graph_actually_needs_still_pass(name: str, source: str) -> None:
+    """The denial must not take the package the agent is built from. A rule
+    that rejects the reference agent is not a rule anyone can adopt."""
+    from aef.harness.gates.g0_static_safety import DEFAULT_IMPORT_ALLOWLIST, scan_source
+
+    assert not scan_source("agents/graph.py", source, DEFAULT_IMPORT_ALLOWLIST), name
+
+
+def test_this_repos_own_demo_agent_still_passes_g0() -> None:
+    """The strongest control available: the agent every gate test runs
+    against."""
+    from aef.harness.gates.g0_static_safety import DEFAULT_IMPORT_ALLOWLIST, scan_source
+
+    source = (REPO_ROOT / "agents" / "demo" / "graph.py").read_text()
+    assert not scan_source("agents/demo/graph.py", source, DEFAULT_IMPORT_ALLOWLIST)
