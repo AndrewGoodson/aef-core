@@ -398,3 +398,39 @@ def test_the_digest_is_readable_while_the_loop_is_halted(repo: GitRepo, tmp_path
     config.paths.kill_switch.engage("halted")
     result = loop_digest(config, since=NOW - timedelta(days=7), until=NOW)
     assert result.proposed == 0
+
+
+# --------------------------------------------------------------------------
+# ADR 0063 — G3's cohort floor must not move with the cohort
+# --------------------------------------------------------------------------
+
+
+def test_the_driver_does_not_pass_the_cohort_size_as_the_minimum(
+    repo: GitRepo, tmp_path: Path
+) -> None:
+    """The builder generates exactly cohort_size members, so wiring
+    min_cohort_size=cohort_size made `len(cohort) < min_cohort_size`
+    unsatisfiable: a cohort of 2 passed, with p95 over two samples. A floor
+    that moves with the thing it floors is not a floor."""
+    import inspect
+
+    import aef.harness.loop as loop_module
+
+    source = inspect.getsource(loop_module._gates_with_evidence)
+    assert "min_cohort_size=config.cohort_size" not in source
+
+
+def test_an_undersized_cohort_config_is_refused_at_construction(
+    repo: GitRepo, tmp_path: Path
+) -> None:
+    # Every candidate would be rejected for an undersized cohort; better to
+    # say so once than to discover it at the first gate run.
+    with pytest.raises(ValueError, match="below G3's minimum"):
+        LoopConfig(repo=repo, paths=LoopPaths(root=tmp_path / "state"), cohort_size=2)
+
+
+def test_the_default_cohort_size_meets_the_floor(repo: GitRepo, tmp_path: Path) -> None:
+    from aef.harness.gates.g3_improvement import DEFAULT_MIN_COHORT_SIZE
+
+    config = LoopConfig(repo=repo, paths=LoopPaths(root=tmp_path / "state"))
+    assert config.cohort_size >= DEFAULT_MIN_COHORT_SIZE
