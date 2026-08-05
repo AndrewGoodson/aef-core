@@ -24,7 +24,6 @@ from aef.kernel.durability import CorruptedCheckpointError
 from aef.kernel.graph import CompiledGraph, Graph
 from aef.observability import semconv
 from aef.state import AEFState, StateDelta
-from aef.state.schema import RECOVERED_KEY
 
 
 class GraphExecutionError(RuntimeError):
@@ -261,23 +260,6 @@ class GraphExecutor:
                                 "node_id": node.id,
                                 "error": str(exc),
                                 "error_type": type(exc).__name__,
-                                # RECOVERED, set here and only here.
-                                #
-                                # ADR 0076 added this marker and said plainly
-                                # that nothing set it. This is the one place
-                                # in the system that knows a node raised AND
-                                # that control continued anyway — a declared
-                                # fallback took over. It is Zone B, so the
-                                # marker keeps the unforgeability ADR 0080
-                                # found `recovered` lacked when agent code
-                                # wrote it.
-                                #
-                                # Without this a fallback that WORKS still
-                                # scores as a failure, so the loop could
-                                # never be rewarded for adding one — which
-                                # is the first structural repair the
-                                # proposer can make (ADR 0096, ADR 0097).
-                                RECOVERED_KEY: True,
                             }
                         ]
                     )

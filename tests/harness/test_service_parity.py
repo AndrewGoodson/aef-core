@@ -231,3 +231,111 @@ def test_gate_limits_reach_the_gate_that_reads_them(tmp_path) -> None:  # type: 
 
     assert run.result.ran == ("G0",)
     assert not run.result.passed
+
+
+# --------------------------------------------------------------------------
+# ADR 0098 — what survived Milestone 1's revert
+# --------------------------------------------------------------------------
+
+
+def test_the_reflect_node_records_which_node_failed() -> None:
+    """Kept from the reverted milestone because it stands on its own.
+
+    `ctx.node_id` inside the reflect node is `"reflect"` — the node that
+    OBSERVED the failure. The failing node's id sat in
+    `state.errors[i]["node_id"]`, which the reflect node read to build its
+    feedback text and then discarded. Any structural proposer needs it, and
+    recording it is correct independently of what a proposer later does with
+    it (ADR 0096, ADR 0098).
+    """
+    from aef.kernel import Edge, Graph, GraphExecutor, Node
+    from aef.reasoning.nodes import make_reflect_node
+    from aef.services.memory.in_memory import InMemoryMemoryStore
+    from aef.state import AEFState, Plan, StateDelta
+
+    def failing(state, ctx, services):  # type: ignore[no-untyped-def]
+        return (
+            StateDelta(
+                plan=Plan(goal=state.objective, status="failed"),
+                errors=[{"node_id": "fetch", "error": "upstream timed out"}],
+            ),
+            "reflect",
+        )
+
+    graph = Graph(
+        id="demo",
+        version="1",
+        nodes={
+            "fetch": Node(id="fetch", version="1", fn=failing, deterministic=True),
+            "reflect": make_reflect_node(),
+        },
+        edges=[Edge(from_node="fetch", to_node="reflect")],
+        entry_node="fetch",
+    )
+    store = InMemoryMemoryStore()
+    GraphExecutor(graph.compile(), agent_services(memory=store)).run(
+        AEFState(run_id="prod-1", agent_id="demo", objective="fetch the thing")
+    )
+
+    record = store.query(kind="failure", limit=1)[0]
+    assert record.content["node_id"] == "reflect", "who observed it"
+    assert record.content["failing_nodes"] == ["fetch"], "who caused it"
+
+
+def test_an_error_with_no_recorded_origin_is_not_attributed() -> None:
+    """Guessing which node produced an unattributed error is worse than
+    omitting it."""
+    from aef.reasoning.nodes import _failing_nodes
+    from aef.state import AEFState
+
+    state = AEFState(
+        run_id="r",
+        agent_id="a",
+        objective="o",
+        errors=[{"node_id": "a", "error": "x"}, {"error": "no origin"}, {"node_id": "a"}],
+    )
+    assert _failing_nodes(state) == ["a"]
+
+
+def test_the_evidence_exposes_the_nodes_a_failure_blames() -> None:
+    """`MemoryEvidence.failing_nodes()` pairs a node with the record that
+    named it, so a later proposal's citation can CONSTRAIN its target rather
+    than decorate it."""
+    from aef.harness.proposer import MemoryEvidence
+    from aef.services.memory.base import MemoryRecord
+
+    evidence = MemoryEvidence(
+        records=(
+            MemoryRecord(
+                kind="failure",
+                content={"failing_nodes": ["fetch", "verify"]},
+                run_id="prod-1",
+            ),
+            MemoryRecord(kind="failure", content={"verbal_feedback": "old record"}, run_id="p2"),
+        )
+    )
+    nodes = dict(evidence.failing_nodes())
+    assert set(nodes) == {"fetch", "verify"}
+    assert all(record_id for record_id in nodes.values()), "each names its record"
+
+
+def test_no_agent_declared_fallback_is_proposed() -> None:
+    """The reverted transformation produced `fallback_node_id`, which G4 has
+    rejected as an owner-only security event since ADR 0036/0039. The
+    proposer must not emit it (ADR 0098)."""
+    import inspect
+
+    from aef.harness.proposer import RuleBasedProposer
+
+    assert "fallback_node_id" not in inspect.getsource(RuleBasedProposer)
+
+
+def test_the_executor_does_not_mark_its_own_fallback_recovered() -> None:
+    """ADR 0097 had the executor set `recovered` when a declared fallback
+    fired. That made "control continued" score identically to "the work got
+    done" — ADR 0080's reward hack relocated, not fixed (ADR 0098)."""
+    import inspect
+
+    from aef.kernel import executor
+
+    assert "RECOVERED_KEY" not in inspect.getsource(executor)
