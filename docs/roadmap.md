@@ -109,7 +109,7 @@ either an unread `Services` slot or a test asserting they still raise.
 - `Optimizer` (`aef/services/optimizers/base.py`) — GEPA/DSPy-style
   offline prompt/program optimization, not implemented
 
-## Self-rewiring harness (Zone B) — **M0/M1 REAL**
+## Self-rewiring harness (Zone B) — **M0–M10 REAL, Tier-1 OFF**
 
 `aef/harness/` is the structurally-isolated harness that judges
 agent-authored candidates (ADR 0044, ADR 0047). Real and tested:
@@ -117,11 +117,21 @@ agent-authored candidates (ADR 0044, ADR 0047). Real and tested:
 (`git diff base...head` with the rename/symlink/submodule escapes closed),
 `trust.py` (gates execute from the base ref — the load-bearing property),
 `sandbox.py` (env scrubbing, timeouts, rlimits; declares what it cannot
-enforce and refuses to run without attested network isolation).
+enforce and refuses to run without attested network isolation), plus a
+container-backed sandbox that can report `network_isolated=True`
+truthfully (`container.py`, ADR 0102).
 
-Not built yet: the gates themselves (M3-M7), the corpus (M2), the proposer
-(M8), and post-merge monitoring (M10). **Tier-1 auto-merge is not
-implemented and must not be enabled before M10** — see
+Also built since this section was first written: the corpus (M2,
+`corpus.py`), all six gates (M3–M7, `gates/g0`–`g5`, run in the canonical
+cheap-first order `G0 → G1 → G4 → G5 → G2 → G3`, ADR 0085), the proposer
+(M8, `proposer.py` — numeric *and* the bounded structural catalogue in
+`transformations.py`, ADR 0099), and post-merge monitoring (M10,
+`monitoring.py`).
+
+**Tier-1 auto-merge remains OFF.** It is no longer blocked on
+implementation — every candidate that passes all six gates escalates to a
+human by design, and `docs/trust/promotion-trust-case.md` recommends
+against changing that. See
 `docs/design/self-rewiring/05-approval-policy.md`.
 
 ## Phase 4 — Evolution engine with full safety rails — **STUBBED, DISABLED**
@@ -159,10 +169,15 @@ separate decision from whether the criteria are met: the owner throws the
 switch, on the evidence, not the harness on its own.
 
 `docs/trust/promotion-trust-case.md` is the assessment, and its
-recommendation is **do not enable**: criteria 1 and 6 have never run against
-the live traffic and real tenants their own text names, and shadow
-containment has a demonstrated bypass (a node doing direct file I/O is not
-contained by the tool policy). See ADR 0006 and ADR 0104.
+recommendation is **do not enable**. Its load-bearing reason is that criteria
+1 and 6 have never run against the live traffic and real tenants their own
+text names — implemented and tested is not the same as demonstrated on the
+evidence they exist to produce. The shadow-containment bypass that was its
+second reason is **closed**: the candidate runs inside the Milestone 4
+container, containment is the default rather than an opt-in, and running
+without it is explicit and recorded on every observation (ADR 0105). The
+recommendation is unchanged, because that reason was never the one carrying
+it. See ADR 0006, ADR 0104, ADR 0105, ADR 0106.
 
 ## Phase 5 — Multi-agent coordination, HITL at scale, first vertical agents — **STUBBED**
 
