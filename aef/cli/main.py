@@ -59,6 +59,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         agent_id=args.agent_id,
         objective=args.objective,
         working_memory=json.loads(args.working_memory) if args.working_memory else None,
+        memory_path=args.memory,
         config_path=args.config,
         checkpoints_dir=args.checkpoints_dir,
         record_runs_dir=args.record_runs,
@@ -133,6 +134,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="persist checkpoints here (FileDurabilityBackend) so `aef eval`/`aef trace` "
         "can find this run afterward; omit for a one-off in-memory run",
+    )
+    p_run.add_argument(
+        "--memory",
+        default=None,
+        help="durable memory JSONL for a reflect node to write to. Point `aef loop cycle "
+        "--memory` at the same file, or the proposer never sees what was learned.",
     )
     p_run.add_argument(
         "--working-memory",

@@ -40,7 +40,9 @@ not a config flag — see aef-core ADR 0045 for why that distinction is kept.
    Record scenarios that **fail** as well as ones that pass — a corpus where
    everything already passes cannot demonstrate an improvement. Use
    `aef run --working-memory '{{"key": value}}'` to drive your agent into the
-   failing cases worth recording.
+   failing cases worth recording. Pass `--memory ~/.aef-loop-state/memory.jsonl`
+   too, and point `aef loop cycle --memory` at the same file — otherwise the
+   reflect node's lessons are written somewhere the proposer never reads.
 
    **Label at least one scenario `must_fail`.** Without a tripwire the gates
    cannot detect reward hacking: a one-line change making an agent always
@@ -73,8 +75,16 @@ not a config flag — see aef-core ADR 0045 for why that distinction is kept.
 5. **A blessed baseline.** G5 measures drift against an archived version you
    have approved. Until one exists it refuses every candidate with "no
    owner-blessed baseline" — correctly, since it has no reference point.
-   Archive your starting state once, deliberately, before expecting the loop
-   to accept anything.
+   Archive your starting state once, deliberately:
+
+   ```
+   aef loop bless --repo . --state ~/.aef-loop-state \\
+                  --agent-path agents/<yours>/graph.py
+   ```
+
+   Blessing twice is refused — rebaselining is a separate, rate-limited owner
+   decision, and silently replacing the baseline would reset the drift budget
+   without anyone choosing to.
 
 ## Zones — what agents may and may not touch
 
@@ -91,7 +101,14 @@ faces the original one.
 
 ## Running it
 
+**Start here:** `aef loop doctor` reports all five obligations at once, with
+the exact command to fix each. Work down its output until every line is OK.
+
 ```
+aef loop doctor  --repo . --state ~/.aef-loop-state --corpus corpus \\
+                 --agent-path agents/<yours>/graph.py
+aef loop bless   --repo . --state ~/.aef-loop-state \\
+                 --agent-path agents/<yours>/graph.py
 aef loop status  --repo . --state ~/.aef-loop-state
 aef loop harvest <your.graph.module> --repo . --state ~/.aef-loop-state \\
                  --runs ~/.aef-loop-state/runs --corpus corpus

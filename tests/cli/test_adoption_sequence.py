@@ -187,3 +187,75 @@ def test_loop_md_documents_every_obligation(adopted: tuple[Path, Path]) -> None:
     assert "Adding an `Edge` to it is not enough" in text
     # The flag without which no failing run can be produced.
     assert "--working-memory" in text
+
+
+@pytest.mark.slow
+def test_doctor_drives_a_fresh_repo_to_all_five_green(adopted: tuple[Path, Path]) -> None:
+    """The end state nobody had reached: every obligation met, so the gates
+    judge on real evidence rather than refusing for lack of it."""
+    repo, state = adopted
+
+    first = _aef(
+        repo,
+        "loop",
+        "doctor",
+        "--repo",
+        ".",
+        "--state",
+        str(state),
+        "--corpus",
+        "corpus",
+        "--agent-path",
+        "agents/mine/graph.py",
+    )
+    assert first.returncode != 0, "a fresh repo cannot already be ready"
+
+    blessed = _aef(
+        repo,
+        "loop",
+        "bless",
+        "--repo",
+        ".",
+        "--state",
+        str(state),
+        "--agent-path",
+        "agents/mine/graph.py",
+    )
+    assert blessed.returncode == 0, blessed.stderr
+    assert "baseline v1" in blessed.stdout
+
+    again = _aef(
+        repo,
+        "loop",
+        "bless",
+        "--repo",
+        ".",
+        "--state",
+        str(state),
+        "--agent-path",
+        "agents/mine/graph.py",
+    )
+    assert again.returncode != 0, "blessing twice must be refused"
+
+    after = _aef(
+        repo,
+        "loop",
+        "doctor",
+        "--repo",
+        ".",
+        "--state",
+        str(state),
+        "--corpus",
+        "corpus",
+        "--agent-path",
+        "agents/mine/graph.py",
+    )
+    assert "[OK] blessed baseline" in after.stdout
+
+
+def test_loop_md_leads_with_doctor(adopted: tuple[Path, Path]) -> None:
+    repo, _ = adopted
+    text = (repo / "LOOP.md").read_text()
+    assert "aef loop doctor" in text
+    # The command must be the one the CLI accepts, not an aspirational one.
+    assert "bless <module>" not in text

@@ -150,13 +150,23 @@ def cmd_record(args: argparse.Namespace) -> int:
 
     graph = load_graph_module(args.module)
     from aef.kernel import Services
+    from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
+    from aef.services.memory.in_memory import InMemoryMemoryStore
     from aef.state import AEFState
 
     recorded = record_to_corpus(
         Path(args.corpus),
         graph,
         AEFState(run_id=args.scenario_id, agent_id=args.agent_id, objective=args.objective),
-        Services(),
+        # Same wiring as `aef run`: an agent following obligation 2 has a
+        # reflect node, and a bare Services() cannot run one. Recording is
+        # useless if it cannot record the agent the adopter was told to build
+        # (ADR 0073).
+        Services(
+            memory=InMemoryMemoryStore(),
+            critic=RuleBasedCritic(),
+            judge=RuleBasedJudge(rubric={"quality": 1.0}),
+        ),
         scenario_id=args.scenario_id,
         split=Split(args.split),
         recorded_at=datetime.now(UTC),
@@ -237,6 +247,49 @@ def cmd_cycle(args: argparse.Namespace) -> int:
     for line in run.lines:
         print(f"  {line}")
     return run.exit_code
+
+
+def cmd_bless(args: argparse.Namespace) -> int:
+    from aef.harness.preflight import BlessError, bless
+
+    config = _config(args)
+    try:
+        config.paths.kill_switch.check()
+    except LoopHaltedError as exc:
+        print(f"HALTED: {exc}")
+        return EXIT_HALTED
+    try:
+        entry = bless(
+            repo_root=Path(args.repo),
+            state_root=config.paths.root,
+            agent_path=args.agent_path,
+            graph_id=args.graph_id,
+            at=datetime.now(UTC),
+            note=args.note,
+        )
+    except BlessError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
+    print(f"blessed {args.agent_path} as baseline v{entry.version} for graph {args.graph_id!r}")
+    print("  G5 now has a reference point to measure drift against.")
+    return EXIT_OK
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    from aef.harness.preflight import preflight
+
+    config = _config(args)
+    result = preflight(
+        repo_root=Path(args.repo),
+        state_root=config.paths.root,
+        corpus_root=Path(args.corpus),
+        agent_path=args.agent_path,
+        graph_id=args.graph_id,
+        halt_channel_configured=bool(getattr(_halt_notifier(), "configured", False)),
+        observations=Path(args.observations) if args.observations else config.paths.observations,
+    )
+    print(result.render())
+    return EXIT_OK if result.ready else EXIT_REJECTED
 
 
 def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -358,3 +411,20 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "Defaults to pytest only — anything more is repo-specific.",
     )
     p_cycle.set_defaults(handler=cmd_cycle)
+
+    p_bless = loop_subs.add_parser(
+        "bless", help="archive the current Zone A state as the owner-blessed baseline"
+    )
+    _common(p_bless)
+    p_bless.add_argument("--agent-path", default="agents/demo/graph.py")
+    p_bless.add_argument("--note", default="", help="why this state is the baseline")
+    p_bless.set_defaults(handler=cmd_bless)
+
+    p_doctor = loop_subs.add_parser(
+        "doctor", help="report all five loop obligations at once, with the fix for each"
+    )
+    _common(p_doctor)
+    p_doctor.add_argument("--corpus", default="corpus")
+    p_doctor.add_argument("--agent-path", default="agents/demo/graph.py")
+    p_doctor.add_argument("--observations", default=None)
+    p_doctor.set_defaults(handler=cmd_doctor)

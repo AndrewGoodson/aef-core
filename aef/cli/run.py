@@ -30,6 +30,7 @@ import uuid
 from pathlib import Path
 
 from aef.config import build_model_provider, load_agent_config
+from aef.harness.memory_store import FileMemoryStore
 from aef.kernel import (
     DurabilityBackend,
     FileDurabilityBackend,
@@ -38,6 +39,8 @@ from aef.kernel import (
     Services,
 )
 from aef.observability.in_memory import InMemoryTracer
+from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
+from aef.services.memory.base import MemoryStore
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.state import AEFState
 
@@ -94,6 +97,8 @@ def run_graph_module(
     config_path: str | Path | None = None,
     checkpoints_dir: str | Path | None = None,
     record_runs_dir: str | Path | None = None,
+    memory_path: str | Path | None = None,
+    judge_rubric: dict[str, float] | None = None,
 ) -> AEFState:
     _ensure_cwd_importable()
     module = importlib.import_module(module_path)
@@ -113,11 +118,24 @@ def run_graph_module(
     )
 
     graph = build_graph()
+    # Critic and judge are wired because obligation 2 tells an adopter to put a
+    # reflect node in their graph, and every reflect node requires them. Without
+    # this, following obligation 2 made obligation 3 (observations, produced by
+    # `aef run`) impossible: the run died with ServiceNotConfiguredError. Two
+    # documented requirements contradicted each other (ADR 0073).
+    #
+    # A durable store when a memory path is given: reflections the loop can
+    # never read back are not learning.
+    memory: MemoryStore = (
+        FileMemoryStore(path=Path(memory_path)) if memory_path else InMemoryMemoryStore()
+    )
     services = Services(
         model_provider=model_provider,
-        memory=InMemoryMemoryStore(),
+        memory=memory,
         tracer=InMemoryTracer(),
         durability=durability,
+        critic=RuleBasedCritic(),
+        judge=RuleBasedJudge(rubric=dict(judge_rubric or {"quality": 1.0})),
     )
     # Without this an adopter cannot produce a FAILING run from the CLI, so the
     # workflow LOOP.md documents ("record scenarios that fail as well as ones

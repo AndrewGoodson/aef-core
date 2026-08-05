@@ -509,7 +509,12 @@ def monitor(config: LoopConfig, *, now: datetime, restore_to: Path | None = None
     entries = _preflight(config)
     observations = load_observations(config.paths.observations)
 
-    merges = [e for e in entries if e.kind is ledger.EventKind.MERGED]
+    # BLESSED entries are baselines, not merges: they have no predecessor to
+    # roll back to. Filtering on kind alone would be enough today; the
+    # `blessed` detail check is belt-and-braces against a mislabelled entry.
+    merges = [
+        e for e in entries if e.kind is ledger.EventKind.MERGED and not e.detail.get("blessed")
+    ]
     rolled_back_versions = {
         e.detail.get("archive_version") for e in entries if e.kind is ledger.EventKind.ROLLED_BACK
     }

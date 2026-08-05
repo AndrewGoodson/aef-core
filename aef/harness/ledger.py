@@ -51,6 +51,10 @@ class EventKind(StrEnum):
     ESCALATED = "escalated"
     REJECTED = "rejected"
     MERGED = "merged"
+    # An owner-blessed baseline. Deliberately NOT `MERGED`: the monitor rolls
+    # every merged version back to its predecessor, and a baseline has none —
+    # it would try to restore version 0 and raise (ADR 0073).
+    BLESSED = "blessed"
     ROLLED_BACK = "rolled_back"
     HALTED = "halted"
 
