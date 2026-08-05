@@ -24,9 +24,12 @@ missing.
 
 from __future__ import annotations
 
+import secrets
+import unicodedata
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from hashlib import blake2b
+from hashlib import blake2b, pbkdf2_hmac
+from pathlib import Path
 
 # The ladder. Each rung must survive its own observation window before the next
 # is entered, and 100 is a stage rather than an implicit end state so "fully
@@ -49,8 +52,103 @@ DEFAULT_TOLERANCE = 1.20
 MIN_SAMPLES = 100
 
 
+# blake2b's own bounds. 32 is the floor for the same reason a signing key has
+# one: the assignment function is public, so a short salt is brute-forcible
+# offline against a single observed assignment.
+MIN_SALT_BYTES = 32
+
+# Domain separation for the fingerprint, so a fingerprint can never be
+# mistaken for — or replayed as — any other digest of the same salt.
+FINGERPRINT_DOMAIN = b"aef.canary.salt.fingerprint.v1"
+MAX_SALT_BYTES = blake2b.MAX_KEY_SIZE
+
+
 class CanaryError(RuntimeError):
     pass
+
+
+class UnkeyedCanaryError(CanaryError):
+    """Assignment asked to run without a salt, without saying so."""
+
+
+@dataclass(frozen=True)
+class CanarySalt:
+    """The owner-held key that makes tenant assignment unpredictable.
+
+    Without it, `assigned_to_candidate` is a public deterministic function of
+    a string the tenant supplies, so a tenant who controls its own tag can
+    compute which arm any tag lands in and pick one. Demonstrated in the trust
+    case §2.3: one in roughly two hundred tried tags landed on the incumbent
+    at 99% exposure, found by searching offline.
+
+    **What keying buys, precisely.** It removes OFFLINE computation: a tenant
+    without the salt cannot evaluate the function at all, so it cannot sift
+    candidate tags before using them. It does NOT remove online probing — a
+    tenant that can observe which arm it landed in can still re-register under
+    new tags until it lands where it wants. That is slower, one tag at a time,
+    and visible in whatever issues tenant tags. Stated rather than implied,
+    because "unpredictable" would overclaim.
+
+    **Not the signing key.** Loaded separately and deliberately so: reusing
+    one secret for two purposes means a compromise of either leaks both, and
+    the release key is held by a person while this one is read by a running
+    service.
+    """
+
+    material: bytes = field(repr=False)
+
+    def __post_init__(self) -> None:
+        if not MIN_SALT_BYTES <= len(self.material) <= MAX_SALT_BYTES:
+            raise CanaryError(
+                f"canary salt is {len(self.material)} bytes; blake2b accepts a key of "
+                f"{MIN_SALT_BYTES}..{MAX_SALT_BYTES}. The assignment function is public, so "
+                f"a short salt is brute-forcible offline against one observed assignment."
+            )
+
+    def fingerprint(self) -> str:
+        """A comparable, deliberately EXPENSIVE digest of this salt.
+
+        A fingerprint is persisted next to a rollout, so it ends up in state
+        files and logs — and **any deterministic function of the salt is a
+        verification oracle**: an attacker guesses a salt, computes the
+        fingerprint, and compares. That is unavoidable if restarts are to
+        prove they kept the same population, so the answer is to make each
+        guess cost rather than to pretend the oracle is not there.
+
+        The first version used a plain `blake2b` of the salt — microseconds
+        per guess, found by attacking it. `pbkdf2_hmac` at 200k iterations
+        costs milliseconds instead, which is ~1000x on an offline search and
+        nothing at all on the once-per-rollout real use.
+
+        **This does not make a guessable salt safe.** It buys time against a
+        weak one; the actual defence is that the salt is random, which is what
+        `generate()` is for.
+        """
+        return pbkdf2_hmac("sha256", self.material, FINGERPRINT_DOMAIN, 200_000, 8).hex()
+
+    @classmethod
+    def generate(cls) -> CanarySalt:
+        """A random salt. The documented way to get one.
+
+        `secrets`, not `random`: a salt from a seeded PRNG is a salt an
+        attacker who learns the seed can reproduce, and "it looked random" is
+        how that gets missed.
+        """
+        return cls(material=secrets.token_bytes(MIN_SALT_BYTES))
+
+    @classmethod
+    def from_file(cls, path: str | Path) -> CanarySalt:
+        file = Path(path)
+        if not file.is_file():
+            raise CanaryError(f"no canary salt at {file}")
+        mode = file.stat().st_mode & 0o077
+        if mode:
+            raise CanaryError(
+                f"canary salt {file} is group/world accessible (mode {mode:03o}); "
+                f"`chmod 600` it. A salt any local process can read is a salt a tenant's "
+                f"code could read if it ever ran on the same host."
+            )
+        return cls(material=file.read_bytes().strip())
 
 
 @dataclass(frozen=True)
@@ -108,7 +206,14 @@ class CanaryPolicy:
             raise CanaryError("min_samples must be positive")
 
 
-def assigned_to_candidate(tenant_tag: str, *, graph_id: str, version: int, percent: int) -> bool:
+def assigned_to_candidate(
+    tenant_tag: str,
+    *,
+    graph_id: str,
+    version: int,
+    percent: int,
+    salt: CanarySalt | None = None,
+) -> bool:
     """Is this tenant in the candidate arm at `percent` exposure?
 
     Deterministic, so a tenant's arm does not change between requests, and
@@ -125,8 +230,18 @@ def assigned_to_candidate(tenant_tag: str, *, graph_id: str, version: int, perce
             "request has no arm, and defaulting it to the incumbent would silently exempt "
             "whoever forgot the tag"
         )
-    seed = f"{graph_id}:{version}:{tenant_tag}".encode()
-    bucket = int.from_bytes(blake2b(seed, digest_size=8).digest(), "big") % 100
+    # NFC first. REPRODUCED: "café" in NFC and NFD are different byte
+    # sequences, so one tenant sending each from two clients landed in
+    # different arms 52% of the time — it sees inconsistent behaviour AND
+    # contributes samples to both arms, which is exactly what stratifying by
+    # tenant exists to prevent. Normalising is not cosmetic here.
+    seed = f"{graph_id}:{version}:{unicodedata.normalize('NFC', tenant_tag)}".encode()
+    digest = (
+        blake2b(seed, digest_size=8, key=salt.material)
+        if salt is not None
+        else blake2b(seed, digest_size=8)
+    )
+    bucket = int.from_bytes(digest.digest(), "big") % 100
     return bucket < percent
 
 
@@ -146,6 +261,11 @@ class CanaryState:
     stage_index: int = 0
     policy: CanaryPolicy = field(default_factory=CanaryPolicy)
     history: tuple[str, ...] = ()
+    # The owner-held key that makes assignment unpredictable to the tenant
+    # being assigned. Required unless `unkeyed=True` says otherwise.
+    salt: CanarySalt | None = None
+    # The explicit opt-out, named for what it costs.
+    unkeyed: bool = False
     # Set by `rollback` and never cleared. Found by this milestone's
     # adversarial round: without it a rolled-back rollout climbed the ladder
     # again on the next passing verdict, so a candidate with a real regression
@@ -155,6 +275,25 @@ class CanaryState:
     rolled_back: bool = False
 
     def __post_init__(self) -> None:
+        # KEYED BY DEFAULT, the same shape used for shadow containment and for
+        # network isolation: refuse unless the control is really there, and
+        # make running without it something a caller states rather than
+        # inherits. Trust case §2.3 demonstrated the cost of the unkeyed
+        # version — one in roughly two hundred tried tags landed on the
+        # incumbent at 99% exposure, found by searching offline.
+        if self.salt is None and not self.unkeyed:
+            raise UnkeyedCanaryError(
+                "tenant assignment without a salt is a public deterministic function of a "
+                "string the tenant supplies, so a tenant controlling its own tag can compute "
+                "which arm any tag lands in and choose one — biasing exactly the evidence "
+                "promotion is read from. Pass salt=CanarySalt.from_file(...), or unkeyed=True "
+                "to state that this rollout's population is self-selectable."
+            )
+        if self.salt is not None and self.unkeyed:
+            raise CanaryError(
+                "unkeyed=True was passed alongside a salt; one of the two is a mistake, and "
+                "guessing which would mislabel the population"
+            )
         if self.warm_version == self.candidate_version:
             raise CanaryError(
                 f"warm_version equals candidate_version ({self.warm_version}); there is "
@@ -171,12 +310,42 @@ class CanaryState:
     def complete(self) -> bool:
         return self.percent == 100
 
+    @property
+    def keyed(self) -> bool:
+        return self.salt is not None
+
+    @property
+    def salt_fingerprint(self) -> str:
+        """A short digest of the salt — never the salt.
+
+        Persisted alongside a rollout so a restart can prove it is still
+        assigning the SAME population. Changing the salt mid-ladder reshuffles
+        every tenant, which silently discards every sample gathered so far
+        while the stage index goes on claiming they accumulated — the same
+        failure the monotonicity requirement exists to prevent.
+
+        See `CanarySalt.fingerprint` for why this is deliberately slow.
+        """
+        if self.salt is None:
+            return "unkeyed"
+        return self.salt.fingerprint()
+
+    def assert_same_population(self, fingerprint: str) -> None:
+        if fingerprint != self.salt_fingerprint:
+            raise CanaryError(
+                f"this rollout was assigning under salt {fingerprint} and is now under "
+                f"{self.salt_fingerprint}: every tenant has been reshuffled, so the samples "
+                f"gathered at earlier stages describe a different population. Restore the "
+                f"salt, or start the rollout over."
+            )
+
     def serves_candidate(self, tenant_tag: str) -> bool:
         return assigned_to_candidate(
             tenant_tag,
             graph_id=self.graph_id,
             version=self.candidate_version,
             percent=self.percent,
+            salt=self.salt,
         )
 
     def evaluate(

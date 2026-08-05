@@ -119,9 +119,16 @@ def test_the_known_canary_limit_is_still_a_limit() -> None:
     """§2.2 tells an owner a narrow regression is invisible. If coverage
     improved and this went unstated, the document would be understating the
     harness — which is the safer direction, and still wrong."""
-    from aef.harness.canary import CanaryState
+    from aef.harness.canary import CanarySalt, CanaryState
 
-    state = CanaryState(graph_id="g", candidate_version=2, warm_version=1)
+    state = CanaryState(
+        graph_id="g",
+        candidate_version=2,
+        warm_version=1,
+        # Keyed, because that is now the default (ADR 0106). The percentile
+        # limit this test pins has nothing to do with assignment.
+        salt=CanarySalt(material=b"trust-case-salt-exactly-32-byte!"),
+    )
     verdict = state.evaluate(
         candidate_samples=[10.0] * 995 + [10_000.0] * 5,
         incumbent_samples=[10.0] * 1000,

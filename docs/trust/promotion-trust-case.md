@@ -245,10 +245,24 @@ own tag can search for the arm it wants.**
   tried 200 candidate tags at 99% exposure -> 1 lands on the incumbent: ['evader-106']
 ```
 
-At lower exposures it is trivial. The canary population is therefore
-self-selectable by any tenant who cares to, which biases exactly the evidence
-promotion is read from. A keyed hash with an owner-held salt would fix it and
-is not implemented.
+At lower exposures it is trivial.
+
+**Now closed** (ADR 0106). Assignment is `blake2b` keyed by an owner-held
+`CanarySalt`, and `CanaryState` refuses to construct without one unless
+`unkeyed=True` says so — recorded on the rollout either way.
+
+**Bounded, not eliminated, and the bound is tested.** Keying removes *offline*
+computation: a tenant without the salt cannot evaluate the function, so it
+cannot sift tags before choosing one. It does not remove *online* probing — a
+tenant that observes its arm can re-register under new tags until it lands
+where it wants, one tag at a time, visibly. Calling it unpredictable would
+overclaim.
+
+Attacking the fix found two more: the salt fingerprint was a plain digest and
+so a microsecond-per-guess offline oracle (now `pbkdf2_hmac`, ~12ms measured),
+and the same tenant encoded NFC vs NFD landed in different arms **52% of the
+time** — one tenant, two arms, contributing to both, which is what
+stratifying by tenant exists to prevent.
 
 ### 2.4 What held, and how hard it was pushed
 
@@ -359,7 +373,7 @@ Not more tests. In rough order of value:
   missing item and it converts criteria 1 and 6 from mechanisms into evidence.
 - ~~Shadow executed inside the Milestone 4 container~~ — **done**, and now
   the **default** (ADR 0105).
-- **A keyed tenant hash**, closing §2.3.
+- ~~A keyed tenant hash~~ — **done** (ADR 0106).
 - **An adversarial review by someone who did not write this**, targeting the
   four attacks that held.
 - **Two consecutive dry adversarial rounds.** The program's own stopping rule,

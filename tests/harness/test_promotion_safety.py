@@ -23,6 +23,7 @@ import pytest
 from aef.harness.canary import (
     CanaryError,
     CanaryPolicy,
+    CanarySalt,
     CanaryState,
     CanaryVerdict,
     assigned_to_candidate,
@@ -219,9 +220,12 @@ def test_assignment_is_stable_for_a_tenant() -> None:
     """ "stratified by tenant tag". A tenant flipping arms between requests
     sees inconsistent behaviour AND contributes to both arms, which averages
     the difference into invisibility."""
-    first = assigned_to_candidate("tenant-7", graph_id="g", version=2, percent=25)
+    first = assigned_to_candidate("tenant-7", graph_id="g", version=2, percent=25, salt=SALT)
     for _ in range(50):
-        assert assigned_to_candidate("tenant-7", graph_id="g", version=2, percent=25) is first
+        assert (
+            assigned_to_candidate("tenant-7", graph_id="g", version=2, percent=25, salt=SALT)
+            is first
+        )
 
 
 def test_assignment_is_monotone_in_exposure() -> None:
@@ -232,7 +236,9 @@ def test_assignment_is_monotone_in_exposure() -> None:
     previous: set[str] = set()
     for percent in (1, 5, 25, 50, 100):
         admitted = {
-            t for t in tags if assigned_to_candidate(t, graph_id="g", version=1, percent=percent)
+            t
+            for t in tags
+            if assigned_to_candidate(t, graph_id="g", version=1, percent=percent, salt=SALT)
         }
         assert previous <= admitted, f"tenants dropped out of the candidate arm at {percent}%"
         previous = admitted
@@ -241,14 +247,18 @@ def test_assignment_is_monotone_in_exposure() -> None:
 
 def test_exposure_is_approximately_the_stage_percentage() -> None:
     tags = [f"tenant-{i}" for i in range(2000)]
-    admitted = sum(assigned_to_candidate(t, graph_id="g", version=1, percent=25) for t in tags)
+    admitted = sum(
+        assigned_to_candidate(t, graph_id="g", version=1, percent=25, salt=SALT) for t in tags
+    )
     assert 0.20 < admitted / len(tags) < 0.30
 
 
 def test_a_new_version_reshuffles_who_is_exposed() -> None:
     """The same tenants should not always be the guinea pigs."""
     tags = [f"tenant-{i}" for i in range(500)]
-    v1 = {t for t in tags if assigned_to_candidate(t, graph_id="g", version=1, percent=10)}
+    v1 = {
+        t for t in tags if assigned_to_candidate(t, graph_id="g", version=1, percent=10, salt=SALT)
+    }
     v2 = {t for t in tags if assigned_to_candidate(t, graph_id="g", version=2, percent=10)}
     assert v1 != v2
 
@@ -257,15 +267,23 @@ def test_an_untagged_request_is_refused_rather_than_defaulted() -> None:
     """Defaulting to the incumbent would silently exempt whoever forgot the
     tag, and the exemption would look like a passing canary."""
     with pytest.raises(CanaryError, match="empty tag"):
-        assigned_to_candidate("", graph_id="g", version=1, percent=50)
+        assigned_to_candidate("", graph_id="g", version=1, percent=50, salt=SALT)
 
 
 def _samples(value: float, n: int = 200) -> list[float]:
     return [value] * n
 
 
+SALT = CanarySalt(material=b"canary-salt-for-tests-32-bytes!!")
+
+
 def _state_at(index: int = 0) -> CanaryState:
-    return CanaryState(graph_id="g", candidate_version=2, warm_version=1, stage_index=index)
+    """Keyed, because that is the default (ADR 0106). The percentile and
+    ladder tests below do not depend on assignment at all, and using the
+    default here keeps them from silently exercising the weaker mode."""
+    return CanaryState(
+        graph_id="g", candidate_version=2, warm_version=1, stage_index=index, salt=SALT
+    )
 
 
 def test_a_tail_regression_is_caught_when_the_median_improves() -> None:
@@ -309,6 +327,7 @@ def test_a_regression_narrower_than_the_smallest_percentile_is_INVISIBLE() -> No
         graph_id="g",
         candidate_version=2,
         warm_version=1,
+        salt=SALT,
         policy=CanaryPolicy(percentiles=(50, 95, 99, 100)),
     )
     caught = widened.evaluate(candidate_samples=candidate, incumbent_samples=incumbent)
@@ -349,7 +368,7 @@ def test_the_previous_version_is_kept_warm() -> None:
 
 def test_a_rollout_with_nothing_to_roll_back_to_is_refused() -> None:
     with pytest.raises(CanaryError, match="nothing to roll back"):
-        CanaryState(graph_id="g", candidate_version=2, warm_version=2)
+        CanaryState(graph_id="g", candidate_version=2, warm_version=2, salt=SALT)
 
 
 def test_the_ladder_advances_one_rung_at_a_time() -> None:
