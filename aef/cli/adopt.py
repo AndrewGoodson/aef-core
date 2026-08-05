@@ -405,10 +405,14 @@ The loop in one line: **audit by adversarial construction -> reproduce
 failing -> fix -> verify -> ADR -> commit -> repeat until a bounded work-list
 is done.** Green bar every step:
 
-    pytest -q
+    pytest -q                              # exit 5 = no tests collected, not a pass
     mypy --strict <your package>
     ruff check .
     ruff format --check <your source dirs>
+
+A freshly adopted repo has no tests, so `pytest -q` exits 5 on day one. That
+is the bar telling you the truth: write the first test before you rely on it,
+and note the same code fails G1 if you pass `pytest -q` as `--build-command`.
 
 "Self-learning" means writing reflections into memory (rule-based
 critic/judge first). It does NOT mean self-modification: `aef/evolution/` is
@@ -548,10 +552,14 @@ contract. Full spec: aef-core `docs/autonomy/self-improving-loop.md`.
 
 ## Green bar (every step, all four must pass)
 
-    pytest -q
+    pytest -q                              # exit 5 = no tests collected, not a pass
     mypy --strict <your package>
     ruff check .
     ruff format --check <your source dirs>
+
+A freshly adopted repo has no tests, so `pytest -q` exits 5 on day one. That
+is the bar telling you the truth: write the first test before you rely on it,
+and note the same code fails G1 if you pass `pytest -q` as `--build-command`.
 
 ## Reproduce-first
 Never write a fix before a test/command that reproduces the defect and fails

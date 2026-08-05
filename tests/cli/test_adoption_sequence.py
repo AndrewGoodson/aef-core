@@ -2,8 +2,17 @@
 
 Defect #10 (G1's defaults assumed aef-core's own tree) lived in this path and
 survived because adoption had only ever had a smoke-level pass. This test
-performs the whole documented workflow against a real adopted repo, so an
-instruction that stops working fails here rather than in someone's repo.
+performs the whole documented LOOP workflow against a real adopted repo.
+
+**Read the fixture before trusting this file's coverage.** It hand-writes
+`agents/mine/graph.py` and `tests/test_smoke.py` — the two preconditions a
+real `aef adopt` output does NOT have. That is necessary here, because the
+loop needs an agent to run at all, but it means this file cannot see any
+defect in the state an adopter actually starts from. Five defects survived a
+984-test suite behind exactly that gap (ADR 0079).
+
+`test_pristine_adoption.py` is the other half: unmodified `aef adopt` output,
+nothing added. Neither file is sufficient alone.
 """
 
 import json
@@ -68,6 +77,9 @@ def adopted(tmp_path: Path) -> tuple[Path, Path]:
 
     run_adopt(repo)
 
+    # ADDED BY THE TEST, not by `aef adopt` — see the module docstring. Any
+    # assertion below that depends on these files says nothing about a real
+    # adoption.
     (repo / "agents" / "mine").mkdir(parents=True, exist_ok=True)
     (repo / "agents" / "__init__.py").write_text("")
     (repo / "agents" / "mine" / "__init__.py").write_text("")
