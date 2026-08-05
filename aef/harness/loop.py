@@ -371,22 +371,44 @@ def _drift_exhausted_twice(entries: tuple[ledger.LedgerEntry, ...]) -> bool:
 
 
 def _consecutive_escalation_rejections(entries: tuple[ledger.LedgerEntry, ...]) -> int:
-    """Halt criterion 4: escalations the owner resolved by rejecting.
+    """Halt criterion 4: escalations subsequently resolved by rejection.
 
-    Counted from the tail backwards, so a single acceptance resets it — the
-    criterion is about a proposer that keeps working outside its evidence
-    base, not about a lifetime total.
+    Counted over the TRAILING run of proposals, stopping at the first one
+    that ended any other way. The first implementation only reset on
+    `MERGED` — which is written solely on the auto-merge path, and Tier-1 is
+    off — so nothing reset it from the CLI and it was a lifetime counter.
+    Two re-gated proposals thirty days apart, with twenty ordinary rejections
+    between them, halted the loop for "working outside its evidence base"
+    (ADR 0080).
+
+    Escalation is the NORMAL terminal state while Tier-1 is off, so this has
+    to be about a trailing pattern or it is about nothing.
     """
-    run = 0
-    escalated: str | None = None
+    outcome: dict[str, list[ledger.EventKind]] = {}
+    order: list[str] = []
     for entry in entries:
-        if entry.kind is ledger.EventKind.ESCALATED:
-            escalated = entry.proposal_id
-        elif entry.kind is ledger.EventKind.REJECTED and entry.proposal_id == escalated:
-            run += 1
-            escalated = None
-        elif entry.kind is ledger.EventKind.MERGED:
-            run = 0
+        if entry.kind not in (
+            ledger.EventKind.ESCALATED,
+            ledger.EventKind.REJECTED,
+            ledger.EventKind.MERGED,
+        ):
+            continue
+        if entry.proposal_id not in outcome:
+            outcome[entry.proposal_id] = []
+            order.append(entry.proposal_id)
+        outcome[entry.proposal_id].append(entry.kind)
+
+    run = 0
+    for proposal_id in reversed(order):
+        kinds = outcome[proposal_id]
+        escalated_then_rejected = (
+            ledger.EventKind.ESCALATED in kinds
+            and ledger.EventKind.REJECTED in kinds
+            and kinds.index(ledger.EventKind.ESCALATED) < kinds.index(ledger.EventKind.REJECTED)
+        )
+        if not escalated_then_rejected:
+            break
+        run += 1
     return run
 
 

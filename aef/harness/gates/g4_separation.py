@@ -32,6 +32,7 @@ import ast
 from dataclasses import dataclass
 
 from aef.harness.gates.base import Gate, GateContext, GateOutcome, GateResult
+from aef.harness.outcome import RECOVERED_KEY
 
 # Mirrors 01-architecture.md §2.2 (expanded per 04 §1.9).
 # The Edge-level controls only an owner may clear. Named once so the
@@ -204,15 +205,15 @@ def scan_metadata(path: str, source: str) -> tuple[MetadataFinding, ...]:
     return tuple(findings)
 
 
-def _guarded_edges(source: str) -> dict[tuple[str, str], set[str]]:
-    """`(from_node, to_node) -> {controls that are ON}` for every Edge.
+def _edge_controls(source: str) -> dict[tuple[str, str], set[str]]:
+    """`(from_node, to_node) -> controls guaranteed ON for that transition`.
 
-    Used to compare the base ref against the candidate. Scanning only the
-    candidate could never see a control that was **removed**: `flag in kwargs`
-    is false when the kwarg is simply deleted, and the constructor default is
-    off — so deleting the line was invisible while writing `=False` was a
-    security event. Deleting it is the same act with better manners
-    (ADR 0079).
+    Every Edge for a pair must carry a control for the pair to count as
+    guarded — the **intersection**, not the union. Recording only guarded
+    edges let a candidate add an unguarded duplicate beside the guarded one
+    and route around it: `_resolve_route` takes the first matching edge by
+    priority, so the twin wins while the guarded edge sits there looking
+    reassuring. Same for an edge given a false `condition` (ADR 0080).
     """
     try:
         tree = ast.parse(source)
@@ -220,11 +221,9 @@ def _guarded_edges(source: str) -> dict[tuple[str, str], set[str]]:
         return {}
 
     aliases = _resolve_aliases(tree)
-    out: dict[tuple[str, str], set[str]] = {}
+    seen: dict[tuple[str, str], list[set[str]]] = {}
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        if _called_name(node.func, aliases) != "Edge":
+        if not isinstance(node, ast.Call) or _called_name(node.func, aliases) != "Edge":
             continue
         kwargs = _kwargs(node)
         if "from_node" not in kwargs or "to_node" not in kwargs:
@@ -233,37 +232,84 @@ def _guarded_edges(source: str) -> dict[tuple[str, str], set[str]]:
         dst = _literal(kwargs["to_node"])
         if not isinstance(src, str) or not isinstance(dst, str):
             continue
-        on = {
-            flag
-            for flag in OWNER_ONLY_EDGE_FLAGS
-            if flag in kwargs and bool(_literal(kwargs[flag]))
-        }
-        if on:
-            out[(src, dst)] = on
-    return out
+        on = {f for f in OWNER_ONLY_EDGE_FLAGS if f in kwargs and bool(_literal(kwargs[f]))}
+        # A conditional edge only guards the paths its condition admits, so it
+        # cannot be relied on to guard the transition.
+        if "condition" in kwargs:
+            on = set()
+        seen.setdefault((src, dst), []).append(on)
+
+    return {pair: set.intersection(*sets) for pair, sets in seen.items() if sets}
+
+
+def _has_recovery_marker(source: str) -> bool:
+    """Does this source claim its own errors were recovered?
+
+    `RECOVERED_KEY` relaxes the pass predicate (ADR 0076) and, unlike
+    `policy_denied`, has no Zone B writer — the contract is "whatever agent
+    code says". A candidate could therefore add one dict key to its own error
+    entries and make a real G2 regression disappear, and keep its failures
+    out of the corpus that would later hold it to them. Reproduced: identical
+    broken candidate, `regressed=True` without the key, `regressed=False`
+    with it (ADR 0080).
+
+    So INTRODUCING it is an owner-only act, judged base-vs-head. An agent the
+    owner already blessed with recovery handling keeps it.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    return any(
+        isinstance(node, ast.Constant) and node.value == RECOVERED_KEY for node in ast.walk(tree)
+    )
 
 
 def scan_weakened_controls(
     path: str, base_source: str, head_source: str
 ) -> tuple[MetadataFinding, ...]:
-    """Controls that were ON at the base ref and are not ON in the candidate."""
-    base = _guarded_edges(base_source)
-    head = _guarded_edges(head_source)
+    """Controls present at the base ref and not present in the candidate.
+
+    Reported only when the **transition still exists** and is no longer
+    guarded. An edge that is gone entirely is an ordinary refactor: keying on
+    `(from, to)` alone made renaming a node a security event that halted the
+    loop, so the gate fired on the benign change and stayed silent on three
+    hostile ones (ADR 0080).
+    """
+    base = _edge_controls(base_source)
+    head = _edge_controls(head_source)
     findings: list[MetadataFinding] = []
-    for edge, controls in sorted(base.items()):
-        for flag in sorted(controls - head.get(edge, set())):
+
+    for pair, controls in sorted(base.items()):
+        if pair not in head:
+            continue  # the transition is gone, not smuggled past
+        for flag in sorted(controls - head[pair]):
             findings.append(
                 MetadataFinding(
                     path=path,
                     line=0,
                     field=flag,
                     problem=(
-                        f"was {flag}=True on edge {edge[0]!r} -> {edge[1]!r} at the base ref "
-                        f"and is not any more — removing a control is the same act as "
-                        f"clearing it, and only the owner may do either"
+                        f"transition {pair[0]!r} -> {pair[1]!r} had {flag} on at the base ref "
+                        f"and does not any more — removing or shadowing a control is the same "
+                        f"act as clearing it, and only the owner may do either"
                     ),
                 )
             )
+
+    if _has_recovery_marker(head_source) and not _has_recovery_marker(base_source):
+        findings.append(
+            MetadataFinding(
+                path=path,
+                line=0,
+                field=RECOVERED_KEY,
+                problem=(
+                    f"introduces the {RECOVERED_KEY!r} marker, which makes an error stop "
+                    f"counting against the run. Declaring your own failures recovered is an "
+                    f"owner-only change, not one a candidate may make about itself"
+                ),
+            )
+        )
     return tuple(findings)
 
 
@@ -278,19 +324,32 @@ class G4SeparationOfPowers(Gate):
 
     def run(self, ctx: GateContext) -> GateResult:
         findings: list[MetadataFinding] = []
+        # Per-file scan of what the candidate declares.
         for entry in ctx.verdict.diff.entries:
             if entry.is_deletion or not entry.path.endswith(".py"):
                 continue
-            source = ctx.repo.show(ctx.head_ref, entry.path)
-            findings.extend(scan_metadata(entry.path, source))
-            # Base vs head, because a removed control leaves nothing in the
-            # candidate to scan.
-            base_source = (
-                ctx.repo.show(ctx.base_ref, entry.path)
-                if ctx.repo.path_exists_at(ctx.base_ref, entry.path)
-                else ""
-            )
-            findings.extend(scan_weakened_controls(entry.path, base_source, source))
+            findings.extend(scan_metadata(entry.path, ctx.repo.show(ctx.head_ref, entry.path)))
+
+        # Base vs head across ALL touched paths at once, not file by file.
+        # `raw_diff` uses --no-renames, so `git mv` arrives as a delete plus
+        # an add — and the per-file loop skipped deletions, so moving the
+        # module and dropping the control in the moved copy meant the base
+        # was never read for the old path and the new path had no base. The
+        # diff handed G4 exactly the evidence it needed and G4 discarded it
+        # (ADR 0080). Concatenating both sides makes a move indistinguishable
+        # from an edit, which is what it is.
+        base_source = "\n".join(
+            ctx.repo.show(ctx.base_ref, entry.path)
+            for entry in ctx.verdict.diff.entries
+            if entry.path.endswith(".py") and ctx.repo.path_exists_at(ctx.base_ref, entry.path)
+        )
+        head_source = "\n".join(
+            ctx.repo.show(ctx.head_ref, entry.path)
+            for entry in ctx.verdict.diff.entries
+            if entry.path.endswith(".py") and ctx.repo.path_exists_at(ctx.head_ref, entry.path)
+        )
+        if base_source or head_source:
+            findings.extend(scan_weakened_controls("(candidate)", base_source, head_source))
 
         if findings:
             return GateResult(

@@ -117,3 +117,50 @@ def test_the_gate_acts_on_both_criteria() -> None:
     assert "_drift_exhausted_twice(history)" in source
     assert "_consecutive_escalation_rejections(history)" in source
     assert "if assessment.should_halt:" in source
+
+
+# --------------------------------------------------------------------------
+# ADR 0080 — criterion 4 was a lifetime counter with an unreachable reset
+# --------------------------------------------------------------------------
+
+
+def test_ordinary_rejections_break_the_escalation_run(tmp_path: Path) -> None:
+    """The first implementation only reset on MERGED, which is written solely
+    on the auto-merge path — and Tier-1 is off. So nothing reset it from the
+    CLI: two re-gated proposals thirty days apart, with twenty ordinary
+    rejections between them, halted the loop for "working outside its
+    evidence base"."""
+    entries = _ledger(
+        tmp_path,
+        [
+            (ESCALATED, "a", {}),
+            (REJECTED, "a", {}),
+            (REJECTED, "x", {}),
+            (REJECTED, "y", {}),
+            (ESCALATED, "b", {}),
+            (REJECTED, "b", {}),
+        ],
+    )
+    assert _consecutive_escalation_rejections(entries) == 1
+
+
+def test_an_open_escalation_at_the_tail_is_not_a_rejection(tmp_path: Path) -> None:
+    """Escalation is the NORMAL terminal state while Tier-1 is off, so the
+    criterion has to be about a trailing pattern or it is about nothing."""
+    entries = _ledger(tmp_path, [(ESCALATED, "a", {}), (REJECTED, "a", {}), (ESCALATED, "b", {})])
+    assert _consecutive_escalation_rejections(entries) == 0
+
+
+def test_three_consecutive_are_counted(tmp_path: Path) -> None:
+    entries = _ledger(
+        tmp_path,
+        [
+            (ESCALATED, "a", {}),
+            (REJECTED, "a", {}),
+            (ESCALATED, "b", {}),
+            (REJECTED, "b", {}),
+            (ESCALATED, "c", {}),
+            (REJECTED, "c", {}),
+        ],
+    )
+    assert _consecutive_escalation_rejections(entries) == 3
