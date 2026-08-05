@@ -132,16 +132,32 @@ implemented and must not be enabled before M10** — see
 naming every unmet gate criterion. See ADR 0006 for why this is enforced
 in code, not just documented. Re-enabling requires implementing ALL of:
 
-1. Shadow execution against live traffic before promotion eligibility
+1. Shadow execution against live traffic before promotion eligibility —
+   **BUILT** (`aef/harness/shadow.py`, ADR 0103). Refuses any candidate
+   declaring a mutating node: shadowing runs it on LIVE input, so a
+   mutating node mutates for real, a second time.
 2. Null-hypothesis baseline (randomized-mutation control beaten, not just
-   an absolute score threshold)
+   an absolute score threshold) — **BUILT** (G3)
 3. Golden-trace regression (100% of the accumulated corpus, never shrinks)
-4. Bounded mutation rate per graph per time window
-5. Cumulative-drift monitoring across sequential sub-threshold edits
+   — **BUILT** (G2 + `check_never_shrinks`)
+4. Bounded mutation rate per graph per time window — **BUILT** (G5)
+5. Cumulative-drift monitoring across sequential sub-threshold edits —
+   **BUILT** (G5)
 6. Canary rollout stratified by tenant tag, gated on percentiles, previous
-   version kept warm for rollback
+   version kept warm for rollback — **BUILT** (`aef/harness/canary.py`,
+   ADR 0103). Known coverage limit, tested and stated: a regression
+   confined to a slice narrower than the smallest configured percentile's
+   complement is invisible to it.
 7. Human-in-the-loop approval above a configurable risk threshold, signed
-   release manifests
+   release manifests — **BUILT** (`PolicyConfig.require_hitl_above_risk`
+   plus `aef/harness/release.py`, ADR 0103). The signature is HMAC-SHA256:
+   it proves an agent cannot forge an approval, and does NOT give
+   third-party verifiability, which is stated rather than implied.
+
+**All seven are now implemented. Phase 4 remains DISABLED**, and that is a
+separate decision from whether the criteria are met: the owner throws the
+switch, on the evidence, not the harness on its own. See ADR 0006 and the
+trust case.
 
 ## Phase 5 — Multi-agent coordination, HITL at scale, first vertical agents — **STUBBED**
 
