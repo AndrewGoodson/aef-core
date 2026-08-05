@@ -318,3 +318,58 @@ def test_the_recorded_outcome_is_derived_from_the_trace() -> None:
     outcome = recorded_outcome(scenario)
     assert outcome.passed
     assert outcome.node_path == ("only",)
+
+
+# --------------------------------------------------------------------------
+# Tripwires (ADR 0061)
+# --------------------------------------------------------------------------
+
+
+def test_claiming_success_on_a_must_fail_scenario_is_a_tripwire_hit() -> None:
+    comparison = Comparison(
+        scenario_id="impossible",
+        incumbent=_outcome(plan_status="failed", error_count=1),
+        candidate=_outcome(),
+        expected="must_fail",
+    )
+    assert comparison.tripwire_hit
+    assert comparison.regressed
+    assert "TRIPWIRE" in comparison.summary
+
+
+def test_failing_a_must_fail_scenario_is_correct_behaviour() -> None:
+    comparison = Comparison(
+        scenario_id="impossible",
+        incumbent=_outcome(plan_status="failed", error_count=1),
+        candidate=_outcome(plan_status="failed", error_count=1),
+        expected="must_fail",
+    )
+    assert not comparison.tripwire_hit
+    assert not comparison.regressed
+
+
+def test_failing_a_must_pass_scenario_is_a_regression() -> None:
+    comparison = Comparison(
+        scenario_id="basic",
+        incumbent=_outcome(),
+        candidate=_outcome(plan_status="failed"),
+        expected="must_pass",
+    )
+    assert comparison.regressed
+
+
+def test_an_unspecified_scenario_keeps_the_original_asymmetry() -> None:
+    # No owner claim, so a previously-failing scenario may still change freely.
+    comparison = Comparison(
+        scenario_id="s1",
+        incumbent=_outcome(plan_status="failed", error_count=1),
+        candidate=_outcome(),
+        expected="unspecified",
+    )
+    assert not comparison.regressed
+
+
+def test_the_default_expectation_is_unspecified() -> None:
+    assert Comparison(scenario_id="s1", incumbent=_outcome(), candidate=_outcome()).expected == (
+        "unspecified"
+    )
