@@ -71,10 +71,21 @@ not a config flag — see aef-core ADR 0045 for why that distinction is kept.
    from aef.reasoning.nodes import make_reflect_node
    ```
 
-   **Adding an `Edge` to it is not enough.** Routing is chosen by node code,
-   not authorised by edges — a node that returns `END` never reaches reflect
-   however the edges are drawn. Your work node must `return delta, "reflect"`.
-   This catches everyone once.
+   **You need BOTH an edge and a route, and neither alone works.** Routing is
+   chosen by node code, not authorised by edges — a node that returns `END`
+   never reaches reflect however the edges are drawn. But the executor also
+   refuses a route with no declared edge behind it (`node 'work' routed to
+   'reflect', but no declared edge ... has a true condition`), so the edge is
+   the authorisation and the return value is the choice:
+
+   ```python
+   # in your work node
+   return delta, "reflect"
+   # in build_graph
+   edges=[Edge(from_node="work", to_node="reflect")]
+   ```
+
+   `aef loop doctor` checks the route. This catches everyone once.
 
 3. **Observations.** Post-merge monitoring reads `observations.jsonl`, and
    nothing writes it unless you pass `--observations` to your production
@@ -215,7 +226,15 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - run: pip install --upgrade pip && pip install -e ".[dev]"
+      # `pip install -e ".[dev]"` was the template's line and it installs
+      # THIS repo, not aef — it worked only in aef-core, where they are the
+      # same package. In an adopting repo it either fails outright (no
+      # pyproject.toml) or installs the adopter's own package and leaves
+      # `aef` missing. Install aef, then the repo if it is installable.
+      - run: |
+          pip install --upgrade pip
+          pip install aef-core
+          [ -f pyproject.toml ] && pip install -e . || true
 
       - run: git fetch --no-tags origin "{ref}:refs/loop/candidate"
 
@@ -232,14 +251,30 @@ jobs:
             --repo . --state ~/.aef-loop-state \\
             --base main --head refs/loop/candidate \\
             --workdir "$RUNNER_TEMP/loop" --corpus corpus \\
+            --entrypoint "$AEF_ENTRYPOINT" \\
+            --build-command "$AEF_BUILD_COMMAND" \\
             --network-isolated
+        env:
+          # EDIT THESE TWO. Without --entrypoint, G2 and G3 cannot execute
+          # your corpus and refuse — three of six gates would be judging
+          # every candidate. --build-command is your green bar, not ours;
+          # the default is `pytest -q`, which exits 5 (and so fails G1) in a
+          # repo with no tests.
+          AEF_ENTRYPOINT: agents.mine.graph:build_graph
+          AEF_BUILD_COMMAND: python -m pytest -q
         # 0 = escalated to you · 1 = rejected · 2 = halted, do not retry
 """
 
 
 def render_loop_monitor_workflow(repo_name: str) -> str:
     repo = "${{ github.repository }}"
-    weekly = "${{ github.event.schedule == '0 9 * * 1' }}"
+    # One expression, not two interpolations joined by literal `||`. Written
+    # as `${{ a }} || b` the whole thing is a non-empty STRING, which an
+    # Actions `if:` treats as true — so the "weekly" digest fired on every
+    # hourly cron.
+    weekly = (
+        "${{ github.event.schedule == '0 9 * * 1' || github.event_name == 'workflow_dispatch' }}"
+    )
     return f"""# Post-merge monitoring and the weekly digest for {repo_name}.
 # Same trigger rule as loop-gate.yml — see that file, and aef-core ADR 0057.
 
@@ -262,7 +297,10 @@ jobs:
         with:
           ref: main
 
-      - run: pip install --upgrade pip && pip install -e ".[dev]"
+      - run: |
+          pip install --upgrade pip
+          pip install aef-core
+          [ -f pyproject.toml ] && pip install -e . || true
 
       - uses: actions/cache@v4
         with:
@@ -275,7 +313,7 @@ jobs:
       - run: aef loop monitor --repo . --state ~/.aef-loop-state
 
       - name: Weekly digest
-        if: {weekly} || github.event_name == 'workflow_dispatch'
+        if: {weekly}
         run: aef loop digest --repo . --state ~/.aef-loop-state | tee "$GITHUB_STEP_SUMMARY"
 
       # A failed job is the ONLY halt signal wired by default, and it depends

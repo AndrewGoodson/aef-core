@@ -46,7 +46,14 @@ class G2ExecutionError(RuntimeError):
 class G2OutcomeNonRegression(Gate):
     id: str = "G2"
     corpus: Corpus | None = None
-    entrypoint: str = "agents.graph:build_graph"
+    # No default, for the reason `LoopConfig.entrypoint` has none (ADR 0074):
+    # a default naming a layout the adopting repo does not have fails as an
+    # import error inside a gate, which reads as an ordinary rejection. The
+    # default was deleted from `LoopConfig` and survived here — so the driver
+    # correctly reported "no entrypoint configured: G2/G3 will refuse" and G2
+    # went and imported `agents.graph` anyway, crashing instead of refusing
+    # (ADR 0075).
+    entrypoint: str | None = None
     splits: tuple[Split, ...] = field(default_factory=lambda: GATED_SPLITS)
     # Supplied by the driver when the cohort run already executed the
     # candidate over this corpus. Materialising a variant and loading its
@@ -158,6 +165,12 @@ class G2OutcomeNonRegression(Gate):
     def _execute(
         self, ctx: GateContext, workspace: Path, scenarios: list[Scenario]
     ) -> dict[str, Outcome]:
+        if self.entrypoint is None:
+            raise G2ExecutionError(
+                "no entrypoint configured, so there is no graph to re-execute the corpus "
+                "against. Pass --entrypoint <module>:<factory> naming the function that "
+                "builds your graph."
+            )
         payload = workspace / "_scenarios.json"
         payload.write_text(dumps([s.to_payload() for s in scenarios]))
 

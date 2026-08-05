@@ -250,7 +250,12 @@ def cmd_cycle(args: argparse.Namespace) -> int:
             # Durable, not in-process: a store constructed here would be
             # empty every invocation and the proposer would never see a
             # recorded failure (ADR 0069).
-            memory=FileMemoryStore(path=Path(args.memory)),
+            # `Path(None)` raises TypeError, which main() catches and turns
+            # into exit 1 — the code that means "this candidate is no good".
+            # A missing flag is a configuration error and must not be
+            # reported as a verdict on a candidate, or CI retries it forever
+            # (ADR 0075). None reaches the driver's own explicit refusal.
+            memory=FileMemoryStore(path=Path(args.memory)) if args.memory else None,
             agent_path=args.agent_path,
         )
     except LoopHaltedError as exc:

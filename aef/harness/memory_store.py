@@ -22,6 +22,14 @@ from typing import Any
 from aef.services.memory.base import MemoryKind, MemoryRecord, MemoryStore
 
 
+def _at(raw: object) -> datetime | None:
+    return datetime.fromisoformat(str(raw)) if raw else None
+
+
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
+
+
 @dataclass(frozen=True)
 class FileMemoryStore(MemoryStore):
     """Records persist across processes, which is what makes the loop learn."""
@@ -45,11 +53,14 @@ class FileMemoryStore(MemoryStore):
                         agent_id=payload.get("agent_id"),
                         tags=tuple(payload.get("tags", ())),
                         id=payload["id"],
-                        created_at=(
-                            datetime.fromisoformat(payload["created_at"])
-                            if payload.get("created_at")
-                            else None
-                        ),
+                        created_at=_at(payload.get("created_at")),
+                        # Silently dropped before. `MemoryRecord` declares
+                        # them and semantic memory's whole point is a
+                        # validity window — a durable store that loses it
+                        # returns records that look permanently valid
+                        # (ADR 0075).
+                        valid_from=_at(payload.get("valid_from")),
+                        valid_until=_at(payload.get("valid_until")),
                     )
                 )
             except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
@@ -67,7 +78,9 @@ class FileMemoryStore(MemoryStore):
             "agent_id": record.agent_id,
             "tags": list(record.tags),
             "id": record.id,
-            "created_at": record.created_at.isoformat() if record.created_at else None,
+            "created_at": _iso(record.created_at),
+            "valid_from": _iso(record.valid_from),
+            "valid_until": _iso(record.valid_until),
         }
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, sort_keys=True) + "\n")

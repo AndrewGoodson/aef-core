@@ -52,6 +52,7 @@ from aef.harness.monitoring import (
     build_digest,
     evaluate_window,
 )
+from aef.harness.proposer import Proposal
 from aef.harness.review import Decision, Disposition, decide, render_report
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
 from aef.harness.suite import CohortBuilder, SuiteError
@@ -337,7 +338,14 @@ def _accepted_history(config: LoopConfig) -> tuple[AcceptedChange, ...]:
     )
 
 
-def gate(config: LoopConfig, head_ref: str, *, now: datetime, workdir: Path) -> GateRun:
+def gate(
+    config: LoopConfig,
+    head_ref: str,
+    *,
+    now: datetime,
+    workdir: Path,
+    proposal: Proposal | None = None,
+) -> GateRun:
     """Evaluate one candidate branch end to end."""
     _preflight(config)
 
@@ -382,11 +390,15 @@ def gate(config: LoopConfig, head_ref: str, *, now: datetime, workdir: Path) -> 
             # results above already record which gate raised it.
             "security_gates": [r.gate for r in result.results if r.security_event],
             "evidence": evidence_note,
+            # The memory records this proposal was grounded in. Dropped
+            # before, so the audit trail could not answer "what did the
+            # proposer read to justify this" after the fact (ADR 0075).
+            "grounded_in": list(proposal.grounded_in) if proposal else [],
         },
     )
 
     decision = decide(result, tier1_enabled=config.tier1_enabled)
-    report = _render(config, head_ref, proposal_id, result, decision)
+    report = _render(config, head_ref, proposal_id, result, decision, proposal)
 
     if result.security_events:
         # Halt criterion 2: a proposal reaching for the judge is a category
@@ -470,6 +482,7 @@ def _render(
     proposal_id: str,
     result: PipelineResult,
     decision: Decision,
+    proposal: Proposal | None = None,
 ) -> str:
     """Render a report for a candidate BRANCH.
 
@@ -479,21 +492,25 @@ def _render(
     section says "see the diff elsewhere" is the rubber stamp M9's ordering
     was designed to prevent, just with an extra step.
     """
-    from aef.harness.proposer import Proposal
-
     try:
         diff = config.repo.run("diff", f"{config.base_ref}...{head_ref}")
     except Exception:  # noqa: BLE001 - a missing diff must not lose the report
         diff = f"(could not render a diff for {proposal_id})\n"
 
+    # A branch that came from this repo's proposer HAS a rationale and
+    # citations; rendering the stub for it reported a memory-grounded
+    # proposal as "none (control-cohort member)" in the owner's own review
+    # report — the audit trail contradicting the thing it audits (ADR 0075).
     stub = Proposal(
         id=proposal_id,
-        path="(candidate branch)",
+        path=proposal.path if proposal else "(candidate branch)",
         original="",
         proposed=diff or "(empty diff)\n",
-        rationale=f"candidate branch {proposal_id}",
-        grounded_in=(),
-        is_control=True,  # exempts the stub from the grounding requirement
+        rationale=proposal.rationale if proposal else f"candidate branch {proposal_id}",
+        grounded_in=proposal.grounded_in if proposal else (),
+        # Only the stub is exempt from the grounding requirement. A real
+        # proposal already satisfied it at construction.
+        is_control=proposal.is_control if proposal else True,
     )
     report = render_report(stub, result, decision)
     # render_report emits a unified diff of original->proposed; here the
@@ -830,7 +847,7 @@ def cycle(
     _materialise_candidate_branch(config, branch, agent_path, proposal.proposed)
     lines.append(f"proposed {proposal.id} on local branch {branch} (never pushed)")
 
-    run = gate(config, branch, now=now, workdir=workdir)
+    run = gate(config, branch, now=now, workdir=workdir, proposal=proposal)
     lines.append(f"gated: {run.decision.disposition.value} — {run.decision.reason}")
 
     return CycleRun(

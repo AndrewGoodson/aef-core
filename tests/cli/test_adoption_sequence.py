@@ -184,7 +184,13 @@ def test_loop_md_documents_every_obligation(adopted: tuple[Path, Path]) -> None:
     ):
         assert obligation in text, f"LOOP.md does not mention: {obligation}"
     # The trap that catches everyone once.
-    assert "Adding an `Edge` to it is not enough" in text
+    # An edge alone does not route, AND a route with no edge is refused by
+    # the executor. LOOP.md documented only the first half, so an adopter
+    # following it literally hit `node 'work' routed to 'reflect', but no
+    # declared edge ... has a true condition` (ADR 0075).
+    assert "BOTH an edge and a route" in text
+    assert 'return delta, "reflect"' in text
+    assert "Edge(from_node=" in text
     # The flag without which no failing run can be produced.
     assert "--working-memory" in text
 

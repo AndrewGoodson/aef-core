@@ -30,7 +30,14 @@ from aef.harness.evaluation import score_of
 from aef.harness.outcome import classify
 from aef.kernel import GraphExecutor, Services
 from aef.kernel.graph import Graph
+from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
 from aef.services.eval.rule_based import RuleBasedEvaluator
+from aef.services.memory.in_memory import InMemoryMemoryStore
+
+# The same rubric `aef run` and `aef loop record` default to. A gate that
+# re-executed a recorded scenario under a different rubric would be comparing
+# two different measurements and calling the difference a regression.
+DEFAULT_RUBRIC: dict[str, float] = {"quality": 1.0}
 
 
 class EntrypointError(RuntimeError):
@@ -61,8 +68,28 @@ def load_graph(entrypoint: str) -> Graph:
 
 
 def run_scenario(scenario: Scenario, graph: Graph) -> dict[str, Any]:
-    """One scenario, answering both gates' questions from one execution."""
-    services = Services(clock=fixed_clock(scenario))
+    """One scenario, answering both gates' questions from one execution.
+
+    `critic` and `judge` are wired here for the same reason `aef run` and
+    `aef loop record` wire them (ADR 0073): **every reflect node requires
+    them**, and LOOP.md obligation 2 tells every adopter to add one. This was
+    the third construction site and the only one that was missed — and it is
+    the one the gates use, so an adopter who satisfied obligation 2 made every
+    scenario crash with `ServiceNotConfiguredError`, scoring the candidate,
+    the incumbent and all five cohort members 0.0. G3 rejected every candidate
+    forever, and `doctor` reported the obligation green (ADR 0075).
+
+    Memory is in-process and thrown away: the gate re-executes recorded
+    scenarios to compare behaviour, and writing to the adopter's durable store
+    would let a gate run mutate the evidence a later proposal is built from.
+    Both services are rule-based and deterministic, which the sandbox requires.
+    """
+    services = Services(
+        clock=fixed_clock(scenario),
+        memory=InMemoryMemoryStore(),
+        critic=RuleBasedCritic(),
+        judge=RuleBasedJudge(rubric=dict(DEFAULT_RUBRIC)),
+    )
     try:
         result = GraphExecutor(graph.compile(), services).run(
             scenario.initial_state, record_trace=True
