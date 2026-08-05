@@ -46,6 +46,24 @@ from aef.state import AEFState
 MANIFEST_FILENAME = "manifest.json"
 
 
+class Expected(StrEnum):
+    """What the OWNER says should happen — not what the agent did.
+
+    The distinction is the whole point (ADR 0060). A recorded trace says the
+    agent failed; it does not say failing was correct. Without that
+    statement, a candidate that flips a failing scenario to "passing" is
+    indistinguishable from one that learned to do the task — and a candidate
+    that simply reports success passes every gate.
+
+    `MUST_FAIL` is a tripwire: a task genuinely beyond the agent's remit,
+    where claiming success is a lie rather than an improvement.
+    """
+
+    UNSPECIFIED = "unspecified"  # legacy/unlabelled; carries no claim
+    MUST_PASS = "must_pass"
+    MUST_FAIL = "must_fail"
+
+
 class Split(StrEnum):
     TRAIN = "train"  # the only split a proposer may cite
     VALIDATION = "validation"  # what the gates score against
@@ -72,6 +90,10 @@ class Scenario:
     trace: tuple[NodeExecutionRecord, ...]
     recorded_at: datetime
     notes: str = ""
+    # Owner-supplied ground truth. Defaults to UNSPECIFIED so every existing
+    # scenario keeps its exact meaning: "this is what happened", no claim
+    # about what should have.
+    expected: Expected = Expected.UNSPECIFIED
 
     @property
     def clock_values(self) -> tuple[datetime, ...]:
@@ -89,6 +111,7 @@ class Scenario:
             "trace": encode_trace(self.trace),
             "recorded_at": self.recorded_at.isoformat(),
             "notes": self.notes,
+            "expected": self.expected.value,
         }
 
     @classmethod
@@ -103,6 +126,7 @@ class Scenario:
                 trace=decode_trace(payload["trace"]),
                 recorded_at=datetime.fromisoformat(payload["recorded_at"]),
                 notes=payload.get("notes", ""),
+                expected=Expected(payload.get("expected", Expected.UNSPECIFIED.value)),
             )
         except (KeyError, ValueError) as exc:
             raise CorpusError(f"malformed scenario payload: {exc}") from exc

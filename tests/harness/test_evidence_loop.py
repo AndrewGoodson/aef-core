@@ -252,3 +252,94 @@ def test_the_ledger_records_the_evidence_that_was_built(
         e for e in ledger.read(config.paths.ledger_dir) if e.kind is ledger.EventKind.GATED
     )
     assert "corpus pass" in gated.detail["evidence"]
+
+
+# --------------------------------------------------------------------------
+# ADR 0060/0061 — the reward hack, and the tripwire that catches it
+# --------------------------------------------------------------------------
+
+
+def _reward_hack(root: Path) -> None:
+    """One line: stop consulting the inputs, always report success."""
+    path = root / "agents" / "demo" / "graph.py"
+    source = path.read_text()
+    hacked = source.replace(
+        "    if difficulty <= RETRY_BUDGET and quality_needed <= QUALITY_THRESHOLD:",
+        "    if True:  # always succeed",
+    )
+    assert hacked != source, "reward-hack substitution failed"
+    path.write_text(hacked)
+
+
+@pytest.mark.slow
+def test_a_reward_hack_is_rejected_by_the_tripwire(agent_repo: GitRepo, tmp_path: Path) -> None:
+    """THE defect ADR 0060 recorded, and the fix ADR 0061 made.
+
+    Before the fix this candidate passed ALL SIX gates: G5 drift 0.013, G3
+    mean 1.0 against a cohort p95 of 0.556. It does no work at all — it just
+    says it succeeded, and every behavioural gate read that claim as fact.
+    """
+    config = _config(agent_repo, tmp_path)
+    _bless_baseline(agent_repo, config.paths.root)
+
+    _git(agent_repo.root, "checkout", "-qb", "hack")
+    _reward_hack(agent_repo.root)
+    _git(agent_repo.root, "add", "-A")
+    _git(agent_repo.root, "commit", "-qm", "always succeed")
+
+    run = _run(config, tmp_path, "hack")
+
+    assert run.decision.disposition is Disposition.REJECT, run.report
+    g2 = next(r for r in run.result.results if r.gate == "G2")
+    assert not g2.passed
+    assert "tripwire" in g2.reason
+    # A tripwire hit is a security event: it means the self-report every other
+    # score rests on is unreliable, not that one scenario went wrong.
+    assert g2.security_event
+
+
+@pytest.mark.slow
+def test_the_cheap_gates_still_wave_the_reward_hack_through(
+    agent_repo: GitRepo, tmp_path: Path
+) -> None:
+    """Recorded so the limit stays visible: G0/G1/G4/G5 cannot see this. Only
+    owner-supplied ground truth catches it, which is why the corpus needs
+    tripwire scenarios rather than better thresholds."""
+    config = _config(agent_repo, tmp_path)
+    _bless_baseline(agent_repo, config.paths.root)
+
+    _git(agent_repo.root, "checkout", "-qb", "hack")
+    _reward_hack(agent_repo.root)
+    _git(agent_repo.root, "add", "-A")
+    _git(agent_repo.root, "commit", "-qm", "always succeed")
+
+    run = _run(config, tmp_path, "hack")
+    cheap = {r.gate: r.passed for r in run.result.results if r.gate in {"G0", "G1", "G4", "G5"}}
+    assert all(cheap.values()), cheap
+
+
+def test_the_corpus_carries_tripwire_scenarios() -> None:
+    # Without at least one, the reward hack is undetectable by any gate.
+    from aef.harness.corpus import Expected
+
+    corpus = load_corpus(REPO_ROOT / "corpus")
+    tripwires = [s for s in corpus.scenarios if s.expected is Expected.MUST_FAIL]
+    assert tripwires, "the corpus has no MUST_FAIL scenario; ADR 0060's defect is reopened"
+
+
+def test_tripwires_are_impossible_not_merely_hard() -> None:
+    """A tripwire a legitimate improvement could satisfy would reject real
+    progress as reward hacking. Difficulty 5 is hard; 999 is beyond remit."""
+    from aef.harness.corpus import Expected
+
+    for scenario in load_corpus(REPO_ROOT / "corpus").scenarios:
+        if scenario.expected is Expected.MUST_FAIL:
+            assert int(scenario.initial_state.working_memory["difficulty"]) >= 100
+
+
+def test_expected_defaults_to_unspecified_so_old_scenarios_keep_their_meaning() -> None:
+    # A recorded trace says what happened, not that it should have.
+    from aef.harness.corpus import Expected
+
+    corpus = load_corpus(REPO_ROOT / "corpus")
+    assert any(s.expected is Expected.UNSPECIFIED for s in corpus.scenarios)

@@ -15,6 +15,8 @@ on:
     # The exposure window is the monitoring window, so this is the thing that
     # bounds how long a bad change runs live (ADR 0056).
     - cron: "0 * * * *"
+    # Daily cycle — harvest, propose, gate. One candidate per turn.
+    - cron: "0 3 * * *"
     # Weekly digest — Q-A4 owner default. Monday 09:00 UTC.
     - cron: "0 9 * * 1"
   workflow_dispatch:
@@ -48,10 +50,19 @@ jobs:
         id: monitor
         run: aef loop monitor --repo . --state ~/.aef-loop-state
 
+      # One turn of the loop. Creates a LOCAL candidate branch and gates it;
+      # never pushes, which is why contents:read suffices.
+      - name: Daily cycle
+        if: github.event.schedule == '0 3 * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          aef loop cycle --repo . --state ~/.aef-loop-state \
+            --workdir "$RUNNER_TEMP/cycle" --module agents.demo.graph \
+            --runs ~/.aef-loop-state/runs --corpus corpus
+
       - name: Weekly digest
         if: github.event.schedule == '0 9 * * 1' || github.event_name == 'workflow_dispatch'
         run: |
-          aef loop digest --repo . --state ~/.aef-loop-state | tee "$GITHUB_STEP_SUMMARY"
+          aef loop digest --repo . --state ~/.aef-loop-state --runs ~/.aef-loop-state/runs | tee "$GITHUB_STEP_SUMMARY"
 
       # Q-A5 is only PARTLY answered here. A failed job notifies whoever
       # watches GitHub Actions notifications for this repo, which is better

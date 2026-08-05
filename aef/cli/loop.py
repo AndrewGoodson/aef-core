@@ -93,7 +93,17 @@ def cmd_monitor(args: argparse.Namespace) -> int:
 def cmd_digest(args: argparse.Namespace) -> int:
     config = _config(args)
     since, until = default_digest_window(datetime.now(UTC))
-    result = loop_digest(config, since=since, until=until, owner_edits=args.owner_edits)
+    from aef.harness.harvest import load_runs
+
+    notifier = _halt_notifier()
+    result = loop_digest(
+        config,
+        since=since,
+        until=until,
+        owner_edits=args.owner_edits,
+        halt_channel_configured=bool(getattr(notifier, "configured", False)),
+        runs_recorded=len(load_runs(Path(args.runs))) if args.runs else 0,
+    )
     print(result.to_json() if args.json else result.render())
     return EXIT_OK
 
@@ -130,6 +140,64 @@ def cmd_record(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_harvest(args: argparse.Namespace) -> int:
+    from aef.cli.run import load_graph_module
+    from aef.harness.harvest import harvest
+
+    outcome = harvest(
+        Path(args.runs),
+        Path(args.corpus),
+        load_graph_module(args.module),
+        now=datetime.now(UTC),
+        include_successes=args.include_successes,
+        daily_limit=args.daily_limit,
+    )
+    for line in outcome.lines:
+        print(line)
+    return EXIT_OK
+
+
+def _halt_notifier() -> object:
+    """Read the halt webhook from the environment, at the CLI boundary.
+
+    Never read inside the harness: the URL is owner configuration that lives
+    outside this repository, and a module that reaches for the environment
+    itself is one the candidate is closer to influencing.
+    """
+    import os
+
+    from aef.harness.monitoring import HaltNotifier
+
+    return HaltNotifier(webhook_url=os.environ.get("AEF_HALT_WEBHOOK") or None)
+
+
+def cmd_cycle(args: argparse.Namespace) -> int:
+    from aef.cli.run import load_graph_module
+    from aef.harness.loop import cycle as loop_cycle
+    from aef.services.memory.in_memory import InMemoryMemoryStore
+
+    config = _config(args)
+    graph = load_graph_module(args.module) if args.module else None
+    try:
+        run = loop_cycle(
+            config,
+            now=datetime.now(UTC),
+            workdir=Path(args.workdir),
+            runs_dir=Path(args.runs) if args.runs else None,
+            corpus_root=Path(args.corpus) if args.corpus else None,
+            graph=graph,
+            memory=InMemoryMemoryStore(),
+            agent_path=args.agent_path,
+        )
+    except LoopHaltedError as exc:
+        print(f"HALTED: {exc}")
+        return EXIT_HALTED
+
+    for line in run.lines:
+        print(f"  {line}")
+    return run.exit_code
+
+
 def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = subparsers.add_parser("loop", help="drive the self-rewiring loop (gate/monitor/digest)")
     loop_subs = p.add_subparsers(dest="loop_command", required=True)
@@ -164,6 +232,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     _common(p_digest)
     p_digest.add_argument("--json", action="store_true")
     p_digest.add_argument("--owner-edits", type=int, default=0)
+    p_digest.add_argument("--runs", default=None, help="runs dir, to report whether any exist")
     p_digest.set_defaults(handler=cmd_digest)
 
     p_status = loop_subs.add_parser("status", help="kill switch, ledger integrity, open windows")
@@ -186,3 +255,38 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "independence silently.",
     )
     p_record.set_defaults(handler=cmd_record)
+
+    p_harvest = loop_subs.add_parser(
+        "harvest", help="promote recorded production runs into corpus scenarios"
+    )
+    p_harvest.add_argument("module", help="importable module exposing build_graph()")
+    p_harvest.add_argument("--runs", required=True, help="dir of runs from `aef run --record-runs`")
+    p_harvest.add_argument("--corpus", required=True)
+    p_harvest.add_argument(
+        "--daily-limit",
+        type=int,
+        default=5,
+        help="cap promotions per day. One bad deploy can produce thousands of failing "
+        "runs; without a cap the corpus fills with a single incident and the gates "
+        "start measuring that incident instead of the agent.",
+    )
+    p_harvest.add_argument(
+        "--include-successes",
+        action="store_true",
+        help="also promote runs that passed. Off by default: failures carry the "
+        "information, and auto-promoting successes inflates the pass rate the gates "
+        "measure against.",
+    )
+    p_harvest.set_defaults(handler=cmd_harvest)
+
+    p_cycle = loop_subs.add_parser(
+        "cycle", help="one turn of the loop: harvest -> propose -> gate -> record"
+    )
+    _common(p_cycle)
+    p_cycle.add_argument("--base", default="main")
+    p_cycle.add_argument("--workdir", required=True)
+    p_cycle.add_argument("--module", default=None, help="module exposing build_graph()")
+    p_cycle.add_argument("--runs", default=None, help="dir from `aef run --record-runs`")
+    p_cycle.add_argument("--corpus", default=None)
+    p_cycle.add_argument("--agent-path", default="agents/demo/graph.py")
+    p_cycle.set_defaults(handler=cmd_cycle)

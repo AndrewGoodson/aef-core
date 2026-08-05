@@ -555,11 +555,26 @@ def monitor(config: LoopConfig, *, now: datetime, restore_to: Path | None = None
 # --------------------------------------------------------------------------
 
 
-def digest(config: LoopConfig, *, since: datetime, until: datetime, owner_edits: int = 0) -> Digest:
+def digest(
+    config: LoopConfig,
+    *,
+    since: datetime,
+    until: datetime,
+    owner_edits: int = 0,
+    halt_channel_configured: bool = False,
+    runs_recorded: int = 0,
+) -> Digest:
     # Deliberately NOT behind the kill switch: reading the record of why the
     # loop halted is exactly what you want to do while it is halted.
     entries = ledger.read(config.paths.ledger_dir)
-    return build_digest(entries, since=since, until=until, owner_edits=owner_edits)
+    return build_digest(
+        entries,
+        since=since,
+        until=until,
+        owner_edits=owner_edits,
+        halt_channel_configured=halt_channel_configured,
+        runs_recorded=runs_recorded,
+    )
 
 
 @dataclass(frozen=True)
@@ -621,3 +636,122 @@ def observations_payload(observations: tuple[Observation, ...]) -> list[dict[str
         {"at": o.at.isoformat(), "passed": o.passed, "cost_tokens": o.cost_tokens}
         for o in observations
     ]
+
+
+# --------------------------------------------------------------------------
+# cycle — the whole loop, once
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CycleRun:
+    harvested: tuple[str, ...] = ()
+    proposed: str | None = None
+    decision: Decision | None = None
+    lines: tuple[str, ...] = ()
+    exit_code: int = EXIT_OK
+
+
+def cycle(
+    config: LoopConfig,
+    *,
+    now: datetime,
+    workdir: Path,
+    runs_dir: Path | None = None,
+    corpus_root: Path | None = None,
+    graph: Any = None,
+    memory: Any = None,
+    agent_path: str = "agents/demo/graph.py",
+) -> CycleRun:
+    """One turn of the loop: harvest -> propose -> gate -> record.
+
+    **Nothing is pushed and nothing is merged.** The candidate branch is
+    created in the local checkout only, which needs no repository permission
+    at all — a job with `contents: read` can do it. Pushing is what needs
+    write access, and the gate job must never have it (ADR 0057).
+
+    **At most one candidate per turn.** A loop that can emit many per cycle
+    can exhaust the rate budget in a single run, and every candidate costs
+    N+2 corpus passes to gate.
+    """
+    entries = _preflight(config)  # kill switch, then ledger chain — in that order
+    lines: list[str] = [f"ledger verified: {len(entries)} entr(ies)"]
+
+    harvested: tuple[str, ...] = ()
+    if runs_dir is not None and corpus_root is not None and graph is not None:
+        from aef.harness.harvest import harvest as _harvest
+
+        outcome = _harvest(runs_dir, corpus_root, graph, now=now)
+        harvested = outcome.promoted
+        lines.extend(outcome.lines)
+
+    if memory is None:
+        lines.append("no memory store configured: nothing to learn from, no candidate")
+        return CycleRun(harvested=harvested, lines=tuple(lines))
+
+    from aef.harness.proposer import MemoryEvidence, RuleBasedProposer
+
+    evidence = MemoryEvidence.from_store(memory, config.corpus)
+    if evidence.excluded:
+        lines.append(
+            f"{len(evidence.excluded)} memory record(s) excluded as validation/holdout-derived"
+        )
+    if not evidence.records:
+        # The proposer does not speculate. No recorded failures means no
+        # hypothesis, which is a legitimate outcome and not an error.
+        lines.append("no admissible failure memory: no candidate this cycle")
+        return CycleRun(harvested=harvested, lines=tuple(lines))
+
+    source_path = config.repo.root / agent_path
+    if not source_path.is_file():
+        lines.append(f"no agent source at {agent_path}: no candidate")
+        return CycleRun(harvested=harvested, lines=tuple(lines))
+
+    proposals = RuleBasedProposer().propose_from_memory(
+        evidence,
+        proposal_id=f"cycle-{now:%Y%m%dT%H%M%S}",
+        path=agent_path,
+        source=source_path.read_text(),
+    )
+    if not proposals:
+        lines.append("the proposer produced nothing from the available evidence")
+        return CycleRun(harvested=harvested, lines=tuple(lines))
+
+    proposal = proposals[0]  # at most one candidate per cycle, deliberately
+    branch = f"loop/{proposal.id}"
+    _materialise_candidate_branch(config, branch, agent_path, proposal.proposed)
+    lines.append(f"proposed {proposal.id} on local branch {branch} (never pushed)")
+
+    run = gate(config, branch, now=now, workdir=workdir)
+    lines.append(f"gated: {run.decision.disposition.value} — {run.decision.reason}")
+
+    return CycleRun(
+        harvested=harvested,
+        proposed=proposal.id,
+        decision=run.decision,
+        lines=tuple(lines),
+        exit_code=run.exit_code,
+    )
+
+
+def _materialise_candidate_branch(config: LoopConfig, branch: str, path: str, content: str) -> None:
+    """Create the candidate as a LOCAL branch. Never pushed."""
+    original = config.repo.run("rev-parse", "--abbrev-ref", "HEAD").strip()
+    config.repo.run("checkout", "-q", "-B", branch, config.base_ref)
+    try:
+        target = config.repo.root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content)
+        config.repo.run("add", "--", path)
+        config.repo.run(
+            "-c",
+            "user.email=loop@aef",
+            "-c",
+            "user.name=aef-loop",
+            "commit",
+            "-q",
+            "-m",
+            f"loop: {branch}",
+        )
+    finally:
+        config.repo.run("checkout", "-q", original)

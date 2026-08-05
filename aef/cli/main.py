@@ -59,6 +59,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         objective=args.objective,
         config_path=args.config,
         checkpoints_dir=args.checkpoints_dir,
+        record_runs_dir=args.record_runs,
     )
     if args.observations:
         from datetime import UTC, datetime
@@ -130,6 +131,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="persist checkpoints here (FileDurabilityBackend) so `aef eval`/`aef trace` "
         "can find this run afterward; omit for a one-off in-memory run",
+    )
+    p_run.add_argument(
+        "--record-runs",
+        default=None,
+        help="persist full runs (initial state + trace) here so `aef loop harvest` can "
+        "promote them into scenarios. Observations record only pass/fail, which is not "
+        "enough to rebuild a run as a test case.",
     )
     p_run.add_argument(
         "--observations",

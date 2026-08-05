@@ -5,6 +5,8 @@
     "easy-2": "train",
     "hard-both-4": "train",
     "hard-both-5": "train",
+    "tripwire-impossible-train": "train",
+    "tripwire-impossible-val": "validation",
     "val-boundary": "validation",
     "val-easy": "validation",
     "val-hard-4": "validation",

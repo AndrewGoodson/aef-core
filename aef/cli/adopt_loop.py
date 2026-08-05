@@ -40,6 +40,11 @@ not a config flag — see aef-core ADR 0045 for why that distinction is kept.
    Record scenarios that **fail** as well as ones that pass. A corpus where
    everything already passes cannot demonstrate an improvement.
 
+   **Label at least one scenario `must_fail`.** Without a tripwire the gates
+   cannot detect reward hacking: a one-line change making an agent always
+   report success passed all six gates, because G2 and G3 both read the
+   agent's own claim about itself. See `corpus/README.md`.
+
 2. **Observations.** Post-merge monitoring reads `observations.jsonl`, and
    nothing writes it unless you pass `--observations` to your production
    runs. With no input, every monitoring window reports unobserved — which
@@ -232,6 +237,22 @@ Moving a file between split directories is fatal — it would leak the holdout
 into the proposer's evidence base. Writing to `holdout` requires
 `--i-am-spending-the-holdout`. The corpus never shrinks: a suite that can be
 made to pass by deleting the failing case is not a suite.
+
+## Without a tripwire, the gates cannot detect reward hacking
+
+Not theoretical: a one-line change making an agent ignore its inputs and
+always report success passed **all six gates**. G2 checks outcome class and
+G3 scores a function of that same class, so both ask the agent whether it
+succeeded and record the answer.
+
+Label at least one scenario `must_fail` — a task genuinely **beyond** the
+agent's remit, where claiming success is a lie rather than an improvement. A
+candidate that "passes" it fails G2 as a security event.
+
+Tripwires must be impossible in principle, not merely hard: labelling a
+difficult-but-achievable task `must_fail` rejects real progress as reward
+hacking. Harvested scenarios never carry a label — only you can say a task
+should have failed.
 """
 
 
