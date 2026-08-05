@@ -38,6 +38,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from aef.harness.corpus import Corpus, Split
+from aef.harness.transformations import TransformationError, add_bounded_retry
 from aef.services.memory.base import MemoryRecord, MemoryStore
 
 
@@ -280,13 +281,67 @@ class RuleBasedProposer:
             "; ".join(str(c.detail) for c in citations[:3] if c.detail)
             or f"{len(citations)} recorded failure(s)"
         )
-        return self.propose(
+        numeric = self.propose(
             proposal_id=proposal_id,
             path=path,
             source=source,
             citations=citations,
             rationale=f"grounded in recorded failures — {summary}",
         )
+        # Structural first WHEN IT APPLIES. ADR 0098 is why that clause is
+        # load-bearing: the previous structural proposer was preferred
+        # unconditionally and its only output was a change G4 rejects, so one
+        # new memory record flipped the loop from emitting mergeable
+        # candidates to emitting only security events. Every entry in the
+        # catalogue is now gate-legal by construction (the catalogue reads
+        # OWNER_ONLY_FIELDS from G4), and `test_the_full_pipeline_accepts...`
+        # runs one through all six gates rather than asserting it should pass.
+        return self.propose_structural(
+            evidence, proposal_id=proposal_id, path=path, source=source
+        ) + tuple(numeric)
+
+    def propose_structural(
+        self,
+        evidence: MemoryEvidence,
+        *,
+        proposal_id: str,
+        path: str,
+        source: str,
+    ) -> tuple[Proposal, ...]:
+        """Apply the bounded catalogue to the nodes the memory actually blames.
+
+        **The citation constrains the change.** `failing_nodes()` returns
+        `(node_id, record_id)` pairs, and the transformation is applied to
+        that node and cited to that record — so a reader can check the link
+        rather than take the rationale's word for it. Round 5 recorded the
+        opposite shape and it went unfixed for two nights: a rationale saying
+        "grounded in recorded failures" attached to a mutation that was
+        independent of what the failure said (ADR 0096).
+
+        A transformation that does not apply is skipped, not forced. An empty
+        result means "the catalogue has nothing to offer here", which is a
+        legitimate answer and the reason the numeric proposer still runs.
+        """
+        proposals: list[Proposal] = []
+        for index, (node_id, record_id) in enumerate(evidence.failing_nodes()):
+            citation = evidence.cite(record_id, detail=f"node {node_id!r} raised")
+            try:
+                transformation = add_bounded_retry(
+                    source=source, failing_node=node_id, citation=str(citation)
+                )
+            except TransformationError:
+                continue
+            proposals.append(
+                Proposal(
+                    id=f"{proposal_id}-s{index}",
+                    path=path,
+                    original=source,
+                    proposed=transformation.source,
+                    rationale=f"{transformation.name}: {transformation.rationale}",
+                    grounded_in=(citation,),
+                )
+            )
+        return tuple(proposals)
 
     def propose(
         self,
