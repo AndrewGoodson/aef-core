@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 
-from aef.kernel import END, Context, Edge, Graph, GraphExecutor, Node, ReplayEngine, Services
+import pytest
+
+from aef.kernel import END, Context, Edge, Graph, GraphExecutor, Node, ReplayEngine, Route, Services
 from aef.kernel.executor import NodeExecutionRecord
 from aef.kernel.replay import DeterminismViolationError, MalformedTraceError
 from aef.state import AEFState, StateDelta
@@ -251,3 +253,82 @@ def test_replay_allows_a_partial_trace_not_ending_in_end() -> None:
 
     result = ReplayEngine(compiled, Services()).replay([record_a, record_b])
     assert result is not None
+
+
+# --------------------------------------------------------------------------
+# ADR 0068 — a fallback record's ROUTE is verified, not only its delta
+# --------------------------------------------------------------------------
+
+
+def _fallback_graph(fallback_to: str) -> Graph:
+    """A deterministic node that always raises, plus two possible handlers."""
+
+    def boom(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
+        raise RuntimeError("node exploded")
+
+    def safe(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
+        return StateDelta(working_memory={"handled_by": "SAFE"}), END
+
+    def risky(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
+        return (
+            StateDelta(
+                working_memory={"handled_by": "RISKY"},
+                errors=[{"error": "suppressed by the risky handler"}],
+            ),
+            END,
+        )
+
+    return Graph(
+        id="fb",
+        version="1",
+        nodes={
+            "work": Node(
+                id="work", version="1", fn=boom, deterministic=True, fallback_node_id=fallback_to
+            ),
+            "safe": Node(id="safe", version="1", fn=safe, deterministic=True),
+            "risky": Node(id="risky", version="1", fn=risky, deterministic=True),
+        },
+        edges=[],
+        entry_node="work",
+    )
+
+
+def test_replay_detects_a_retargeted_fallback() -> None:
+    """A fallback record is trusted rather than re-executed (ADR 0039),
+    because re-running the fn would raise the original exception again. That
+    is sound for the DELTA and was silently extended to the ROUTE: replaying
+    an old trace against a graph whose fallback now points at a different
+    existing handler PASSED, while a live run of that graph produced
+    materially different behaviour (SAFE/1 error vs RISKY/2 errors).
+    """
+    recorded = GraphExecutor(_fallback_graph("safe").compile(), Services()).run(
+        AEFState(run_id="r1", agent_id="a", objective="o"), record_trace=True
+    )
+    assert recorded.trace is not None
+
+    retargeted = _fallback_graph("risky").compile()
+    with pytest.raises(DeterminismViolationError, match="fallback"):
+        ReplayEngine(retargeted, Services()).replay(recorded.trace)
+
+
+def test_replay_accepts_an_unchanged_fallback() -> None:
+    recorded = GraphExecutor(_fallback_graph("safe").compile(), Services()).run(
+        AEFState(run_id="r1", agent_id="a", objective="o"), record_trace=True
+    )
+    assert recorded.trace is not None
+
+    ReplayEngine(_fallback_graph("safe").compile(), Services()).replay(recorded.trace)
+
+
+def test_replay_still_does_not_re_execute_a_raising_node() -> None:
+    # The ADR 0039 property must survive the fix: re-running the fn would
+    # raise the original exception and make the trace unreplayable.
+    recorded = GraphExecutor(_fallback_graph("safe").compile(), Services()).run(
+        AEFState(run_id="r1", agent_id="a", objective="o"), record_trace=True
+    )
+    assert recorded.trace is not None
+    fallback_record = next(r for r in recorded.trace if r.is_fallback)
+    assert fallback_record.node_id == "work"
+
+    # No RuntimeError escapes: the raising node is trusted, not re-run.
+    ReplayEngine(_fallback_graph("safe").compile(), Services()).replay(recorded.trace)

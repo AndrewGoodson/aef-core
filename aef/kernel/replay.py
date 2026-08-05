@@ -49,12 +49,26 @@ class ReplayEngine:
                 raise DeterminismViolationError(
                     f"trace references node {record.node_id!r}, which is not in this graph"
                 )
-            if node.deterministic and not record.is_fallback:
-                # A fallback record (node raised, fell back — ADR 0036) is
-                # trusted, not re-executed: re-running `fn` would raise the
-                # original exception again. The recorded error-delta + fallback
-                # route are replayed verbatim, exactly as a non-deterministic
-                # node's output is (ADR 0039).
+            if record.is_fallback:
+                # A fallback record (node raised, fell back — ADR 0036) is not
+                # re-executed: re-running `fn` would raise the original
+                # exception again and make the trace unreplayable (ADR 0039).
+                #
+                # But "do not re-execute the fn" was silently extended to "do
+                # not check anything", and the ROUTE is checkable without
+                # running anything. A graph whose `fallback_node_id` now points
+                # at a different existing handler replayed CLEAN while a live
+                # run behaved materially differently — measured, not supposed
+                # (ADR 0068). The declared fallback target is part of a node's
+                # behaviour, so replay verifies it.
+                if record.route != node.fallback_node_id:
+                    raise DeterminismViolationError(
+                        f"node {node.id!r} recorded a fallback to {record.route!r} but its "
+                        f"declared fallback_node_id is now {node.fallback_node_id!r}. The "
+                        f"handler that would run has changed, and re-executing the node "
+                        f"cannot reveal that because it raises by construction."
+                    )
+            elif node.deterministic:
                 replayed_delta, replayed_route = node.fn(
                     record.input_state, record.context, self._services
                 )
