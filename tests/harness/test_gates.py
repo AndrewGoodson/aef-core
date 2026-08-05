@@ -449,3 +449,70 @@ def test_a_subverting_candidate_is_stopped_by_the_first_gate(repo: GitRepo, tmp_
     assert result.ran == ("G0",)  # never reached the expensive gates
     assert not result.passed
     assert result.security_events
+
+
+# --------------------------------------------------------------------------
+# ADR 0062 — unmeasurable size denies; export-ignore cannot hide the suite
+# --------------------------------------------------------------------------
+
+
+def test_a_change_git_will_not_size_is_rejected_not_counted_as_zero(
+    repo: GitRepo, tmp_path: Path
+) -> None:
+    """Measured, not hypothesised: a candidate marking its own files binary
+    via agents/.gitattributes made a 5,050-line rewrite report as 1 changed
+    line, because an unparseable numstat count defaulted to 0."""
+    _git(repo.root, "checkout", "-qb", "cand")
+    (repo.root / "agents" / ".gitattributes").write_text("*.py binary\n")
+    (repo.root / "agents" / "planner.py").write_text("y = 2\n" * 5000)
+    _git(repo.root, "add", "-A")
+    _git(repo.root, "commit", "-qm", "huge, marked binary")
+
+    ctx = _ctx(repo, tmp_path)
+    assert ctx.verdict.diff.unmeasurable, "the binary-marked file should be flagged"
+
+    result = G0StaticSafety().run(ctx)
+    assert not result.passed
+    assert "unmeasurable" in result.reason
+
+
+def test_an_ordinary_change_is_still_measurable(repo: GitRepo, tmp_path: Path) -> None:
+    _candidate(repo, {"agents/planner.py": "VALUE = 1\n"})
+    ctx = _ctx(repo, tmp_path)
+    assert ctx.verdict.diff.unmeasurable == ()
+    assert G0StaticSafety().run(ctx).passed
+
+
+def test_export_ignore_cannot_hide_the_test_suite_from_the_workspace(
+    repo: GitRepo, tmp_path: Path
+) -> None:
+    """`git archive` honours export-ignore, so a repo that excludes tests/
+    from its sdist — an ordinary thing to do — got a workspace with no test
+    suite, and G1 ran a suite missing the test that fails. ls-tree ignores
+    export attributes and reports the tree as committed."""
+    (repo.root / "tests").mkdir(exist_ok=True)
+    (repo.root / "tests" / "test_x.py").write_text("def test_x():\n    assert True\n")
+    (repo.root / ".gitattributes").write_text("tests/ export-ignore\naef/ export-ignore\n")
+    _git(repo.root, "add", "-A")
+    _git(repo.root, "commit", "-qm", "export-ignore at base")
+
+    _candidate(repo, {"agents/planner.py": "VALUE = 2\n"})
+    diff = inspect_candidate(repo, "base", "cand").diff
+    dest = build_candidate_workspace(repo, diff, tmp_path / "ws")
+
+    assert (dest / "tests" / "test_x.py").is_file(), "export-ignore hid the test suite"
+    assert (dest / "aef" / "harness" / "gate.py").is_file(), "export-ignore hid the harness"
+
+
+def test_the_workspace_does_not_materialise_symlinks_from_the_base_tree(
+    repo: GitRepo, tmp_path: Path
+) -> None:
+    (repo.root / "link.py").symlink_to("agents/planner.py")
+    _git(repo.root, "add", "-A")
+    _git(repo.root, "commit", "-qm", "base symlink")
+
+    _candidate(repo, {"agents/planner.py": "VALUE = 3\n"})
+    diff = inspect_candidate(repo, "base", "cand").diff
+    dest = build_candidate_workspace(repo, diff, tmp_path / "ws")
+
+    assert not (dest / "link.py").exists()

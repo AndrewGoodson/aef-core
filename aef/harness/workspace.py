@@ -36,9 +36,7 @@ def build_candidate_workspace(
     dest = dest.resolve()
     dest.mkdir(parents=True, exist_ok=True)
 
-    repo.run("archive", "--format=tar", "-o", str(dest / "_base.tar"), diff.base_sha)
-    _extract_tar(dest / "_base.tar", dest)
-    (dest / "_base.tar").unlink()
+    _materialise_tree(repo, diff.base_sha, dest)
 
     for entry in diff.entries:
         zone = classify_path(entry.path, policy)
@@ -62,16 +60,36 @@ def build_candidate_workspace(
     return dest
 
 
-def _extract_tar(archive: Path, dest: Path) -> None:
-    import tarfile
+def _materialise_tree(repo: GitRepo, sha: str, dest: Path) -> None:
+    """Write every blob at `sha` into `dest`, enumerated from the tree.
 
-    with tarfile.open(archive) as tar:
-        for member in tar.getmembers():
-            # `git archive` cannot emit these, but the check costs nothing
-            # and this function writes to disk.
-            if member.islnk() or member.issym() or Path(member.name).is_absolute():
-                continue
-            target = (dest / member.name).resolve()
-            if not target.is_relative_to(dest):
-                continue
-            tar.extract(member, dest, filter="data")
+    Deliberately NOT `git archive`. Archive honours `export-ignore` in
+    `.gitattributes`, so a repo that excludes `tests/` from its sdist — an
+    ordinary, sensible thing to do — would get a workspace with its test
+    suite missing, and G1 would run a suite that no longer contains the test
+    that fails. Confirmed by building such a repo, not inferred: with
+    `tests/ export-ignore` at the base ref, the materialised workspace had no
+    tests at all and reported nothing wrong.
+
+    `ls-tree` reports the tree as committed and ignores export attributes, so
+    what lands is what the base ref actually contains.
+    """
+    listing = repo.run_bytes("ls-tree", "-r", "-z", sha)
+    dest_resolved = dest.resolve()
+    for record in listing.decode("utf-8", errors="replace").split("\0"):
+        if not record:
+            continue
+        meta, _, path = record.partition("\t")
+        parts = meta.split()
+        if len(parts) < 3:  # pragma: no cover - git does not emit this
+            continue
+        mode = parts[0]
+        # Only regular files land. Symlinks (120000) and gitlinks (160000)
+        # are refused for the same reason candidate.py refuses them.
+        if mode not in ("100644", "100755"):
+            continue
+        target = (dest / path).resolve()
+        if not target.is_relative_to(dest_resolved):  # pragma: no cover - git paths are relative
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(repo.run_bytes("show", f"{sha}:{path}"))

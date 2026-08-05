@@ -125,6 +125,21 @@ class G0StaticSafety(Gate):
         max_lines = ctx.limits.get("max_changed_lines", self.max_changed_lines)
         max_files = ctx.limits.get("max_changed_files", self.max_changed_files)
 
+        unmeasurable = diff.unmeasurable
+        if unmeasurable:
+            return GateResult(
+                gate=self.id,
+                outcome=GateOutcome.FAIL,
+                reason=(
+                    "git will not compute a change size for one or more files, so the "
+                    "size budget cannot be applied — an unmeasurable change is rejected, "
+                    "not counted as zero"
+                ),
+                evidence=tuple(
+                    f"{p}: size not computable (binary or marked binary)" for p in unmeasurable
+                ),
+            )
+
         over: list[str] = []
         if diff.changed_lines > max_lines:
             over.append(f"{diff.changed_lines} changed lines exceeds the budget of {max_lines}")
