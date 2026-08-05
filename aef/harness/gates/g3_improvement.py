@@ -106,11 +106,44 @@ class G3Improvement(Gate):
         )
 
     def _check_cost(self, verdict: CohortVerdict) -> GateResult | None:
+        """Cost is SELF-REPORTED, and this rule says so.
+
+        `cost_tokens` is `sum(p.token_cost for p in state.provenance)`, and
+        `Provenance` is written by agent-authored nodes in their own
+        `StateDelta`. Nothing else produces it. So a candidate that deletes
+        `provenance=[...]` reports zero tokens and this rule cannot bind —
+        the same shape as ADR 0080's `recovered` marker, on the cost axis
+        (ADR 0092).
+
+        Deleting the reporting is not a cheaper agent, it is an agent that
+        stopped saying. An incumbent that reported and a candidate that does
+        not is therefore treated as a cost violation, not a free pass. The
+        rule remains unenforceable against an agent that never reported at
+        all, and that limit is stated in the gate's own evidence rather than
+        left for someone to discover.
+        """
         incumbent_cost = verdict.incumbent.cost_tokens
         if incumbent_cost <= 0:
             # Nothing to compare against; say so rather than dividing by zero
             # or silently treating "unmeasured" as "free".
             return None
+
+        if verdict.candidate.cost_tokens <= 0:
+            return GateResult(
+                gate=self.id,
+                outcome=GateOutcome.FAIL,
+                reason=(
+                    f"the incumbent reported {incumbent_cost} tokens and the candidate "
+                    f"reports none. Cost is self-reported from Provenance the agent emits, "
+                    f"so dropping it reads as free rather than cheap — a candidate that "
+                    f"stopped reporting has not shown it costs less"
+                ),
+                evidence=(
+                    f"incumbent {incumbent_cost} tokens, candidate 0",
+                    *verdict.report,
+                ),
+            )
+
         ratio = verdict.candidate.cost_tokens / incumbent_cost
         if ratio <= self.max_cost_ratio:
             return None

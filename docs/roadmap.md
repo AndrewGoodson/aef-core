@@ -47,7 +47,11 @@ directional context, not commitments). Each phase lists what's real
   `InMemoryMemoryStore`, real `Mem0Adapter` — `aef/services/memory/`
   (see ADR 0004)
 - [x] Basic eval harness: `Evaluator` interface, `EvaluationRecord`, real
-  `RuleBasedEvaluator` with pluggable `domain_gates` —
+  `RuleBasedEvaluator` with `domain_gates` pluggable **in code** — nothing
+  populates them from `aef.yaml` (`evaluator.suites` is read by nothing), so
+  `record.domain_gates` is `{}` in every shipped path and `score_of`'s gate
+  branch does not fire. Pass them to the constructor to use them (ADR 0014,
+  ADR 0092) —
   `aef/services/eval/`
 - [x] Per-agent config: `AgentConfig` (report §16, verbatim + `evolution`),
   unknown-key rejection, `agent.example.yaml` + `agent.azure_sec.yaml` —

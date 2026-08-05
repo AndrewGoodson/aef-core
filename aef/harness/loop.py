@@ -59,6 +59,7 @@ from aef.harness.review import Decision, Disposition, decide, render_report
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
 from aef.harness.suite import CohortBuilder, SuiteError
 from aef.harness.zones import ZonePolicy
+from aef.observability.base import Tracer
 from aef.security.tool import PolicyConfig
 
 # The gates that judge a candidate WITHOUT executing it.
@@ -120,6 +121,12 @@ class LoopConfig:
     # Path to the agent config, READ FROM THE BASE REF. `None` means
     # deny-by-default, which is what an unconfigured production run gets.
     config_path: str | None = None
+    # One span per gate run, when the owner wants them. Injected rather than
+    # constructed, for the same reason nodes take a Tracer via Services.
+    tracer: Tracer | None = None
+    # Per-gate overrides, e.g. G0's max_changed_lines. Declared on
+    # `GateContext` since ADR 0044 and never supplied.
+    gate_limits: dict[str, Any] = field(default_factory=dict)
     gates: tuple[Gate, ...] | None = None
 
     def __post_init__(self) -> None:
@@ -522,6 +529,12 @@ def gate(
     )
 
     ctx = GateContext(
+        # `tracer` had exactly one production construction site and it passed
+        # neither of these, so `_run_traced`'s traced branch never executed
+        # outside a test and G0's `max_changed_lines`/`max_changed_files`
+        # overrides were unreachable by construction (ADR 0092).
+        tracer=config.tracer,
+        limits=dict(config.gate_limits),
         repo=config.repo,
         base_ref=config.base_ref,
         head_ref=head_ref,

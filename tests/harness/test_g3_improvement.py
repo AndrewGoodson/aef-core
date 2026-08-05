@@ -11,6 +11,7 @@ import math
 import pytest
 
 from aef.harness.evaluation import CohortVerdict, ScoreSet, build_score_set, score_of
+from aef.harness.gates.base import GateOutcome
 from aef.harness.gates.g3_improvement import G3Improvement
 from aef.services.eval.base import EvaluationRecord
 
@@ -217,3 +218,82 @@ def test_an_unmeasured_incumbent_cost_is_not_treated_as_free() -> None:
     result = G3Improvement(verdict=_verdict(candidate, incumbent, _cohort([0.5] * 6))).run(None)  # type: ignore[arg-type]
     assert result.passed
     assert math.isfinite(candidate.mean)
+
+
+# --------------------------------------------------------------------------
+# ADR 0092 — cost is self-reported, and dropping it is not getting cheaper
+# --------------------------------------------------------------------------
+
+
+def test_a_candidate_cannot_zero_the_cost_rule_by_dropping_provenance() -> None:
+    """`cost_tokens` is `sum(p.token_cost for p in state.provenance)`, and
+    `Provenance` is written by agent-authored nodes in their own
+    `StateDelta`. Nothing else produces it. So deleting `provenance=[...]`
+    reported zero tokens and the cost rule could not bind — the same shape as
+    ADR 0080's `recovered` marker, on the cost axis.
+
+    Deleting the reporting is not a cheaper agent; it is an agent that
+    stopped saying.
+    """
+    incumbent = ScoreSet(label="incumbent", per_scenario={"s1": 0.5}, cost_tokens=100)
+    cohort = tuple(
+        ScoreSet(label=f"c{i}", per_scenario={"s1": 0.4}, cost_tokens=100) for i in range(5)
+    )
+    dropped = ScoreSet(label="candidate", per_scenario={"s1": 1.0}, cost_tokens=0)
+
+    result = G3Improvement(
+        verdict=CohortVerdict(candidate=dropped, incumbent=incumbent, cohort=cohort)
+    ).run(None)  # type: ignore[arg-type]
+
+    assert result.outcome is GateOutcome.FAIL
+    assert "reports none" in result.reason
+
+
+def test_an_honest_cost_blow_up_is_still_caught() -> None:
+    """The control that matters: the new branch must not have replaced the
+    rule it was protecting."""
+    incumbent = ScoreSet(label="incumbent", per_scenario={"s1": 0.5}, cost_tokens=100)
+    cohort = tuple(
+        ScoreSet(label=f"c{i}", per_scenario={"s1": 0.4}, cost_tokens=100) for i in range(5)
+    )
+    expensive = ScoreSet(label="candidate", per_scenario={"s1": 1.0}, cost_tokens=1000)
+
+    result = G3Improvement(
+        verdict=CohortVerdict(candidate=expensive, incumbent=incumbent, cohort=cohort)
+    ).run(None)  # type: ignore[arg-type]
+
+    assert result.outcome is GateOutcome.FAIL
+    assert "cost blow-up" in result.reason
+
+
+def test_an_honest_candidate_within_budget_still_passes() -> None:
+    """And the control for the control: a gate that fails everything is not
+    a gate."""
+    incumbent = ScoreSet(label="incumbent", per_scenario={"s1": 0.5}, cost_tokens=100)
+    cohort = tuple(
+        ScoreSet(label=f"c{i}", per_scenario={"s1": 0.4}, cost_tokens=100) for i in range(5)
+    )
+    fine = ScoreSet(label="candidate", per_scenario={"s1": 1.0}, cost_tokens=120)
+
+    result = G3Improvement(
+        verdict=CohortVerdict(candidate=fine, incumbent=incumbent, cohort=cohort)
+    ).run(None)  # type: ignore[arg-type]
+
+    assert result.outcome is GateOutcome.PASS
+
+
+def test_an_incumbent_that_never_reported_leaves_the_rule_unenforceable() -> None:
+    """Stated as a test so the limit is recorded rather than discovered. An
+    agent that has never emitted Provenance gives this rule nothing to
+    compare against, and no amount of gate logic can invent it."""
+    incumbent = ScoreSet(label="incumbent", per_scenario={"s1": 0.5}, cost_tokens=0)
+    cohort = tuple(
+        ScoreSet(label=f"c{i}", per_scenario={"s1": 0.4}, cost_tokens=0) for i in range(5)
+    )
+    candidate = ScoreSet(label="candidate", per_scenario={"s1": 1.0}, cost_tokens=999_999)
+
+    result = G3Improvement(
+        verdict=CohortVerdict(candidate=candidate, incumbent=incumbent, cohort=cohort)
+    ).run(None)  # type: ignore[arg-type]
+
+    assert result.outcome is GateOutcome.PASS, "nothing to compare against"

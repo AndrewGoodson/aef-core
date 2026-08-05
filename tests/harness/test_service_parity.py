@@ -127,3 +127,94 @@ def test_the_gate_does_not_write_to_the_adopters_stores() -> None:
     services = agent_services()
     assert isinstance(services.memory, InMemoryMemoryStore)
     assert isinstance(services.durability, InMemoryDurabilityBackend)
+
+
+# --------------------------------------------------------------------------
+# ADR 0092 — declared injection points nothing injected into
+# --------------------------------------------------------------------------
+
+
+def test_the_gate_context_receives_a_tracer_when_one_is_configured(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """`GateContext.tracer` had exactly one production construction site and
+    it passed nothing, so `_run_traced`'s traced branch never executed
+    outside a test — the observability of the gate pipeline was unreachable
+    by construction (ADR 0092)."""
+    import subprocess
+    from datetime import UTC, datetime
+
+    from aef.harness.git import GitRepo
+    from aef.harness.loop import LoopConfig, LoopPaths, gate
+    from aef.observability.in_memory import InMemoryTracer
+
+    repo = tmp_path / "repo"
+    (repo / "agents" / "demo").mkdir(parents=True)
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+    subprocess.run(
+        ["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True, capture_output=True
+    )
+    git("config", "user.email", "t@t")
+    git("config", "user.name", "t")
+    (repo / "agents" / "demo" / "graph.py").write_text("RETRY = 3\n")
+    git("add", "-A")
+    git("commit", "-qm", "i")
+    git("checkout", "-q", "-b", "cand")
+    (repo / "agents" / "demo" / "graph.py").write_text("RETRY = 4\n")
+    git("commit", "-qam", "c")
+    git("checkout", "-q", "main")
+
+    tracer = InMemoryTracer()
+    config = LoopConfig(
+        repo=GitRepo(root=repo),
+        paths=LoopPaths(root=tmp_path / "state"),
+        build_commands=(("python", "-c", "pass"),),
+        tracer=tracer,
+    )
+    gate(config, "cand", now=datetime(2026, 3, 1, tzinfo=UTC), workdir=tmp_path / "w")
+
+    names = [span.name for span in tracer.spans]
+    assert names, "no gate span was emitted"
+    assert all(name.startswith("aef.harness.gate.") for name in names), names
+
+
+def test_gate_limits_reach_the_gate_that_reads_them(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """`GateContext.limits` was declared and never supplied, so G0's
+    `max_changed_lines` / `max_changed_files` overrides could not be set by
+    any caller."""
+    import subprocess
+    from datetime import UTC, datetime
+
+    from aef.harness.git import GitRepo
+    from aef.harness.loop import LoopConfig, LoopPaths, gate
+
+    repo = tmp_path / "repo"
+    (repo / "agents" / "demo").mkdir(parents=True)
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+    subprocess.run(
+        ["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True, capture_output=True
+    )
+    git("config", "user.email", "t@t")
+    git("config", "user.name", "t")
+    (repo / "agents" / "demo" / "graph.py").write_text("RETRY = 3\n")
+    git("add", "-A")
+    git("commit", "-qm", "i")
+    git("checkout", "-q", "-b", "cand")
+    (repo / "agents" / "demo" / "graph.py").write_text("RETRY = 4\nEXTRA = 1\nMORE = 2\n")
+    git("commit", "-qam", "c")
+    git("checkout", "-q", "main")
+
+    config = LoopConfig(
+        repo=GitRepo(root=repo),
+        paths=LoopPaths(root=tmp_path / "state"),
+        build_commands=(("python", "-c", "pass"),),
+        gate_limits={"max_changed_lines": 1},
+    )
+    run = gate(config, "cand", now=datetime(2026, 3, 1, tzinfo=UTC), workdir=tmp_path / "w")
+
+    assert run.result.ran == ("G0",)
+    assert not run.result.passed
