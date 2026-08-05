@@ -67,7 +67,11 @@ def test_a_policy_denial_is_counted_separately_from_a_plain_error() -> None:
     # PolicyEngine is deny-by-default; a candidate that starts tripping it
     # has changed behaviour that matters even if the count of errors is
     # otherwise unremarkable.
-    state = _state(errors=[{"error": "tool call denied by policy: scope not declared"}])
+    # The refusal is MARKED by the node, not inferred from the message —
+    # inference was measured as anti-correlated and removed (ADR 0064).
+    state = _state(
+        errors=[{"error": "tool call denied by policy: scope not declared", "policy_denied": True}]
+    )
     outcome = classify(state, trace=None, terminated=True)
     assert outcome.error_count == 1
     assert outcome.policy_denials == 1
@@ -373,3 +377,34 @@ def test_the_default_expectation_is_unspecified() -> None:
     assert Comparison(scenario_id="s1", incumbent=_outcome(), candidate=_outcome()).expected == (
         "unspecified"
     )
+
+
+# ADR 0064 — policy denials are marked, not guessed from text
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "connection denied by upstream DNS",
+        "the policy document could not be parsed",
+        "user denied the cookie banner",
+    ],
+)
+def test_an_unrelated_error_mentioning_policy_words_is_not_a_denial(message: str) -> None:
+    """Substring matching flagged 3 of 3 of these. A signal that fires more
+    often on the wrong input than the right one is worse than none, because
+    it gets acted on."""
+    outcome = classify(_state(errors=[{"error": message}]), None, terminated=True)
+    assert outcome.policy_denials == 0
+
+
+def test_a_marked_entry_is_counted_exactly() -> None:
+    state = _state(errors=[{"error": "refused", "policy_denied": True}])
+    assert classify(state, None, terminated=True).policy_denials == 1
+
+
+def test_a_marked_entry_needs_no_error_text() -> None:
+    # Substring matching missed structured entries with no "error" key.
+    state = _state(errors=[{"code": "E_SCOPE", "policy_denied": True}])
+    assert classify(state, None, terminated=True).policy_denials == 1

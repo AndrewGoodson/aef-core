@@ -30,10 +30,15 @@ from typing import Any
 from aef.kernel.executor import NodeExecutionRecord
 from aef.state import AEFState
 
-# Substrings that mark a policy refusal in an error entry. `PolicyEngine` is
-# deny-by-default and records its reason (`security/tool.py`); a candidate
-# that starts tripping it has changed behaviour that matters.
-_POLICY_MARKERS = ("policy", "denied", "requires_hitl", "not approved", "human approval")
+# The key a node sets when a call was refused by policy. Explicit, because
+# guessing from error TEXT was measured and is roughly ANTI-correlated: it
+# missed 4 of 5 real refusals ("scope not granted", "HITL gate blocked",
+# "guardrail rejected", a structured entry with no "error" key) and falsely
+# flagged 3 of 3 innocuous ones ("connection denied by upstream DNS", "the
+# policy document could not be parsed", "user denied the cookie banner").
+# A signal that fires more often on the wrong input than the right one is
+# worse than no signal, because it is acted on (ADR 0064).
+POLICY_DENIED_KEY = "policy_denied"
 
 
 @dataclass(frozen=True)
@@ -75,8 +80,11 @@ class Outcome:
 
 
 def _is_policy_denial(entry: dict[str, Any]) -> bool:
-    text = str(entry.get("error", "")).lower()
-    return any(marker in text for marker in _POLICY_MARKERS)
+    """Exact, not inferred. A node that was refused by `PolicyEngine` sets
+    `policy_denied=True` on the error entry it appends; anything else is not
+    counted. Under-counting an unmarked refusal is a known and bounded gap —
+    mis-counting an unrelated timeout as one was neither."""
+    return entry.get(POLICY_DENIED_KEY) is True
 
 
 def classify(

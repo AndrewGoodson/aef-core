@@ -210,3 +210,34 @@ def test_a_zero_rate_budget_is_refused() -> None:
 def test_a_nonpositive_window_is_refused() -> None:
     with pytest.raises(ValueError, match="window"):
         DriftBudget(window=timedelta(0))
+
+
+# --------------------------------------------------------------------------
+# ADR 0064 — insertions cost one line, wherever they land
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("position", [0, 50, 99])
+def test_a_single_insertion_costs_one_line_wherever_it_lands(position: int) -> None:
+    """Position-wise comparison treated an insertion as changing every line
+    after it: one line at the top of a 100-line file scored 1.000 against a
+    true 0.010. Any candidate adding an import tripped the drift budget."""
+    baseline = {"a.py": b"\n".join(f"line{i}".encode() for i in range(100))}
+    lines = [f"line{i}".encode() for i in range(100)]
+    lines.insert(position, b"NEW")
+
+    drift = structural_drift(baseline, {"a.py": b"\n".join(lines)})
+    assert drift == pytest.approx(1 / 101, abs=0.002)
+
+
+def test_a_deletion_also_costs_one_line() -> None:
+    baseline = {"a.py": b"\n".join(f"line{i}".encode() for i in range(100))}
+    lines = [f"line{i}".encode() for i in range(100)]
+    del lines[0]
+    assert structural_drift(baseline, {"a.py": b"\n".join(lines)}) == pytest.approx(0.01, abs=0.002)
+
+
+def test_a_full_rewrite_is_still_total_drift() -> None:
+    baseline = {"a.py": b"\n".join(f"line{i}".encode() for i in range(100))}
+    rewritten = {"a.py": b"\n".join(f"other{i}".encode() for i in range(100))}
+    assert structural_drift(baseline, rewritten) == 1.0

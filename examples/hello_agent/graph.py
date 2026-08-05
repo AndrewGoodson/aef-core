@@ -100,7 +100,12 @@ def search_node(state: AEFState, ctx: Context, services: Services) -> tuple[Stat
     decision = services.require_policy_engine().evaluate(tool, call)
 
     if decision.decision is not PolicyDecision.ALLOW:
-        error_delta = StateDelta(errors=[{"node_id": ctx.node_id, "error": decision.reason}])
+        # `policy_denied` is what G2 counts; inferring it from the error text
+        # was measured as anti-correlated and removed (ADR 0064). A node that
+        # is refused by PolicyEngine must say so explicitly.
+        error_delta = StateDelta(
+            errors=[{"node_id": ctx.node_id, "error": decision.reason, "policy_denied": True}]
+        )
         return error_delta, "summarize"
 
     result = tool.invoke(call.arguments)
