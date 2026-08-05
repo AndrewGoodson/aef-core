@@ -67,6 +67,20 @@ class GitRepo:
             return False
         return True
 
+    def list_tree(self, ref: str, prefix: str) -> tuple[str, ...]:
+        """Every file path under `prefix` as of `ref`.
+
+        Exists because G5's drift metric compares two dicts of path -> bytes
+        and is only meaningful when both describe the **same tree**. Feeding
+        it a whole-tree baseline and a changed-files-only candidate made every
+        untouched file read as deleted (ADR 0074).
+        """
+        try:
+            out = self.run("ls-tree", "-r", "--name-only", "-z", ref, "--", prefix)
+        except GitError:
+            return ()
+        return tuple(p for p in out.split("\0") if p)
+
     def raw_diff(self, base: str, head: str) -> bytes:
         """`git diff --raw -z --no-renames base...head`.
 

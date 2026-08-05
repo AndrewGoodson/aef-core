@@ -108,7 +108,6 @@ def _config(repo: GitRepo, tmp_path: Path) -> LoopConfig:
         entrypoint="agents.demo.graph:build_graph",
         cohort_size=5,
         cohort_seed=11,
-        now_for_gates=NOW,
     )
 
 
@@ -125,8 +124,8 @@ def _run(config: LoopConfig, tmp_path: Path, head: str):
 
     original = loop_module._gates_with_evidence
 
-    def patched(cfg, verdict, workdir):  # type: ignore[no-untyped-def]
-        built, note = original(cfg, verdict, workdir)
+    def patched(cfg, verdict, workdir, now):  # type: ignore[no-untyped-def]
+        built, note = original(cfg, verdict, workdir, now)
         return (
             tuple(
                 G1Builds(commands=(("python", "-c", "import agents.demo.graph"),))

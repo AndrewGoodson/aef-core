@@ -15,11 +15,12 @@ outcomes, and a workflow that cannot tell them apart will retry the first.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from aef.harness.corpus import Split, load_corpus
+from aef.harness.corpus import Expected, Split, load_corpus
 from aef.harness.git import GitRepo
 from aef.harness.loop import (
     EXIT_HALTED,
@@ -59,6 +60,7 @@ def _config(args: argparse.Namespace) -> LoopConfig:
         corpus=load_corpus(corpus_dir) if corpus_dir and corpus_dir.is_dir() else None,
         network_isolated=bool(getattr(args, "network_isolated", False)),
         build_commands=_build_commands(args),
+        entrypoint=getattr(args, "entrypoint", None),
         # Never wired to a flag. Enabling Tier-1 auto-merge is an owner
         # action against the source, not something a CI invocation can do by
         # passing an argument (ADR 0045).
@@ -157,7 +159,17 @@ def cmd_record(args: argparse.Namespace) -> int:
     recorded = record_to_corpus(
         Path(args.corpus),
         graph,
-        AEFState(run_id=args.scenario_id, agent_id=args.agent_id, objective=args.objective),
+        AEFState(
+            run_id=args.scenario_id,
+            agent_id=args.agent_id,
+            objective=args.objective,
+            # Without this the recorder could only ever run the agent with an
+            # empty working memory — so every recorded scenario landed on the
+            # agent's happy path, and the failing cases LOOP.md tells owners to
+            # record (and every tripwire) were unreachable from the CLI that
+            # records them (ADR 0074).
+            working_memory=json.loads(args.working_memory) if args.working_memory else {},
+        ),
         # Same wiring as `aef run`: an agent following obligation 2 has a
         # reflect node, and a bare Services() cannot run one. Recording is
         # useless if it cannot record the agent the adopter was told to build
@@ -172,6 +184,7 @@ def cmd_record(args: argparse.Namespace) -> int:
         recorded_at=datetime.now(UTC),
         notes=args.notes,
         allow_holdout=args.i_am_spending_the_holdout,
+        expected=Expected(args.expected),
     )
     print(f"recorded {recorded.scenario.id} ({recorded.scenario.split.value}) -> {recorded.path}")
     print(f"  {len(recorded.scenario.trace)} node execution(s) pinned")
@@ -310,6 +323,16 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_gate.add_argument("--workdir", required=True, help="scratch dir for gate execution")
     p_gate.add_argument("--corpus", default=None)
     p_gate.add_argument(
+        "--entrypoint",
+        default=None,
+        help=(
+            "module:factory that builds your graph, e.g. agents.mine.graph:build_graph. "
+            "G2 and G3 refuse without it — they have to execute the corpus to have anything "
+            "to say. There is deliberately no default: one would name a layout your repo "
+            "may not have and fail as an import error inside a gate rejection."
+        ),
+    )
+    p_gate.add_argument(
         "--network-isolated",
         action="store_true",
         help="attest that the caller (a CI container) provides network isolation. "
@@ -353,7 +376,28 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_record.add_argument("--objective", required=True)
     p_record.add_argument("--agent-id", default="recorder")
     p_record.add_argument("--split", default="train", choices=[s.value for s in Split])
+    p_record.add_argument(
+        "--expected",
+        default=Expected.UNSPECIFIED.value,
+        choices=[e.value for e in Expected],
+        help=(
+            "the OWNER's claim about this task, which no recording can supply. "
+            "must_fail makes the scenario a TRIPWIRE: a task genuinely beyond the agent's "
+            "remit, where claiming success is a lie rather than an improvement. Without at "
+            "least one, the gates cannot detect reward hacking (ADR 0060)."
+        ),
+    )
     p_record.add_argument("--notes", default="")
+    p_record.add_argument(
+        "--working-memory",
+        default=None,
+        help=(
+            "JSON object seeding AEFState.working_memory, e.g. '{\"difficulty\": 99}'. "
+            "This is how you drive the agent into the FAILING cases worth recording — a "
+            "corpus where everything already passes cannot demonstrate an improvement, and "
+            "a tripwire has to be a task the agent genuinely cannot do."
+        ),
+    )
     p_record.add_argument(
         "--i-am-spending-the-holdout",
         action="store_true",
@@ -396,6 +440,11 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_cycle.add_argument("--module", default=None, help="module exposing build_graph()")
     p_cycle.add_argument("--runs", default=None, help="dir from `aef run --record-runs`")
     p_cycle.add_argument("--corpus", default=None)
+    p_cycle.add_argument(
+        "--entrypoint",
+        default=None,
+        help="module:factory that builds your graph; G2/G3 refuse without it",
+    )
     p_cycle.add_argument("--agent-path", default="agents/demo/graph.py")
     p_cycle.add_argument(
         "--memory",

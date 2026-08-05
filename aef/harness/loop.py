@@ -103,11 +103,13 @@ class LoopConfig:
     # HARD-STOP. Present so the merge path is reachable in a test; no caller
     # in this repo passes True. Turning it on is an owner action (ADR 0045).
     tier1_enabled: bool = False
-    entrypoint: str = "agents.graph:build_graph"
+    # No default. A default naming a layout the adopting repo does not have
+    # fails as an import traceback buried in a ledger note, and reads as an
+    # ordinary gate rejection (ADR 0069 defect 3, ADR 0074).
+    entrypoint: str | None = None
     build_commands: tuple[tuple[str, ...], ...] | None = None
     cohort_size: int = 5
     cohort_seed: int = 0
-    now_for_gates: datetime | None = None
     gates: tuple[Gate, ...] | None = None
 
     def __post_init__(self) -> None:
@@ -203,7 +205,7 @@ def _halt(config: LoopConfig, *, at: datetime, proposal_id: str, reasons: tuple[
 
 
 def _gates_with_evidence(
-    config: LoopConfig, verdict: CandidateVerdict, workdir: Path
+    config: LoopConfig, verdict: CandidateVerdict, workdir: Path, now: datetime
 ) -> tuple[tuple[Gate, ...], str]:
     """Attach real evidence to G2, G3 and G5.
 
@@ -213,15 +215,31 @@ def _gates_with_evidence(
     feeding them, which meant the pipeline could not pass a candidate even
     with a perfect corpus.
 
-    Building the cohort costs N+2 corpus passes and is skipped when the
-    candidate is already going to be rejected by a cheaper gate — but it is
-    NOT skipped merely because it is expensive. A gate that is dropped when
-    it is inconvenient is not a gate.
+    `now` is the caller's clock, threaded down rather than read from config.
+    It used to come from `LoopConfig.now_for_gates`, which **no CLI command
+    ever set** — so G5 ran with `now=None`, failed, and the fail-fast pipeline
+    stopped before G2 and G3. Those two gates had never executed outside a
+    test (ADR 0074).
+
+    G5 is wired **before** the cohort is attempted, because a cohort failure
+    is not evidence about the baseline: wiring it afterwards meant one
+    `SuiteError` disabled three gates and made G5 report a missing baseline
+    that was sitting in the archive.
+
+    Building the cohort costs N+2 corpus passes. It is NOT skipped merely
+    because it is expensive — a gate that is dropped when it is inconvenient
+    is not a gate.
     """
     if config.gates is not None:
         return config.gates, "gates supplied explicitly"
 
-    gates = list(config.default_gates())
+    gates = _with_g5(config, verdict, now, list(config.default_gates()))
+
+    if config.entrypoint is None:
+        return tuple(gates), (
+            "no entrypoint configured: G2/G3 will refuse. Pass --entrypoint "
+            "<module>:<factory> naming the function that builds your graph."
+        )
     if config.corpus is None or not config.corpus.scenarios:
         return tuple(gates), "no corpus: G2/G3 will refuse for lack of evidence"
 
@@ -244,9 +262,9 @@ def _gates_with_evidence(
     except SuiteError as exc:
         # Reported, not swallowed: G2/G3 stay in the pipeline and refuse,
         # so the candidate escalates rather than slipping through ungated.
+        # G5 keeps its evidence — see the docstring.
         return tuple(gates), f"could not build evidence ({exc}); G2/G3 will refuse"
 
-    baseline = _blessed_baseline(config)
     rebuilt: list[Gate] = []
     for g in gates:
         if isinstance(g, G2OutcomeNonRegression):
@@ -261,18 +279,28 @@ def _gates_with_evidence(
             # passed with p95 computed over two samples. A floor that moves
             # with the thing it floors is not a floor (ADR 0063).
             rebuilt.append(G3Improvement(verdict=cohort_verdict))
-        elif isinstance(g, G5RateAndDrift) and baseline is not None:
-            rebuilt.append(
-                G5RateAndDrift(
-                    baseline_files=baseline,
-                    candidate_files=_candidate_files(config, verdict),
-                    history=_accepted_history(config),
-                    now=config.now_for_gates,
-                )
-            )
         else:
             rebuilt.append(g)
     return tuple(rebuilt), note
+
+
+def _with_g5(
+    config: LoopConfig, verdict: CandidateVerdict, now: datetime, gates: list[Gate]
+) -> list[Gate]:
+    baseline = _blessed_baseline(config)
+    if baseline is None:
+        return gates
+    return [
+        G5RateAndDrift(
+            baseline_files=baseline,
+            candidate_files=_candidate_files(config, verdict),
+            history=_accepted_history(config),
+            now=now,
+        )
+        if isinstance(g, G5RateAndDrift)
+        else g
+        for g in gates
+    ]
 
 
 def _blessed_baseline(config: LoopConfig) -> dict[str, bytes] | None:
@@ -284,11 +312,20 @@ def _blessed_baseline(config: LoopConfig) -> dict[str, bytes] | None:
 
 
 def _candidate_files(config: LoopConfig, verdict: CandidateVerdict) -> dict[str, bytes]:
-    return {
-        e.path: config.repo.run_bytes("show", f"{verdict.diff.head_sha}:{e.path}")
-        for e in verdict.diff.entries
-        if not e.is_deletion
-    }
+    """The candidate's **whole Zone A tree**, not just the files it changed.
+
+    Drift is `structural_drift(baseline, candidate)`, which unions the two key
+    sets. Passing only the changed files made every blessed file the candidate
+    left alone score as fully deleted, and every added file score against a
+    denominator missing the untouched tree — so the *first* candidate after a
+    blessing was rejected for 0.583 drift it had not caused (ADR 0074).
+    """
+    root = config.zone_policy.agent_root
+    paths = set(config.repo.list_tree(verdict.diff.head_sha, root))
+    # A deletion inside Zone A is real drift and must survive: it is absent
+    # from the head tree by definition, so the union with the baseline's keys
+    # is what charges it.
+    return {p: config.repo.run_bytes("show", f"{verdict.diff.head_sha}:{p}") for p in sorted(paths)}
 
 
 def _accepted_history(config: LoopConfig) -> tuple[AcceptedChange, ...]:
@@ -325,7 +362,7 @@ def gate(config: LoopConfig, head_ref: str, *, now: datetime, workdir: Path) -> 
         zone_policy=config.zone_policy,
         sandbox_policy=config.sandbox_policy(),
     )
-    gates, evidence_note = _gates_with_evidence(config, verdict, workdir)
+    gates, evidence_note = _gates_with_evidence(config, verdict, workdir, now)
     result = run_pipeline(gates, ctx)
 
     ledger.append(
@@ -339,7 +376,11 @@ def gate(config: LoopConfig, head_ref: str, *, now: datetime, workdir: Path) -> 
                 {"gate": r.gate, "outcome": r.outcome.value, "reason": r.reason}
                 for r in result.results
             ],
-            "security_event": bool(result.security_events),
+            # NOT `security_event`. The REJECTED entry below carries that key,
+            # and the digest counts one per entry carrying it — so a single
+            # incident was reported to the owner as two (ADR 0074). The gate
+            # results above already record which gate raised it.
+            "security_gates": [r.gate for r in result.results if r.security_event],
             "evidence": evidence_note,
         },
     )

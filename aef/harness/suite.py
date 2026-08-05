@@ -228,11 +228,17 @@ class CohortBuilder:
         except ProposalError as exc:
             raise SuiteError(f"cannot build a control cohort: {exc}") from exc
 
+        # Controls are materialised from the INCUMBENT, not from the candidate
+        # workspace. Overlaying the candidate diff and then replacing only
+        # `targets[0]` left every control carrying the candidate's changes to
+        # files 1..n — so on a two-file candidate all five controls scored
+        # identically to the candidate, p95 rose to meet it, and G3 could
+        # never pass. This is the same failure the comment above records for
+        # the single-file case; the fix had been applied to one file only
+        # (ADR 0074).
         made: list[tuple[str, Path]] = []
         for control in controls:
-            workspace = build_candidate_workspace(
-                self.repo, diff, workroot / control.id, self.zone_policy
-            )
+            workspace = _materialise_base(self.repo, diff, workroot / control.id)
             (workspace / source_path).write_text(control.proposed)
             made.append((control.id, workspace))
         return made

@@ -19,6 +19,8 @@ from pathlib import Path
 
 from aef.harness import archive, ledger
 from aef.harness.corpus import Expected, load_corpus
+from aef.harness.git import GitRepo
+from aef.harness.zones import DEFAULT_AGENT_ROOT
 
 
 class BlessError(RuntimeError):
@@ -135,9 +137,10 @@ def preflight(
                 met=bool(scenarios) and bool(tripwires),
                 detail=f"{len(scenarios)} scenario(s), {len(tripwires)} tripwire(s)",
                 fix=(
-                    "aef loop record <module> --corpus corpus --scenario-id <id> "
-                    "--objective '...' , then label one MUST_FAIL. Without a tripwire "
-                    "the gates cannot detect reward hacking (ADR 0060)."
+                    "aef loop record <module> --corpus corpus --scenario-id tripwire-1 "
+                    "--objective '<a task beyond this agent>' --split validation "
+                    "--expected must_fail --working-memory '{\"difficulty\": 99}'. "
+                    "Without a tripwire the gates cannot detect reward hacking (ADR 0060)."
                 ),
             )
         )
@@ -196,6 +199,22 @@ def preflight(
     return Preflight(obligations=tuple(checks))
 
 
+def _zone_a_files(repo: GitRepo, ref: str, agent_root: str) -> dict[str, bytes]:
+    """Every file under the Zone A root **as of `ref`**, keyed by repo path.
+
+    Read from git, not from the working tree, for two reasons. It is the same
+    source `_candidate_files` reads, so G5's two inputs describe the same tree
+    the same way — reading one side from disk let untracked build output
+    (a `__pycache__` the candidate had committed, in the run that found this)
+    appear on one side only and charged 0.430 drift for a two-line change.
+    And a baseline blessed from a dirty working tree records a state that
+    exists nowhere in history, so nothing could ever be compared against it
+    reproducibly (ADR 0074).
+    """
+    paths = repo.list_tree(ref, agent_root)
+    return {p: repo.run_bytes("show", f"{ref}:{p}") for p in sorted(paths)}
+
+
 def bless(
     *,
     repo_root: Path,
@@ -204,8 +223,18 @@ def bless(
     graph_id: str,
     at: datetime,
     note: str = "",
+    agent_root: str = DEFAULT_AGENT_ROOT,
+    ref: str = "HEAD",
 ) -> archive.ArchiveEntry:
     """Archive the current Zone A state as the owner-blessed baseline.
+
+    **The whole Zone A tree, not one file.** G5 measures drift as
+    `structural_drift(baseline, candidate)`, which unions the two key sets;
+    archiving a single file while the candidate side describes the whole tree
+    made every other Zone A file read as deleted, and the *first* candidate
+    after a blessing was rejected for drift it had not caused (ADR 0074).
+    Baseline and candidate must describe the same tree or the metric is
+    measuring the difference between two questions.
 
     Refuses when one already exists. Rebaselining is owner-only and
     rate-limited by G5 (ADR 0053), and a `bless` that silently replaced the
@@ -220,14 +249,22 @@ def bless(
             f"— blessing again here would reset the drift budget without anyone choosing to."
         )
 
-    source = repo_root / agent_path
-    if not source.is_file():
-        raise BlessError(f"no agent source at {source}; nothing to bless")
+    repo = GitRepo(root=repo_root)
+    if not repo.path_exists_at(ref, agent_path):
+        raise BlessError(
+            f"no agent source at {agent_path} in {ref}; nothing to bless. If you have just "
+            f"written it, commit it first — the baseline is read from git so that what was "
+            f"blessed is a state the gates can actually compare against."
+        )
+
+    files = _zone_a_files(repo, ref, agent_root)
+    if not files:  # pragma: no cover - agent_path is inside agent_root in practice
+        raise BlessError(f"no files under {agent_root!r} at {ref}; nothing to bless")
 
     entry = archive.record(
         state_root / "archive",
         graph_id,
-        files={agent_path: source.read_bytes()},
+        files=files,
         base_sha="0" * 40,
         head_sha="0" * 40,
         recorded_at=at,

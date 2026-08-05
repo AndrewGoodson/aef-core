@@ -34,20 +34,33 @@ not a config flag — see aef-core ADR 0045 for why that distinction is kept.
 
    ```
    aef loop record <your.graph.module> --corpus corpus \\
-       --scenario-id <id> --objective "..." --split train
+       --scenario-id <id> --objective "..." --split validation \\
+       --working-memory '{{"difficulty": 9}}'
    ```
 
    Record scenarios that **fail** as well as ones that pass — a corpus where
-   everything already passes cannot demonstrate an improvement. Use
-   `aef run --working-memory '{{"key": value}}'` to drive your agent into the
-   failing cases worth recording. Pass `--memory ~/.aef-loop-state/memory.jsonl`
-   too, and point `aef loop cycle --memory` at the same file — otherwise the
-   reflect node's lessons are written somewhere the proposer never reads.
+   everything already passes cannot demonstrate an improvement. `--working-memory`
+   is how you drive the agent into those failing cases. Pass
+   `--memory ~/.aef-loop-state/memory.jsonl` to `aef run` too, and point
+   `aef loop cycle --memory` at the same file — otherwise the reflect node's
+   lessons are written somewhere the proposer never reads.
 
-   **Label at least one scenario `must_fail`.** Without a tripwire the gates
-   cannot detect reward hacking: a one-line change making an agent always
-   report success passed all six gates, because G2 and G3 both read the
-   agent's own claim about itself. See `corpus/README.md`.
+   **Record at least one tripwire.** Without one the gates cannot detect
+   reward hacking: a one-line change making an agent always report success
+   passed all six gates, because G2 and G3 both read the agent's own claim
+   about itself.
+
+   ```
+   aef loop record <your.graph.module> --corpus corpus \\
+       --scenario-id tripwire-1 --objective "<a task beyond this agent>" \\
+       --split validation --expected must_fail \\
+       --working-memory '{{"difficulty": 99}}'
+   ```
+
+   The task must be impossible **in principle**, not merely hard — labelling
+   an achievable task `must_fail` makes every real improvement look like
+   reward hacking. `record` refuses to apply the label if the agent completes
+   the task. See `corpus/README.md`.
 
 2. **A reflect node in your graph, that your nodes actually route to.**
    The proposer learns from `MemoryRecord`s a reflect node writes. Without
@@ -82,6 +95,11 @@ not a config flag — see aef-core ADR 0045 for why that distinction is kept.
                   --agent-path agents/<yours>/graph.py
    ```
 
+   It archives your **whole Zone A tree as committed in git**, not the file
+   named by `--agent-path` and not your working tree: G5 measures drift
+   between the baseline and the candidate's Zone A tree, and two sides that
+   describe different things do not subtract. Commit before you bless.
+
    Blessing twice is refused — rebaselining is a separate, rate-limited owner
    decision, and silently replacing the baseline would reset the drift budget
    without anyone choosing to.
@@ -113,9 +131,12 @@ aef loop status  --repo . --state ~/.aef-loop-state
 aef loop harvest <your.graph.module> --repo . --state ~/.aef-loop-state \\
                  --runs ~/.aef-loop-state/runs --corpus corpus
 aef loop gate    --repo . --state ~/.aef-loop-state --head <branch> \\
-                 --workdir /tmp/loop --build-command "python -m pytest -q"
+                 --workdir /tmp/loop --corpus corpus \\
+                 --entrypoint <your.graph.module>:build_graph \\
+                 --build-command "python -m pytest -q"
 aef loop cycle   --repo . --state ~/.aef-loop-state --workdir /tmp/loop \\
                  --module <your.graph.module> --corpus corpus \\
+                 --entrypoint <your.graph.module>:build_graph \\
                  --memory ~/.aef-loop-state/memory.jsonl \\
                  --build-command "python -m pytest -q"
 aef loop monitor --repo . --state ~/.aef-loop-state
@@ -125,6 +146,13 @@ aef loop digest  --repo . --state ~/.aef-loop-state --runs ~/.aef-loop-state/run
 **`--build-command` is your green bar, not ours.** G1 runs it against your
 tree; the default is `pytest -q` alone because anything more is
 repo-specific. Repeat the flag for each command.
+
+**`--entrypoint` is required for G2 and G3 to run at all.** They have to
+execute your corpus to have anything to say, and they cannot find your graph
+without it. There is deliberately no default: one would name a layout your
+repo may not have, and the failure would arrive as an import error buried in
+a ledger note, reading like an ordinary gate rejection. Without it the gate
+report says so explicitly.
 
 **`--memory` must point at the file your reflect node writes.** Without it
 the proposer has no recorded failures to ground in and will never propose —

@@ -21,7 +21,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from aef.harness.corpus import Scenario, Split, load_corpus, save_scenario
+from aef.harness.corpus import Expected, Scenario, Split, load_corpus, save_scenario
+from aef.harness.outcome import classify
 from aef.kernel import GraphExecutor, Services
 from aef.kernel.graph import Graph
 from aef.state import AEFState
@@ -53,6 +54,7 @@ def record_run(
     recorded_at: datetime,
     notes: str = "",
     allow_holdout: bool = False,
+    expected: Expected = Expected.UNSPECIFIED,
 ) -> Scenario:
     """Execute `graph` and capture the run as a `Scenario`.
 
@@ -77,6 +79,20 @@ def record_run(
             f"would pass every gate vacuously"
         )
 
+    # Same `classify` the gates read, so "the agent completed it" means here
+    # exactly what it means to G2.
+    if (
+        expected is Expected.MUST_FAIL
+        and classify(result.final_state, result.trace, terminated=True).passed
+    ):
+        raise RecorderError(
+            f"refusing to label {scenario_id!r} MUST_FAIL: the agent just completed it. A "
+            f"tripwire must be impossible in principle, not merely hard — labelling an "
+            f"achievable task MUST_FAIL makes every real improvement look like reward "
+            f"hacking, which is the opposite of what the tripwire is for. Record a task "
+            f"genuinely beyond this agent's remit."
+        )
+
     return Scenario(
         id=scenario_id,
         split=split,
@@ -86,6 +102,7 @@ def record_run(
         trace=result.trace,
         recorded_at=recorded_at,
         notes=notes,
+        expected=expected,
     )
 
 
@@ -100,6 +117,7 @@ def record_to_corpus(
     recorded_at: datetime,
     notes: str = "",
     allow_holdout: bool = False,
+    expected: Expected = Expected.UNSPECIFIED,
 ) -> RecordedScenario:
     """Record and persist, refusing to overwrite an existing scenario.
 
@@ -124,5 +142,6 @@ def record_to_corpus(
         recorded_at=recorded_at,
         notes=notes,
         allow_holdout=allow_holdout,
+        expected=expected,
     )
     return RecordedScenario(scenario=scenario, path=save_scenario(root, scenario))

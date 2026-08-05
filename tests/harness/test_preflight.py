@@ -51,6 +51,23 @@ def _repo(tmp_path: Path, source: str) -> Path:
     return repo
 
 
+def _committed_repo(tmp_path: Path, source: str) -> Path:
+    """`bless` reads the baseline from git, not from the working tree — a
+    baseline blessed from a dirty tree records a state that exists nowhere in
+    history, so nothing can be compared against it (ADR 0074)."""
+    repo = _repo(tmp_path, source)
+
+    def run(*a: str) -> None:
+        subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True)
+
+    run("init", "-q", "-b", "main")
+    run("config", "user.email", "t@example.com")
+    run("config", "user.name", "t")
+    run("add", "-A")
+    run("commit", "-qm", "init")
+    return repo
+
+
 def _check(tmp_path: Path, source: str, **kw: object):
     defaults: dict[str, object] = {
         "repo_root": _repo(tmp_path, source),
@@ -136,7 +153,7 @@ def test_a_fresh_repo_is_not_ready(tmp_path: Path) -> None:
 
 
 def test_bless_archives_the_current_state_as_version_one(tmp_path: Path) -> None:
-    repo = _repo(tmp_path, ROUTED)
+    repo = _committed_repo(tmp_path, ROUTED)
     entry = bless(
         repo_root=repo,
         state_root=tmp_path / "state",
@@ -152,7 +169,7 @@ def test_blessing_twice_is_refused(tmp_path: Path) -> None:
     """Rebaselining is a separate, rate-limited owner decision (G5). A bless
     that silently replaced the baseline would reset the drift budget to zero
     without anyone choosing to."""
-    repo = _repo(tmp_path, ROUTED)
+    repo = _committed_repo(tmp_path, ROUTED)
     kw = dict(
         repo_root=repo,
         state_root=tmp_path / "state",
@@ -169,7 +186,7 @@ def test_bless_records_a_BLESSED_entry_not_a_MERGED_one(tmp_path: Path) -> None:
     """A baseline is not a merge. As MERGED, the monitor would try to roll it
     back to version 0 and raise — a seam defect caught before it shipped."""
     bless(
-        repo_root=_repo(tmp_path, ROUTED),
+        repo_root=_committed_repo(tmp_path, ROUTED),
         state_root=tmp_path / "state",
         agent_path="agents/graph.py",
         graph_id="g",
@@ -184,8 +201,7 @@ def test_the_monitor_ignores_a_blessed_baseline(tmp_path: Path) -> None:
     from aef.harness.git import GitRepo
     from aef.harness.loop import LoopConfig, LoopPaths, monitor
 
-    repo = _repo(tmp_path, ROUTED)
-    subprocess.run(["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True)
+    repo = _committed_repo(tmp_path, ROUTED)
     bless(
         repo_root=repo,
         state_root=tmp_path / "state",

@@ -132,13 +132,29 @@ class G5RateAndDrift(Gate):
     budget: DriftBudget = field(default_factory=DriftBudget)
 
     def run(self, ctx: GateContext) -> GateResult:
-        if self.baseline_files is None or self.candidate_files is None or self.now is None:
+        # Two distinct failures, two distinct messages. They shared one for a
+        # while, and the shared text named the baseline — so a candidate that
+        # failed for a missing clock was told its owner had never blessed
+        # anything, while version 1 sat in the archive. A refusal that
+        # misnames its own cause sends the operator to fix the wrong thing
+        # (ADR 0074).
+        if self.baseline_files is None or self.candidate_files is None:
             return GateResult(
                 gate=self.id,
                 outcome=GateOutcome.FAIL,
                 reason=(
                     "no owner-blessed baseline to measure drift against — without a "
-                    "reference point this gate has no signal, so the candidate escalates"
+                    "reference point this gate has no signal, so the candidate escalates. "
+                    "Create one with `aef loop bless`."
+                ),
+            )
+        if self.now is None:
+            return GateResult(
+                gate=self.id,
+                outcome=GateOutcome.FAIL,
+                reason=(
+                    "no clock supplied, so the acceptance-rate window cannot be evaluated. "
+                    "This is a wiring fault in the caller, not a fact about the candidate."
                 ),
             )
 
