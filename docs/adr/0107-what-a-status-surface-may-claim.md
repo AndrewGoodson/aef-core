@@ -237,6 +237,39 @@ and deliberately left. `PANELS` is a default, not a whitelist — an adopting
 repo will want panels this repo has never heard of — and the `unknown_when`
 enforcement is per-spec, so it still holds for any spec anyone brings.
 
+## The fourth adversarial round
+
+Two more. Both were in code round 3 had written minutes earlier, and one of
+them **was round 3's own fix**.
+
+**D1 — the freeze was decoration.** `MappingProxyType` is a *view*, not a copy,
+and round 3 wrapped the registry while leaving the backing dict bound at module
+level. `contract._FIELD_DISCLOSURE["signing_key"] = Disclosure.PUBLIC` still
+worked. The name is deleted now, which closes the accidental path — an import
+touching the wrong symbol, which is the threat here. It does **not** close a
+determined one: the object remains reachable through the proxy's referents via
+`gc`. The accurate phrase is "not writable by accident", not "immutable".
+
+**D2 — `redacted_form` hashed `repr(value)`.** For an object without its own
+`__repr__` that embeds a memory address:
+
+```
+<ErrorLike object at 0x100c0a510>
+```
+
+so two **identical** values hashed differently. That breaks grouping — the only
+reason this is a digest rather than a constant placeholder — and byte-stability,
+which is Milestone 2's requirement 2e, and it fails in the direction where the
+export looks fine and the numbers are quietly noise. `redacted_form` now accepts
+only types with a canonical byte form and refuses anything else, so the caller
+converts deliberately (`str(exc)`, and says which part of the object is the
+value).
+
+A follow-on worth recording: the first fix introduced a `REDACTABLE_TYPES`
+constant, which `mypy` will not narrow on — and a second list of the same types
+is precisely the drift ADR 0091 names. `redacted_form`'s signature is the single
+source of truth, and it is the one the type checker actually reads.
+
 ## Consequences
 
 Milestone 2's export must map every optional source through `Known.optional`

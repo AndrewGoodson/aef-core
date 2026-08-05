@@ -34,6 +34,7 @@ from aef.dash.contract import (
     disclosure_of,
     panel_spec,
     prepare,
+    redacted_form,
 )
 from aef.harness.monitoring import Digest, evaluate_window
 
@@ -483,6 +484,44 @@ def test_redaction_is_stable_so_the_fleet_page_can_still_count() -> None:
     reason this is a digest rather than a constant placeholder."""
     assert prepare("tenant_tag", "acme") == prepare("tenant_tag", "acme")
     assert prepare("tenant_tag", "acme") != prepare("tenant_tag", "globex")
+
+
+def test_the_backing_dict_is_not_left_named_after_the_freeze() -> None:
+    """Round 4, against round 3's own fix. `MappingProxyType` is a VIEW, not a
+    copy — wrapping the dict and leaving the dict named meant
+    `contract._FIELD_DISCLOSURE["signing_key"] = PUBLIC` still worked. The
+    freeze looked installed and was not."""
+    import aef.dash.contract as contract
+
+    assert not hasattr(contract, "_FIELD_DISCLOSURE"), (
+        "the backing dict is still named; the proxy is a view over it and the freeze is decoration"
+    )
+    assert disclosure_of("signing_key") is Disclosure.EXCLUDED
+
+
+def test_redaction_refuses_a_value_with_no_canonical_form() -> None:
+    """Round 4: the body was `repr(value)`, and `repr` of an object without its
+    own `__repr__` embeds a memory address, so two IDENTICAL values hashed
+    differently — breaking grouping and byte-stability at once, in the
+    direction where the export looks fine and the numbers are noise."""
+
+    class ErrorLike:
+        def __init__(self, msg: str) -> None:
+            self.msg = msg
+
+    assert "0x" in repr(ErrorLike("boom")), "precondition: repr embeds an address"
+
+    with pytest.raises(DisclosureError, match="canonical form"):
+        redacted_form(ErrorLike("boom"))  # type: ignore[arg-type]
+
+
+def test_redaction_is_identical_for_equal_values_of_every_accepted_type() -> None:
+    """The property the digest exists for. Checked per accepted type rather
+    than on one sample, since the failure was type-dependent."""
+    for value in ("acme-corp", b"raw-bytes", 42, 3.5, True):
+        assert redacted_form(value) == redacted_form(value), value
+    # ...and an exception once the caller has stringified it deliberately.
+    assert redacted_form(str(ValueError("db down"))) == redacted_form("db down")
 
 
 def test_emittable_is_gone() -> None:

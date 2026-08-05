@@ -509,6 +509,17 @@ _FIELD_DISCLOSURE: dict[str, Disclosure] = {
 # writable is most of the way back to not having decided.
 FIELD_DISCLOSURE: Mapping[str, Disclosure] = MappingProxyType(_FIELD_DISCLOSURE)
 
+# Round 4, against round 3's own fix: `MappingProxyType` is a VIEW, not a copy.
+# Wrapping the dict and leaving the dict NAMED meant
+# `contract._FIELD_DISCLOSURE["signing_key"] = Disclosure.PUBLIC` still worked
+# — the freeze looked installed and was not. Deleting the name closes the
+# accidental path (an import touching the wrong symbol), which is the threat
+# here. It does not close a determined one: the object is still reachable
+# through the proxy's referents via `gc`. Saying "immutable" would be the
+# overclaim this program keeps writing ADRs about; the accurate word is
+# "not writable by accident."
+del _FIELD_DISCLOSURE
+
 
 def disclosure_of(field: str) -> Disclosure:
     """The decided disclosure for `field`, or raise.
@@ -527,7 +538,7 @@ def disclosure_of(field: str) -> Disclosure:
         ) from None
 
 
-def redacted_form(value: object) -> str:
+def redacted_form(value: str | bytes | int | float) -> str:
     """The emittable stand-in for a REDACTED value: a stable, truncated digest.
 
     Stable so the fleet page can count distinct tenants and group identical
@@ -541,7 +552,27 @@ def redacted_form(value: object) -> str:
     tag, and it is not anonymity. Making it unguessable would need a key, and a
     key in the export is the ADR 0106 mistake with the serial numbers filed off.
     """
-    return "sha256:" + sha256(repr(value).encode("utf-8")).hexdigest()[:16]
+    if isinstance(value, str):
+        material = value.encode("utf-8")
+    elif isinstance(value, bytes):
+        material = value
+    elif isinstance(value, (bool, int, float)):
+        material = repr(value).encode("utf-8")
+    else:
+        # Round 4: the body was `repr(value)`, and `repr` of an object without
+        # its own `__repr__` embeds a memory address —
+        #   <ErrorLike object at 0x100c0a510>
+        # so two IDENTICAL values hashed differently. That breaks grouping (the
+        # only reason this is a digest rather than a constant) and byte-stability
+        # (Milestone 2's 2e), and it fails in the direction where the export
+        # looks fine and the numbers are noise.
+        raise DisclosureError(
+            f"redaction needs a canonical form; {type(value).__name__} has none. Convert "
+            f"deliberately at the call site — `str(exc)` for an exception, and say which "
+            f"part of the object is the value. `repr()` here embedded a memory address, "
+            f"so equal values hashed differently."
+        )
+    return "sha256:" + sha256(material).hexdigest()[:16]
 
 
 def prepare(field: str, value: object) -> object:
@@ -571,5 +602,18 @@ def prepare(field: str, value: object) -> object:
             f"disclosure decision — a count, a boolean, a type name."
         )
     if disclosure is Disclosure.REDACTED:
+        # The literal tuple, not a named constant: mypy narrows on the
+        # former and not the latter, and a second list of the same types
+        # is the drift ADR 0091 names. `redacted_form`'s signature is the
+        # one source of truth, and it is the one the type checker reads.
+        if not isinstance(value, (str, bytes, bool, int, float)):
+            # Same cause as `redacted_form`'s own refusal, raised here so the
+            # narrowing is visible to the type checker rather than deferred to
+            # a runtime branch mypy cannot see through.
+            raise DisclosureError(
+                f"field {field!r} is REDACTED but {type(value).__name__} has no canonical "
+                f"form to hash. Convert deliberately at the call site — `str(exc)` for an "
+                f"exception — and say which part of the object is the value."
+            )
         return redacted_form(value)
     return value
