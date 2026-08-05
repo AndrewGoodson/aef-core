@@ -20,6 +20,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 
 from aef.kernel.contracts import Context, Edge, Node, Route, Services, _End, hitl_approval_key
+from aef.kernel.durability import CorruptedCheckpointError
 from aef.kernel.graph import CompiledGraph, Graph
 from aef.observability import semconv
 from aef.state import AEFState, StateDelta
@@ -86,6 +87,26 @@ class GraphExecutor:
         if state is None:
             raise GraphExecutionError(
                 f"no checkpoints found for run_id={run_id!r}; nothing to resume"
+            )
+
+        # The state may have been REWOUND past a corrupt checkpoint
+        # (ADR 0031), and the cursor was not — it still names the node that
+        # was to run after the checkpoint that could not be read. Pairing a
+        # rewound state with a live cursor SILENTLY SKIPS every node in
+        # between: a three-node run resumed as if the middle node had never
+        # existed, with no error, and the resume then overwrote the torn file
+        # so the evidence disappeared (ADR 0086).
+        #
+        # Both numbers are right here. Refusing is the only safe answer: the
+        # work between them is lost, and continuing would produce a final
+        # state that never existed.
+        recorded = durability.list_checkpoints(run_id)
+        if recorded and state.checkpoint_seq < max(recorded):
+            raise CorruptedCheckpointError(
+                f"cannot resume run_id={run_id!r}: the newest readable checkpoint is "
+                f"seq {state.checkpoint_seq} but seq {max(recorded)} exists and could not "
+                f"be read. Resuming from the rewound state would skip every node between "
+                f"them and report success. Repair or remove the damaged checkpoint."
             )
 
         cursor = durability.load_cursor(run_id)

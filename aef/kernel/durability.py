@@ -149,7 +149,17 @@ class FileDurabilityBackend(DurabilityBackend):
         self._root.mkdir(parents=True, exist_ok=True)
 
     def _run_dir(self, run_id: str) -> Path:
-        run_dir = self._root / run_id
+        # `run_id` was joined onto the root verbatim, so `../../escaped`
+        # wrote outside the backend entirely. Containment cannot rest on
+        # callers passing well-formed ids — this is the boundary, so the
+        # check belongs here as well as in the schema (ADR 0086).
+        run_dir = (self._root / run_id).resolve()
+        root = self._root.resolve()
+        if run_dir != root and root not in run_dir.parents:
+            raise ValueError(
+                f"run_id {run_id!r} resolves outside the checkpoint root {root}; "
+                f"a run id is a directory name, not a path"
+            )
         run_dir.mkdir(parents=True, exist_ok=True)
         return run_dir
 

@@ -50,6 +50,9 @@ class Plan(_StrictModel):
 class AEFState(_StrictModel):
     schema_version: str = CURRENT_SCHEMA_VERSION
     run_id: str
+    """Identifies one execution. Used verbatim as a directory name by
+    `FileDurabilityBackend`, so it is validated as one — see the validator
+    below and ADR 0086."""
     agent_id: str
     objective: str
     messages: list[Message] = Field(default_factory=list)
@@ -63,6 +66,20 @@ class AEFState(_StrictModel):
     errors: list[dict[str, Any]] = Field(default_factory=list)
     checkpoint_seq: int = 0
     provenance: list[Provenance] = Field(default_factory=list)
+
+    @field_validator("run_id")
+    @classmethod
+    def _run_id_is_a_directory_name(cls, value: str) -> str:
+        """A run id becomes a directory name on disk. `../../escaped` wrote
+        outside the checkpoint root entirely (ADR 0086). The backend enforces
+        containment at its own boundary too; this rejects the value earlier,
+        where the message can still name the field."""
+        if not value or value in (".", "..") or "/" in value or "\\" in value:
+            raise ValueError(
+                f"run_id must be a single path segment (it becomes a directory name) — "
+                f"got {value!r}"
+            )
+        return value
 
     @field_validator("scores")
     @classmethod
