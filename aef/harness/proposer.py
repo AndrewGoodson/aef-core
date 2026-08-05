@@ -35,8 +35,10 @@ import random
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from aef.harness.corpus import Corpus, Split
+from aef.services.memory.base import MemoryRecord, MemoryStore
 
 
 class ProposalError(RuntimeError):
@@ -49,18 +51,35 @@ class UngroundedProposalError(ProposalError):
     exist."""
 
 
+class CitationKind(StrEnum):
+    SCENARIO = "scenario"  # a train-split corpus scenario
+    MEMORY = "memory"  # a failure/success record written by a reflect node
+
+
 @dataclass(frozen=True)
 class Citation:
-    """One piece of evidence. `source` is a memory record id or scenario id;
-    `split` records where it came from so the train-only rule is checkable
-    rather than merely asserted."""
+    """One piece of evidence a proposal is grounded in.
+
+    Two kinds, with different admissibility rules. A **scenario** citation
+    must name the train split, checkable rather than merely asserted. A
+    **memory** citation names a `MemoryRecord` written by a reflect node —
+    the lessons an agent recorded about its own runs, which is what makes
+    this loop self-*learning* rather than self-modifying (ADR 0065).
+
+    Memory records carry no split of their own, so the leak they could cause
+    is indirect: a reflect node running over a holdout scenario writes a
+    record whose `run_id` is that scenario's id, and citing it would leak the
+    holdout by proxy. `MemoryEvidence` filters those out at the source.
+    """
 
     source: str
-    split: Split
+    split: Split | None = None
     detail: str = ""
+    kind: CitationKind = CitationKind.SCENARIO
 
     def __str__(self) -> str:
-        return f"{self.source} ({self.split.value}){f': {self.detail}' if self.detail else ''}"
+        where = self.split.value if self.split is not None else self.kind.value
+        return f"{self.source} ({where}){f': {self.detail}' if self.detail else ''}"
 
 
 @dataclass(frozen=True)
@@ -174,12 +193,22 @@ def coerce_value(constant: NumericConstant, new_value: float) -> float:
 
 
 def _check_citations(citations: Sequence[Citation]) -> None:
-    off_limits = [c for c in citations if c.split is not Split.TRAIN]
+    off_limits = [
+        c for c in citations if c.kind is CitationKind.SCENARIO and c.split is not Split.TRAIN
+    ]
     if off_limits:
         raise ProposalError(
             f"grounding may cite the train split only; got {[str(c) for c in off_limits]}. "
             f"Citing validation lets the proposer optimise against the set that gates it; "
             f"citing the holdout destroys the owner's only independent read."
+        )
+    mislabelled = [c for c in citations if c.kind is CitationKind.MEMORY and c.split is not None]
+    if mislabelled:
+        raise ProposalError(
+            f"a memory citation carries no split; got {[str(c) for c in mislabelled]}. "
+            f"Whether a memory record is admissible depends on the RUN that produced it, "
+            f"which MemoryEvidence decides — a split on the citation would look like a "
+            f"check while checking nothing."
         )
 
 
@@ -189,6 +218,36 @@ class RuleBasedProposer:
     justify changing, and nothing otherwise."""
 
     step: float = 0.25
+
+    def propose_from_memory(
+        self,
+        evidence: MemoryEvidence,
+        *,
+        proposal_id: str,
+        path: str,
+        source: str,
+    ) -> tuple[Proposal, ...]:
+        """Propose from what the agent recorded about its own failures.
+
+        The rationale is built from the recorded feedback rather than
+        invented, so a reader can trace the proposal back to the run that
+        motivated it. Empty evidence produces nothing — the proposer does not
+        fall back to speculating when it has learned nothing.
+        """
+        citations = evidence.citations()
+        if not citations:
+            return ()
+        summary = (
+            "; ".join(str(c.detail) for c in citations[:3] if c.detail)
+            or f"{len(citations)} recorded failure(s)"
+        )
+        return self.propose(
+            proposal_id=proposal_id,
+            path=path,
+            source=source,
+            citations=citations,
+            rationale=f"grounded in recorded failures — {summary}",
+        )
 
     def propose(
         self,
@@ -305,3 +364,71 @@ class TrainOnlyEvidence:
                 f"evidence it is permitted to see"
             )
         return Citation(source=scenario_id, split=Split.TRAIN, detail=detail)
+
+
+@dataclass(frozen=True)
+class MemoryEvidence:
+    """Failure memory the proposer is permitted to learn from.
+
+    This is the wire that was missing. `make_reflect_node` has written
+    `MemoryRecord(kind="failure"|"success")` since M0 and nothing read them,
+    so the system recorded lessons and never used one — self-modifying, but
+    not self-learning (ADR 0065).
+
+    **Records produced by a validation or holdout run are excluded**, because
+    a reflect node running over such a scenario writes a record whose
+    `run_id` is that scenario's id; citing it would leak the very set the
+    proposer must not see. The exclusion is by known id rather than by
+    allowlist: a production run has an arbitrary `run_id` that appears in no
+    split, and production experience is exactly what this exists to learn
+    from. So the rule is *deny what is known to be off-limits*, and the
+    reason it is safe is that the leak we care about has an exact signature.
+    """
+
+    records: tuple[MemoryRecord, ...] = ()
+    excluded: tuple[str, ...] = ()
+
+    @classmethod
+    def from_store(
+        cls,
+        store: MemoryStore,
+        corpus: Corpus | None = None,
+        *,
+        agent_id: str | None = None,
+        limit: int = 50,
+    ) -> MemoryEvidence:
+        off_limits = _off_limits_run_ids(corpus)
+        found = store.query("failure", agent_id=agent_id, limit=limit)
+        admissible = tuple(r for r in found if r.run_id not in off_limits)
+        blocked = tuple(r.id for r in found if r.run_id in off_limits)
+        return cls(records=admissible, excluded=blocked)
+
+    @property
+    def ids(self) -> frozenset[str]:
+        return frozenset(r.id for r in self.records)
+
+    def cite(self, record_id: str, detail: str = "") -> Citation:
+        if record_id not in self.ids:
+            raise ProposalError(
+                f"memory record {record_id!r} is not admissible evidence — it was either "
+                f"never recorded, or it came from a validation/holdout run and citing it "
+                f"would leak the set the proposer must not see"
+            )
+        return Citation(source=record_id, detail=detail, kind=CitationKind.MEMORY)
+
+    def citations(self) -> tuple[Citation, ...]:
+        """Every admissible record, cited with the feedback that motivated it."""
+        return tuple(
+            Citation(
+                source=r.id,
+                detail=str(r.content.get("verbal_feedback", ""))[:160],
+                kind=CitationKind.MEMORY,
+            )
+            for r in self.records
+        )
+
+
+def _off_limits_run_ids(corpus: Corpus | None) -> frozenset[str]:
+    if corpus is None:
+        return frozenset()
+    return frozenset(s.id for s in corpus.scenarios if s.split in (Split.VALIDATION, Split.HOLDOUT))
