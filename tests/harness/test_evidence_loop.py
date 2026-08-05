@@ -111,37 +111,32 @@ def _config(repo: GitRepo, tmp_path: Path) -> LoopConfig:
     )
 
 
-def _run(config: LoopConfig, tmp_path: Path, head: str):
-    # G1's defaults are aef-core's green bar; a small agent repo has its own.
-    gates = tuple(
-        G1Builds(commands=(("python", "-c", "import agents.demo.graph"),)) if g.id == "G1" else g
-        for g in config.default_gates()
-    )
-    from dataclasses import replace
+_DEMO_BUILD = (("python", "-c", "import agents.demo.graph"),)
 
-    # Keep the driver's evidence wiring; only swap G1's commands.
+
+def _run(config: LoopConfig, tmp_path: Path, head: str):
+    """Drive the real `gate()`, swapping only G1's build commands.
+
+    G1 is now built by `_cheap_gates`, not by `_gates_with_evidence` — the
+    cheap gates run FIRST so a rejected candidate never executes (ADR 0085).
+    Patching only the evidence path left G1 on aef-core's own green bar,
+    which exits 5 in a small agent repo.
+    """
     import aef.harness.loop as loop_module
 
-    original = loop_module._gates_with_evidence
+    original = loop_module._cheap_gates
 
-    def patched(cfg, verdict, workdir, now):  # type: ignore[no-untyped-def]
-        built, note = original(cfg, verdict, workdir, now)
-        return (
-            tuple(
-                G1Builds(commands=(("python", "-c", "import agents.demo.graph"),))
-                if g.id == "G1"
-                else g
-                for g in built
-            ),
-            note,
+    def patched(cfg, verdict, now):  # type: ignore[no-untyped-def]
+        return tuple(
+            G1Builds(commands=_DEMO_BUILD) if g.id == "G1" else g
+            for g in original(cfg, verdict, now)
         )
 
-    loop_module._gates_with_evidence = patched  # type: ignore[assignment]
+    loop_module._cheap_gates = patched  # type: ignore[assignment]
     try:
         return gate(config, head, now=NOW, workdir=tmp_path / "work")
     finally:
-        loop_module._gates_with_evidence = original  # type: ignore[assignment]
-    del gates, replace
+        loop_module._cheap_gates = original  # type: ignore[assignment]
 
 
 # --------------------------------------------------------------------------

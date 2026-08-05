@@ -61,6 +61,9 @@ from aef.harness.suite import CohortBuilder, SuiteError
 from aef.harness.zones import ZonePolicy
 from aef.security.tool import PolicyConfig
 
+# The gates that judge a candidate WITHOUT executing it.
+_CHEAP: frozenset[str] = frozenset({"G0", "G1", "G4", "G5"})
+
 OBSERVATIONS_FILENAME = "observations.jsonl"
 
 EXIT_OK = 0
@@ -245,6 +248,19 @@ def _policy_from_base_ref(config: LoopConfig) -> PolicyConfig | None:
     return build_policy_config(agent_config.tools, agent_config.policies)
 
 
+def _cheap_gates(config: LoopConfig, verdict: CandidateVerdict, now: datetime) -> tuple[Gate, ...]:
+    """G0, G1, G4, G5 — everything that can reject a candidate WITHOUT
+    executing its corpus. Run first so a rejected candidate never runs."""
+    if config.gates is not None:
+        return tuple(g for g in config.gates if g.id in _CHEAP)
+    gates = [g for g in config.default_gates() if g.id in _CHEAP]
+    return tuple(_with_g5(config, verdict, now, gates))
+
+
+def _behavioural_only(gates: tuple[Gate, ...]) -> tuple[Gate, ...]:
+    return tuple(g for g in gates if g.id not in _CHEAP)
+
+
 def _gates_with_evidence(
     config: LoopConfig, verdict: CandidateVerdict, workdir: Path, now: datetime
 ) -> tuple[tuple[Gate, ...], str]:
@@ -272,21 +288,21 @@ def _gates_with_evidence(
     is not a gate.
     """
     if config.gates is not None:
-        return config.gates, "gates supplied explicitly"
+        return _behavioural_only(config.gates), "gates supplied explicitly"
 
     gates = _with_g5(config, verdict, now, list(config.default_gates()))
 
     if config.entrypoint is None:
-        return tuple(gates), (
+        return _behavioural_only(tuple(gates)), (
             "no entrypoint configured: G2/G3 will refuse. Pass --entrypoint "
             "<module>:<factory> naming the function that builds your graph."
         )
     if config.corpus is None or not config.corpus.scenarios:
-        return tuple(gates), "no corpus: G2/G3 will refuse for lack of evidence"
+        return _behavioural_only(tuple(gates)), "no corpus: G2/G3 will refuse for lack of evidence"
 
     scenarios = tuple(s for s in config.corpus.scenarios if s.split in GATED_SPLITS)
     if not scenarios:
-        return tuple(gates), "no gated-split scenarios: G2/G3 will refuse"
+        return _behavioural_only(tuple(gates)), "no gated-split scenarios: G2/G3 will refuse"
 
     policy_config = _policy_from_base_ref(config)
     builder = CohortBuilder(
@@ -306,7 +322,9 @@ def _gates_with_evidence(
         # Reported, not swallowed: G2/G3 stay in the pipeline and refuse,
         # so the candidate escalates rather than slipping through ungated.
         # G5 keeps its evidence — see the docstring.
-        return tuple(gates), f"could not build evidence ({exc}); G2/G3 will refuse"
+        return _behavioural_only(
+            tuple(gates)
+        ), f"could not build evidence ({exc}); G2/G3 will refuse"
 
     rebuilt: list[Gate] = []
     for g in gates:
@@ -328,7 +346,7 @@ def _gates_with_evidence(
             rebuilt.append(G3Improvement(verdict=cohort_verdict))
         else:
             rebuilt.append(g)
-    return tuple(rebuilt), note
+    return _behavioural_only(tuple(rebuilt)), note
 
 
 def _with_g5(
@@ -480,8 +498,29 @@ def gate(
         zone_policy=config.zone_policy,
         sandbox_policy=config.sandbox_policy(),
     )
-    gates, evidence_note = _gates_with_evidence(config, verdict, workdir, now)
-    result = run_pipeline(gates, ctx)
+    # TWO PASSES, and the split is a containment boundary, not an
+    # optimisation. Building evidence EXECUTES THE CANDIDATE'S CODE — N+2
+    # corpus passes in subprocesses — and it used to happen before
+    # `run_pipeline` ran anything. So G0's import allowlist, the control that
+    # exists for exactly this, ran second: a candidate G0 would reject for
+    # `import socket` had already run its module-level code by then.
+    # `gates/base.py` states the opposite ordering as the design ("all four
+    # cheap gates run before the expensive corpus re-execution in G2. G4 is
+    # deliberately early: a proposal reaching for its own tests is rejected
+    # before it gets to run them"). It was not true (ADR 0085).
+    #
+    # Canonical order is preserved exactly — G0,G1,G4,G5 then G2,G3 — and a
+    # candidate rejected by a cheap gate now never executes at all.
+    cheap = run_pipeline(_cheap_gates(config, verdict, now), ctx)
+    if not cheap.passed:
+        result = cheap
+        rejected_by = cheap.failed_at.gate if cheap.failed_at else "a cheap gate"
+        evidence_note = (
+            f"not built: {rejected_by} rejected the candidate first, so its code was never executed"
+        )
+    else:
+        behavioural, evidence_note = _gates_with_evidence(config, verdict, workdir, now)
+        result = PipelineResult(results=cheap.results + run_pipeline(behavioural, ctx).results)
 
     ledger.append(
         config.paths.ledger_dir,

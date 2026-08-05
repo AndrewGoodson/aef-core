@@ -40,6 +40,25 @@ from aef.services.memory.in_memory import InMemoryMemoryStore
 # two different measurements and calling the difference a regression.
 DEFAULT_RUBRIC: dict[str, float] = {"quality": 1.0}
 
+# Marks the runner's own output. Candidate code shares this process and this
+# stdout, so "whatever the subprocess printed" cannot be the contract — it
+# made the candidate the author of the evidence judging it (ADR 0085).
+#
+# The harness supplies a per-run NONCE and requires the marker to appear
+# EXACTLY ONCE. A fixed string is readable from this source, so a candidate
+# could print it; a nonce is readable from argv, so a candidate could still
+# print it — but printing it a second time is what the harness counts. The
+# only way to emit exactly one forged marker is to stop the runner emitting
+# its own, which needs `os._exit`, which needs an import G0 rejects — and G0
+# now runs before any candidate code executes. Three independent layers, and
+# none of them is "the candidate did not think of it".
+RESULT_MARKER_PREFIX = "\x00AEF-SCENARIO-RESULT:"
+RESULT_MARKER_SUFFIX = "\x00"
+
+
+def result_marker(nonce: str) -> str:
+    return f"{RESULT_MARKER_PREFIX}{nonce}{RESULT_MARKER_SUFFIX}"
+
 
 class EntrypointError(RuntimeError):
     pass
@@ -61,7 +80,14 @@ def load_graph(entrypoint: str) -> Graph:
 
     try:
         graph = factory()
-    except Exception as exc:  # noqa: BLE001 - agent-authored factory; any raise is a bad entrypoint
+    except BaseException as exc:  # noqa: BLE001 - see below
+        # BaseException, not Exception. `SystemExit` is a BaseException, so
+        # `raise SystemExit(0)` sailed through this handler and exited the
+        # process CLEANLY — and a candidate that had already printed forged
+        # JSON then owned the runner's entire output. Two added lines scored
+        # a broken agent 1.0 instead of 0.0 and passed all six gates
+        # (ADR 0085). Agent-authored code does not get to decide that this
+        # process is finished.
         raise EntrypointError(f"{entrypoint} raised {type(exc).__name__}: {exc}") from exc
     if not isinstance(graph, Graph):
         raise EntrypointError(f"{entrypoint} returned {type(graph).__name__}, expected a Graph")
@@ -177,22 +203,30 @@ def run_scenario(
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) not in (3, 4):
+    if len(argv) not in (4, 5):
         print(
             f"usage: python -m {__package__}.scenario_runner <scenarios.json> "
-            f"<entrypoint> [<policy.json>]",
+            f"<entrypoint> <nonce> [<policy.json>]",
             file=sys.stderr,
         )
         return 2
 
+    nonce = argv[3]
+
     scenarios = [Scenario.from_payload(p) for p in json.loads(open(argv[1]).read())]
-    graph = load_graph(argv[2])
     # Optional third argument, written by the harness from the base ref.
     policy = policy_config_from_payload(
-        json.loads(open(argv[3]).read()) if len(argv) == 4 else None
+        json.loads(open(argv[4]).read()) if len(argv) == 5 else None
     )
+    graph = load_graph(argv[2])
     outcomes = {s.id: run_scenario(s, graph, policy) for s in scenarios}
-    print(json.dumps(outcomes))
+    # RESULT_SENTINEL first, then the payload, both on the LAST line. The
+    # harness parses only what follows the final sentinel, so anything the
+    # candidate printed before this point — including a complete forged
+    # payload — is not the result. Combined with the BaseException guard
+    # above, a candidate cannot both print a forgery and stop this line from
+    # being written (ADR 0085).
+    print(result_marker(nonce) + json.dumps(outcomes))
     return 0
 
 

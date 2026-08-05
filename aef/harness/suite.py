@@ -21,6 +21,7 @@ it is reported rather than hidden.
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,6 +32,7 @@ from aef.harness.git import GitRepo
 from aef.harness.outcome import Outcome
 from aef.harness.proposer import ControlCohortGenerator, ProposalError
 from aef.harness.sandbox import SandboxPolicy, run_sandboxed
+from aef.harness.scenario_runner import result_marker
 from aef.harness.trace_codec import dumps
 from aef.harness.workspace import build_candidate_workspace
 from aef.harness.zones import ZonePolicy
@@ -56,12 +58,37 @@ class VariantRun:
         return frozenset(self.outcomes)
 
 
-def _parse(label: str, stdout: str) -> VariantRun:
+def _parse(label: str, stdout: str, nonce: str) -> VariantRun:
+    # EXACTLY ONE marker, carrying this run's nonce. The candidate's code runs
+    # in the same process and writes the same stdout, so parsing the whole
+    # stream let it author the evidence judging it: two added lines printing a
+    # forged payload and exiting cleanly scored a broken agent 1.0 and passed
+    # all six gates (ADR 0085).
+    #
+    # Counting is what makes a forgery visible. The nonce is in argv, so a
+    # candidate can print a valid-looking marker — and then there are two, and
+    # two is not one.
+    marker = result_marker(nonce)
+    found = stdout.count(marker)
+    if found == 0:
+        raise SuiteError(
+            f"variant {label!r} produced no runner result — the process exited without "
+            f"the harness writing one. Anything it printed is the candidate's output, "
+            f"not evidence. stdout was {stdout[:400]!r}"
+        )
+    if found > 1:
+        raise SuiteError(
+            f"variant {label!r} emitted {found} result markers and the runner writes one. "
+            f"Agent-authored code is forging the evidence that judges it — this is a "
+            f"security event, not a bad candidate."
+        )
+    payload = stdout[stdout.index(marker) + len(marker) :]
     try:
-        raw = json.loads(stdout)
+        raw = json.loads(payload)
     except json.JSONDecodeError as exc:
         raise SuiteError(
-            f"variant {label!r} runner emitted invalid JSON: {exc}; stdout was {stdout[:400]!r}"
+            f"variant {label!r} runner emitted invalid JSON after its result marker: "
+            f"{exc}; payload was {payload[:400]!r}"
         ) from exc
 
     outcomes: dict[str, Outcome] = {}
@@ -99,7 +126,8 @@ def run_variant(
     """Score one already-materialised workspace over the corpus, in the sandbox."""
     payload = workspace / "_scenarios.json"
     payload.write_text(dumps([s.to_payload() for s in scenarios]))
-    argv = ["python", "-m", RUNNER_MODULE, str(payload), entrypoint]
+    nonce = uuid.uuid4().hex
+    argv = ["python", "-m", RUNNER_MODULE, str(payload), entrypoint, nonce]
     if policy_config is not None:
         # Written into the workspace by the HARNESS, from the base ref. The
         # candidate never supplies the rules it is judged under (ADR 0082).
@@ -118,7 +146,7 @@ def run_variant(
             f"variant {label!r} failed ({detail}): "
             f"{(result.stderr or result.stdout).strip()[-1500:]}"
         )
-    return _parse(label, result.stdout)
+    return _parse(label, result.stdout, nonce)
 
 
 @dataclass(frozen=True)

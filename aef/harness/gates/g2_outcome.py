@@ -21,6 +21,7 @@ input to it, never part of it.
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -28,6 +29,7 @@ from aef.harness.corpus import Corpus, Scenario, Split
 from aef.harness.gates.base import Gate, GateContext, GateOutcome, GateResult
 from aef.harness.outcome import Comparison, Outcome
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy, run_sandboxed
+from aef.harness.scenario_runner import result_marker
 from aef.harness.trace_codec import dumps
 from aef.harness.workspace import build_candidate_workspace
 from aef.security.tool import PolicyConfig
@@ -197,7 +199,11 @@ class G2OutcomeNonRegression(Gate):
             )
         payload = workspace / "_scenarios.json"
         payload.write_text(dumps([s.to_payload() for s in scenarios]))
-        argv = ["python", "-m", RUNNER_MODULE, str(payload), self.entrypoint]
+        # Same per-run nonce discipline as the cohort runner: the candidate's
+        # code shares this process's stdout, so "whatever it printed" cannot
+        # be the evidence (ADR 0085).
+        nonce = uuid.uuid4().hex
+        argv = ["python", "-m", RUNNER_MODULE, str(payload), self.entrypoint, nonce]
         if self.policy_config is not None:
             # From the base ref, written by the harness — never read from the
             # candidate's workspace, or it would supply its own rules
@@ -227,8 +233,19 @@ class G2OutcomeNonRegression(Gate):
                 f"{(result.stderr or result.stdout).strip()[-2000:]}"
             )
 
+        marker = result_marker(nonce)
+        found = result.stdout.count(marker)
+        if found != 1:
+            why = (
+                "Agent-authored code is forging the evidence that judges it."
+                if found
+                else "The process exited without the harness writing a result."
+            )
+            raise G2ExecutionError(
+                f"scenario runner emitted {found} result marker(s) and writes exactly one. {why}"
+            )
         try:
-            raw = json.loads(result.stdout)
+            raw = json.loads(result.stdout[result.stdout.index(marker) + len(marker) :])
         except json.JSONDecodeError as exc:
             raise G2ExecutionError(
                 f"scenario runner emitted invalid JSON: {exc}; stdout was {result.stdout[:500]!r}"
