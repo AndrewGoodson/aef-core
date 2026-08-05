@@ -81,6 +81,17 @@ LLM-backed reflection, offline optimization, and multi-agent coordination
 are typed interfaces with `NotImplementedError` bodies (Phase 2/3/5). The
 evolution engine is a typed interface, disabled (Phase 4).
 
+## Development pod
+
+`.claude/skills/reproduce-first/` is the verification method — construct the
+failing case and RUN it, assert every patch applied, never weaken a control
+to make something pass. Load it for any audit or fix.
+`.claude/agents/seam-hunter.md` hunts joins between components that are each
+correct; three of ten defects lived there. See `docs/dev-pod.md`, including
+why the other agents were cut.
+
+Nothing under `agents/` — that is Zone A, inside the loop's blast radius.
+
 ## Decisions and deviations
 
 `docs/adr/` records every place the research report and research brief

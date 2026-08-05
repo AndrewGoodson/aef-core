@@ -413,7 +413,12 @@ def gate(config: LoopConfig, head_ref: str, *, now: datetime, workdir: Path) -> 
         at=now,
         proposal_id=proposal_id,
         summary=decision.reason,
-        detail={"archive_version": archived.version, "baseline_pass_rate": 1.0},
+        # No baseline_pass_rate is written, deliberately. Nothing in the harness
+        # measures a live pass rate, and writing a literal 1.0 asserted that
+        # production was perfect before every merge — so any agent below 95%
+        # live read as REGRESSED, which halts the loop permanently with a
+        # message blaming the gates (ADR 0072). Absence now means unmeasured.
+        detail={"archive_version": archived.version},
     )
     return GateRun(decision=decision, result=result, report=report, exit_code=EXIT_OK)
 
@@ -517,9 +522,23 @@ def monitor(config: LoopConfig, *, now: datetime, restore_to: Path | None = None
         version = merge.detail.get("archive_version")
         if version is None or version in rolled_back_versions:
             continue
+        measured = merge.detail.get("baseline_pass_rate")
+        if measured is None:
+            # Unmeasured, so nothing can be concluded about regression. Report
+            # it as such: AMBIGUOUS still rolls back (rollback-by-default,
+            # ADR 0056) but does NOT halt the loop, because there is no
+            # evidence the gates missed anything.
+            lines.append(
+                f"{merge.proposal_id} (v{version}): no measured pre-merge baseline, so "
+                f"regression cannot be judged — reverting without blaming the gates"
+            )
+            _rollback_merge(config, merge, int(version), now, restore_to, "no measured baseline")
+            rolled.append(merge.proposal_id)
+            continue
+
         result = evaluate_window(
             observations,
-            baseline_pass_rate=float(merge.detail.get("baseline_pass_rate", 1.0)),
+            baseline_pass_rate=float(measured),
             merged_at=merge.at,
             now=now,
             policy=config.monitor_policy,
@@ -529,22 +548,7 @@ def monitor(config: LoopConfig, *, now: datetime, restore_to: Path | None = None
         if result.action is not Action.ROLLBACK:
             continue
 
-        archive.rollback(
-            config.paths.archive_dir,
-            config.graph_id,
-            int(version),
-            restore_to or (config.paths.root / "restored"),
-            recorded_at=now,
-            notes=result.reason,
-        )
-        ledger.append(
-            config.paths.ledger_dir,
-            kind=ledger.EventKind.ROLLED_BACK,
-            at=now,
-            proposal_id=merge.proposal_id,
-            summary=result.reason,
-            detail={"archive_version": version, "verdict": result.verdict.value},
-        )
+        _rollback_merge(config, merge, int(version), now, restore_to, result.reason)
         rolled.append(merge.proposal_id)
         if result.verdict is Verdict.REGRESSED:
             gated_rollback = True
@@ -566,6 +570,51 @@ def monitor(config: LoopConfig, *, now: datetime, restore_to: Path | None = None
 # --------------------------------------------------------------------------
 # digest / status
 # --------------------------------------------------------------------------
+
+
+def _rollback_merge(
+    config: LoopConfig,
+    merge: ledger.LedgerEntry,
+    version: int,
+    now: datetime,
+    restore_to: Path | None,
+    reason: str,
+) -> None:
+    """Restore the state that preceded `version`, not `version` itself.
+
+    `archive.rollback(v)` restores v's CONTENT. Passing the version the merge
+    *produced* therefore restored the regressing change — the rollback
+    reinstated exactly what it was reverting (ADR 0072). The target is the
+    version before it.
+    """
+    target = version - 1
+    existing = archive.versions(config.paths.archive_dir, config.graph_id)
+    if target not in existing:
+        # Refuse rather than restore the wrong thing. A rollback with no
+        # predecessor to return to is a gap in the archive, not a licence to
+        # reinstate the change being reverted.
+        raise archive.ArchiveError(
+            f"cannot roll back {merge.proposal_id}: no archived version {target} preceding "
+            f"v{version} for graph {config.graph_id!r}. Archive a blessed baseline before "
+            f"enabling any path that merges."
+        )
+
+    archive.rollback(
+        config.paths.archive_dir,
+        config.graph_id,
+        target,
+        restore_to or (config.paths.root / "restored"),
+        recorded_at=now,
+        notes=reason,
+    )
+    ledger.append(
+        config.paths.ledger_dir,
+        kind=ledger.EventKind.ROLLED_BACK,
+        at=now,
+        proposal_id=merge.proposal_id,
+        summary=reason,
+        detail={"archive_version": version, "restored_version": target},
+    )
 
 
 def digest(

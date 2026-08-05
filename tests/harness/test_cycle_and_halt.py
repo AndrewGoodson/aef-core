@@ -5,7 +5,7 @@ what it does, because the thing it does is change code.
 """
 
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -193,3 +193,122 @@ def test_the_digest_reports_both_counts() -> None:
     rendered = Digest(since=NOW, until=NOW, runs_recorded=12, halt_channel_configured=True).render()
     assert "Production runs recorded: 12" in rendered
     assert "Halt channel configured: yes" in rendered
+
+
+# --------------------------------------------------------------------------
+# ADR 0072 — three defects seam-hunter found in the monitor path
+# --------------------------------------------------------------------------
+
+
+def test_no_fabricated_baseline_is_written_on_merge() -> None:
+    """A literal 1.0 asserted production was perfect before every merge, so
+    any agent below 95% live read as REGRESSED — which halts the loop
+    permanently, blaming the gates for a baseline nobody measured."""
+    import inspect
+
+    import aef.harness.loop as loop_module
+
+    source = inspect.getsource(loop_module.gate)
+    assert '"baseline_pass_rate": 1.0' not in source
+
+
+def test_an_unmeasured_baseline_does_not_halt_the_loop(repo: GitRepo, tmp_path: Path) -> None:
+    # Rolling back is right; halting is not. A halt means the gates have a
+    # blind spot, and an absent measurement is not evidence of one.
+    from aef.harness import archive
+    from aef.harness.loop import monitor
+
+    config = _config(repo, tmp_path)
+    for content in (b"BASELINE = 1\n", b"CANDIDATE = 1\n"):
+        archive.record(
+            config.paths.archive_dir,
+            "default",
+            files={"agents/demo/graph.py": content},
+            base_sha="a" * 40,
+            head_sha="b" * 40,
+            recorded_at=NOW,
+        )
+    ledger.append(
+        config.paths.ledger_dir,
+        kind=ledger.EventKind.MERGED,
+        at=NOW,
+        proposal_id="p1",
+        summary="merged",
+        detail={"archive_version": 2},
+    )
+
+    run = monitor(config, now=NOW + timedelta(days=8))
+
+    assert run.rolled_back == ("p1",)
+    assert not run.halted, "an unmeasured baseline must not be read as a gate blind spot"
+
+
+def test_rollback_restores_the_version_before_the_merge(repo: GitRepo, tmp_path: Path) -> None:
+    """`archive.rollback(v)` restores v's CONTENT. Passing the version the
+    merge PRODUCED reinstated exactly the change being reverted."""
+    from aef.harness import archive
+    from aef.harness.loop import monitor
+
+    config = _config(repo, tmp_path)
+    for content in (b"GOOD = 1\n", b"REGRESSION = 1\n"):
+        archive.record(
+            config.paths.archive_dir,
+            "default",
+            files={"agents/demo/graph.py": content},
+            base_sha="a" * 40,
+            head_sha="b" * 40,
+            recorded_at=NOW,
+        )
+    ledger.append(
+        config.paths.ledger_dir,
+        kind=ledger.EventKind.MERGED,
+        at=NOW,
+        proposal_id="p1",
+        summary="merged",
+        detail={"archive_version": 2},
+    )
+
+    monitor(config, now=NOW + timedelta(days=8), restore_to=tmp_path / "restored")
+
+    restored = (tmp_path / "restored" / "agents" / "demo" / "graph.py").read_bytes()
+    assert restored == b"GOOD = 1\n", "the rollback reinstated the change it was reverting"
+
+
+def test_rollback_refuses_when_there_is_no_predecessor(repo: GitRepo, tmp_path: Path) -> None:
+    # No pre-merge version archived means no correct target. Refuse rather
+    # than restore the wrong thing.
+    from aef.harness import archive
+    from aef.harness.loop import monitor
+
+    config = _config(repo, tmp_path)
+    archive.record(
+        config.paths.archive_dir,
+        "default",
+        files={"agents/demo/graph.py": b"ONLY = 1\n"},
+        base_sha="a" * 40,
+        head_sha="b" * 40,
+        recorded_at=NOW,
+    )
+    ledger.append(
+        config.paths.ledger_dir,
+        kind=ledger.EventKind.MERGED,
+        at=NOW,
+        proposal_id="p1",
+        summary="merged",
+        detail={"archive_version": 1},
+    )
+
+    with pytest.raises(archive.ArchiveError, match="no archived version 0"):
+        monitor(config, now=NOW + timedelta(days=8))
+
+
+def test_the_monitor_can_be_pointed_at_an_observations_file() -> None:
+    """A deployment writes observations wherever it runs; the monitor read a
+    hardcoded <state>/observations.jsonl. Nothing connected them, so every
+    window reported unobserved and silently reverted."""
+    import inspect
+
+    import aef.cli.loop as loop_cli
+
+    assert "--observations" in inspect.getsource(loop_cli.add_loop_parser)
+    assert "observations" in inspect.getsource(loop_cli.cmd_monitor)

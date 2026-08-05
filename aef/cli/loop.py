@@ -15,6 +15,7 @@ outcomes, and a workflow that cannot tell them apart will retry the first.
 from __future__ import annotations
 
 import argparse
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from aef.harness.git import GitRepo
 from aef.harness.loop import (
     EXIT_HALTED,
     EXIT_OK,
+    EXIT_REJECTED,
     LoopConfig,
     LoopPaths,
     default_digest_window,
@@ -85,6 +87,19 @@ def cmd_gate(args: argparse.Namespace) -> int:
 
 def cmd_monitor(args: argparse.Namespace) -> int:
     config = _config(args)
+    # A deployment writes observations wherever it runs; the monitor reads
+    # <state>/observations.jsonl. Nothing connected the two, so every window
+    # reported unobserved and silently reverted (ADR 0072).
+    if args.observations:
+        source = Path(args.observations)
+        if not source.is_file():
+            print(f"error: no observations file at {source}", file=sys.stderr)
+            return EXIT_REJECTED
+        target = config.paths.observations
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if source.resolve() != target.resolve():
+            target.write_text(source.read_text())
+
     try:
         run = loop_monitor(config, now=datetime.now(UTC))
     except LoopHaltedError as exc:
@@ -259,6 +274,12 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
 
     p_monitor = loop_subs.add_parser("monitor", help="evaluate post-merge windows, auto-rollback")
     _common(p_monitor)
+    p_monitor.add_argument(
+        "--observations",
+        default=None,
+        help="the observations JSONL your deployment wrote. Without it the monitor sees "
+        "no live runs and every window reverts for lack of evidence.",
+    )
     p_monitor.set_defaults(handler=cmd_monitor)
 
     p_digest = loop_subs.add_parser("digest", help="weekly trend report")

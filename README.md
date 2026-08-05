@@ -181,6 +181,40 @@ resolving to one canonical guide (`AGENT_INTEGRATION.md`):
 | **Phase 2/3/5** | 🧩 Typed stubs | Knowledge graph, context engine, token optimizer, planner, offline optimization, coordination — real interfaces, `NotImplementedError` bodies, **no fake behavior** |
 | **Phase 4 — Evolution** | 🔒 Built but gated | Self-modification interfaces exist and are hard-disabled in code (`EvolutionConfig(enabled=True)` raises) |
 
+## What improves itself, and what does not
+
+**aef-core cannot improve itself autonomously. That is a design decision, not
+a gap.**
+
+The self-rewiring loop improves the agents aef-core **hosts** — the code in
+`agents/**` (Zone A). It never touches the harness that gates them or the
+kernel they run on. Those are Zone B and Zone C, and the loop is structurally
+prevented from writing there: gates execute from the base ref, so a candidate
+cannot supply the code that judges it (ADR 0047).
+
+Letting the loop improve its own harness would mean letting it rewrite its
+own judge. That is the one thing the entire safety design exists to prevent.
+
+| | Runs on a schedule | Needs a human |
+|---|---|---|
+| Post-merge monitoring, auto-rollback | hourly | — |
+| Harvest, propose, gate a Zone A candidate | daily | — |
+| Weekly trend digest | weekly | reading it |
+| **Merging any candidate** | — | **you** |
+| Improving the harness, kernel, or gates | — | **you** |
+| Labelling corpus tripwires | — | **you** |
+
+**Tier-1 auto-merge is off and cannot be turned on from a flag, a config key,
+or an environment variable.** Enabling it is a deliberate source change. Every
+candidate that passes all six gates is escalated to a human, phrased as a
+decision rather than a diff.
+
+So aef-core gets better the way any repo does: a person runs it. What
+compounds over time is not autonomy but **evidence** — a hash-chained ledger,
+a corpus with tripwires that a future model cannot quietly regress past, and
+70+ ADRs recording what was tried and what was wrong. A smarter model
+inherits that and starts from what is known.
+
 Every design decision and deviation is recorded as a numbered ADR in
 [`docs/adr/`](docs/adr/README.md) (40 and counting).
 
