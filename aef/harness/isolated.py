@@ -1,0 +1,264 @@
+"""Running a candidate's graph without letting it report on itself.
+
+The parent builds a `Graph` whose node functions are PROXIES: each call
+serialises `(node_id, state, context)` to a worker subprocess and reads back
+`(delta, route)`. Everything else — applying the delta, resolving the route,
+counting steps, recording the trace, classifying the outcome, scoring — runs
+here, in a process the candidate's code never enters.
+
+That is the whole idea. `GraphExecutor` is untouched and does not know the
+difference; the only thing that moved is where `node.fn` runs (ADR 0094).
+
+What a candidate can still do: return a lying `StateDelta`. That is the node
+contract, and it is what the corpus, the MUST_FAIL tripwires and G2 exist to
+judge. What it can no longer do: claim scenarios it never ran, fabricate the
+aggregate report, or exit cleanly mid-run and have that read as success.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+from types import TracebackType
+from typing import Any
+
+from aef.harness.trace_codec import decode_route
+from aef.kernel.contracts import Context, Edge, Node, Route, Services, SideEffect
+from aef.kernel.graph import Graph
+from aef.state import AEFState, StateDelta
+
+WORKER_MODULE = "aef.harness.node_worker"
+
+
+def _frame(value: Any) -> str:
+    """One frame, one line. `trace_codec.dumps` pretty-prints for corpus
+    files on disk; a newline-delimited protocol needs the opposite."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _unframe(text: str) -> Any:
+    return json.loads(text)
+
+
+class IsolationError(RuntimeError):
+    """The worker could not be started, or stopped answering."""
+
+
+@dataclass
+class _Proxy:
+    """Stands in for one agent-authored node function."""
+
+    node_id: str
+    session: NodeWorkerSession
+
+    def __call__(
+        self, state: AEFState, ctx: Context, services: Services
+    ) -> tuple[StateDelta, Route]:
+        return self.session.evaluate(self.node_id, state, ctx)
+
+
+class NodeWorkerSession:
+    """One worker subprocess, reused across every node of every scenario.
+
+    Reused deliberately: a fresh process per node would make module-level
+    agent state behave differently under the gate than in production, and the
+    gate is supposed to re-execute what was recorded.
+    """
+
+    def __init__(
+        self,
+        entrypoint: str,
+        *,
+        workdir: Path,
+        env: dict[str, str],
+        timeout_s: float,
+        preexec_fn: Callable[[], None] | None = None,
+    ) -> None:
+        self._timeout_s = timeout_s
+        self._proc = subprocess.Popen(
+            [sys.executable, "-m", WORKER_MODULE, entrypoint],
+            cwd=str(workdir),
+            env=env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            preexec_fn=preexec_fn,
+        )
+        self.description = self._handshake(entrypoint)
+
+    def _handshake(self, entrypoint: str) -> dict[str, Any]:
+        line = self._readline()
+        if line is None:
+            self.close()
+            raise IsolationError(f"worker for {entrypoint!r} exited before describing its graph")
+        try:
+            payload = _unframe(line)
+        except Exception as exc:  # noqa: BLE001 - candidate output on the same stream
+            self.close()
+            raise IsolationError(
+                f"worker for {entrypoint!r} did not describe its graph; the first line was "
+                f"{line[:200]!r}. Agent code printing to stdout before the graph is built "
+                f"lands here — it cannot forge a result, but it can make the worker "
+                f"unusable."
+            ) from exc
+        if not isinstance(payload, dict) or "graph" not in payload:
+            self.close()
+            detail = payload.get("error") if isinstance(payload, dict) else None
+            why = detail or f"unexpected first frame {line[:200]!r}"
+            raise IsolationError(f"worker for {entrypoint!r} failed: {why}")
+        graph: dict[str, Any] = payload["graph"]
+        for required in ("id", "version", "entry_node", "nodes", "edges"):
+            if required not in graph:
+                self.close()
+                raise IsolationError(
+                    f"worker for {entrypoint!r} described a graph with no {required!r}"
+                )
+        return graph
+
+    def _readline(self) -> str | None:
+        assert self._proc.stdout is not None
+        line = self._proc.stdout.readline()
+        return line.strip() or None
+
+    def evaluate(self, node_id: str, state: AEFState, ctx: Context) -> tuple[StateDelta, Route]:
+        assert self._proc.stdin is not None
+        request = {
+            "node_id": node_id,
+            "state": _unframe(state.model_dump_json()),
+            "context": {
+                "run_id": ctx.run_id,
+                "graph_version": ctx.graph_version,
+                "trace_id": ctx.trace_id,
+                "node_id": ctx.node_id,
+                "now": ctx.now.isoformat(),
+                "idempotency_key": ctx.idempotency_key,
+                "attempt": ctx.attempt,
+            },
+        }
+        try:
+            self._proc.stdin.write(_frame(request) + "\n")
+            self._proc.stdin.flush()
+        except (BrokenPipeError, ValueError) as exc:
+            raise IsolationError(f"worker died before node {node_id!r} could run: {exc}") from exc
+
+        line = self._readline()
+        if line is None:
+            raise IsolationError(
+                f"worker produced no result for node {node_id!r} — it exited or was killed "
+                f"mid-step. A run that stopped is not a run that passed."
+            )
+        response = _unframe(line)
+        if "error" in response:
+            # Re-raised so `GraphExecutor` handles it exactly as it handles a
+            # node raising in-process: fallback route if declared, error entry
+            # otherwise. The parent's semantics do not change because the node
+            # happens to live elsewhere.
+            raise NodeEvaluationError(response["error"])
+        delta = StateDelta.model_validate(response["delta"])
+        return delta, decode_route(response["route"])
+
+    @property
+    def returncode(self) -> int | None:
+        """`None` while the worker is alive. A candidate can end its own
+        process; the parent needs to notice rather than keep asking."""
+        return self._proc.poll()
+
+    def close(self) -> None:
+        if self._proc.poll() is None:
+            self._proc.kill()
+        for stream in (self._proc.stdin, self._proc.stdout, self._proc.stderr):
+            if stream is None:
+                continue
+            try:
+                stream.close()
+            except (BrokenPipeError, OSError, ValueError):
+                # The worker is gone — which is one of the things a candidate
+                # can do to itself. Cleanup must not turn that into an
+                # exception the caller has to handle twice (ADR 0094).
+                pass
+
+    def __enter__(self) -> NodeWorkerSession:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.close()
+
+
+class NodeEvaluationError(RuntimeError):
+    """The node raised in the worker. Surfaced here so the parent's executor
+    treats it identically to an in-process raise."""
+
+
+def _parent_side_key(node_id: str) -> Callable[[AEFState], str]:
+    """A stand-in idempotency key.
+
+    `Node` requires one for any impure node (ADR 0010). The candidate's real
+    key function lives in the worker; the parent needs *a* callable for the
+    invariant to hold, and this key is only consumed by HITL dedup, which the
+    parent owns.
+    """
+
+    def key(state: AEFState) -> str:
+        return f"{node_id}:{state.run_id}:{state.checkpoint_seq}"
+
+    return key
+
+
+def graph_from(session: NodeWorkerSession) -> Graph:
+    """Rebuild the candidate's graph in the PARENT, with proxied functions.
+
+    The shape is the candidate's declaration — the same declaration G0 and G4
+    read from the base ref. What changes is who acts on it.
+    """
+    description = session.description
+    nodes: dict[str, Node] = {}
+    for spec in description["nodes"]:
+        side_effects = SideEffect(spec["side_effects"])
+        nodes[spec["id"]] = Node(
+            id=spec["id"],
+            version=spec["version"],
+            fn=_Proxy(node_id=spec["id"], session=session),
+            deterministic=bool(spec["deterministic"]),
+            side_effects=side_effects,
+            # The contract requires a key fn for any impure node. The real one
+            # lives in the worker; the parent needs *a* callable so `Node`'s
+            # own invariant holds, and the key is only used for HITL dedup.
+            idempotency_key_fn=(
+                _parent_side_key(spec["id"]) if side_effects is not SideEffect.PURE else None
+            ),
+            telemetry_tags=tuple(spec.get("telemetry_tags", ())),
+            fallback_node_id=spec.get("fallback_node_id"),
+        )
+
+    edges = [
+        Edge(
+            from_node=spec["from_node"],
+            to_node=(
+                spec["to_node"] if isinstance(spec["to_node"], str) else tuple(spec["to_node"])
+            ),
+            priority=int(spec.get("priority", 0)),
+            requires_human_approval=bool(spec.get("requires_human_approval", False)),
+            requires_deterministic_fallback=bool(
+                spec.get("requires_deterministic_fallback", False)
+            ),
+        )
+        for spec in description["edges"]
+    ]
+
+    return Graph(
+        id=description["id"],
+        version=description["version"],
+        nodes=nodes,
+        edges=edges,
+        entry_node=description["entry_node"],
+    )

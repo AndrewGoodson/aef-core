@@ -20,21 +20,15 @@ input to it, never part of it.
 
 from __future__ import annotations
 
-import json
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from aef.harness.corpus import Corpus, Scenario, Split
 from aef.harness.gates.base import Gate, GateContext, GateOutcome, GateResult
+from aef.harness.isolated_suite import run_corpus_isolated
 from aef.harness.outcome import Comparison, Outcome
-from aef.harness.sandbox import NetworkPolicy, SandboxPolicy, run_sandboxed
-from aef.harness.scenario_runner import result_marker
-from aef.harness.trace_codec import dumps
 from aef.harness.workspace import build_candidate_workspace
 from aef.security.tool import PolicyConfig
-
-RUNNER_MODULE = "aef.harness.scenario_runner"
 
 # Which splits hold the candidate. The holdout is the owner's and is never
 # spent on a routine gate run.
@@ -191,71 +185,22 @@ class G2OutcomeNonRegression(Gate):
     def _execute(
         self, ctx: GateContext, workspace: Path, scenarios: list[Scenario]
     ) -> dict[str, Outcome]:
+        """Re-execute the corpus with the candidate isolated.
+
+        The candidate answers one node at a time in a worker subprocess and
+        never sees a scenario id, an `Outcome`, or how many scenarios exist.
+        This method concludes (ADR 0094).
+        """
         if self.entrypoint is None:
             raise G2ExecutionError(
                 "no entrypoint configured, so there is no graph to re-execute the corpus "
                 "against. Pass --entrypoint <module>:<factory> naming the function that "
                 "builds your graph."
             )
-        payload = workspace / "_scenarios.json"
-        payload.write_text(dumps([s.to_payload() for s in scenarios]))
-        # Same per-run nonce discipline as the cohort runner: the candidate's
-        # code shares this process's stdout, so "whatever it printed" cannot
-        # be the evidence (ADR 0085).
-        nonce = uuid.uuid4().hex
-        argv = ["python", "-m", RUNNER_MODULE, str(payload), self.entrypoint, nonce]
-        if self.policy_config is not None:
-            # From the base ref, written by the harness — never read from the
-            # candidate's workspace, or it would supply its own rules
-            # (ADR 0082).
-            policy_payload = workspace / "_policy.json"
-            policy_payload.write_text(
-                json.dumps(
-                    {
-                        "allowed_scopes": sorted(self.policy_config.allowed_scopes),
-                        "forbidden_tool_names": sorted(self.policy_config.forbidden_tool_names),
-                        "require_hitl_above_risk": (self.policy_config.require_hitl_above_risk),
-                    }
-                )
-            )
-            argv.append(str(policy_payload))
-
-        policy = ctx.sandbox_policy or SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED)
-        result = run_sandboxed(
-            tuple(argv),
-            workdir=workspace,
-            policy=policy,
+        results = run_corpus_isolated(
+            workspace, scenarios, entrypoint=self.entrypoint, policy=self.policy_config
         )
-        if not result.ok:
-            detail = "timed out" if result.timed_out else f"exit {result.returncode}"
-            raise G2ExecutionError(
-                f"scenario runner failed ({detail}): "
-                f"{(result.stderr or result.stdout).strip()[-2000:]}"
-            )
-
-        marker = result_marker(nonce)
-        found = result.stdout.count(marker)
-        if found != 1:
-            why = (
-                "Agent-authored code is forging the evidence that judges it."
-                if found
-                else "The process exited without the harness writing a result."
-            )
-            raise G2ExecutionError(
-                f"scenario runner emitted {found} result marker(s) and writes exactly one. {why}"
-            )
-        try:
-            raw = json.loads(result.stdout[result.stdout.index(marker) + len(marker) :])
-        except json.JSONDecodeError as exc:
-            raise G2ExecutionError(
-                f"scenario runner emitted invalid JSON: {exc}; stdout was {result.stdout[:500]!r}"
-            ) from exc
-        # The runner emits {"outcome": ..., "score": ...} so one pass serves
-        # both G2 and G3; tolerate the bare-outcome shape for robustness.
-        return {
-            sid: Outcome.from_payload(body["outcome"] if "outcome" in body else body)
-            for sid, body in raw.items()
-        }
+        return {sid: r.outcome for sid, r in results.items()}
 
 
 def recorded_outcome(scenario: Scenario) -> Outcome:

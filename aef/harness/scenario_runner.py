@@ -1,28 +1,25 @@
-"""Re-executes corpus scenarios against a candidate graph, inside the sandbox.
+"""Executing one recorded scenario, in this process.
 
-Invoked as `python -m aef.harness.scenario_runner <scenarios.json> <entrypoint>`
-with the post-merge workspace as cwd. **The `aef` package it runs from is the
-base ref's** (`workspace.py`), so the code loading and running agent-authored
-code is the harness's own, not the candidate's. The candidate supplies only
-the graph.
+**This is no longer how the gates score a candidate.** It was, and the
+contract was "run the corpus in a subprocess and print the results" — which
+made the candidate the author of the evidence judging it. Three attempts to
+secure that channel were each defeated (ADR 0085, 0088, 0093), because the
+candidate's code and the reporting code shared an interpreter.
 
-Emits `{scenario_id: {"outcome": ..., "score": ...}}` on stdout. A scenario
-that raises is recorded as a non-terminating, zero-scoring result rather than
-aborting the batch: one broken scenario is a result about that scenario, and
-losing the other ninety-nine to it would hide more than it reveals.
+The gates now use `isolated_suite.run_corpus_isolated`: the candidate answers
+one node at a time in a worker that never learns what a scenario is, and the
+parent concludes (ADR 0094). The stdout marker protocol that used to live
+here has been REMOVED rather than left behind, so it cannot be wired back by
+someone who reads only its docstring.
 
-The **score** is emitted alongside the outcome deliberately. G2 (outcome
-non-regression) and G3 (improvement) both need a full pass over the corpus,
-and a variant is expensive to materialise and load. Running the graph twice
-to answer two questions about the same execution would double the cost of
-the most expensive gate in the pipeline for nothing.
+What remains is the in-process helper: given a scenario and a graph you
+already trust — the incumbent's, a test's — run it and classify. It executes
+agent code in the calling process and must not be used to score a candidate.
 """
 
 from __future__ import annotations
 
 import importlib
-import json
-import sys
 from typing import Any
 
 from aef.harness.corpus import Scenario, fixed_clock
@@ -39,31 +36,6 @@ from aef.services.runtime import agent_services
 # re-executed a recorded scenario under a different rubric would be comparing
 # two different measurements and calling the difference a regression.
 DEFAULT_RUBRIC: dict[str, float] = {"quality": 1.0}
-
-# Marks the runner's own output. Candidate code shares this process and this
-# stdout, so "whatever the subprocess printed" cannot be the contract — it
-# made the candidate the author of the evidence judging it (ADR 0085).
-#
-# The harness supplies a per-run NONCE and requires the marker to appear
-# EXACTLY ONCE. That catches a candidate that prints a forgery and lets the
-# runner also print its own — two markers, and two is not one.
-#
-# IT DOES NOT MAKE THIS CHANNEL TRUSTWORTHY, and an earlier version of this
-# comment claimed it did ("the only way to emit exactly one forged marker
-# ... needs an import G0 rejects"). That claim was false twice over: first
-# via `aef.harness.scenario_runner.sys` (ADR 0088), then via
-# `getattr(module, "os")`, which G0's attribute denial cannot see at all
-# (ADR 0093).
-#
-# The candidate's code and this code share an interpreter. Any channel this
-# module can write, agent code can write. What is here is a cost barrier
-# whose cost is currently one token — read ADR 0093 before relying on it.
-RESULT_MARKER_PREFIX = "\x00AEF-SCENARIO-RESULT:"
-RESULT_MARKER_SUFFIX = "\x00"
-
-
-def result_marker(nonce: str) -> str:
-    return f"{RESULT_MARKER_PREFIX}{nonce}{RESULT_MARKER_SUFFIX}"
 
 
 class EntrypointError(RuntimeError):
@@ -199,34 +171,3 @@ def run_scenario(
         "score": score_of(record),
         "cost_tokens": record.cost_tokens,
     }
-
-
-def main(argv: list[str]) -> int:
-    if len(argv) not in (4, 5):
-        print(
-            f"usage: python -m {__package__}.scenario_runner <scenarios.json> "
-            f"<entrypoint> <nonce> [<policy.json>]",
-            file=sys.stderr,
-        )
-        return 2
-
-    nonce = argv[3]
-
-    scenarios = [Scenario.from_payload(p) for p in json.loads(open(argv[1]).read())]
-    # Optional third argument, written by the harness from the base ref.
-    policy = policy_config_from_payload(
-        json.loads(open(argv[4]).read()) if len(argv) == 5 else None
-    )
-    graph = load_graph(argv[2])
-    outcomes = {s.id: run_scenario(s, graph, policy) for s in scenarios}
-    # The marker, then the payload, on the LAST line. The harness parses only
-    # what follows it, so anything the candidate printed before this point is
-    # not the result — which stops accidental corruption and naive forgery.
-    # It does not stop a candidate that suppresses this line; see the module
-    # docstring and ADR 0093.
-    print(result_marker(nonce) + json.dumps(outcomes))
-    return 0
-
-
-if __name__ == "__main__":  # pragma: no cover - exercised as a subprocess
-    raise SystemExit(main(sys.argv))

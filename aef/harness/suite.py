@@ -20,8 +20,6 @@ it is reported rather than hidden.
 
 from __future__ import annotations
 
-import json
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,16 +27,13 @@ from aef.harness.candidate import CandidateDiff
 from aef.harness.corpus import Scenario
 from aef.harness.evaluation import CohortVerdict, ScoreSet
 from aef.harness.git import GitRepo
+from aef.harness.isolated_suite import run_corpus_isolated
 from aef.harness.outcome import Outcome
 from aef.harness.proposer import ControlCohortGenerator, ProposalError
-from aef.harness.sandbox import SandboxPolicy, run_sandboxed
-from aef.harness.scenario_runner import RESULT_MARKER_PREFIX, result_marker
-from aef.harness.trace_codec import dumps
+from aef.harness.sandbox import SandboxPolicy
 from aef.harness.workspace import build_candidate_workspace
 from aef.harness.zones import ZonePolicy
 from aef.security.tool import PolicyConfig
-
-RUNNER_MODULE = "aef.harness.scenario_runner"
 
 
 class SuiteError(RuntimeError):
@@ -61,85 +56,6 @@ class VariantRun:
         return frozenset(self.outcomes)
 
 
-def _parse(label: str, stdout: str, nonce: str) -> VariantRun:
-    # EXACTLY ONE marker, carrying this run's nonce. The candidate's code runs
-    # in the same process and writes the same stdout, so parsing the whole
-    # stream let it author the evidence judging it: two added lines printing a
-    # forged payload and exiting cleanly scored a broken agent 1.0 and passed
-    # all six gates (ADR 0085).
-    #
-    # Counting is what makes a forgery visible. The nonce is in argv, so a
-    # candidate can print a valid-looking marker — and then there are two, and
-    # two is not one.
-    marker = result_marker(nonce)
-    # The PREFIX is counted too. `str.count` is non-overlapping, so a
-    # candidate writing `PREFIX + nonce` with no suffix let the runner's own
-    # leading NUL complete a match — count stayed 1 while two partial markers
-    # were present, and the payload read was the runner's marker text rather
-    # than JSON. That surfaced as an ordinary parse failure, not as the
-    # forgery it is (ADR 0090).
-    prefix_hits = stdout.count(RESULT_MARKER_PREFIX)
-    found = stdout.count(marker)
-    if prefix_hits > 1:
-        raise SuiteError(
-            f"variant {label!r} emitted {prefix_hits} result-marker prefixes and the runner "
-            f"writes one. Agent-authored code is forging the evidence that judges it — this "
-            f"is a security event, not a bad candidate."
-        )
-    if found == 0:
-        raise SuiteError(
-            f"variant {label!r} produced no runner result — the process exited without "
-            f"the harness writing one. Anything it printed is the candidate's output, "
-            f"not evidence. stdout was {stdout[:400]!r}"
-        )
-    if found > 1:
-        raise SuiteError(
-            f"variant {label!r} emitted {found} result markers and the runner writes one. "
-            f"Agent-authored code is forging the evidence that judges it — this is a "
-            f"security event, not a bad candidate."
-        )
-    payload = stdout[stdout.index(marker) + len(marker) :]
-    try:
-        raw = json.loads(payload)
-    except json.JSONDecodeError as exc:
-        raise SuiteError(
-            f"variant {label!r} runner emitted invalid JSON after its result marker: "
-            f"{exc}; payload was {payload[:400]!r}"
-        ) from exc
-
-    outcomes: dict[str, Outcome] = {}
-    per_scenario: dict[str, float] = {}
-    failures: list[str] = []
-    cost = 0
-    for scenario_id, body in raw.items():
-        if "outcome" not in body:
-            # A payload without an outcome is a malformed runner result, not
-            # a scenario that failed. Raising a bare KeyError from here
-            # escaped `_gates_with_evidence`'s `except SuiteError` and left
-            # the run with no ledger entry at all (ADR 0093).
-            raise SuiteError(
-                f"variant {label!r} emitted a result for {scenario_id!r} with no outcome; "
-                f"the runner's output is malformed, which is a harness fault and not a "
-                f"verdict on the candidate"
-            )
-        # The runner reports WHY a scenario produced nothing. Discarding it
-        # turned a harness crash — an unserialisable value, a missing
-        # service — into "5 previously-passing scenario(s) no longer pass",
-        # a behavioural regression with a fabricated error count (ADR 0093).
-        if body.get("failure"):
-            failures.append(f"{scenario_id}: {body['failure']}")
-        outcomes[scenario_id] = Outcome.from_payload(body["outcome"])
-        per_scenario[scenario_id] = float(body.get("score", 0.0))
-        cost += int(body.get("cost_tokens", 0))
-
-    return VariantRun(
-        label=label,
-        outcomes=outcomes,
-        scores=ScoreSet(label=label, per_scenario=per_scenario, cost_tokens=cost),
-        failures=tuple(failures),
-    )
-
-
 def _policy_payload(config: PolicyConfig) -> dict[str, object]:
     return {
         "allowed_scopes": sorted(config.allowed_scopes),
@@ -157,30 +73,32 @@ def run_variant(
     policy: SandboxPolicy,
     policy_config: PolicyConfig | None = None,
 ) -> VariantRun:
-    """Score one already-materialised workspace over the corpus, in the sandbox."""
-    payload = workspace / "_scenarios.json"
-    payload.write_text(dumps([s.to_payload() for s in scenarios]))
-    nonce = uuid.uuid4().hex
-    argv = ["python", "-m", RUNNER_MODULE, str(payload), entrypoint, nonce]
-    if policy_config is not None:
-        # Written into the workspace by the HARNESS, from the base ref. The
-        # candidate never supplies the rules it is judged under (ADR 0082).
-        policy_payload = workspace / "_policy.json"
-        policy_payload.write_text(json.dumps(_policy_payload(policy_config)))
-        argv.append(str(policy_payload))
+    """Score one already-materialised workspace over the corpus.
 
-    result = run_sandboxed(
-        tuple(argv),
-        workdir=workspace,
-        policy=policy,
+    The candidate's code runs in a worker subprocess that is asked for one
+    node at a time and never learns what a scenario is; the outcome, the
+    score and the count are concluded HERE (ADR 0094). The previous
+    arrangement — a subprocess that ran the corpus and printed the results —
+    made the candidate the author of the evidence judging it, and three
+    attempts to secure that channel were each defeated (ADR 0085, 0088, 0093).
+    """
+    del policy  # the worker is a plain subprocess; see ADR 0094's open items
+    results = run_corpus_isolated(
+        workspace,
+        list(scenarios),
+        entrypoint=entrypoint,
+        policy=policy_config,
     )
-    if not result.ok:
-        detail = "timed out" if result.timed_out else f"exit {result.returncode}"
-        raise SuiteError(
-            f"variant {label!r} failed ({detail}): "
-            f"{(result.stderr or result.stdout).strip()[-1500:]}"
-        )
-    return _parse(label, result.stdout, nonce)
+    return VariantRun(
+        label=label,
+        outcomes={sid: r.outcome for sid, r in results.items()},
+        scores=ScoreSet(
+            label=label,
+            per_scenario={sid: r.score for sid, r in results.items()},
+            cost_tokens=sum(r.cost_tokens for r in results.values()),
+        ),
+        failures=tuple(f"{sid}: {r.failure}" for sid, r in sorted(results.items()) if r.failure),
+    )
 
 
 @dataclass(frozen=True)
