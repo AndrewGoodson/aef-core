@@ -17,7 +17,6 @@ are built to judge. `test_a_lie_through_the_node_contract_is_still_possible`
 pins that as a deliberate boundary rather than an oversight.
 """
 
-import os
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +26,7 @@ import pytest
 from aef.harness.corpus import Scenario, Split
 from aef.harness.isolated import IsolationError, NodeWorkerSession, graph_from
 from aef.harness.isolated_suite import run_corpus_isolated
+from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
 from aef.kernel import END, Graph, GraphExecutor, Node
 from aef.services.runtime import agent_services
 from aef.state import AEFState, Plan, StateDelta
@@ -225,9 +225,13 @@ def test_a_graph_that_cannot_be_built_fails_every_scenario(corpus) -> None:  # t
 
 def test_the_session_reports_a_worker_that_will_not_start() -> None:
     ws = Path(tempfile.mkdtemp())
-    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "PYTHONPATH": str(ws)}
     with pytest.raises(IsolationError):
-        NodeWorkerSession("nonexistent.module:build_graph", workdir=ws, env=env, timeout_s=10)
+        NodeWorkerSession(
+            "nonexistent.module:build_graph",
+            workdir=ws,
+            sandbox=SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED),
+            extra_env={"PYTHONPATH": str(ws)},
+        )
 
 
 def test_the_parent_rebuilds_the_graph_and_records_its_own_trace(corpus) -> None:  # type: ignore[no-untyped-def]
@@ -235,13 +239,11 @@ def test_the_parent_rebuilds_the_graph_and_records_its_own_trace(corpus) -> None
     candidate's account of itself."""
     ws, _ = corpus
     (ws / "agents" / "graph.py").write_text(HONEST)
-    env = {
-        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-        "HOME": os.environ.get("HOME", "/tmp"),
-        "PYTHONPATH": f"{ws}:{REPO_ROOT}",
-    }
     with NodeWorkerSession(
-        "agents.graph:build_graph", workdir=ws, env=env, timeout_s=30
+        "agents.graph:build_graph",
+        workdir=ws,
+        sandbox=SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED),
+        extra_env={"PYTHONPATH": f"{ws}:{REPO_ROOT}"},
     ) as session:
         graph = graph_from(session)
         assert graph.id == "g"
@@ -250,3 +252,137 @@ def test_the_parent_rebuilds_the_graph_and_records_its_own_trace(corpus) -> None
         )
         assert result.trace is not None
         assert [r.node_id for r in result.trace] == ["do"]
+
+
+# --------------------------------------------------------------------------
+# ADR 0095 — the worker gets the confinement ADR 0094 dropped
+# --------------------------------------------------------------------------
+
+
+def _agent(body: str) -> str:
+    return (
+        "from aef.kernel import END, Graph, Node\n"
+        "from aef.state import Plan, StateDelta\n"
+        "def do(state, ctx, services):\n"
+        f"{body}\n"
+        "def build_graph():\n"
+        '    return Graph(id="g", version="1", nodes={"do": Node(id="do", version="1", '
+        'fn=do, deterministic=True)}, edges=[], entry_node="do")\n'
+    )
+
+
+def test_no_credential_reaches_the_process_running_candidate_code(corpus, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """ADR 0094 hand-rolled the worker's environment, so `SandboxPolicy`'s
+    `env_allowlist` — the thing that decides what a candidate can read a
+    credential out of — did not apply to the one process running candidate
+    code (ADR 0095)."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-SECRET-must-not-reach-the-worker")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "aws-SECRET")
+
+    ws, _ = corpus
+    (ws / "agents" / "graph.py").write_text(
+        _agent(
+            "    import os\n"
+            "    wm = {\n"
+            "        'anthropic': os.environ.get('ANTHROPIC_API_KEY'),\n"
+            "        'aws': os.environ.get('AWS_SECRET_ACCESS_KEY'),\n"
+            "    }\n"
+            "    return StateDelta(plan=Plan(goal=state.objective, status='done'),\n"
+            "                      working_memory=wm, scores={'quality': 1.0}), END"
+        )
+    )
+    with NodeWorkerSession(
+        "agents.graph:build_graph",
+        workdir=ws,
+        sandbox=SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED),
+        extra_env={"PYTHONPATH": f"{ws}:{REPO_ROOT}"},
+    ) as session:
+        result = GraphExecutor(graph_from(session).compile(), agent_services()).run(
+            AEFState(run_id="s0", agent_id="a", objective="o")
+        )
+
+    assert result.final_state.working_memory["anthropic"] is None
+    assert result.final_state.working_memory["aws"] is None
+
+
+def test_a_node_that_never_returns_does_not_hang_the_gate(corpus) -> None:  # type: ignore[no-untyped-def]
+    """`SandboxPolicy.timeout_s` bounds a whole command; a worker is
+    long-lived by design. Without a per-step deadline a node that never
+    returns hangs the PARENT — the one process a candidate must not be able
+    to stop (ADR 0095)."""
+    import time as _time
+
+    ws, scenarios = corpus
+    (ws / "agents" / "graph.py").write_text(
+        _agent("    import time\n    time.sleep(60)\n    return StateDelta(), END")
+    )
+
+    started = _time.monotonic()
+    results = run_corpus_isolated(
+        ws,
+        scenarios,
+        entrypoint="agents.graph:build_graph",
+        sandbox=SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED),
+        step_timeout_s=2.0,
+    )
+    elapsed = _time.monotonic() - started
+
+    assert elapsed < 30, f"the gate waited {elapsed:.0f}s on a node that sleeps 60"
+    assert not any(r.outcome.passed for r in results.values())
+    assert all(r.failure for r in results.values())
+
+
+def test_a_runaway_descendant_does_not_outlive_the_gate(corpus) -> None:  # type: ignore[no-untyped-def]
+    """The worker gets its own process group so the group can be killed —
+    the property ADR 0093 fixed for `run_sandboxed` and ADR 0094 left off the
+    worker."""
+    import time as _time
+
+    ws, scenarios = corpus
+    marker = ws / "GRANDCHILD_SURVIVED"
+    (ws / "agents" / "graph.py").write_text(
+        _agent(
+            "    import subprocess, sys, time\n"
+            f"    subprocess.Popen([sys.executable, '-c', \"import time; time.sleep(6); "
+            f"open({str(marker)!r}, 'w').write('x')\"])\n"
+            "    time.sleep(60)\n"
+            "    return StateDelta(), END"
+        )
+    )
+
+    run_corpus_isolated(
+        ws,
+        scenarios,
+        entrypoint="agents.graph:build_graph",
+        sandbox=SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED),
+        step_timeout_s=2.0,
+    )
+    assert not marker.exists()
+    _time.sleep(7)
+    assert not marker.exists(), "a descendant outlived the gate that reported finishing"
+
+
+def test_the_gate_stops_ignoring_the_sandbox_policy() -> None:
+    """`run_variant` accepted a `SandboxPolicy` and deleted it — the
+    regression ADR 0094 recorded and this closes."""
+    import inspect
+
+    from aef.harness.suite import run_variant
+
+    source = inspect.getsource(run_variant)
+    assert "del policy" not in source
+    assert "sandbox=policy" in source
+
+
+def test_an_honest_agent_still_passes_under_full_confinement(corpus) -> None:  # type: ignore[no-untyped-def]
+    """The control. Confinement that rejects honest agents is not
+    confinement, it is a broken gate."""
+    ws, scenarios = corpus
+    (ws / "agents" / "graph.py").write_text(HONEST)
+    results = run_corpus_isolated(
+        ws,
+        scenarios,
+        entrypoint="agents.graph:build_graph",
+        sandbox=SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED),
+    )
+    assert sum(1 for r in results.values() if r.outcome.passed) == 3

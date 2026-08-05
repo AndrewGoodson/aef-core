@@ -41,7 +41,7 @@ import resource
 import signal
 import subprocess
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -192,6 +192,32 @@ def _kill_process_group(pid: int) -> None:
         return
 
 
+def child_preexec(policy: SandboxPolicy) -> Callable[[], None]:
+    """The confinement a sandboxed child gets, as a reusable callable.
+
+    Exported because the node worker needs exactly this and a second copy
+    would drift — which is the defect ADR 0091 named. `setsid()` puts the
+    child in its own process group so a timeout can kill its descendants too;
+    the rlimits are best-effort and reported rather than assumed.
+    """
+
+    def _preexec() -> None:  # pragma: no cover - runs in the forked child
+        os.setsid()
+        _apply_rlimits(policy)
+
+    return _preexec
+
+
+def scrubbed_env(policy: SandboxPolicy) -> dict[str, str]:
+    """The child's environment. Public for the same reason as above."""
+    return _scrubbed_env(policy)
+
+
+def kill_process_group(pid: int) -> None:
+    """SIGKILL a child's whole process group. Public for the same reason."""
+    _kill_process_group(pid)
+
+
 def run_sandboxed(
     argv: Sequence[str],
     *,
@@ -203,10 +229,6 @@ def run_sandboxed(
     workdir = workdir.resolve()
     if not workdir.is_dir():
         raise SandboxUnavailableError(f"sandbox workdir {workdir} does not exist")
-
-    def _preexec() -> None:  # pragma: no cover - runs in the forked child
-        os.setsid()  # own process group, so a timeout kills descendants too
-        _apply_rlimits(policy)
 
     started = time.monotonic()
     timed_out = False
@@ -224,7 +246,7 @@ def run_sandboxed(
             env=_scrubbed_env(policy),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            preexec_fn=_preexec,
+            preexec_fn=child_preexec(policy),
         )
         try:
             out, err = proc.communicate(timeout=policy.timeout_s)

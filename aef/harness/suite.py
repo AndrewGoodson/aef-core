@@ -82,12 +82,15 @@ def run_variant(
     made the candidate the author of the evidence judging it, and three
     attempts to secure that channel were each defeated (ADR 0085, 0088, 0093).
     """
-    del policy  # the worker is a plain subprocess; see ADR 0094's open items
     results = run_corpus_isolated(
         workspace,
         list(scenarios),
         entrypoint=entrypoint,
         policy=policy_config,
+        # ADR 0094 accepted this policy and ignored it, so the process running
+        # candidate code had no rlimits, no process group and an ad-hoc
+        # environment. Applied now (ADR 0095).
+        sandbox=policy,
     )
     return VariantRun(
         label=label,

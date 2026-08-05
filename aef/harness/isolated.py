@@ -18,6 +18,7 @@ aggregate report, or exit cleanly mid-run and have that read as success.
 from __future__ import annotations
 
 import json
+import select
 import subprocess
 import sys
 from collections.abc import Callable
@@ -26,6 +27,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any
 
+from aef.harness.sandbox import SandboxPolicy, child_preexec, kill_process_group, scrubbed_env
 from aef.harness.trace_codec import decode_route
 from aef.kernel.contracts import Context, Edge, Node, Route, Services, SideEffect
 from aef.kernel.graph import Graph
@@ -74,11 +76,27 @@ class NodeWorkerSession:
         entrypoint: str,
         *,
         workdir: Path,
-        env: dict[str, str],
-        timeout_s: float,
-        preexec_fn: Callable[[], None] | None = None,
+        sandbox: SandboxPolicy,
+        extra_env: dict[str, str] | None = None,
+        step_timeout_s: float | None = None,
     ) -> None:
-        self._timeout_s = timeout_s
+        """The worker gets the SAME confinement a sandboxed command gets.
+
+        ADR 0094 moved the candidate into this worker and left it a plain
+        subprocess — no rlimits, no process group, an ad-hoc environment — so
+        the defence against a *dishonest* candidate was bought by dropping the
+        defence against a *runaway* one. Both now apply (ADR 0095).
+
+        `step_timeout_s` bounds ONE node evaluation. `SandboxPolicy.timeout_s`
+        bounds a whole command, and a worker is long-lived by design — a node
+        that never returns would otherwise hang the parent forever, since the
+        parent is the thing doing the waiting.
+        """
+        self._sandbox = sandbox
+        self._timed_out = False
+        self._step_timeout_s = step_timeout_s if step_timeout_s is not None else sandbox.timeout_s
+        env = scrubbed_env(sandbox)
+        env.update(extra_env or {})
         self._proc = subprocess.Popen(
             [sys.executable, "-m", WORKER_MODULE, entrypoint],
             cwd=str(workdir),
@@ -87,7 +105,7 @@ class NodeWorkerSession:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            preexec_fn=preexec_fn,
+            preexec_fn=child_preexec(sandbox),
         )
         self.description = self._handshake(entrypoint)
 
@@ -121,7 +139,20 @@ class NodeWorkerSession:
         return graph
 
     def _readline(self) -> str | None:
+        """Read one frame, or give up at the deadline.
+
+        `readline()` on a pipe blocks forever. The parent is what waits, so a
+        node that never returns hangs the GATE — the one process that must
+        not be stoppable by the candidate (ADR 0095). `select` bounds it, and
+        a timeout kills the worker's whole process group so descendants go
+        too.
+        """
         assert self._proc.stdout is not None
+        ready, _, _ = select.select([self._proc.stdout], [], [], self._step_timeout_s)
+        if not ready:
+            kill_process_group(self._proc.pid)
+            self._timed_out = True
+            return None
         line = self._proc.stdout.readline()
         return line.strip() or None
 
@@ -148,9 +179,14 @@ class NodeWorkerSession:
 
         line = self._readline()
         if line is None:
+            why = (
+                f"did not answer within {self._step_timeout_s:g}s and was killed"
+                if self._timed_out
+                else "exited or was killed mid-step"
+            )
             raise IsolationError(
-                f"worker produced no result for node {node_id!r} — it exited or was killed "
-                f"mid-step. A run that stopped is not a run that passed."
+                f"worker produced no result for node {node_id!r} — it {why}. "
+                f"A run that stopped is not a run that passed."
             )
         response = _unframe(line)
         if "error" in response:
@@ -168,8 +204,17 @@ class NodeWorkerSession:
         process; the parent needs to notice rather than keep asking."""
         return self._proc.poll()
 
+    @property
+    def timed_out(self) -> bool:
+        """A node exceeded the per-step deadline. Distinct from the worker
+        dying on its own, because the operator needs to tell them apart."""
+        return self._timed_out
+
     def close(self) -> None:
         if self._proc.poll() is None:
+            # The GROUP, not just the child: `child_preexec` gave it its own
+            # session precisely so descendants can be reached (ADR 0093).
+            kill_process_group(self._proc.pid)
             self._proc.kill()
         for stream in (self._proc.stdin, self._proc.stdout, self._proc.stderr):
             if stream is None:

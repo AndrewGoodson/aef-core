@@ -14,7 +14,6 @@ at a time and never learns what a scenario is (ADR 0094).
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -23,6 +22,7 @@ from aef.harness.corpus import Scenario, fixed_clock
 from aef.harness.evaluation import score_of
 from aef.harness.isolated import IsolationError, NodeWorkerSession, graph_from
 from aef.harness.outcome import Outcome, classify
+from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
 from aef.kernel import GraphExecutor
 from aef.security.tool import PolicyConfig
 from aef.services.eval.rule_based import RuleBasedEvaluator
@@ -40,17 +40,15 @@ class ScenarioResult:
 
 
 def _worker_env(workspace: Path) -> dict[str, str]:
-    """A scrubbed environment with the workspace importable.
+    """The only thing the worker needs beyond the sandbox's own allowlist.
 
-    Mirrors `sandbox._scrubbed_env`'s posture: nothing inherited that a
-    candidate could read a credential out of.
+    Previously this hand-rolled the whole environment, which meant the
+    sandbox's `env_allowlist` — the thing that decides what a candidate can
+    read a credential out of — did not apply to the process running candidate
+    code (ADR 0095). `SandboxPolicy` supplies the environment now; this adds
+    the import path and nothing else.
     """
-    return {
-        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-        "HOME": os.environ.get("HOME", "/tmp"),
-        "LANG": os.environ.get("LANG", "C.UTF-8"),
-        "PYTHONPATH": str(workspace),
-    }
+    return {"PYTHONPATH": str(workspace)}
 
 
 def run_corpus_isolated(
@@ -59,7 +57,8 @@ def run_corpus_isolated(
     *,
     entrypoint: str,
     policy: PolicyConfig | None = None,
-    timeout_s: float = 120.0,
+    sandbox: SandboxPolicy | None = None,
+    step_timeout_s: float | None = None,
 ) -> dict[str, ScenarioResult]:
     """Execute every scenario, concluding in this process.
 
@@ -76,7 +75,11 @@ def run_corpus_isolated(
     session: NodeWorkerSession | None = None
     try:
         session = NodeWorkerSession(
-            entrypoint, workdir=workspace, env=_worker_env(workspace), timeout_s=timeout_s
+            entrypoint,
+            workdir=workspace,
+            sandbox=sandbox or SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED),
+            extra_env=_worker_env(workspace),
+            step_timeout_s=step_timeout_s,
         )
         graph = graph_from(session)
         compiled = graph.compile()

@@ -198,7 +198,14 @@ class G2OutcomeNonRegression(Gate):
                 "builds your graph."
             )
         results = run_corpus_isolated(
-            workspace, scenarios, entrypoint=self.entrypoint, policy=self.policy_config
+            workspace,
+            scenarios,
+            entrypoint=self.entrypoint,
+            policy=self.policy_config,
+            # The same confinement a sandboxed command gets. G2 already had
+            # the policy in `ctx`; the worker was simply not given it
+            # (ADR 0095).
+            sandbox=ctx.sandbox_policy,
         )
         return {sid: r.outcome for sid, r in results.items()}
 
