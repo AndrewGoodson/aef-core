@@ -1,7 +1,12 @@
 # ADR 0053: Drift is distance from the baseline; rebaselining is rate-limited
 
 ## Status
-Accepted. Implements M7 (gate G5).
+Accepted, and **partially corrected**. The file-level drift granularity
+decided here was wrong and is superseded by ADR 0058 (on the
+`verify/1b-isolation` branch): it scored a two-line change to a one-file
+agent as 1.0, identical to a total rewrite, so no budget below 1.0 could
+admit anything. The distance-not-sum decision and the rebaseline rate limit
+below both stand. Implements M7 (gate G5).
 
 ## Context
 Every other gate judges one candidate in isolation. A system that accepts

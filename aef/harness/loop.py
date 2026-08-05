@@ -37,7 +37,7 @@ from aef.harness.gates.base import Gate, GateContext, PipelineResult, run_pipeli
 from aef.harness.gates.g0_static_safety import G0StaticSafety
 from aef.harness.gates.g1_builds import G1Builds
 from aef.harness.gates.g2_outcome import GATED_SPLITS, G2OutcomeNonRegression
-from aef.harness.gates.g3_improvement import G3Improvement
+from aef.harness.gates.g3_improvement import DEFAULT_MIN_COHORT_SIZE, G3Improvement
 from aef.harness.gates.g4_separation import G4SeparationOfPowers
 from aef.harness.gates.g5_rate_drift import AcceptedChange, G5RateAndDrift
 from aef.harness.git import GitRepo
@@ -108,6 +108,14 @@ class LoopConfig:
     cohort_seed: int = 0
     now_for_gates: datetime | None = None
     gates: tuple[Gate, ...] | None = None
+
+    def __post_init__(self) -> None:
+        if self.cohort_size < DEFAULT_MIN_COHORT_SIZE:
+            raise ValueError(
+                f"cohort_size {self.cohort_size} is below G3's minimum of "
+                f"{DEFAULT_MIN_COHORT_SIZE}; every candidate would be rejected for an "
+                f"undersized cohort. Raise it, or change G3's floor deliberately."
+            )
 
     def sandbox_policy(self) -> SandboxPolicy:
         if self.network_isolated:
@@ -245,9 +253,13 @@ def _gates_with_evidence(
                 G2OutcomeNonRegression(corpus=config.corpus, precomputed=candidate_run.outcomes)
             )
         elif isinstance(g, G3Improvement):
-            rebuilt.append(
-                G3Improvement(verdict=cohort_verdict, min_cohort_size=config.cohort_size)
-            )
+            # G3's cohort floor is deliberately left at its own default.
+            # Passing the configured size through as the floor made the guard
+            # unsatisfiable — the builder generates exactly that many members,
+            # so the comparison could never be true, and a two-member cohort
+            # passed with p95 computed over two samples. A floor that moves
+            # with the thing it floors is not a floor (ADR 0063).
+            rebuilt.append(G3Improvement(verdict=cohort_verdict))
         elif isinstance(g, G5RateAndDrift) and baseline is not None:
             rebuilt.append(
                 G5RateAndDrift(
