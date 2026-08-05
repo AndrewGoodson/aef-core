@@ -449,3 +449,39 @@ def test_a_subverting_candidate_is_stopped_by_the_first_gate(repo: GitRepo, tmp_
     assert result.ran == ("G0",)  # never reached the expensive gates
     assert not result.passed
     assert result.security_events
+
+
+# --------------------------------------------------------------------------
+# ADR 0064 — G4 resolves import aliases
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "e = Edge(from_node='a', to_node='b', requires_human_approval=False)\n",
+        "from aef.kernel import Edge as E\n"
+        "e = E(from_node='a', to_node='b', requires_human_approval=False)\n",
+        "import aef.kernel as k\n"
+        "e = k.Edge(from_node='a', to_node='b', requires_human_approval=False)\n",
+        "import aef.kernel\n"
+        "e = aef.kernel.Edge(from_node='a', to_node='b', requires_human_approval=False)\n",
+    ],
+)
+def test_g4_sees_through_import_aliases(source: str) -> None:
+    """Matching the bare name was evadable: `from aef.kernel import Edge as E`
+    produced zero findings, so a HITL gate could be disabled by renaming an
+    import."""
+    assert scan_metadata("agents/x.py", source)
+
+
+def test_g4_sees_an_aliased_node_declaration() -> None:
+    source = (
+        "from aef.kernel import Node as N\n"
+        "n = N(id='x', version='1', fn=f, deterministic=True, side_effects=SideEffect.IO)\n"
+    )
+    assert scan_metadata("agents/x.py", source)
+
+
+def test_g4_does_not_flag_an_unrelated_call() -> None:
+    assert scan_metadata("agents/x.py", "e = SomethingElse(requires_human_approval=False)\n") == ()

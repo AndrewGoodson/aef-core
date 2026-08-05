@@ -78,6 +78,38 @@ def _side_effect_name(node: ast.expr) -> str | None:
     return None
 
 
+def _resolve_aliases(tree: ast.Module) -> dict[str, str]:
+    """Map local names back to `Node` / `Edge`.
+
+    Matching the bare name was measured as evadable: `from aef.kernel import
+    Edge as E` then `E(..., requires_human_approval=False)` produced zero
+    findings, so an agent could disable a HITL gate by renaming the import
+    (ADR 0064). Both alias forms are now resolved.
+    """
+    aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name in ("Node", "Edge"):
+                    aliases[alias.asname or alias.name] = alias.name
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                # `import aef.kernel as k` -> k.Node(...) resolves via attribute
+                if alias.asname:
+                    aliases.setdefault(f"__module__{alias.asname}", alias.name)
+    return aliases
+
+
+def _called_name(func: ast.expr, aliases: dict[str, str]) -> str | None:
+    """The canonical `Node`/`Edge` a call refers to, through any alias."""
+    if isinstance(func, ast.Name):
+        return aliases.get(func.id, func.id if func.id in ("Node", "Edge") else None)
+    if isinstance(func, ast.Attribute) and func.attr in ("Node", "Edge"):
+        # `aef.kernel.Node(...)` or `k.Node(...)`
+        return func.attr
+    return None
+
+
 def scan_metadata(path: str, source: str) -> tuple[MetadataFinding, ...]:
     """Find safety-metadata declarations that disable a control."""
     try:
@@ -87,13 +119,17 @@ def scan_metadata(path: str, source: str) -> tuple[MetadataFinding, ...]:
         return ()
 
     findings: list[MetadataFinding] = []
+    aliases = _resolve_aliases(tree)
 
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+        if not isinstance(node, ast.Call):
+            continue
+        called = _called_name(node.func, aliases)
+        if called is None:
             continue
         kwargs = _kwargs(node)
 
-        if node.func.id == "Node":
+        if called == "Node":
             deterministic = _literal(kwargs["deterministic"]) if "deterministic" in kwargs else None
             side_effects = (
                 _side_effect_name(kwargs["side_effects"]) if "side_effects" in kwargs else None
@@ -138,7 +174,7 @@ def scan_metadata(path: str, source: str) -> tuple[MetadataFinding, ...]:
                     )
                 )
 
-        elif node.func.id == "Edge":
+        elif called == "Edge":
             for flag in ("requires_human_approval", "requires_deterministic_fallback"):
                 if flag in kwargs and _literal(kwargs[flag]) is False:
                     findings.append(

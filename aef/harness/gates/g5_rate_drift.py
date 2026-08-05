@@ -40,6 +40,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 
 from aef.harness.gates.base import Gate, GateContext, GateOutcome, GateResult
 
@@ -79,18 +80,22 @@ def _lines(blob: bytes | None) -> list[bytes]:
 
 
 def structural_drift(baseline: dict[str, bytes], current: dict[str, bytes]) -> float:
-    """Fraction of LINES that differ between the baseline and the current
-    state, over the larger of the two line counts.
+    """Fraction of LINES that differ, measured as the actual edit size.
 
     Distance, not path length: a line changed and changed back contributes
     nothing, which is the correct reading of "how far have we drifted from
     what the owner blessed".
 
     Line-level rather than file-level (ADR 0058): a two-line change to a
-    one-file agent is not the same as rewriting it, and the file-level
-    metric could not tell them apart — it scored both 1.0, so no budget
-    below 1.0 admitted anything. Found by running the pipeline against a
-    real single-file agent, not by inspection.
+    one-file agent is not the same as rewriting it, and the file-level metric
+    scored both 1.0.
+
+    Edit size rather than position-wise (ADR 0064): comparing index-by-index
+    treated a pure insertion as changing every line after it, so adding one
+    line at the top of a 100-line file scored **1.000** against a true 0.010 —
+    a hundredfold over-report that would reject any candidate adding an
+    import. `SequenceMatcher` charges an insertion one line wherever it lands.
+    Measured, not suspected.
     """
     paths = set(baseline) | set(current)
     if not paths:
@@ -101,15 +106,12 @@ def structural_drift(baseline: dict[str, bytes], current: dict[str, bytes]) -> f
     for path in paths:
         before = _lines(baseline.get(path))
         after = _lines(current.get(path))
-        # Position-wise comparison over the longer side: an added or removed
-        # line counts, and so does a changed one, without needing a diff.
-        span = max(len(before), len(after))
-        total += span
-        for i in range(span):
-            b = before[i] if i < len(before) else None
-            a = after[i] if i < len(after) else None
-            if b != a:
-                differing += 1
+        total += max(len(before), len(after))
+        if before == after:
+            continue
+        matcher = SequenceMatcher(a=before, b=after, autojunk=False)
+        common = sum(block.size for block in matcher.get_matching_blocks())
+        differing += max(len(before), len(after)) - common
 
     if total == 0:
         # Both sides are empty files. Nothing changed, and dividing would
