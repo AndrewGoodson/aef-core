@@ -11,11 +11,29 @@ the delta sets them.
 from __future__ import annotations
 
 import math
+from copy import deepcopy
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
 from aef.state.schema import AEFState, Message, Plan, Provenance
+
+
+def _non_finite_paths(value: Any, path: str = "") -> list[str]:
+    """Every location holding a non-finite float, walked depth-first."""
+    if isinstance(value, float):
+        return [] if math.isfinite(value) else [path or "<root>"]
+    if isinstance(value, dict):
+        out: list[str] = []
+        for key, item in value.items():
+            out.extend(_non_finite_paths(item, f"{path}.{key}" if path else str(key)))
+        return out
+    if isinstance(value, list | tuple):
+        out = []
+        for index, item in enumerate(value):
+            out.extend(_non_finite_paths(item, f"{path}[{index}]"))
+        return out
+    return []
 
 
 class StateDelta(BaseModel):
@@ -61,22 +79,61 @@ class StateDelta(BaseModel):
             )
         return value
 
+    @field_validator("working_memory", "retrieved_context", "tool_results", "errors")
+    @classmethod
+    def _payloads_must_be_finite(cls, value: Any) -> Any:
+        """The ADR 0022 guard, on the fields it did not cover.
+
+        It rejected a non-finite `scores` value and left `working_memory`
+        alone — the field `AEFState`'s own docstring names as where per-agent
+        data belongs. A NaN there is rewritten to JSON `null` by the first
+        checkpoint write, exactly as ADR 0022 describes, so a corrupted value
+        reads as a merely-absent one forever after (ADR 0087).
+        """
+        bad = sorted(_non_finite_paths(value))
+        if bad:
+            raise ValueError(
+                f"non-finite float (inf/-inf/nan) at: {bad}. JSON has no literal for these, "
+                f"so the first checkpoint write rewrites them as null and the corruption "
+                f"becomes indistinguishable from an absent value. Fix the computation "
+                f"upstream (ADR 0022)."
+            )
+        return value
+
     def apply(self, state: AEFState) -> AEFState:
+        """Return a NEW state. Deeply, not shallowly.
+
+        `model_copy(update=...)` rebuilds the top-level containers and shares
+        every nested object. `NodeExecutionRecord.input_state` aliases the
+        live state, so a node mutating a nested dict **rewrote trace records
+        that are supposed to be history** — and the same delta applied twice
+        leaked nested values between the two results and back into the delta
+        itself (ADR 0087).
+
+        The existing purity test asserted `state.working_memory == {}` and
+        `state.checkpoint_seq`, which passes under full nested aliasing while
+        reading as if it pins deep purity.
+
+        `deepcopy` on the agent-supplied payloads only. `messages`,
+        `provenance` and `plan` are frozen or immutable-by-contract models;
+        the `Any`-typed dicts and lists are where arbitrary mutable structure
+        lives.
+        """
         return state.model_copy(
             update={
                 "messages": [*state.messages, *self.messages],
                 "plan": self.plan if self.plan is not None else state.plan,
-                "working_memory": {**state.working_memory, **self.working_memory},
+                "working_memory": deepcopy({**state.working_memory, **self.working_memory}),
                 "context_budget_tokens": (
                     self.context_budget_tokens
                     if self.context_budget_tokens is not None
                     else state.context_budget_tokens
                 ),
-                "retrieved_context": [*state.retrieved_context, *self.retrieved_context],
-                "tool_results": [*state.tool_results, *self.tool_results],
+                "retrieved_context": deepcopy([*state.retrieved_context, *self.retrieved_context]),
+                "tool_results": deepcopy([*state.tool_results, *self.tool_results]),
                 "reflections": [*state.reflections, *self.reflections],
                 "scores": {**state.scores, **self.scores},
-                "errors": [*state.errors, *self.errors],
+                "errors": deepcopy([*state.errors, *self.errors]),
                 "provenance": [*state.provenance, *self.provenance],
                 "checkpoint_seq": state.checkpoint_seq + 1,
             }

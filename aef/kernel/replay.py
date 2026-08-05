@@ -42,8 +42,26 @@ class ReplayEngine:
             raise ValueError("cannot replay an empty trace")
         self._validate_chain(trace)
 
-        state: AEFState | None = None
+        # The chain starts at the FIRST record's recorded input and is
+        # carried forward from there. It used to be reassigned from each
+        # record's own `input_state`, so the final state was decided entirely
+        # by the last record: a trace whose node ids chained perfectly and
+        # whose deterministic nodes re-executed to matching deltas replayed
+        # CLEAN with forged `scores`, `objective` and `checkpoint_seq`,
+        # because no deterministic node reads those fields (ADR 0087).
+        #
+        # ADR 0023's stated goal was "instead of silently producing a wrong
+        # final state with no error". Reordering by node id was caught; state
+        # forgery was not.
+        state: AEFState = trace[0].input_state
         for record in trace:
+            if record.input_state != state:
+                raise MalformedTraceError(
+                    f"trace record for node {record.node_id!r} declares an input state that "
+                    f"is not what the preceding record produced. A trace is a chain: each "
+                    f"record's input must be the previous record's output, or the final "
+                    f"state describes a run that never happened."
+                )
             node = self._graph.nodes.get(record.node_id)
             if node is None:
                 raise DeterminismViolationError(
@@ -85,10 +103,11 @@ class ReplayEngine:
                         f"replayed={replayed_route!r}"
                     )
             # Trust the recorded delta to reconstruct state — non-deterministic
-            # (LLM) node output is replayed, not recomputed.
-            state = record.delta.apply(record.input_state)
+            # (LLM) node output is replayed, not recomputed. Applied to the
+            # CHAINED state, which the check above has just proved equal to
+            # `record.input_state`.
+            state = record.delta.apply(state)
 
-        assert state is not None  # non-empty trace guarantees at least one iteration
         return state
 
     def _validate_chain(self, trace: Sequence[NodeExecutionRecord]) -> None:

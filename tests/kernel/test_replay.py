@@ -246,9 +246,14 @@ def test_replay_allows_a_partial_trace_not_ending_in_end() -> None:
     compiled = graph.compile()
     state = _make_state()
 
-    record_a = _record("a", state, route="b", delta=StateDelta(working_memory={"stage": "a"}))
+    delta_a = StateDelta(working_memory={"stage": "a"})
+    record_a = _record("a", state, route="b", delta=delta_a)
+    # b's input is a's OUTPUT. A trace is a chain, and replay now verifies
+    # that — a hand-built trace where both records share the initial state
+    # describes a run that never happened (ADR 0087). The point under test is
+    # the unresolvable final route, not a broken chain.
     record_b = _record(
-        "b", state, route="c"
+        "b", delta_a.apply(state), route="c"
     )  # "c" doesn't even exist — but this is the LAST record
 
     result = ReplayEngine(compiled, Services()).replay([record_a, record_b])

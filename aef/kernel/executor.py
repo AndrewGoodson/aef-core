@@ -149,13 +149,20 @@ class GraphExecutor:
                 ),
             )
 
+            # Snapshot BEFORE the node runs. A node receives the live state
+            # object, and nothing stops it mutating a nested structure in
+            # place — which rewrote the very record that is supposed to be
+            # the history of what it was given. `StateDelta.apply` is now
+            # deeply pure (ADR 0087), but that governs apply's OUTPUT; this
+            # is apply's INPUT, and it is the thing the record holds.
+            recorded_input = state.model_copy(deep=True) if record_trace else state
             delta, route, fallback_target = self._execute_node(node, state, ctx)
             new_state = delta.apply(state)
             if record_trace:
                 trace.append(
                     NodeExecutionRecord(
                         node_id=node.id,
-                        input_state=state,
+                        input_state=recorded_input,
                         context=ctx,
                         delta=delta,
                         route=route,
