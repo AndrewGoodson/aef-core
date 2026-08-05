@@ -97,11 +97,21 @@ class SandboxPolicy:
     extra_env: Mapping[str, str] = field(default_factory=dict)
     network: NetworkPolicy = NetworkPolicy.REQUIRE_ISOLATED
     network_isolation_attested: bool = False
+    # An image name, not a `ContainerRuntime`: a plain string keeps this
+    # module free of any import of `container.py`, which imports this one.
+    # When set, `run_sandboxed` executes inside a container that ACTUALLY
+    # blocks egress, and the attestation stops being something a caller
+    # asserts and becomes something a probe measured (ADR 0102).
+    container_image: str | None = None
 
     def __post_init__(self) -> None:
         if self.timeout_s <= 0:
             raise ValueError("SandboxPolicy.timeout_s must be positive")
-        if self.network is NetworkPolicy.REQUIRE_ISOLATED and not self.network_isolation_attested:
+        if (
+            self.network is NetworkPolicy.REQUIRE_ISOLATED
+            and not self.network_isolation_attested
+            and self.container_image is None
+        ):
             # Not raised lazily at run() time: a policy that can never run is
             # a configuration error, and finding out at the first gate
             # invocation is finding out too late.
@@ -224,8 +234,19 @@ def run_sandboxed(
     workdir: Path,
     policy: SandboxPolicy | None = None,
 ) -> SandboxResult:
-    """Run `argv` under `policy`, in `workdir`, and report what was enforced."""
+    """Run `argv` under `policy`, in `workdir`, and report what was enforced.
+
+    Dispatches to the container path when the policy names an image. Imported
+    lazily so `container.py` can import this module without a cycle, and so a
+    repo with no container runtime never pays for the import.
+    """
     policy = policy or SandboxPolicy()
+    if policy.container_image is not None:
+        from aef.harness.container import detect_container_runtime, run_containerized
+
+        runtime = detect_container_runtime(policy.container_image)
+        return run_containerized(argv, workdir=workdir, runtime=runtime, policy=policy)
+
     workdir = workdir.resolve()
     if not workdir.is_dir():
         raise SandboxUnavailableError(f"sandbox workdir {workdir} does not exist")

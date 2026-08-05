@@ -128,6 +128,7 @@ class LoopConfig:
     # `GateContext` since ADR 0044 and never supplied.
     gate_limits: dict[str, Any] = field(default_factory=dict)
     gates: tuple[Gate, ...] | None = None
+    sandbox_image: str | None = None
 
     def __post_init__(self) -> None:
         if self.cohort_size < DEFAULT_MIN_COHORT_SIZE:
@@ -138,6 +139,15 @@ class LoopConfig:
             )
 
     def sandbox_policy(self) -> SandboxPolicy:
+        # An image beats an attestation. `network_isolated=True` is the CI
+        # job saying "I am inside a --network none container"; an image is
+        # the local run BUILDING one, and the difference is that the second
+        # is verified by a probe rather than asserted (ADR 0102). That is 4b:
+        # the two places can now make the same claim on the same evidence.
+        if self.sandbox_image is not None:
+            return SandboxPolicy(
+                network=NetworkPolicy.REQUIRE_ISOLATED, container_image=self.sandbox_image
+            )
         if self.network_isolated:
             return SandboxPolicy(
                 network=NetworkPolicy.REQUIRE_ISOLATED, network_isolation_attested=True

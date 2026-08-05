@@ -61,6 +61,7 @@ def _config(args: argparse.Namespace) -> LoopConfig:
         graph_id=args.graph_id,
         corpus=load_corpus(corpus_dir) if corpus_dir and corpus_dir.is_dir() else None,
         network_isolated=bool(getattr(args, "network_isolated", False)),
+        sandbox_image=getattr(args, "sandbox_image", None),
         build_commands=_build_commands(args),
         entrypoint=getattr(args, "entrypoint", None),
         config_path=getattr(args, "config", None),
@@ -382,6 +383,15 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         help="attest that the caller (a CI container) provides network isolation. "
         "A process cannot revoke its own network access; passing this without real "
         "isolation makes the sandbox's report untrue.",
+    )
+    p_gate.add_argument(
+        "--sandbox-image",
+        default=None,
+        help="run candidate code inside a container built from this image, with "
+        "--network none, --read-only and --cap-drop ALL. Unlike --network-isolated, "
+        "which the caller ASSERTS, this is verified by a probe before anything runs — "
+        "so the result's network_isolated=True is measured. Needs docker or podman; "
+        "raises rather than degrading if neither is available.",
     )
     p_gate.add_argument(
         "--build-command",
