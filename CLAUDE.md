@@ -61,6 +61,18 @@ to `REQUIRE_HITL`, not `ALLOW`. Assume prompt injection will sometimes
 succeed; this is designed for containment (least privilege, explicit HITL
 gates, a full audit trail via `AuditLogWriter`), not detection.
 
+## Should the loop merge on its own? (no)
+
+`docs/trust/promotion-trust-case.md` assesses all seven Phase-4 criteria —
+now all implemented — and recommends **against** enabling Tier-1
+auto-merge. Its three load-bearing findings: criteria 1 and 6 have never run
+against the live traffic and real tenants their text names; a shadow node
+doing direct file I/O is not contained by the tool policy (demonstrated);
+and every adversarial round in the program found a defect, six for six, in
+freshly written code believed correct. Residual risk is stated as a number
+(5-10 false accepts per 100 gated candidates) with its basis and its
+weakness. Read it before changing anything about promotion.
+
 ## Evolution is disabled (constraint #7)
 
 `aef/evolution/` ships real interfaces and a hard-enforced disablement:

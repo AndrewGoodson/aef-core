@@ -1,0 +1,141 @@
+"""The trust case must stay true, or it is worse than absent.
+
+A document asserting a recommendation and a residual-risk number goes stale
+silently: nothing fails when the thing it describes changes. These tests pin
+the claims that would MOST mislead an owner if they drifted — above all that
+Tier-1 is still off, since the whole document is advice about not enabling it.
+"""
+
+from pathlib import Path
+
+import pytest
+
+CASE = Path(__file__).resolve().parents[2] / "docs" / "trust" / "promotion-trust-case.md"
+
+
+@pytest.fixture(scope="module")
+def text() -> str:
+    """Whitespace-normalised. The document is hard-wrapped, so a claim can be
+    split across a line break and a naive substring check would report it
+    missing — a test that fails on the prose's formatting rather than on its
+    content teaches everyone to stop reading it."""
+    return " ".join(CASE.read_text().split())
+
+
+def test_the_trust_case_exists_and_recommends(text: str) -> None:
+    assert "Recommendation: no" in text
+    assert "Do not enable Tier-1 auto-merge." in text
+
+
+def test_the_document_still_describes_a_disabled_switch() -> None:
+    """The claim the whole document rests on. If Tier-1 were ever enabled, the
+    recommendation would be describing a decision already taken."""
+    from aef.harness.review import Disposition
+
+    assert hasattr(Disposition, "ESCALATE")
+    from aef.harness import loop
+
+    source = Path(loop.__file__).read_text()
+    assert "auto_merge" not in source or "tier1_auto_merge = True" not in source
+
+
+def test_a_fully_passing_candidate_still_escalates() -> None:
+    """Behaviour, not prose. The transcript in §1 ends `DISPOSITION: ESCALATE
+    — every gate passed, but Tier-1 auto-merge is not enabled`, and that is
+    the sentence an owner reads the rest of the document against."""
+    from aef.harness.gates.base import GateOutcome, GateResult, PipelineResult
+    from aef.harness.review import Disposition, decide
+
+    passing = PipelineResult(
+        results=tuple(
+            GateResult(gate=g, outcome=GateOutcome.PASS, reason="ok")
+            for g in ("G0", "G1", "G4", "G5", "G2", "G3")
+        )
+    )
+    decision = decide(passing, tier1_enabled=False)
+    assert decision.disposition is Disposition.ESCALATE, (
+        "a fully passing candidate no longer escalates — the trust case's central "
+        "transcript is stale and its recommendation is about a switch already thrown"
+    )
+
+    # And every production caller must still pass False. The parameter existing
+    # is not the control; nobody setting it is.
+    import subprocess
+
+    hits = subprocess.run(
+        ["grep", "-rn", "tier1_enabled", "aef/"],
+        capture_output=True,
+        text=True,
+        cwd=str(CASE.resolve().parents[2]),
+    ).stdout.splitlines()
+    enabled_true = [h for h in hits if "tier1_enabled=True" in h.replace(" ", "")]
+    assert not enabled_true, f"Tier-1 is enabled somewhere in aef/: {enabled_true}"
+
+
+def test_the_residual_risk_is_a_number_with_a_basis(text: str) -> None:
+    """6c: "None" is not an answer, it is an absence of one."""
+    assert "5 to 10 false accepts" in text
+    assert "derived, not measured" in text
+    assert "p95" in text
+
+
+def test_the_adversarial_section_reports_failures_not_only_successes(text: str) -> None:
+    """A list of attacks that all held is a claim of completeness, which this
+    program has three ADRs recording as a mistake."""
+    assert text.count("BROKE IT") >= 2
+    assert "demonstrated bypass" in text
+
+
+def test_the_known_canary_limit_is_still_a_limit() -> None:
+    """§2.2 tells an owner a narrow regression is invisible. If coverage
+    improved and this went unstated, the document would be understating the
+    harness — which is the safer direction, and still wrong."""
+    from aef.harness.canary import CanaryState
+
+    state = CanaryState(graph_id="g", candidate_version=2, warm_version=1)
+    verdict = state.evaluate(
+        candidate_samples=[10.0] * 995 + [10_000.0] * 5,
+        incumbent_samples=[10.0] * 1000,
+    )
+    assert verdict.passed, (
+        "coverage improved: update docs/trust/promotion-trust-case.md §2.2 and "
+        "DEFAULT_PERCENTILES together"
+    )
+
+
+def test_the_shadow_bypass_is_still_real() -> None:
+    """§2.1 is the finding that carries the recommendation. If it were fixed
+    and the document still claimed it, the case would be arguing against
+    enabling on evidence that no longer holds."""
+    import tempfile
+
+    from aef.harness.shadow import ShadowRunner
+    from aef.kernel import END, Graph, Node
+    from aef.services.runtime import agent_services
+    from aef.state import AEFState, StateDelta
+
+    marker = Path(tempfile.mkdtemp()) / "shadow_did_io"
+
+    def writes(state, ctx, services):  # type: ignore[no-untyped-def]
+        marker.write_text("the shadow wrote this")
+        return StateDelta(), END
+
+    def clean(state, ctx, services):  # type: ignore[no-untyped-def]
+        return StateDelta(), END
+
+    def graph(fn, name):  # type: ignore[no-untyped-def]
+        return Graph(
+            id=name,
+            version="1",
+            nodes={"w": Node(id="w", version="1", fn=fn, deterministic=True)},
+            edges=[],
+            entry_node="w",
+        )
+
+    ShadowRunner(incumbent=graph(clean, "i"), candidate=graph(writes, "c")).observe(
+        AEFState(run_id="r", agent_id="a", objective="o"), agent_services()
+    )
+    assert marker.exists(), (
+        "the shadow no longer performs direct I/O: §2.1 of the trust case is stale, and "
+        "the recommendation rests partly on it"
+    )

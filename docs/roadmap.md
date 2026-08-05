@@ -156,8 +156,13 @@ in code, not just documented. Re-enabling requires implementing ALL of:
 
 **All seven are now implemented. Phase 4 remains DISABLED**, and that is a
 separate decision from whether the criteria are met: the owner throws the
-switch, on the evidence, not the harness on its own. See ADR 0006 and the
-trust case.
+switch, on the evidence, not the harness on its own.
+
+`docs/trust/promotion-trust-case.md` is the assessment, and its
+recommendation is **do not enable**: criteria 1 and 6 have never run against
+the live traffic and real tenants their own text names, and shadow
+containment has a demonstrated bypass (a node doing direct file I/O is not
+contained by the tool policy). See ADR 0006 and ADR 0104.
 
 ## Phase 5 — Multi-agent coordination, HITL at scale, first vertical agents — **STUBBED**
 
