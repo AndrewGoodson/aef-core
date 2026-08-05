@@ -104,6 +104,7 @@ class NodeWorkerSession:
         """
         self._sandbox = sandbox
         self._timed_out = False
+        self._closed = False
         self._step_timeout_s = step_timeout_s if step_timeout_s is not None else sandbox.timeout_s
         self._container = container
         env = scrubbed_env(sandbox)
@@ -253,7 +254,32 @@ class NodeWorkerSession:
         dying on its own, because the operator needs to tell them apart."""
         return self._timed_out
 
+    @property
+    def is_contained(self) -> bool:
+        """Whether this worker runs inside a container.
+
+        A `NodeWorkerSession` with `container=None` is a plain subprocess: real
+        confinement (rlimits, process group, scrubbed env) and NO filesystem or
+        network boundary. Callers that need the boundary must ask for THIS, not
+        for "is there a session" — the adversarial round for ADR 0105 found a
+        runner claiming containment because any truthy object had been passed.
+        """
+        return self._container is not None
+
+    @property
+    def closed(self) -> bool:
+        """Set by `close()`, not inferred from the process.
+
+        `poll()` returns None until the killed process is reaped, so a session
+        closed microseconds ago still read as open — and the caller's next
+        node evaluation failed as a dead worker and was recorded as CANDIDATE
+        behaviour. An explicit flag rather than a symptom, which is what
+        ADR 0064 measured about inferring a marker.
+        """
+        return self._closed
+
     def close(self) -> None:
+        self._closed = True
         if self._proc.poll() is None:
             if self._container is not None:
                 # Ask the DAEMON. Killing the `docker run` client leaves the

@@ -75,6 +75,19 @@ def _graph(graph_id: str, *, value: str, side_effects: SideEffect = SideEffect.P
     )
 
 
+def _uncontained(incumbent, candidate):  # type: ignore[no-untyped-def]
+    """A deliberately UNCONTAINED runner.
+
+    Containment is the default (ADR 0105); these tests exercise the
+    comparison, divergence and refusal logic, which is identical either way
+    and much cheaper without a container. Written once, here, so that every
+    call site is not silently opting out of a security control — and so
+    `grep uncontained` finds every place that does.
+    """
+
+    return ShadowRunner(incumbent=incumbent, candidate=candidate, uncontained=True)
+
+
 def _state() -> AEFState:
     return AEFState(run_id="live-1", agent_id="a", objective="serve a real request")
 
@@ -82,9 +95,7 @@ def _state() -> AEFState:
 def test_the_user_gets_the_incumbents_answer_when_the_candidate_disagrees() -> None:
     """ "nothing it returns reaches a user". Asserted on the value actually
     handed back, not on a flag saying it was suppressed."""
-    runner = ShadowRunner(
-        incumbent=_graph("g", value="incumbent"), candidate=_graph("g", value="candidate")
-    )
+    runner = _uncontained(_graph("g", value="incumbent"), _graph("g", value="candidate"))
     observation = runner.observe(_state(), agent_services())
     assert observation.state.working_memory["answer"] == "incumbent"
     assert observation.divergence.diverged
@@ -93,7 +104,7 @@ def test_the_user_gets_the_incumbents_answer_when_the_candidate_disagrees() -> N
 def test_there_is_no_way_to_reach_the_candidates_result() -> None:
     """Structural, not a convention. A shadow result a caller can reach for is
     one that eventually reaches a user."""
-    runner = ShadowRunner(incumbent=_graph("g", value="a"), candidate=_graph("g", value="b"))
+    runner = _uncontained(_graph("g", value="a"), _graph("g", value="b"))
     observation = runner.observe(_state(), agent_services())
     for attribute in vars(observation):
         assert "candidate" not in attribute, (
@@ -104,7 +115,7 @@ def test_there_is_no_way_to_reach_the_candidates_result() -> None:
 def test_agreement_is_reported_as_agreement() -> None:
     """The control for the divergence test. If everything read as divergent
     the assertion above would pass while measuring nothing."""
-    runner = ShadowRunner(incumbent=_graph("g", value="same"), candidate=_graph("g", value="same"))
+    runner = _uncontained(_graph("g", value="same"), _graph("g", value="same"))
     observation = runner.observe(_state(), agent_services())
     assert observation.agreed
     assert observation.divergence.fields == ()
@@ -114,9 +125,7 @@ def test_only_the_divergence_is_recorded_not_both_outputs() -> None:
     """A shadow log holding every candidate output is a second copy of
     production data with none of its access controls."""
     secret = "SHADOW-ONLY-VALUE-Q7X"
-    runner = ShadowRunner(
-        incumbent=_graph("g", value="served"), candidate=_graph("g", value=secret)
-    )
+    runner = _uncontained(_graph("g", value="served"), _graph("g", value=secret))
     divergence = runner.observe(_state(), agent_services()).divergence
     assert divergence.fields == ("working_memory",)
     assert secret not in repr(divergence), "the shadow's output leaked into the divergence record"
@@ -130,7 +139,7 @@ def test_a_mutating_candidate_is_refused_before_any_live_request() -> None:
     with pytest.raises(UnsuppressableSideEffectError, match="mutating"):
         assert_shadowable(mutating)
     with pytest.raises(UnsuppressableSideEffectError):
-        ShadowRunner(incumbent=_graph("g", value="x"), candidate=mutating)
+        _uncontained(_graph("g", value="x"), mutating)
 
 
 def test_a_pure_candidate_is_shadowable() -> None:
@@ -154,9 +163,7 @@ def test_a_crashing_candidate_does_not_break_the_live_request() -> None:
         edges=[],
         entry_node="work",
     )
-    observation = ShadowRunner(incumbent=_graph("g", value="ok"), candidate=broken).observe(
-        _state(), agent_services()
-    )
+    observation = _uncontained(_graph("g", value="ok"), broken).observe(_state(), agent_services())
 
     assert observation.state.working_memory["answer"] == "ok"
     assert "candidate exploded" in observation.divergence.candidate_failed
@@ -193,7 +200,7 @@ def test_a_divergence_rate_over_zero_observations_is_undefined() -> None:
 
 
 def test_the_report_accumulates_which_fields_diverge() -> None:
-    runner = ShadowRunner(incumbent=_graph("g", value="a"), candidate=_graph("g", value="b"))
+    runner = _uncontained(_graph("g", value="a"), _graph("g", value="b"))
     report = ShadowReport()
     for _ in range(3):
         report = report.with_observation(runner.observe(_state(), agent_services()))

@@ -94,15 +94,59 @@ specifically watching for. One dry round on a small surface is not evidence
 that the rate has fallen; the program's own stopping rule wants two
 consecutive, on the whole system.
 
+## Containment is now the DEFAULT (revision)
+
+The owner made the call the section below deferred. `ShadowRunner` **refuses
+to construct** without a container session unless `uncontained=True` is passed
+explicitly — the same shape `SandboxPolicy` already uses for network
+isolation: refuse unless the containment is really there, and make running
+without it something a caller states rather than inherits.
+
+Every observation records `contained`, and a report is downgraded by **one**
+uncontained observation, because a report is only as strong as its weakest
+observation and averaging that away is how a mixed run reads as a clean one.
+`SandboxCapabilities` exists for the same reason (ADR 0102): a result cannot
+be read without knowing the conditions it ran under.
+
+An AST test asserts nothing in `aef/` passes `uncontained=True` — a production
+caller opting out would restore the bypass while every other test still
+passed. The first version of that test grepped for the string and matched the
+error message that *tells* a caller how to opt out, plus a `.pyc`; inferring a
+call from text rather than reading the call is what ADR 0064 measured.
+
+### The adversarial round on the default
+
+Four attacks, three landed:
+
+- **Any truthy object made the runner claim containment.** `session is not
+  None` was the check, so a bare object produced `contained=True` while the
+  candidate ran in-process — a false capability report, the class ADR 0102
+  exists to prevent. Containment is now read from the session's own container,
+  and a `NodeWorkerSession` built without one is refused for the same reason:
+  a plain subprocess has real rlimits and no filesystem boundary.
+- **A closed session was blamed on the candidate.** Reusing one recorded
+  `contained=True` and a divergence reading `IsolationError: worker died
+  before node` — a harness fault reported as candidate behaviour (ADR 0074),
+  which makes a working candidate look broken. Now refused. `closed` is an
+  explicit flag set by `close()`, because `poll()` returns None until the
+  killed process is reaped and a session closed microseconds ago still read as
+  open.
+- **An empty report claimed `contained=True` over zero observations**, making
+  "never ran" indistinguishable from the good case — the same reasoning that
+  already made `divergence_rate` raise.
+- **Dismissed:** `object.__setattr__` bypasses the frozen dataclass. It
+  bypasses any frozen dataclass in Python, and anyone who can call it can call
+  the underlying function directly, so it is not a boundary. Recorded so the
+  dismissal is legible rather than an omission. `contained` is derived from
+  the session rather than stored, so tampering with the field changes nothing.
+
 ## What this does not fix
 
-**It is opt-in.** `ShadowRunner` with an in-process graph behaves exactly as
-before, and that is still the default. Making containment mandatory means
-requiring every adopter to supply an image, which is a decision with a cost
-and is the owner's.
-
-**It needs an operator-supplied image** with `aef` importable. The tests build
-one and **skip** without it rather than passing.
+**It needs an operator-supplied image** with `aef` importable — and now that
+containment is the default, an adopter without one must pass `uncontained=True`
+and will see `contained=False` on every observation. That is the intended
+trade: the weaker mode stays available and stops being invisible. The tests
+build an image and **skip** without it rather than passing.
 
 **The workspace is still a host directory the candidate can write to.** That
 is what a workspace is; containment means it cannot reach anywhere else.
@@ -113,10 +157,12 @@ That was the trust case's reason #1 and it is untouched by this.
 
 ## Consequences for the recommendation
 
-Reason #2 of the trust case's recommendation weakens and does not disappear:
-the criterion doing the most work for promotion is contained only when someone
-opts in. Reasons #1, #3 and #4 are unchanged. **The recommendation remains: do
-not enable Tier-1 auto-merge.**
+Reason #2 of the trust case's recommendation is now **spent**: shadow
+containment is the default, opting out is explicit, and the opt-out is
+recorded on the evidence. Reasons #1, #3 and #4 are unchanged, and #1 was
+always the strongest — criteria 1 and 6 still have not run against the live
+traffic and real tenants their own text names. **The recommendation remains:
+do not enable Tier-1 auto-merge.**
 
 ## Confidence
 High on the fix, which is verified in both directions against a real container

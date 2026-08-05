@@ -69,6 +69,15 @@ class ShadowError(RuntimeError):
     pass
 
 
+class UncontainedShadowError(ShadowError):
+    """A shadow asked to run without containment, without saying so.
+
+    Fatal rather than a warning, for the reason ADR 0102 gives about
+    sandboxes: one that silently provides less than it claims is worse than
+    none, because the claim is what gets trusted.
+    """
+
+
 class UnsuppressableSideEffectError(ShadowError):
     """The candidate declares an effect shadowing cannot contain.
 
@@ -108,6 +117,12 @@ class ShadowObservation:
 
     state: AEFState
     divergence: Divergence
+    # What this evidence was gathered under. `SandboxCapabilities` exists for
+    # the same reason (ADR 0102): a gate outcome can never be read without
+    # knowing the conditions it ran under, and an uncontained shadow
+    # observation is a weaker claim that would otherwise be indistinguishable
+    # from a contained one.
+    contained: bool = False
 
     @property
     def agreed(self) -> bool:
@@ -122,6 +137,21 @@ class ShadowReport:
     divergences: int = 0
     candidate_failures: int = 0
     diverging_fields: dict[str, int] = field(default_factory=dict)
+    # Counted, not flagged. A report is only as strong as its weakest
+    # observation, and averaging that away is how a mixed run reads as a clean
+    # one — so the count is kept and `contained` is derived from it.
+    uncontained_observations: int = 0
+
+    @property
+    def contained(self) -> bool:
+        """True only if there IS evidence and all of it was contained.
+
+        Zero observations is not containment. The same reasoning as
+        `divergence_rate`: an empty report claiming `contained=True` asserts a
+        property of evidence that does not exist, and "never ran" would again
+        be indistinguishable from the good case (reproduced).
+        """
+        return self.observations > 0 and self.uncontained_observations == 0
 
     @property
     def divergence_rate(self) -> float:
@@ -146,6 +176,8 @@ class ShadowReport:
             candidate_failures=self.candidate_failures
             + (1 if observation.divergence.candidate_failed else 0),
             diverging_fields=fields,
+            uncontained_observations=self.uncontained_observations
+            + (0 if observation.contained else 1),
         )
 
 
@@ -216,12 +248,74 @@ class ShadowRunner:
     incumbent: Graph
     candidate: Graph
     max_steps: int = 1000
+    # Supplied by `contained_candidate_graph`. Its presence is what makes this
+    # runner contained — a fact, not an assertion: the session IS the
+    # container, so there is nothing to keep in agreement with anything.
+    session: NodeWorkerSession | None = None
+    # The explicit opt-out. Named for what it costs rather than for what it
+    # enables, so nobody sets it without reading it.
+    uncontained: bool = False
+
+    @property
+    def contained(self) -> bool:
+        """Contained only if the session actually runs inside a container.
+
+        REPRODUCED in this fix's adversarial round: `session is not None` let
+        any truthy object make the runner report `contained=True` while the
+        candidate ran in-process — a false capability report, which is the
+        class ADR 0102 exists to prevent. A `NodeWorkerSession` with
+        `container=None` is a plain subprocess and is caught by the same
+        check.
+        """
+        return isinstance(self.session, NodeWorkerSession) and self.session.is_contained
 
     def __post_init__(self) -> None:
         # At construction, not at first request. A runner that can never
         # legally run is a configuration error, and finding out on live
         # traffic is finding out too late (the same reasoning as
         # `SandboxPolicy.__post_init__`).
+        #
+        # CONTAINMENT IS THE DEFAULT, and the shape is the one
+        # `SandboxPolicy` already uses for network isolation: refuse unless
+        # the containment is really there, and make running without it
+        # something a caller states rather than inherits. The trust case
+        # demonstrated why — suppression by `PolicyEngine` denies tool CALLS,
+        # and a node that imported `pathlib` and wrote to disk was never
+        # making one (ADR 0105).
+        if self.session is not None and self.uncontained:
+            raise ShadowError(
+                "uncontained=True was passed alongside a container session; one of the two "
+                "is a mistake, and guessing which would mislabel the evidence"
+            )
+        if self.session is not None and not isinstance(self.session, NodeWorkerSession):
+            raise ShadowError(
+                f"session must be a NodeWorkerSession, not {type(self.session).__name__}. "
+                f"Containment is read from the session, so an object that merely occupies "
+                f"the slot would make this runner claim a boundary it does not have"
+            )
+        if self.session is not None and not self.session.is_contained:
+            raise UncontainedShadowError(
+                "the supplied session runs its worker as a plain subprocess, not in a "
+                "container: real rlimits and a scrubbed environment, but no filesystem or "
+                "network boundary. Pass a session built by `contained_candidate_graph`, or "
+                "uncontained=True to say plainly that this run has no boundary."
+            )
+        if self.session is not None and self.session.closed:
+            raise ShadowError(
+                "this session is already closed, so every node evaluation would fail as a "
+                "dead worker and be recorded as a CANDIDATE divergence. A harness fault "
+                "reported as candidate behaviour is the mistake ADR 0074 names"
+            )
+        if self.session is None and not self.uncontained:
+            raise UncontainedShadowError(
+                "shadow execution runs a candidate's code on LIVE input, and an in-process "
+                "shadow contains only its TOOL CALLS — a node that opens a file directly is "
+                "outside the policy engine, demonstrated in the trust case §2.1. Build the "
+                "candidate with `contained_candidate_graph(...)` and pass the session it "
+                "returns. To run without containment anyway, pass uncontained=True; every "
+                "observation will record contained=False and a report containing one is "
+                "downgraded for all of them."
+            )
         assert_shadowable(self.candidate)
 
     def observe(self, state: AEFState, services: Services) -> ShadowObservation:
@@ -259,7 +353,11 @@ class ShadowRunner:
                 1 for e in (candidate_state.errors if candidate_state else []) if _is_denial(e)
             ),
         )
-        return ShadowObservation(state=incumbent_result.final_state, divergence=divergence)
+        return ShadowObservation(
+            state=incumbent_result.final_state,
+            divergence=divergence,
+            contained=self.contained,
+        )
 
 
 def _is_denial(entry: dict[str, Any]) -> bool:
@@ -292,9 +390,19 @@ def contained_candidate_graph(
     forged "identical" state hides a divergence and makes the candidate look
     SAFER than it is (ADR 0094).
 
-    Returns the graph and the session, because the caller must close the
-    session: an unclosed one leaves a container running, which is ADR 0093's
-    defect in its third location.
+    Returns the graph and the session. The caller passes BOTH to
+    `ShadowRunner` — the session is what makes the runner contained, and it
+    must be closed afterwards, because an unclosed one leaves a container
+    running (ADR 0093's defect in its third location):
+
+    ```python
+    graph, session = contained_candidate_graph(entrypoint, workdir=w, runtime=rt)
+    try:
+        runner = ShadowRunner(incumbent=incumbent, candidate=graph, session=session)
+        ...
+    finally:
+        session.close()
+    ```
     """
     session = NodeWorkerSession(
         entrypoint,

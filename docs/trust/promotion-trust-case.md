@@ -179,14 +179,18 @@ containment by accident:
   /aef-workspace/ok.txt            WROTE   <-- the workspace, deliberately
 ```
 
-**Three things this does not fix, and they are why reason #2 in §4 survives at
-reduced weight.** It is **opt-in**: `ShadowRunner` with an in-process graph
-still behaves exactly as before, and that is still the default — the
-in-process bypass is pinned by a test asserting it is *still real*. It
-requires the operator to supply an **image with `aef` importable**, which is
-their build, not this repo's. And the candidate can still write to its own
-**workspace**, which is a host directory — that is what a workspace is, and
-containment means it cannot reach anywhere else.
+**Containment is now the DEFAULT.** `ShadowRunner` refuses to construct
+without a container session unless `uncontained=True` is passed explicitly,
+and every observation records which it was — one uncontained observation
+downgrades a whole report. An AST test asserts nothing in `aef/` opts out.
+
+**Two things remain, and neither is the bypass.** It requires the operator to
+supply an **image with `aef` importable**, which is their build, not this
+repo's; an adopter without one must opt out explicitly and will see
+`contained=False` on every observation, which is the intended trade — the
+weaker mode stays available and stops being invisible. And the candidate can
+still write to its own **workspace**, which is a host directory: that is what
+a workspace is, and containment means it cannot reach anywhere else.
 
 Reproduce the image the tests use:
 
@@ -328,13 +332,13 @@ Four reasons, in order of weight:
    synthetic inputs. Enabling on that basis would be accepting a mechanism for
    the evidence it was designed to produce rather than for the evidence it has
    produced.
-2. **The shadow's containment is fixed but opt-in** (§2.1). The demonstrated
-   bypass is closed by running the candidate inside the Milestone 4 container,
-   verified in both directions. But the in-process path is unchanged and still
-   the default, and the fix needs an operator-supplied image. This reason has
-   weakened since the first draft of this document and has not disappeared:
-   the criterion doing the most work for promotion is contained only when
-   someone opts in.
+2. ~~**The shadow's containment is demonstrably incomplete.**~~ **Spent.**
+   The bypass is closed, verified in both directions, and containment is now
+   the default rather than an opt-in — running without it is explicit and is
+   recorded on every observation. This reason no longer supports the
+   recommendation. It is left visible rather than deleted because a
+   recommendation whose reasons quietly change is not one an owner can audit;
+   three of the four still stand, and #1 was always the strongest.
 3. **Every adversarial round in this program has found a defect, six for six,
    in freshly written code believed correct** — including one that revoked an
    entire milestone. There is no basis in the observed data for expecting the
@@ -353,9 +357,8 @@ Not more tests. In rough order of value:
 - **An adopter with real traffic**, running shadow execution for a fixed
   period, with the divergence rate published. This is the single highest-value
   missing item and it converts criteria 1 and 6 from mechanisms into evidence.
-- ~~Shadow executed inside the Milestone 4 container~~ — **done** (ADR 0105).
-  What remains is making it the default rather than the opt-in, which needs a
-  decision about requiring an image.
+- ~~Shadow executed inside the Milestone 4 container~~ — **done**, and now
+  the **default** (ADR 0105).
 - **A keyed tenant hash**, closing §2.3.
 - **An adversarial review by someone who did not write this**, targeting the
   four attacks that held.

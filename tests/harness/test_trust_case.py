@@ -80,7 +80,25 @@ def test_the_contained_shadow_path_the_document_claims_exists(text: str) -> None
 
     assert callable(contained_candidate_graph)
     assert "now fixed, and the fix is verified in both directions" in text
-    assert "opt-in" in text, "the document must not claim the fix is the default"
+    assert "Containment is now the DEFAULT" in text
+
+    # And the document must not still be describing it as opt-in.
+    from aef.harness.shadow import ShadowRunner, UncontainedShadowError
+    from aef.kernel import END, Graph, Node
+    from aef.state import StateDelta
+
+    def w(state, ctx, services):  # type: ignore[no-untyped-def]
+        return StateDelta(), END
+
+    graph = Graph(
+        id="g",
+        version="1",
+        nodes={"w": Node(id="w", version="1", fn=w, deterministic=True)},
+        edges=[],
+        entry_node="w",
+    )
+    with pytest.raises(UncontainedShadowError):
+        ShadowRunner(incumbent=graph, candidate=graph)
 
 
 def test_the_residual_risk_is_a_number_with_a_basis(text: str) -> None:
@@ -114,12 +132,13 @@ def test_the_known_canary_limit_is_still_a_limit() -> None:
     )
 
 
-def test_the_in_process_shadow_bypass_is_still_real() -> None:
-    """§2.1 says the bypass is CLOSED for the contained path and unchanged for
-    the in-process one, which is still the default. This pins the second half.
+def test_the_in_process_shadow_bypass_is_still_real_when_opted_into() -> None:
+    """§2.1 says the bypass is closed by containment, which is now the DEFAULT.
+    The uncontained mode still exists and still has the bypass — that is why
+    opting into it is explicit and recorded on every observation.
 
-    If the in-process path ever contains its candidates, §2.1 is understating
-    the harness and reason #2 in §4 should shrink again.
+    If the uncontained path ever contains its candidates too, §2.1 is
+    understating the harness and should be updated.
     """
     import tempfile
 
@@ -146,9 +165,9 @@ def test_the_in_process_shadow_bypass_is_still_real() -> None:
             entry_node="w",
         )
 
-    ShadowRunner(incumbent=graph(clean, "i"), candidate=graph(writes, "c")).observe(
-        AEFState(run_id="r", agent_id="a", objective="o"), agent_services()
-    )
+    ShadowRunner(
+        incumbent=graph(clean, "i"), candidate=graph(writes, "c"), uncontained=True
+    ).observe(AEFState(run_id="r", agent_id="a", objective="o"), agent_services())
     assert marker.exists(), (
         "the in-process shadow no longer performs direct I/O: §2.1 of the trust case is "
         "stale, and reason #2 of the recommendation rests partly on it"
