@@ -482,23 +482,33 @@ def test_aef_ships_a_py_typed_marker() -> None:
 
 
 def test_the_config_stub_says_which_fields_actually_reach_a_run() -> None:
-    """Of the five per-agent fields, only `model_provider` is wired
-    (ADR 0014). No generated file said so, while the checklist made "fill in
-    these fields" a required step and `aef doctor` called the result
+    """No generated file said which fields were live, while the checklist made
+    "fill in these fields" a required step and `aef doctor` called the result
     "valid" — an adopter setting `require_hitl_above_risk` believed it was
-    enforced."""
+    enforced (ADR 0014).
+
+    This test previously asserted `STILL NOT WIRED` was PRESENT. Milestone 2
+    wired `objectives` and `evaluator.suites` and made `knowledge_graph` and a
+    non-default `extends` refuse at load time, so the section is gone and the
+    assertion inverts (ADR 0100). It is pinned in both directions: a stub that
+    grew the section back would be describing a regression, and a stub that
+    dropped the refusals would be hiding one.
+    """
     import yaml
 
     from aef.cli.adopt import render_aef_yaml
 
     text = render_aef_yaml("adoptee")
     assert yaml.safe_load(text), "the stub must still be valid YAML"
-    assert "STILL NOT WIRED" in text
-    assert "ADR 0014" in text
-    # The two that ARE wired must be named as wired, or the stub understates
-    # itself and an adopter leaves working config unset.
+    assert "STILL NOT WIRED" not in text
     assert "WHAT IS WIRED TODAY" in text
-    assert "tools.allow" in text
+    for field in ("tools.allow", "objectives", "evaluator.suites"):
+        assert field in text, f"the stub understates itself: {field} is wired and unnamed"
+    # The two that are REFUSED must still be named, or an adopter writes a
+    # block that raises on their first command with no warning here.
+    assert "REFUSED" in text
+    for refused in ("knowledge_graph", "extends"):
+        assert refused in text
 
 
 def test_the_documented_eval_sequence_includes_the_flag_it_needs() -> None:

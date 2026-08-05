@@ -1,3 +1,4 @@
+from aef.config.domain_gates import DomainGateError, build_domain_gates
 from aef.config.factory import (
     UnsupportedProviderImplError,
     build_model_provider,
@@ -26,6 +27,8 @@ __all__ = [
     "PoliciesConfig",
     "ToolsConfig",
     "UnsupportedProviderImplError",
+    "DomainGateError",
+    "build_domain_gates",
     "build_model_provider",
     "build_policy_config",
     "load_agent_config",

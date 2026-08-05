@@ -53,11 +53,37 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def _resolve_objective(args: argparse.Namespace) -> str:
+    """`--objective`, else `objectives` from the config.
+
+    These were two things with one name and no connection: the config field
+    was required, validated, and never read, while the flag was required on
+    every invocation. An owner who wrote their objective once in `aef.yaml`
+    had to repeat it on the command line, and could not tell that the file's
+    copy did nothing (ADR 0092, ADR 0100).
+
+    The flag still wins when both are present — a per-run override is the
+    point of a flag — and neither is an error rather than an empty objective,
+    which every evaluator would then score against nothing.
+    """
+    if args.objective:
+        return str(args.objective)
+    if args.config is not None:
+        from aef.config import load_agent_config
+
+        objectives = load_agent_config(args.config).objectives.strip()
+        if objectives:
+            return objectives
+    raise SystemExit(
+        "no objective: pass --objective, or set `objectives` in the file given to --config"
+    )
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     state = run_graph_module(
         args.module,
         agent_id=args.agent_id,
-        objective=args.objective,
+        objective=_resolve_objective(args),
         working_memory=json.loads(args.working_memory) if args.working_memory else None,
         audit_log_path=args.audit_log,
         memory_path=args.memory,
@@ -68,10 +94,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if args.observations:
         from datetime import UTC, datetime
 
+        from aef.cli.eval import build_evaluator
         from aef.cli.run import append_observation
-        from aef.services.eval.rule_based import RuleBasedEvaluator
 
-        record = RuleBasedEvaluator().evaluate(state)
+        # The adopter's own `evaluator.suites`, not a bare evaluator — an
+        # observation scored without the gates the owner declared reports a
+        # pass the owner never agreed to (ADR 0100).
+        record = build_evaluator(args.config).evaluate(state)
         append_observation(
             Path(args.observations),
             at=datetime.now(UTC).isoformat(),
@@ -83,7 +112,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 
 def _cmd_eval(args: argparse.Namespace) -> int:
-    record = eval_run(Path(args.checkpoints_dir), args.run_id)
+    record = eval_run(Path(args.checkpoints_dir), args.run_id, config_path=args.config)
     print(f"task_completion={record.task_completion}")
     print(f"tool_call_accuracy={record.tool_call_accuracy}")
     print(f"trajectory_quality={record.trajectory_quality}")
@@ -126,7 +155,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_run = subparsers.add_parser("run", help="run a graph module's build_graph()")
     p_run.add_argument("module", help="importable module path exposing build_graph()")
     p_run.add_argument("--agent-id", default="cli-agent")
-    p_run.add_argument("--objective", required=True)
+    p_run.add_argument(
+        "--objective",
+        default=None,
+        help="the run's objective; defaults to `objectives` from --config if given",
+    )
     p_run.add_argument(
         "--config", default=None, help="aef.yaml path; wires a real model_provider if given"
     )
@@ -176,6 +209,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_eval = subparsers.add_parser("eval", help="score a checkpointed run")
     p_eval.add_argument("--checkpoints-dir", required=True)
     p_eval.add_argument("--run-id", required=True)
+    p_eval.add_argument(
+        "--config",
+        default=None,
+        help="aef.yaml path; applies the agent's `evaluator.suites` as domain gates",
+    )
     p_eval.set_defaults(handler=_cmd_eval)
 
     p_trace = subparsers.add_parser("trace", help="print a checkpointed run's provenance trail")

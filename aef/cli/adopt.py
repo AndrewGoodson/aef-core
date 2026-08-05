@@ -295,7 +295,8 @@ def render_aef_yaml(repo_name: str) -> str:
 # Fill in the five fields allowed to differ per agent: objectives,
 # policies, tools.allow, evaluator.suites, and memory/knowledge_graph.
 #
-# WHAT IS WIRED TODAY: `model_provider`, `policies` and `tools.allow`.
+# WHAT IS WIRED TODAY: `model_provider`, `policies`, `tools.allow`,
+# `objectives` and `evaluator.suites`.
 #   - `tools.allow` is a list of SCOPES, not tool names. The policy engine
 #     gates on a tool's required_scopes, so an allowlist of names could not
 #     authorise anything. Names are the DENY axis: `policies.forbid`.
@@ -304,13 +305,18 @@ def render_aef_yaml(repo_name: str) -> str:
 #     gate`/`cycle`, or the engine falls back to its own deny-by-default.
 #     The gate reads this file FROM THE BASE REF, so editing it on a
 #     candidate branch cannot widen the rules that candidate is judged by.
+#   - `objectives` is the default objective for `aef run --config`; an
+#     explicit `--objective` still overrides it.
+#   - `evaluator.suites` are DOMAIN GATES, applied by `aef run --observations`
+#     and `aef eval --config`. Each entry is a `module:function` reference to
+#     a callable taking the run's AEFState and returning bool. A gate can only
+#     make a run FAIL that would otherwise pass; it can never rescue one.
 #
-# STILL NOT WIRED — these validate and are IGNORED (aef-core ADR 0014):
-#   - `objectives` is NOT the objective a run uses; pass --objective.
-#   - `evaluator.suites` is read by nothing; `aef eval` uses the rule-based
-#     evaluator regardless.
-#   - `knowledge_graph` has no builder.
-# `extends` is likewise declarative only — nothing resolves a base config.
+# REFUSED, so it cannot be believed by mistake:
+#   - `knowledge_graph` — no builder exists, so the block raises at load time
+#     rather than validating a claim nothing honours (aef-core ADR 0100).
+#   - `extends` — nothing resolves a base config, so any value but the
+#     default `_base` is rejected (aef-core ADR 0084).
 
 extends: _base
 
@@ -512,9 +518,13 @@ deny-by-default, which denies every tool call.
 `tools.allow` is a list of **scopes**, not tool names; `policies.forbid` is
 the name-based deny axis. An empty `tools.allow` allows nothing, on purpose.
 
-`objectives`, `evaluator.suites` and `knowledge_graph` still validate and are
-**ignored** (aef-core ADR 0014), as is `extends`. The stub says which is
-which, field by field; believe the stub, not the field names.
+`objectives` and `evaluator.suites` now reach a run (aef-core ADR 0100):
+`objectives` is the default for `aef run --config`, and each `evaluator.suites`
+entry is a `module:function` reference resolved into a domain gate that can
+only make a run fail, never pass. `knowledge_graph` and a non-default `extends`
+are **refused at load time** rather than silently ignored — there is no builder
+and no inheritance, and a field that validates while being read by nothing is
+indistinguishable from a feature. The stub says which is which, field by field.
 
 **Nothing merges automatically.** Tier-1 auto-merge is off and no flag, config
 or environment variable enables it. A candidate passing all six gates is

@@ -13,11 +13,12 @@ model_provider:
 memory:
   impl: in_memory
 
-# knowledge_graph: omitted — Phase 2 feature. Uncomment once a GraphStore
-# adapter is wired in (aef/services/kg/base.py):
-# knowledge_graph:
-#   impl: neo4j
-#   ontology: your_domain.ttl
+# knowledge_graph: omitted, and it is not merely commented out — the schema
+# REFUSES the block, because nothing builds a knowledge graph yet and a field
+# that validates while being read by nothing lets an owner believe otherwise
+# (ADR 0100). What it needs first is a retrieval contract the node signature
+# does not carry: a query interface, a result shape the context engine can
+# budget, and a provenance story for retrieved facts.
 
 evaluator:
   suites: []

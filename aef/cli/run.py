@@ -29,7 +29,12 @@ import sys
 import uuid
 from pathlib import Path
 
-from aef.config import build_model_provider, build_policy_config, load_agent_config
+from aef.config import (
+    build_domain_gates,
+    build_model_provider,
+    build_policy_config,
+    load_agent_config,
+)
 from aef.harness.memory_store import FileMemoryStore
 from aef.kernel import (
     DurabilityBackend,
@@ -111,6 +116,15 @@ def run_graph_module(
     if config_path is not None:
         config = load_agent_config(config_path)
         model_provider = build_model_provider(config.model_provider)
+        # `evaluator.suites` now reaches the evaluator. It validated and was
+        # read by nothing — a declared injection point with no production
+        # caller, which ADR 0092 named as indistinguishable from a missing
+        # feature. Resolved EAGERLY so an unresolvable suite fails here,
+        # naming itself, rather than at the end of a run (ADR 0100).
+        # Resolved here purely to FAIL EARLY: an unresolvable suite should
+        # stop the run before it costs anything, not after. The evaluator that
+        # actually uses them is built by `build_evaluator` at scoring time.
+        build_domain_gates(config.evaluator)
         # `policies` and `tools.allow` now reach a run. They validated and were
         # ignored before, so an adopter setting require_hitl_above_risk got the
         # engine's own default instead of the one they wrote (ADR 0014, 0082).

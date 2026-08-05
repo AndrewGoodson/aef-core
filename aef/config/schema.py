@@ -32,6 +32,33 @@ class KnowledgeGraphConfig(_StrictModel):
     impl: str
     ontology: str | None = None
 
+    @field_validator("impl")
+    @classmethod
+    def _no_builder_exists(cls, value: str) -> str:
+        # Same treatment `extends` got, for the same reason (ADR 0084): a
+        # field that validates any string and is read by nothing lets an
+        # owner believe a knowledge graph is attached when no code has ever
+        # constructed one. `aef/services/knowledge_graph/` is a typed
+        # interface with `NotImplementedError` bodies (Phase 2), so there is
+        # nothing for any `impl` to name.
+        #
+        # The DESIGN reason this is a refusal rather than a builder, stated
+        # because the milestone asked for one and not for an excuse: a
+        # knowledge-graph adapter needs a retrieval contract the node
+        # signature does not yet carry. `Services` hands a node its
+        # dependencies, and a KG is only useful if a node can ASK it
+        # something — which means a query interface, a result shape the
+        # context engine can budget, and a provenance story for retrieved
+        # facts. None of those three exist. Building a constructor before
+        # them produces a service nothing can call, which is the defect
+        # class ADR 0092 named (ADR 0100).
+        raise ValueError(
+            f"knowledge_graph.impl={value!r} names a builder that does not exist — "
+            f"aef/services/knowledge_graph/ is a typed interface with no implementation "
+            f"(Phase 2), so this block would be silently ignored. Remove it until a "
+            f"knowledge graph is wired; see docs/adr/0100."
+        )
+
 
 class EvaluatorConfig(_StrictModel):
     suites: list[str] = []

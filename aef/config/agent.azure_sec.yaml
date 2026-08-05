@@ -11,12 +11,18 @@ model_provider:
 memory:
   impl: in_memory
 
-knowledge_graph:
-  impl: neo4j
-  ontology: azure_security.ttl
+# knowledge_graph: REMOVED, and the removal is the point. This block declared
+# `impl: neo4j` while no code has ever constructed a knowledge graph — the
+# config said the agent had one and the runtime never gave it one. The schema
+# now refuses the block rather than validating a claim nothing honours.
+# Restore it when there is a builder to name (ADR 0100).
 
 evaluator:
-  suites: [private_azure_pentest]
+  # A suite is a `module:function` reference, resolved and CALLED as a domain
+  # gate. It was the bare name `private_azure_pentest` here, which named
+  # nothing resolvable — harmless only for as long as the field was read by
+  # nothing (ADR 0100).
+  suites: []
 
 tools:
   allow: [az_cli_ro, kql_query]
