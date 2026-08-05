@@ -39,7 +39,10 @@ directional context, not commitments). Each phase lists what's real
   providers in declared order, falls through on `ModelProviderError`
 - [x] Tool interface + sandbox hooks: `Tool` ABC (declared scopes),
   `PolicyEngine` (deny-by-default, HITL-above-risk-threshold gate),
-  `AuditLogWriter` — `aef/security/tool.py`
+  `AuditLogWriter` with a durable `FileAuditLogWriter` (JSONL, argument
+  values redacted by default) — `aef/security/tool.py`. Policy is
+  configurable from `aef.yaml` and the gate reads it from the base ref
+  (ADR 0082); wire the audit log with `aef run --audit-log`.
 - [x] Memory interface: `MemoryStore` (six-type + tool taxonomy), real
   `InMemoryMemoryStore`, real `Mem0Adapter` — `aef/services/memory/`
   (see ADR 0004)

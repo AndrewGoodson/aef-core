@@ -10,11 +10,13 @@ HITL gates, a full audit trail), not detection.
 
 from __future__ import annotations
 
+import json
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
 
@@ -120,6 +122,79 @@ class InMemoryAuditLogWriter(AuditLogWriter):
         self.entries.append(entry)
 
 
+class FileAuditLogWriter(AuditLogWriter):
+    """Append-only JSONL. The audit trail that survives the process.
+
+    `InMemoryAuditLogWriter` was the only implementation shipped, so every
+    audit entry died with the interpreter that wrote it — and `roadmap.md`
+    listed `AuditLogWriter` under Phase 1 DONE. The interface was done; an
+    audit trail you cannot read after the fact is not one (ADR 0083).
+
+    **Argument VALUES are redacted by default.** A tool call's arguments are
+    where an API key, a bearer token or a customer record lives, and an audit
+    log is exactly the file that gets shipped to a log aggregator, attached to
+    a ticket, or read by someone debugging. The names are what makes the entry
+    useful — *which* tool, *which* parameters, what the engine decided — and
+    the values are what makes it dangerous. Pass `redact_arguments=False` only
+    if you have decided the destination is as trusted as the arguments are
+    sensitive.
+    """
+
+    REDACTED = "<redacted>"
+
+    def __init__(self, path: Path, *, redact_arguments: bool = True) -> None:
+        self.path = Path(path)
+        self._redact = redact_arguments
+
+    def write(self, entry: AuditEntry) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(self._payload(entry), sort_keys=True) + "\n")
+
+    def _payload(self, entry: AuditEntry) -> dict[str, Any]:
+        return {
+            "ts": entry.ts.isoformat(),
+            "tool": entry.tool,
+            "decision": entry.result.decision.value,
+            "reason": entry.result.reason,
+            "call": {
+                "tool_name": entry.call.tool_name,
+                "risk": entry.call.risk,
+                "arguments": self._arguments(entry.call.arguments),
+            },
+        }
+
+    def _arguments(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        if self._redact:
+            return {key: self.REDACTED for key in sorted(arguments)}
+        return {key: _jsonable(arguments[key]) for key in sorted(arguments)}
+
+    def read(self) -> list[dict[str, Any]]:
+        """Entries as written. Malformed lines raise rather than being
+        skipped — an audit log that silently drops records is worse than one
+        that admits it is damaged."""
+        if not self.path.is_file():
+            return []
+        out: list[dict[str, Any]] = []
+        for number, line in enumerate(self.path.read_text().splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                out.append(json.loads(line))
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"{self.path}:{number}: malformed audit entry: {exc}") from exc
+        return out
+
+
+def _jsonable(value: Any) -> Any:
+    """Never let an unserialisable argument lose the whole entry."""
+    try:
+        json.dumps(value)
+    except (TypeError, ValueError):
+        return repr(value)
+    return value
+
+
 class PolicyEngine:
     """Evaluates every tool call before execution. Deny-by-default: a tool
     must declare scopes, every declared scope must be explicitly allowlisted,
@@ -134,6 +209,15 @@ class PolicyEngine:
         self._config = config or PolicyConfig()
         self._audit_log = audit_log or InMemoryAuditLogWriter()
         self._clock = clock or (lambda: datetime.now(UTC))
+
+    @property
+    def audit_log(self) -> AuditLogWriter:
+        """The writer every evaluation is recorded to.
+
+        Public because it was not: constructed without an explicit writer, the
+        default landed on a private attribute with no accessor, so entries
+        were written and then unreachable (ADR 0083)."""
+        return self._audit_log
 
     def evaluate(self, tool: Tool, call: ToolCall) -> PolicyResult:
         result = self._decide(tool, call)

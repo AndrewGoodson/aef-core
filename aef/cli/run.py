@@ -40,7 +40,7 @@ from aef.kernel import (
 )
 from aef.observability.in_memory import InMemoryTracer
 from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
-from aef.security.tool import PolicyEngine
+from aef.security.tool import FileAuditLogWriter, PolicyEngine
 from aef.services.memory.base import MemoryStore
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.state import AEFState
@@ -99,6 +99,7 @@ def run_graph_module(
     checkpoints_dir: str | Path | None = None,
     record_runs_dir: str | Path | None = None,
     memory_path: str | Path | None = None,
+    audit_log_path: str | Path | None = None,
     judge_rubric: dict[str, float] | None = None,
 ) -> AEFState:
     _ensure_cwd_importable()
@@ -146,7 +147,13 @@ def run_graph_module(
         # deny-by-default otherwise. Without an engine at all, an agent whose
         # tool calls go through `aef.security.tool.Tool` — which the generated
         # CLAUDE.md instructs — dies with ServiceNotConfiguredError (ADR 0079).
-        policy_engine=PolicyEngine(policy_config),
+        policy_engine=PolicyEngine(
+            policy_config,
+            # Durable when a path is given. An audit trail that dies with the
+            # interpreter is not one you can consult after an incident, which
+            # is the only time anybody consults one (ADR 0083).
+            audit_log=FileAuditLogWriter(Path(audit_log_path)) if audit_log_path else None,
+        ),
     )
     # Without this an adopter cannot produce a FAILING run from the CLI, so the
     # workflow LOOP.md documents ("record scenarios that fail as well as ones

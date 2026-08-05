@@ -59,6 +59,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         agent_id=args.agent_id,
         objective=args.objective,
         working_memory=json.loads(args.working_memory) if args.working_memory else None,
+        audit_log_path=args.audit_log,
         memory_path=args.memory,
         config_path=args.config,
         checkpoints_dir=args.checkpoints_dir,
@@ -140,6 +141,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="durable memory JSONL for a reflect node to write to. Point `aef loop cycle "
         "--memory` at the same file, or the proposer never sees what was learned.",
+    )
+    p_run.add_argument(
+        "--audit-log",
+        default=None,
+        help=(
+            "append every policy decision to this JSONL file. Without it the audit trail "
+            "is in-process and dies with the run. Argument VALUES are redacted; the names "
+            "and the decision are kept."
+        ),
     )
     p_run.add_argument(
         "--working-memory",
