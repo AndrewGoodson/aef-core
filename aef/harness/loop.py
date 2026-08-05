@@ -39,7 +39,7 @@ from aef.harness.gates.g1_builds import G1Builds
 from aef.harness.gates.g2_outcome import GATED_SPLITS, G2OutcomeNonRegression
 from aef.harness.gates.g3_improvement import DEFAULT_MIN_COHORT_SIZE, G3Improvement
 from aef.harness.gates.g4_separation import G4SeparationOfPowers
-from aef.harness.gates.g5_rate_drift import AcceptedChange, G5RateAndDrift
+from aef.harness.gates.g5_rate_drift import DRIFT_EXHAUSTED, AcceptedChange, G5RateAndDrift
 from aef.harness.git import GitRepo
 from aef.harness.monitoring import (
     Action,
@@ -348,6 +348,48 @@ def _accepted_history(config: LoopConfig) -> tuple[AcceptedChange, ...]:
     )
 
 
+def _drift_exhausted_twice(entries: tuple[ledger.LedgerEntry, ...]) -> bool:
+    """Halt criterion 3. Read from the ledger, which has always held the
+    evidence — `assess_halt` accepted the flag and nothing ever computed it,
+    so two of the five criteria were dead parameters (ADR 0074).
+
+    "In quick succession" is read as the two most recent gated verdicts: a
+    proposer that exhausts the drift budget, is told so, and immediately does
+    it again is not responding to the signal.
+    """
+    drift_failures = [
+        any(
+            g.get("gate") == "G5"
+            and g.get("outcome") == "fail"
+            and g.get("reason", "").startswith(DRIFT_EXHAUSTED)
+            for g in e.detail.get("gates", [])
+        )
+        for e in entries
+        if e.kind is ledger.EventKind.GATED
+    ]
+    return len(drift_failures) >= 2 and all(drift_failures[-2:])
+
+
+def _consecutive_escalation_rejections(entries: tuple[ledger.LedgerEntry, ...]) -> int:
+    """Halt criterion 4: escalations the owner resolved by rejecting.
+
+    Counted from the tail backwards, so a single acceptance resets it — the
+    criterion is about a proposer that keeps working outside its evidence
+    base, not about a lifetime total.
+    """
+    run = 0
+    escalated: str | None = None
+    for entry in entries:
+        if entry.kind is ledger.EventKind.ESCALATED:
+            escalated = entry.proposal_id
+        elif entry.kind is ledger.EventKind.REJECTED and entry.proposal_id == escalated:
+            run += 1
+            escalated = None
+        elif entry.kind is ledger.EventKind.MERGED:
+            run = 0
+    return run
+
+
 def gate(
     config: LoopConfig,
     head_ref: str,
@@ -403,7 +445,14 @@ def gate(
             # The memory records this proposal was grounded in. Dropped
             # before, so the audit trail could not answer "what did the
             # proposer read to justify this" after the fact (ADR 0075).
-            "grounded_in": list(proposal.grounded_in) if proposal else [],
+            #
+            # Rendered to strings, not passed as objects: `ledger.append`
+            # JSON-serialises `detail`, and `Citation` is a frozen dataclass.
+            # Writing the objects raised `Object of type Citation is not JSON
+            # serializable` and killed `aef loop cycle` outright — the fix for
+            # a dropped audit trail broke the command it was auditing, and the
+            # test defending the wire only asserted source text (ADR 0078).
+            "grounded_in": [str(c) for c in proposal.grounded_in] if proposal else [],
         },
     )
 
@@ -439,6 +488,24 @@ def gate(
             proposal_id=proposal_id,
             summary=decision.reason,
         )
+        # Halt criteria 3 and 4, read from a ledger that now includes this
+        # run. `assess_halt` accepted both flags and NOTHING EVER COMPUTED
+        # THEM — two of five criteria were dead parameters while the ledger
+        # held the evidence all along (ADR 0074, fixed in ADR 0077).
+        history = ledger.read(config.paths.ledger_dir)
+        assessment = assess_halt(
+            drift_exhausted_twice=_drift_exhausted_twice(history),
+            consecutive_escalation_rejections=_consecutive_escalation_rejections(history),
+        )
+        if assessment.should_halt:
+            _halt(config, at=now, proposal_id=proposal_id, reasons=assessment.reasons)
+            return GateRun(
+                decision=decision,
+                result=result,
+                report=report,
+                exit_code=EXIT_HALTED,
+                halted=True,
+            )
         return GateRun(decision=decision, result=result, report=report, exit_code=EXIT_REJECTED)
 
     if decision.disposition is Disposition.ESCALATE:
@@ -837,16 +904,23 @@ def cycle(
         lines.append("no admissible failure memory: no candidate this cycle")
         return CycleRun(harvested=harvested, lines=tuple(lines))
 
-    source_path = config.repo.root / agent_path
-    if not source_path.is_file():
-        lines.append(f"no agent source at {agent_path}: no candidate")
+    # The BASE REF's source, not the working tree's. The candidate branch is
+    # built from `base_ref` and the diff is taken against it, so proposing
+    # from whatever happens to be checked out laundered every un-proposed
+    # working-tree change into the candidate: the rationale said "raising
+    # RETRY_BUDGET from 3 to 4" while the diff G0 sized and scanned also
+    # carried an `import os` nobody had reasoned about. Reading from the same
+    # ref the diff is against makes the artefact judged the artefact proposed
+    # (ADR 0078).
+    if not config.repo.path_exists_at(config.base_ref, agent_path):
+        lines.append(f"no agent source at {agent_path} in {config.base_ref}: no candidate")
         return CycleRun(harvested=harvested, lines=tuple(lines))
 
     proposals = RuleBasedProposer().propose_from_memory(
         evidence,
         proposal_id=f"cycle-{now:%Y%m%dT%H%M%S}",
         path=agent_path,
-        source=source_path.read_text(),
+        source=config.repo.show(config.base_ref, agent_path),
     )
     if not proposals:
         lines.append("the proposer produced nothing from the available evidence")
@@ -870,8 +944,21 @@ def cycle(
 
 
 def _materialise_candidate_branch(config: LoopConfig, branch: str, path: str, content: str) -> None:
-    """Create the candidate as a LOCAL branch. Never pushed."""
-    original = config.repo.run("rev-parse", "--abbrev-ref", "HEAD").strip()
+    """Create the candidate as a LOCAL branch. Never pushed.
+
+    The starting position is recorded as a SHA, not a branch name.
+    `rev-parse --abbrev-ref HEAD` returns the literal string `"HEAD"` on a
+    detached checkout — which is the normal CI shape, since
+    `actions/checkout` with a ref or SHA detaches — so the restore was
+    `git checkout HEAD`, a no-op, and the job was left standing on the
+    candidate branch with an un-gated mutation in its working tree. The next
+    cycle then read that mutation as its starting point and proposed on top
+    of it while still diffing against the base (ADR 0078).
+    """
+    # The branch name when there is one, so an owner running this on `main`
+    # is put back on `main` rather than left detached; the SHA otherwise.
+    symbolic = config.repo.run("rev-parse", "--abbrev-ref", "HEAD").strip()
+    original = symbolic if symbolic != "HEAD" else config.repo.run("rev-parse", "HEAD").strip()
     config.repo.run("checkout", "-q", "-B", branch, config.base_ref)
     try:
         target = config.repo.root / path
@@ -889,4 +976,7 @@ def _materialise_candidate_branch(config: LoopConfig, branch: str, path: str, co
             f"loop: {branch}",
         )
     finally:
-        config.repo.run("checkout", "-q", original)
+        # `--force` because the candidate content is committed on the branch
+        # by this point; without it a leftover working-tree difference would
+        # abort the restore and strand the caller on the candidate.
+        config.repo.run("checkout", "-q", "--force", original)

@@ -164,7 +164,29 @@ class G0StaticSafety(Gate):
                 continue
             # Read from the HEAD ref, not the working tree: the working tree
             # may hold uncommitted edits that are not part of the candidate.
-            source = ctx.repo.show(ctx.head_ref, entry.path)
+            #
+            # BYTES, then decoded strictly. `GitRepo.show` decodes with
+            # `errors="replace"`, and the sandbox writes the workspace from
+            # raw bytes — so G0 and the runtime saw different source. A file
+            # containing invalid UTF-8 passed G0 as clean and then failed to
+            # compile, surfacing as a confusing G1 error on a file G0 had
+            # just called safe. A gate that judges a different artefact than
+            # the one that runs is not judging the candidate (ADR 0078).
+            raw = ctx.repo.run_bytes("show", f"{ctx.head_ref}:{entry.path}")
+            try:
+                source = raw.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                findings.append(
+                    StaticFinding(
+                        path=entry.path,
+                        line=0,
+                        problem=(
+                            f"file is not valid UTF-8 ({exc}); Python cannot compile it and "
+                            f"a gate cannot scan what it cannot decode"
+                        ),
+                    )
+                )
+                continue
             findings.extend(scan_source(entry.path, source, self.import_allowlist))
         return tuple(findings)
 

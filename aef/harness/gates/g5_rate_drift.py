@@ -120,6 +120,15 @@ def structural_drift(baseline: dict[str, bytes], current: dict[str, bytes]) -> f
     return differing / total
 
 
+# The exact phrase halt criterion 3 keys on. A constant rather than a
+# substring of the prose: matching `"drift" in reason` also matched the
+# "no owner-blessed baseline to measure DRIFT against" refusal — the state
+# every fresh adopter starts in — and would have halted the loop on the
+# second run of every new repo. Caught by a planted-fault test after my own
+# planted fault used the wrong string (ADR 0077).
+DRIFT_EXHAUSTED = "cumulative drift"
+
+
 @dataclass(frozen=True)
 class G5RateAndDrift(Gate):
     id: str = "G5"
@@ -186,7 +195,7 @@ class G5RateAndDrift(Gate):
                 gate=self.id,
                 outcome=GateOutcome.FAIL,
                 reason=(
-                    f"cumulative drift {drift:.3f} exceeds the budget of "
+                    f"{DRIFT_EXHAUSTED}: {drift:.3f} exceeds the budget of "
                     f"{self.budget.max_drift:.3f} — individually-small accepted changes have "
                     f"accumulated past what the owner blessed. This is a decision to make, "
                     f"not a threshold to raise"

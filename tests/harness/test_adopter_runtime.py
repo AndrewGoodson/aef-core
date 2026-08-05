@@ -343,3 +343,54 @@ def test_the_digest_reports_that_a_baseline_was_blessed(tmp_path) -> None:  # ty
     )
     assert digest.blessed == 1
     assert "no baseline blessed" not in digest.render()
+
+
+def test_a_proposals_citations_survive_the_ledgers_json_round_trip(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """`test_a_grounded_proposals_citations_reach_the_report` is exactly the
+    kind of test that let this through: it asserts the wire is connected and
+    never sends anything down it.
+
+    `ledger.append` JSON-serialises `detail`, and `Citation` is a frozen
+    dataclass — so writing the citations raised `Object of type Citation is
+    not JSON serializable` and killed `aef loop cycle` outright. The fix for
+    a dropped audit trail broke the command it was auditing, and exit 1 meant
+    CI read a serialisation bug as "this candidate is no good" (ADR 0078).
+    """
+    from aef.harness import ledger
+    from aef.harness.corpus import Split
+    from aef.harness.proposer import Citation, CitationKind, Proposal
+
+    proposal = Proposal(
+        id="p1",
+        path="agents/demo/graph.py",
+        original="RETRY = 3\n",
+        proposed="RETRY = 4\n",
+        rationale="raising RETRY",
+        grounded_in=(
+            Citation(source="mem-abc", kind=CitationKind.MEMORY, detail="timed out twice"),
+            Citation(source="s1", split=Split.TRAIN, detail="scenario"),
+        ),
+    )
+    ledger.append(
+        tmp_path,
+        kind=ledger.EventKind.GATED,
+        at=NOW,
+        proposal_id=proposal.id,
+        summary="s",
+        detail={"grounded_in": [str(c) for c in proposal.grounded_in]},
+    )
+    (entry,) = ledger.read(tmp_path)
+    assert entry.detail["grounded_in"] == [
+        "mem-abc (memory): timed out twice",
+        "s1 (train): scenario",
+    ]
+
+
+def test_the_gate_writes_citations_the_ledger_can_serialise() -> None:
+    """Pins the shape at the call site too — `list(proposal.grounded_in)`
+    passes every signature check and still cannot be written."""
+    import inspect
+
+    from aef.harness.loop import gate
+
+    assert "[str(c) for c in proposal.grounded_in]" in inspect.getsource(gate)

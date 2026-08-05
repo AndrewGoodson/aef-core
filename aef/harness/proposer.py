@@ -116,7 +116,9 @@ class Proposal:
 
 # Module-level `NAME = <number>` — the smallest thing a rule-based proposer
 # can change with a defensible story about what it did.
-_CONSTANT_RE = re.compile(r"^(?P<name>[A-Z][A-Z0-9_]*)\s*=\s*(?P<value>-?\d+(?:\.\d+)?)\s*$")
+_CONSTANT_RE = re.compile(
+    r"^(?P<name>[A-Z][A-Z0-9_]*)\s*=\s*(?P<value>-?\d+(?:\.\d+)?)\s*(?P<comment>#.*)?$"
+)
 
 
 @dataclass(frozen=True)
@@ -135,6 +137,7 @@ def find_constants(source: str) -> tuple[NumericConstant, ...]:
     except SyntaxError:
         return ()
 
+    lines = source.splitlines(keepends=True)
     found: list[NumericConstant] = []
     for node in tree.body:  # module level only
         if not isinstance(node, ast.Assign) or len(node.targets) != 1:
@@ -144,6 +147,18 @@ def find_constants(source: str) -> tuple[NumericConstant, ...]:
             continue
         value = node.value
         if isinstance(value, ast.Constant) and isinstance(value.value, int | float):
+            # Only constants the rewriter can actually rewrite. The AST
+            # accepts strictly more than the line-level regex does —
+            # `X = 3; Y = 4`, a parenthesised value, a value spanning lines —
+            # and `propose()` raises on the first one it cannot handle, so a
+            # single such line made the proposer emit NOTHING for the file,
+            # including for constants beside it that were perfectly
+            # rewritable. Ordinary Python turned the loop off, and the
+            # failure was reported as a candidate rejection (ADR 0078).
+            line = lines[node.lineno - 1] if node.lineno <= len(lines) else ""
+            match = _CONSTANT_RE.match(line.rstrip("\n"))
+            if match is None or match.group("name") != target.id:
+                continue
             found.append(
                 NumericConstant(
                     name=target.id,
@@ -170,7 +185,10 @@ def rewrite_constant(source: str, constant: NumericConstant, new_value: float) -
             f"refusing to rewrite it"
         )
     ending = "\n" if lines[index].endswith("\n") else ""
-    lines[index] = f"{constant.name} = {rendered}{ending}"
+    # A trailing comment is the author's, not the proposer's, and dropping it
+    # would make the diff say more than the proposal does.
+    comment = f"  {match.group('comment')}" if match.group("comment") else ""
+    lines[index] = f"{constant.name} = {rendered}{comment}{ending}"
     return "".join(lines)
 
 
@@ -314,20 +332,31 @@ class ControlCohortGenerator:
 
         rng = random.Random(self.seed)
         cohort: list[Proposal] = []
+        # Distinct SOURCES, not just distinct members. `coerce_value` clamps
+        # integer mutations to +/-1 whole unit, so a constant like
+        # `RETRIES = 1` has about two reachable mutations — and a cohort of
+        # five copies of one mutation is a point mass, not a distribution.
+        # G3's floor counts members, so five identical controls satisfied it
+        # while giving the percentile nothing to be computed over (ADR 0078).
+        seen: set[str] = set()
         attempts = 0
-        while len(cohort) < size and attempts < size * 20:
+        while len(cohort) < size and attempts < size * 40:
             attempts += 1
             constant = rng.choice(constants)
             factor = rng.uniform(*self.scale)
             new_value = coerce_value(constant, constant.value * factor)
             if new_value == constant.value:
                 continue
+            mutated = rewrite_constant(source, constant, new_value)
+            if mutated in seen:
+                continue
+            seen.add(mutated)
             cohort.append(
                 Proposal(
                     id=f"control-{self.seed}-{len(cohort)}",
                     path=path,
                     original=source,
-                    proposed=rewrite_constant(source, constant, new_value),
+                    proposed=mutated,
                     rationale="",
                     grounded_in=(),
                     is_control=True,  # ungrounded BY DESIGN — that is the null hypothesis
@@ -336,8 +365,12 @@ class ControlCohortGenerator:
 
         if len(cohort) < size:
             raise ProposalError(
-                f"could only generate {len(cohort)} of {size} control mutations for {path!r}; "
-                f"a short cohort would silently weaken G3's threshold"
+                f"could only generate {len(cohort)} of {size} DISTINCT control mutations for "
+                f"{path!r}; a short cohort would silently weaken G3's threshold, and a cohort "
+                f"of repeats is a point mass rather than a distribution. Small integer "
+                f"constants are the usual cause: `coerce_value` moves an integer by at least "
+                f"one whole unit, so a constant of 1 or 2 has only a couple of reachable "
+                f"mutations. Give the agent a second tunable constant, or a float one."
             )
         return tuple(cohort)
 
