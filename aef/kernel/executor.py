@@ -67,6 +67,21 @@ class ExecutionResult:
     trace: tuple[NodeExecutionRecord, ...] | None = None
 
 
+def _snapshot(state: AEFState) -> AEFState:
+    """A deep copy for the trace record, falling back to the live object.
+
+    A `threading.Lock` or open handle in `working_memory` is not
+    deep-copyable, and raising here would make an agent that parks one there
+    unrunnable — legal before ADR 0087 (ADR 0089). Such a value cannot be
+    checkpointed either, so the fallback loses a purity guarantee that was
+    never available for it.
+    """
+    try:
+        return state.model_copy(deep=True)
+    except (TypeError, ValueError):
+        return state
+
+
 class GraphExecutor:
     def __init__(
         self, compiled: CompiledGraph, services: Services, *, max_steps: int = 1000
@@ -155,7 +170,7 @@ class GraphExecutor:
             # the history of what it was given. `StateDelta.apply` is now
             # deeply pure (ADR 0087), but that governs apply's OUTPUT; this
             # is apply's INPUT, and it is the thing the record holds.
-            recorded_input = state.model_copy(deep=True) if record_trace else state
+            recorded_input = _snapshot(state) if record_trace else state
             delta, route, fallback_target = self._execute_node(node, state, ctx)
             new_state = delta.apply(state)
             if record_trace:

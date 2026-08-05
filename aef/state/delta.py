@@ -19,6 +19,27 @@ from pydantic import BaseModel, Field, field_validator
 from aef.state.schema import AEFState, Message, Plan, Provenance
 
 
+def _copy(value: Any) -> Any:
+    """Deep-copy where possible, share where it is not.
+
+    ADR 0087 made `apply` deeply pure with a bare `deepcopy`, and that turned
+    a `threading.Lock`, an open file, or a client handle parked in
+    `working_memory` from legal into fatal — `AEFState`'s own docstring names
+    that field as where per-agent data belongs, and such values worked before.
+    Inside `scenario_runner` the raise became a 0.0 for every scenario, for
+    candidate and incumbent and cohort alike: the ADR 0075/0079 shape again
+    (ADR 0089).
+
+    Purity for the data that can be copied; the previous aliasing behaviour
+    for the handles that cannot. A value that cannot be deep-copied also
+    cannot be checkpointed, so it was never surviving a round-trip anyway.
+    """
+    try:
+        return deepcopy(value)
+    except (TypeError, ValueError):
+        return value
+
+
 def _non_finite_paths(value: Any, path: str = "") -> list[str]:
     """Every location holding a non-finite float, walked depth-first."""
     if isinstance(value, float):
@@ -123,17 +144,17 @@ class StateDelta(BaseModel):
             update={
                 "messages": [*state.messages, *self.messages],
                 "plan": self.plan if self.plan is not None else state.plan,
-                "working_memory": deepcopy({**state.working_memory, **self.working_memory}),
+                "working_memory": _copy({**state.working_memory, **self.working_memory}),
                 "context_budget_tokens": (
                     self.context_budget_tokens
                     if self.context_budget_tokens is not None
                     else state.context_budget_tokens
                 ),
-                "retrieved_context": deepcopy([*state.retrieved_context, *self.retrieved_context]),
-                "tool_results": deepcopy([*state.tool_results, *self.tool_results]),
+                "retrieved_context": _copy([*state.retrieved_context, *self.retrieved_context]),
+                "tool_results": _copy([*state.tool_results, *self.tool_results]),
                 "reflections": [*state.reflections, *self.reflections],
                 "scores": {**state.scores, **self.scores},
-                "errors": deepcopy([*state.errors, *self.errors]),
+                "errors": _copy([*state.errors, *self.errors]),
                 "provenance": [*state.provenance, *self.provenance],
                 "checkpoint_seq": state.checkpoint_seq + 1,
             }

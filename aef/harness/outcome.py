@@ -186,9 +186,12 @@ class Comparison:
 
     @property
     def gate_added(self) -> bool:
-        """The candidate stops at a gate the incumbent did not. Reported, not
-        rejected: a loop that cannot make itself MORE conservative is a loop
-        pointed the wrong way."""
+        """The candidate stops at a gate the incumbent did not.
+
+        Reported so the owner can see WHY a scenario regressed — "it now
+        waits for you" is a different fact from "it broke" — but not exempt
+        from the regression check. Exempting it made adding a HITL edge a
+        free way to neutralise G2 (ADR 0089)."""
         return self.candidate.hitl_paused and not self.incumbent.hitl_paused
 
     @property
@@ -207,8 +210,19 @@ class Comparison:
         # "unchanged" (ADR 0081).
         if self.gate_removed:
             return True
-        if self.gate_added:
-            return False
+        # NO exemption for gate_added. ADR 0081 exempted it on the reasoning
+        # that "a loop that cannot make itself more conservative is pointed
+        # the wrong way" — and that exemption was a free pass: a candidate
+        # that broke five scenarios and added `requires_human_approval=True`
+        # to its exit edge converted every regression into a G2 PASS, at no
+        # cost, because a paused scenario scores 0.0 exactly like a failed
+        # one. G2 was fully neutralised (ADR 0089).
+        #
+        # A recorded scenario that no longer completes is a regression
+        # whatever stopped it. Adding a control to a passing path is a real
+        # change to what the agent does, and the owner approves it by
+        # re-recording the scenario with the approval granted — deliberately,
+        # which is the whole point of the control.
         if not self.incumbent.passed:
             return False
         if not self.candidate.passed:
@@ -233,9 +247,11 @@ class Comparison:
             )
         if self.gate_added:
             return (
-                f"{self.scenario_id}: gate added — the candidate now stops for human "
-                f"approval where the incumbent did not. Reported, not rejected: a loop "
-                f"that cannot make itself more conservative is pointed the wrong way."
+                f"{self.scenario_id}: REGRESSION (gate added) — the candidate now stops "
+                f"for human approval where the incumbent did not, so a scenario that used "
+                f"to complete no longer does. Adding a control is a real change to what "
+                f"the agent does; re-record the scenario with the approval granted if you "
+                f"want it."
             )
         if self.regressed:
             return (

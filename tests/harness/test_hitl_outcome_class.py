@@ -130,16 +130,41 @@ def test_an_unchanged_gate_is_unchanged(scenario: Scenario) -> None:
     assert not comparison.gate_removed
 
 
-def test_adding_a_gate_is_reported_not_rejected(scenario: Scenario) -> None:
-    """A loop that cannot make itself more conservative is pointed the wrong
-    way. The change is surfaced, not failed."""
+def test_adding_a_gate_is_reported_AND_counted_as_a_regression(scenario: Scenario) -> None:
+    """ADR 0081 exempted this, reasoning that "a loop that cannot make itself
+    more conservative is pointed the wrong way". **That exemption was a free
+    pass.** A candidate that broke five scenarios and added
+    `requires_human_approval=True` to its exit edge converted every
+    regression into a G2 PASS at no cost, because a paused scenario scores
+    0.0 exactly like a failed one — G2 fully neutralised (ADR 0089).
+
+    A recorded scenario that no longer completes is a regression whatever
+    stopped it. The owner approves the added control by re-recording the
+    scenario with the approval granted, deliberately, which is the point of
+    the control."""
     incumbent = Outcome.from_payload(_run(scenario, guarded=False)["outcome"])
     candidate = Outcome.from_payload(_run(scenario, guarded=True)["outcome"])
 
     comparison = Comparison(scenario_id="s-deploy", incumbent=incumbent, candidate=candidate)
-    assert comparison.gate_added
-    assert not comparison.regressed
+    assert comparison.gate_added, "the owner still needs to see WHY it regressed"
+    assert comparison.regressed
     assert "gate added" in comparison.summary
+
+
+def test_a_hitl_edge_cannot_launder_a_broken_candidate(scenario: Scenario) -> None:
+    """The exploit, stated as the property. Pausing must never score better
+    than failing — otherwise adding a gate is a way to hide breakage."""
+    incumbent = Outcome.from_payload(_run(scenario, guarded=False)["outcome"])
+    paused = Outcome.from_payload(_run(scenario, guarded=True)["outcome"])
+    failed = Outcome(
+        terminated=False, plan_status="failed", error_count=1, policy_denials=0, node_path=()
+    )
+
+    def regressed(candidate: Outcome) -> bool:
+        return Comparison(scenario_id="s", incumbent=incumbent, candidate=candidate).regressed
+
+    assert regressed(failed)
+    assert regressed(paused), "pausing scored better than failing"
 
 
 def test_the_three_hitl_answers_are_distinct(scenario: Scenario) -> None:
@@ -155,7 +180,11 @@ def test_the_three_hitl_answers_are_distinct(scenario: Scenario) -> None:
 
     assert verdict(paused, passing) == (True, True, False), "pause -> pass"
     assert verdict(paused, failing) == (True, True, False), "pause -> fail"
-    assert verdict(passing, paused) == (False, False, True), "pass -> pause"
+    # pass -> pause is a regression too (ADR 0089). It is still reported
+    # distinctly via `gate_added`, because "it now waits for you" and "it
+    # broke" are different facts an owner needs to tell apart — but they
+    # carry the same verdict.
+    assert verdict(passing, paused) == (True, False, True), "pass -> pause"
 
 
 def test_the_marker_round_trips() -> None:

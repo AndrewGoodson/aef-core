@@ -174,3 +174,63 @@ def test_the_error_names_where_the_value_is() -> None:
     """A guard that says "something is non-finite" sends you looking."""
     with pytest.raises(pydantic.ValidationError, match=r"m\.pf"):
         StateDelta(working_memory={"m": {"pf": float("inf")}})
+
+
+# --------------------------------------------------------------------------
+# ADR 0089 — deep purity must not make legal state fatal
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name,make",
+    [
+        ("threading.Lock", lambda: __import__("threading").Lock()),
+        ("generator", lambda: (x for x in [1, 2])),
+    ],
+)
+def test_a_value_that_cannot_be_deep_copied_does_not_break_apply(name, make) -> None:  # type: ignore[no-untyped-def]
+    """ADR 0087's bare `deepcopy` turned a lock, an open file or a client
+    handle in `working_memory` from legal into FATAL — and `AEFState`'s own
+    docstring names that field as where per-agent data belongs. Inside
+    `scenario_runner` the raise became a 0.0 for every scenario, for
+    candidate and incumbent and cohort alike: the ADR 0075/0079 shape again.
+
+    Purity for what can be copied; the previous aliasing for what cannot. A
+    value that cannot be deep-copied cannot be checkpointed either, so the
+    fallback loses a guarantee that was never available for it.
+    """
+    value = make()
+    result = StateDelta(working_memory={"v": value}).apply(
+        AEFState(run_id="r", agent_id="a", objective="o")
+    )
+    assert result.working_memory["v"] is value
+
+
+def test_the_executor_still_records_a_trace_with_an_uncopyable_value() -> None:
+    import threading
+
+    def node(state, ctx, services):  # type: ignore[no-untyped-def]
+        return StateDelta(working_memory={"done": True}), END
+
+    graph = Graph(
+        id="g",
+        version="1",
+        nodes={"n": Node(id="n", version="1", fn=node, deterministic=False)},
+        edges=[],
+        entry_node="n",
+    )
+    result = GraphExecutor(graph.compile(), Services()).run(
+        AEFState(
+            run_id="r", agent_id="a", objective="o", working_memory={"lock": threading.Lock()}
+        ),
+        record_trace=True,
+    )
+    assert result.trace is not None and len(result.trace) == 1
+
+
+def test_deep_purity_still_holds_for_ordinary_data() -> None:
+    """The fallback must not quietly become the normal path."""
+    state = AEFState(run_id="r", agent_id="a", objective="o", working_memory={"cfg": {"deep": 1}})
+    result = StateDelta(working_memory={"x": 1}).apply(state)
+    result.working_memory["cfg"]["deep"] = 999
+    assert state.working_memory["cfg"] == {"deep": 1}
