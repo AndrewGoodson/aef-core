@@ -153,6 +153,7 @@ def cmd_record(args: argparse.Namespace) -> int:
     graph = load_graph_module(args.module)
     from aef.kernel import Services
     from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
+    from aef.security.tool import PolicyEngine
     from aef.services.memory.in_memory import InMemoryMemoryStore
     from aef.state import AEFState
 
@@ -178,6 +179,10 @@ def cmd_record(args: argparse.Namespace) -> int:
             memory=InMemoryMemoryStore(),
             critic=RuleBasedCritic(),
             judge=RuleBasedJudge(rubric={"quality": 1.0}),
+            # Deny-by-default. Without it an agent whose tool calls go through
+            # `aef.security.tool.Tool` — which the generated CLAUDE.md instructs —
+            # dies with ServiceNotConfiguredError (ADR 0079).
+            policy_engine=PolicyEngine(),
         ),
         scenario_id=args.scenario_id,
         split=Split(args.split),

@@ -37,6 +37,12 @@ aef = "aef.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["aef"]
+# PEP 561. Without the marker, `mypy --strict` in an adopting repo reports
+# every `from aef... import` as `module is installed, but missing library
+# stubs or py.typed marker` — so the green bar this project mandates for its
+# adopters was impossible for them to pass (ADR 0079). Invisible here,
+# because aef-core type-checks its own source tree rather than the wheel.
+artifacts = ["aef/py.typed"]
 
 [tool.ruff]
 line-length = 100

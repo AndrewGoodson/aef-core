@@ -31,6 +31,7 @@ from aef.harness.outcome import classify
 from aef.kernel import GraphExecutor, Services
 from aef.kernel.graph import Graph
 from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
+from aef.security.tool import PolicyEngine
 from aef.services.eval.rule_based import RuleBasedEvaluator
 from aef.services.memory.in_memory import InMemoryMemoryStore
 
@@ -89,6 +90,19 @@ def run_scenario(scenario: Scenario, graph: Graph) -> dict[str, Any]:
         memory=InMemoryMemoryStore(),
         critic=RuleBasedCritic(),
         judge=RuleBasedJudge(rubric=dict(DEFAULT_RUBRIC)),
+        # Deny-by-default, the same engine an unconfigured production run
+        # gets. Omitting it was ADR 0075's defect one service over: an agent
+        # that followed the generated CLAUDE.md and put its tool calls behind
+        # `aef.security.tool.Tool` crashed here with
+        # `ServiceNotConfiguredError: policy_engine`, scoring candidate,
+        # incumbent and every cohort member 0.0 — so G3 rejected every
+        # candidate forever (ADR 0079).
+        #
+        # Denials are then RECORDED rather than fatal, which is what makes
+        # `Outcome.policy_denials` a real regression signal: a candidate that
+        # starts tripping the policy engine more than the incumbent did is
+        # visible to G2.
+        policy_engine=PolicyEngine(),
     )
     try:
         result = GraphExecutor(graph.compile(), services).run(

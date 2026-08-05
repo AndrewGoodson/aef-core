@@ -34,7 +34,9 @@ from aef.kernel import END, Context, Graph, Node, Route, Services
 from aef.state import AEFState, Plan, StateDelta
 
 
-def hello_node(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
+def hello_node(
+    state: AEFState, ctx: Context, services: Services
+) -> tuple[StateDelta, Route]:
     # Setting the plan status is not decoration. `Outcome.passed` requires
     # `plan_status == "done"`, and G2 skips any scenario whose incumbent did
     # not pass — so a graph that never sets a plan produces a corpus G2
@@ -52,7 +54,11 @@ def hello_node(state: AEFState, ctx: Context, services: Services) -> tuple[State
 def build_graph() -> Graph:
     node = Node(id="hello", version="0.1.0", fn=hello_node, deterministic=True)
     return Graph(
-        id="{agent_name}", version="0.1.0", nodes={{"hello": node}}, edges=[], entry_node="hello"
+        id="{agent_name}",
+        version="0.1.0",
+        nodes={{"hello": node}},
+        edges=[],
+        entry_node="hello",
     )
 '''
 

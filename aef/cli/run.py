@@ -40,6 +40,7 @@ from aef.kernel import (
 )
 from aef.observability.in_memory import InMemoryTracer
 from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
+from aef.security.tool import PolicyEngine
 from aef.services.memory.base import MemoryStore
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.state import AEFState
@@ -136,6 +137,10 @@ def run_graph_module(
         durability=durability,
         critic=RuleBasedCritic(),
         judge=RuleBasedJudge(rubric=dict(judge_rubric or {"quality": 1.0})),
+        # Deny-by-default. Without it an agent whose tool calls go through
+        # `aef.security.tool.Tool` — which the generated CLAUDE.md instructs —
+        # dies with ServiceNotConfiguredError (ADR 0079).
+        policy_engine=PolicyEngine(),
     )
     # Without this an adopter cannot produce a FAILING run from the CLI, so the
     # workflow LOOP.md documents ("record scenarios that fail as well as ones

@@ -34,6 +34,13 @@ from dataclasses import dataclass
 from aef.harness.gates.base import Gate, GateContext, GateOutcome, GateResult
 
 # Mirrors 01-architecture.md §2.2 (expanded per 04 §1.9).
+# The Edge-level controls only an owner may clear. Named once so the
+# removal check and the literal-value check cannot drift apart.
+OWNER_ONLY_EDGE_FLAGS: tuple[str, ...] = (
+    "requires_human_approval",
+    "requires_deterministic_fallback",
+)
+
 OWNER_ONLY_FIELDS: frozenset[str] = frozenset(
     {
         "deterministic",
@@ -175,19 +182,88 @@ def scan_metadata(path: str, source: str) -> tuple[MetadataFinding, ...]:
                 )
 
         elif called == "Edge":
-            for flag in ("requires_human_approval", "requires_deterministic_fallback"):
-                if flag in kwargs and _literal(kwargs[flag]) is False:
+            for flag in OWNER_ONLY_EDGE_FLAGS:
+                # Truthiness, not `is False`. Identity meant `0`, `[]` and `""`
+                # all slipped through, and every one of them is
+                # runtime-equivalent to the control being off — the executor
+                # tests truthiness. Same evasion class ADR 0064 closed for
+                # import aliases, left open on the value side (ADR 0079).
+                if flag in kwargs and not _literal(kwargs[flag]):
                     findings.append(
                         MetadataFinding(
                             path=path,
                             line=node.lineno,
                             field=flag,
                             problem=(
-                                f"{flag}=False disables a control; only the owner may clear it"
+                                f"{flag}={ast.unparse(kwargs[flag])} disables a control; "
+                                f"only the owner may clear it"
                             ),
                         )
                     )
 
+    return tuple(findings)
+
+
+def _guarded_edges(source: str) -> dict[tuple[str, str], set[str]]:
+    """`(from_node, to_node) -> {controls that are ON}` for every Edge.
+
+    Used to compare the base ref against the candidate. Scanning only the
+    candidate could never see a control that was **removed**: `flag in kwargs`
+    is false when the kwarg is simply deleted, and the constructor default is
+    off — so deleting the line was invisible while writing `=False` was a
+    security event. Deleting it is the same act with better manners
+    (ADR 0079).
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return {}
+
+    aliases = _resolve_aliases(tree)
+    out: dict[tuple[str, str], set[str]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if _called_name(node.func, aliases) != "Edge":
+            continue
+        kwargs = _kwargs(node)
+        if "from_node" not in kwargs or "to_node" not in kwargs:
+            continue
+        src = _literal(kwargs["from_node"])
+        dst = _literal(kwargs["to_node"])
+        if not isinstance(src, str) or not isinstance(dst, str):
+            continue
+        on = {
+            flag
+            for flag in OWNER_ONLY_EDGE_FLAGS
+            if flag in kwargs and bool(_literal(kwargs[flag]))
+        }
+        if on:
+            out[(src, dst)] = on
+    return out
+
+
+def scan_weakened_controls(
+    path: str, base_source: str, head_source: str
+) -> tuple[MetadataFinding, ...]:
+    """Controls that were ON at the base ref and are not ON in the candidate."""
+    base = _guarded_edges(base_source)
+    head = _guarded_edges(head_source)
+    findings: list[MetadataFinding] = []
+    for edge, controls in sorted(base.items()):
+        for flag in sorted(controls - head.get(edge, set())):
+            findings.append(
+                MetadataFinding(
+                    path=path,
+                    line=0,
+                    field=flag,
+                    problem=(
+                        f"was {flag}=True on edge {edge[0]!r} -> {edge[1]!r} at the base ref "
+                        f"and is not any more — removing a control is the same act as "
+                        f"clearing it, and only the owner may do either"
+                    ),
+                )
+            )
     return tuple(findings)
 
 
@@ -207,6 +283,14 @@ class G4SeparationOfPowers(Gate):
                 continue
             source = ctx.repo.show(ctx.head_ref, entry.path)
             findings.extend(scan_metadata(entry.path, source))
+            # Base vs head, because a removed control leaves nothing in the
+            # candidate to scan.
+            base_source = (
+                ctx.repo.show(ctx.base_ref, entry.path)
+                if ctx.repo.path_exists_at(ctx.base_ref, entry.path)
+                else ""
+            )
+            findings.extend(scan_weakened_controls(entry.path, base_source, source))
 
         if findings:
             return GateResult(

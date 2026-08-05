@@ -43,10 +43,14 @@ from aef.harness.corpus import (
 )
 from aef.harness.corpus import fixed_clock as _fixed_clock
 from aef.harness.outcome import is_recovered
+from aef.harness.scenario_runner import DEFAULT_RUBRIC
 from aef.harness.trace_codec import decode_trace, dumps, encode_trace, loads
 from aef.kernel import GraphExecutor, Services
 from aef.kernel.executor import NodeExecutionRecord
 from aef.kernel.graph import Graph
+from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
+from aef.security.tool import PolicyEngine
+from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.state import AEFState
 
 DEFAULT_DAILY_LIMIT = 5
@@ -144,6 +148,18 @@ class HarvestOutcome:
         return tuple(out)
 
 
+def _reexecution_services(scenario: Scenario) -> Services:
+    """Mirrors `scenario_runner.run_scenario` — harvest asks the same
+    question the gates do, so it has to ask it of the same environment."""
+    return Services(
+        clock=_fixed_clock(scenario),
+        memory=InMemoryMemoryStore(),
+        critic=RuleBasedCritic(),
+        judge=RuleBasedJudge(rubric=dict(DEFAULT_RUBRIC)),
+        policy_engine=PolicyEngine(),
+    )
+
+
 def _reexecutes_identically(run: RecordedRun, graph: Graph) -> bool:
     """Re-run from the recorded initial state with the recorded clock.
 
@@ -161,7 +177,11 @@ def _reexecutes_identically(run: RecordedRun, graph: Graph) -> bool:
         recorded_at=run.at,
     )
     try:
-        result = GraphExecutor(graph.compile(), Services(clock=_fixed_clock(scenario))).run(
+        # The same services the gate runner supplies. A bare `Services()`
+        # here made every reflect-node or policy-gated agent fail the
+        # determinism re-check for a missing service rather than for
+        # non-determinism, so harvest silently promoted nothing (ADR 0079).
+        result = GraphExecutor(graph.compile(), _reexecution_services(scenario)).run(
             run.initial_state, record_trace=True
         )
     except Exception:  # noqa: BLE001 - any failure to reproduce is a rejection

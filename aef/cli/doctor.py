@@ -5,6 +5,7 @@ repo's setup: Python version, presence of CLAUDE.md, and validity of every
 
 from __future__ import annotations
 
+import ast
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,37 @@ class DoctorCheck:
     level: str = "error"
 
 
+def _adapter_check(adapter: Path) -> DoctorCheck:
+    """Does `aef_adapter.py` at least parse and expose `build_graph`?
+
+    Parsed, not imported: importing an adopter's shim would execute whatever
+    their legacy entrypoint does at module scope, and a diagnostic must not
+    have side effects. Parsing catches the case that shipped — a file that is
+    not valid Python — without running anything.
+    """
+    try:
+        tree = ast.parse(adapter.read_text(), filename=str(adapter))
+    except SyntaxError as exc:
+        return DoctorCheck("adapter_importable", False, f"{adapter} does not parse: {exc}")
+    except OSError as exc:  # pragma: no cover - unreadable file
+        return DoctorCheck("adapter_importable", False, f"{adapter} is unreadable: {exc}")
+
+    names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    if "build_graph" not in names:
+        return DoctorCheck(
+            "adapter_importable", False, f"{adapter} defines no build_graph(); nothing can load it"
+        )
+
+    still_a_stub = "wire your existing entrypoint into this node" in adapter.read_text()
+    return DoctorCheck(
+        "adapter_importable",
+        True,
+        f"{adapter} parses and defines build_graph()"
+        + (" — still the generated stub, not wired yet" if still_a_stub else ""),
+        level="advisory" if still_a_stub else "info",
+    )
+
+
 def run_doctor(target_dir: Path) -> list[DoctorCheck]:
     target_dir = target_dir.resolve()
     checks: list[DoctorCheck] = []
@@ -36,14 +68,34 @@ def run_doctor(target_dir: Path) -> list[DoctorCheck]:
         )
     )
 
+    # An `aef init` project legitimately has no CLAUDE.md — `init` does not
+    # write one. Hard-failing that left a pristine `aef init` repo at exit 1
+    # with no fix but to hand-write the file, while AGENT_INTEGRATION.md says
+    # "fix any [FAIL]". Advisory when the repo looks init-shaped, an error
+    # when it looks adopted (ADR 0079).
     claude_md = target_dir / "CLAUDE.md"
+    looks_adopted = (target_dir / "aef_adapter.py").exists()
     claude_md_detail = (
         str(claude_md)
         if claude_md.exists()
         else f"{claude_md} not found — run `aef adopt` to generate one for an existing repo, "
         f"or add your own if this is a fresh `aef init`-based project"
     )
-    checks.append(DoctorCheck("claude_md_present", claude_md.exists(), claude_md_detail))
+    checks.append(
+        DoctorCheck(
+            "claude_md_present",
+            claude_md.exists(),
+            claude_md_detail,
+            level="error" if looks_adopted else "advisory",
+        )
+    )
+
+    # F4: `aef adopt` promises doctor "confirms the config and IMPORTS are
+    # wired correctly" and doctor never imported anything — so a syntactically
+    # invalid `aef_adapter.py` passed clean.
+    adapter = target_dir / "aef_adapter.py"
+    if adapter.is_file():
+        checks.append(_adapter_check(adapter))
 
     config_candidates = sorted(
         {*target_dir.glob("aef.yaml"), *target_dir.glob("agents/*/aef.yaml")}
@@ -95,12 +147,18 @@ def _config_advisories(path: Path, config: AgentConfig) -> list[DoctorCheck]:
                 level="advisory",
             )
         )
-    if not config.objectives.strip():
+    # `.startswith("TODO")` as well as empty: `aef adopt` writes
+    # `objectives: "TODO: describe this agent's objective..."`, which is
+    # non-empty — so the check built to catch "the agent has no stated
+    # purpose" could not see the one string that ships by default (ADR 0079).
+    objectives = config.objectives.strip()
+    if not objectives or objectives.upper().startswith("TODO"):
         out.append(
             DoctorCheck(
                 f"advisory:{path}:empty_objectives",
                 False,
-                "objectives is empty/whitespace — the agent has no stated purpose; fill it in",
+                "objectives is empty or still the generated TODO — the agent has no stated "
+                "purpose; fill it in",
                 level="advisory",
             )
         )

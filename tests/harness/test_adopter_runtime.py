@@ -394,3 +394,116 @@ def test_the_gate_writes_citations_the_ledger_can_serialise() -> None:
     from aef.harness.loop import gate
 
     assert "[str(c) for c in proposal.grounded_in]" in inspect.getsource(gate)
+
+
+# --------------------------------------------------------------------------
+# ADR 0079 — the onboarding half, which had never been swept
+# --------------------------------------------------------------------------
+
+
+def test_the_onboarding_kit_does_not_tell_adopters_to_install_this_repo() -> None:
+    """`pip install -e ".[dev]"` is the FIRST command AGENT_INTEGRATION.md
+    gives, and it fails outright in a repo with no pyproject.toml. The loop
+    half already carried a verbatim diagnosis of this bug and the fix was
+    applied only to the generated CI workflow — the knowledge existed in the
+    codebase and never crossed the seam."""
+    from aef.cli.adopt import render_agent_integration_md
+
+    text = render_agent_integration_md("adoptee")
+    assert 'pip install -e ".[dev]"' not in text
+    assert "pip install aef-core" in text
+
+
+def test_the_prescribed_green_bar_does_not_assume_this_repos_layout() -> None:
+    """`mypy --strict aef` in an adopting repo is ADR 0069 defect 3 verbatim,
+    reinstated in prose. Two of four entry files had been fixed; the two the
+    kit calls canonical had not."""
+    from aef.cli.adopt import render_agent_integration_md, render_autonomy_md
+
+    for render in (render_agent_integration_md, render_autonomy_md):
+        text = render("adoptee")
+        assert "mypy --strict aef" not in text, render.__name__
+        assert "ruff format --check aef tests" not in text, render.__name__
+
+
+def test_the_generated_adapter_passes_the_lint_the_kit_prescribes(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """`aef adopt` generated a repo that failed the `ruff check .` command
+    `aef adopt` tells you to run — the shim imported `END` and never used
+    it."""
+    import subprocess
+    import sys
+
+    from aef.cli.adopt import _ADAPTER_SHIM_TEMPLATE
+
+    source = _ADAPTER_SHIM_TEMPLATE.format(framework="none", repo_name="adoptee")
+    compile(source, "aef_adapter.py", "exec")  # must at least be valid Python
+    path = tmp_path / "aef_adapter.py"
+    path.write_text(source)
+    result = subprocess.run(
+        [sys.executable, "-m", "ruff", "check", "--isolated", str(path)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_the_init_scaffold_is_formatted_for_a_repo_with_no_ruff_config(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """`aef init` writes no ruff config, so the adopting repo uses ruff's
+    default line length of 88 — and the template was written at aef-core's
+    100, so the generated file was non-conforming on arrival."""
+    import subprocess
+    import sys
+
+    from aef.cli.init import _GRAPH_TEMPLATE
+
+    path = tmp_path / "graph.py"
+    path.write_text(_GRAPH_TEMPLATE.format(agent_name="demo"))
+    result = subprocess.run(
+        # `--isolated`: an adopting repo has no ruff config, so ruff's own
+        # default line length applies. Without it, ruff discovers aef-core's
+        # pyproject.toml and the test measures the wrong repo's settings.
+        [sys.executable, "-m", "ruff", "format", "--check", "--isolated", str(path)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_aef_ships_a_py_typed_marker() -> None:
+    """Without it, `mypy --strict` in an adopting repo reports every
+    `from aef... import` as missing stubs — so the green bar this project
+    mandates for adopters was impossible for them to pass. Invisible here,
+    because aef-core type-checks its own source tree rather than the wheel."""
+    from pathlib import Path
+
+    import aef
+
+    assert (Path(aef.__file__).parent / "py.typed").is_file()
+
+
+def test_the_config_stub_says_which_fields_actually_reach_a_run() -> None:
+    """Of the five per-agent fields, only `model_provider` is wired
+    (ADR 0014). No generated file said so, while the checklist made "fill in
+    these fields" a required step and `aef doctor` called the result
+    "valid" — an adopter setting `require_hitl_above_risk` believed it was
+    enforced."""
+    import yaml
+
+    from aef.cli.adopt import render_aef_yaml
+
+    text = render_aef_yaml("adoptee")
+    assert yaml.safe_load(text), "the stub must still be valid YAML"
+    assert "DO NOT REACH A RUN" in text
+    assert "ADR 0014" in text
+
+
+def test_the_documented_eval_sequence_includes_the_flag_it_needs() -> None:
+    """Step 5 said `aef run <module>` then `aef eval`, and without
+    `--checkpoints-dir` the run is held in memory and discarded — `aef eval`
+    then blames the run id rather than the missing flag on the previous
+    command."""
+    from aef.cli.adopt import render_agent_integration_md
+
+    text = render_agent_integration_md("adoptee")
+    step = text[text.index("5. Execute, score") :]
+    assert "--checkpoints-dir" in step[:900]
