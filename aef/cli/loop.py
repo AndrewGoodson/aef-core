@@ -130,6 +130,23 @@ def cmd_record(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_harvest(args: argparse.Namespace) -> int:
+    from aef.cli.run import load_graph_module
+    from aef.harness.harvest import harvest
+
+    outcome = harvest(
+        Path(args.runs),
+        Path(args.corpus),
+        load_graph_module(args.module),
+        now=datetime.now(UTC),
+        include_successes=args.include_successes,
+        daily_limit=args.daily_limit,
+    )
+    for line in outcome.lines:
+        print(line)
+    return EXIT_OK
+
+
 def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p = subparsers.add_parser("loop", help="drive the self-rewiring loop (gate/monitor/digest)")
     loop_subs = p.add_subparsers(dest="loop_command", required=True)
@@ -186,3 +203,26 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "independence silently.",
     )
     p_record.set_defaults(handler=cmd_record)
+
+    p_harvest = loop_subs.add_parser(
+        "harvest", help="promote recorded production runs into corpus scenarios"
+    )
+    p_harvest.add_argument("module", help="importable module exposing build_graph()")
+    p_harvest.add_argument("--runs", required=True, help="dir of runs from `aef run --record-runs`")
+    p_harvest.add_argument("--corpus", required=True)
+    p_harvest.add_argument(
+        "--daily-limit",
+        type=int,
+        default=5,
+        help="cap promotions per day. One bad deploy can produce thousands of failing "
+        "runs; without a cap the corpus fills with a single incident and the gates "
+        "start measuring that incident instead of the agent.",
+    )
+    p_harvest.add_argument(
+        "--include-successes",
+        action="store_true",
+        help="also promote runs that passed. Off by default: failures carry the "
+        "information, and auto-promoting successes inflates the pass rate the gates "
+        "measure against.",
+    )
+    p_harvest.set_defaults(handler=cmd_harvest)

@@ -92,6 +92,7 @@ def run_graph_module(
     objective: str,
     config_path: str | Path | None = None,
     checkpoints_dir: str | Path | None = None,
+    record_runs_dir: str | Path | None = None,
 ) -> AEFState:
     _ensure_cwd_importable()
     module = importlib.import_module(module_path)
@@ -119,5 +120,25 @@ def run_graph_module(
     )
     state = AEFState(run_id=str(uuid.uuid4()), agent_id=agent_id, objective=objective)
     executor = GraphExecutor(graph.compile(), services)
-    result = executor.run(state)
+    # Tracing is on only when the run is being recorded: a trace costs memory
+    # proportional to the run, and every other caller wants the final state.
+    result = executor.run(state, record_trace=record_runs_dir is not None)
+
+    if record_runs_dir is not None and result.trace is not None:
+        from datetime import UTC, datetime
+
+        from aef.harness.harvest import RecordedRun, save_run
+
+        save_run(
+            Path(record_runs_dir),
+            RecordedRun(
+                run_id=state.run_id,
+                graph_id=graph.id,
+                graph_version=graph.version,
+                initial_state=state,
+                trace=result.trace,
+                at=datetime.now(UTC),
+            ),
+        )
+
     return result.final_state

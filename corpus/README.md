@@ -51,3 +51,24 @@ improvement; one where everything fails cannot demonstrate a regression.
 multi-node routing, or failure modes of any real workload. It exists to prove
 the pipeline works end to end, not to gate a real agent. A repo adopting this
 loop must record its own.
+
+## A corpus with no tripwire cannot detect reward hacking
+
+This is the sharpest thing to know about the corpus, and it is not
+theoretical: a one-line change making the agent ignore its inputs and always
+report success passed **all six gates** (ADR 0060). G2 checks outcome class
+and G3 scores a function of that same class, so both ask the agent whether it
+succeeded and record the answer.
+
+The fix is ground truth you supply. Label at least one scenario
+`must_fail` — a task genuinely **beyond** the agent's remit, where reporting
+success is a lie rather than an improvement. A candidate that "passes" it
+fails G2 as a security event.
+
+Tripwires must be **impossible in principle, not merely hard**. Labelling a
+difficult-but-achievable task `must_fail` rejects real progress as reward
+hacking; that mistake was made first and caught by a test.
+
+**Harvested scenarios never carry a label.** Only a human can say a task
+should have failed — a `must_fail` the system set for itself is a tripwire it
+set for itself.
