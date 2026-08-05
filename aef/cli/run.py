@@ -90,6 +90,7 @@ def run_graph_module(
     *,
     agent_id: str,
     objective: str,
+    working_memory: dict[str, object] | None = None,
     config_path: str | Path | None = None,
     checkpoints_dir: str | Path | None = None,
     record_runs_dir: str | Path | None = None,
@@ -118,7 +119,15 @@ def run_graph_module(
         tracer=InMemoryTracer(),
         durability=durability,
     )
-    state = AEFState(run_id=str(uuid.uuid4()), agent_id=agent_id, objective=objective)
+    # Without this an adopter cannot produce a FAILING run from the CLI, so the
+    # workflow LOOP.md documents ("record scenarios that fail as well as ones
+    # that pass") could not be followed at all (ADR 0070).
+    state = AEFState(
+        run_id=str(uuid.uuid4()),
+        agent_id=agent_id,
+        objective=objective,
+        working_memory=dict(working_memory or {}),
+    )
     executor = GraphExecutor(graph.compile(), services)
     # Tracing is on only when the run is being recorded: a trace costs memory
     # proportional to the run, and every other caller wants the final state.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -57,6 +58,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         args.module,
         agent_id=args.agent_id,
         objective=args.objective,
+        working_memory=json.loads(args.working_memory) if args.working_memory else None,
         config_path=args.config,
         checkpoints_dir=args.checkpoints_dir,
         record_runs_dir=args.record_runs,
@@ -131,6 +133,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="persist checkpoints here (FileDurabilityBackend) so `aef eval`/`aef trace` "
         "can find this run afterward; omit for a one-off in-memory run",
+    )
+    p_run.add_argument(
+        "--working-memory",
+        default=None,
+        help="JSON object seeding AEFState.working_memory, e.g. '{\"difficulty\": 9}'. "
+        "Without it you cannot produce a failing run from the CLI, and the corpus "
+        "cannot record the failures the gates need.",
     )
     p_run.add_argument(
         "--record-runs",

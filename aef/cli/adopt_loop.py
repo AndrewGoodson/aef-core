@@ -27,7 +27,7 @@ does not yet, and what only you can decide.
 *escalated to you*, not merged. Turning it on is a deliberate source change,
 not a config flag — see aef-core ADR 0045 for why that distinction is kept.
 
-## Four things you must supply before the loop can approve anything
+## Five things you must supply before the loop can approve anything
 
 1. **A corpus.** `corpus/` starts empty, and an empty corpus makes G2 and G3
    refuse — correctly: absence of evidence is not evidence of non-regression.
@@ -37,24 +37,40 @@ not a config flag — see aef-core ADR 0045 for why that distinction is kept.
        --scenario-id <id> --objective "..." --split train
    ```
 
-   Record scenarios that **fail** as well as ones that pass. A corpus where
-   everything already passes cannot demonstrate an improvement.
+   Record scenarios that **fail** as well as ones that pass — a corpus where
+   everything already passes cannot demonstrate an improvement. Use
+   `aef run --working-memory '{{"key": value}}'` to drive your agent into the
+   failing cases worth recording.
 
    **Label at least one scenario `must_fail`.** Without a tripwire the gates
    cannot detect reward hacking: a one-line change making an agent always
    report success passed all six gates, because G2 and G3 both read the
    agent's own claim about itself. See `corpus/README.md`.
 
-2. **Observations.** Post-merge monitoring reads `observations.jsonl`, and
+2. **A reflect node in your graph, that your nodes actually route to.**
+   The proposer learns from `MemoryRecord`s a reflect node writes. Without
+   one, `aef loop cycle` reports "no admissible failure memory" every run and
+   will never propose anything.
+
+   ```python
+   from aef.reasoning.nodes import make_reflect_node
+   ```
+
+   **Adding an `Edge` to it is not enough.** Routing is chosen by node code,
+   not authorised by edges — a node that returns `END` never reaches reflect
+   however the edges are drawn. Your work node must `return delta, "reflect"`.
+   This catches everyone once.
+
+3. **Observations.** Post-merge monitoring reads `observations.jsonl`, and
    nothing writes it unless you pass `--observations` to your production
    runs. With no input, every monitoring window reports unobserved — which
    correctly rolls every change back. Monitoring with no input is a very
    expensive way to revert.
 
-3. **Halt notification.** When the loop halts, it fails a CI job. If nobody
+4. **Halt notification.** When the loop halts, it fails a CI job. If nobody
    watches that, nothing has told you. Wire a channel you actually read.
 
-4. **A blessed baseline.** G5 measures drift against an archived version you
+5. **A blessed baseline.** G5 measures drift against an archived version you
    have approved. Until one exists it refuses every candidate with "no
    owner-blessed baseline" — correctly, since it has no reference point.
    Archive your starting state once, deliberately, before expecting the loop
