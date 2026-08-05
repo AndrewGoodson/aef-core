@@ -36,13 +36,11 @@ from aef.kernel import (
     FileDurabilityBackend,
     GraphExecutor,
     InMemoryDurabilityBackend,
-    Services,
 )
-from aef.observability.in_memory import InMemoryTracer
-from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
-from aef.security.tool import FileAuditLogWriter, PolicyEngine
+from aef.security.tool import FileAuditLogWriter
 from aef.services.memory.base import MemoryStore
 from aef.services.memory.in_memory import InMemoryMemoryStore
+from aef.services.runtime import agent_services
 from aef.state import AEFState
 
 
@@ -136,24 +134,16 @@ def run_graph_module(
     memory: MemoryStore = (
         FileMemoryStore(path=Path(memory_path)) if memory_path else InMemoryMemoryStore()
     )
-    services = Services(
+    # Same list the gate path uses (aef/services/runtime.py, ADR 0091), so
+    # an agent that runs here can be re-executed there. Four separate defects
+    # were the two lists drifting apart.
+    services = agent_services(
         model_provider=model_provider,
         memory=memory,
-        tracer=InMemoryTracer(),
         durability=durability,
-        critic=RuleBasedCritic(),
-        judge=RuleBasedJudge(rubric=dict(judge_rubric or {"quality": 1.0})),
-        # The adopter's configured policy when `--config` is given,
-        # deny-by-default otherwise. Without an engine at all, an agent whose
-        # tool calls go through `aef.security.tool.Tool` — which the generated
-        # CLAUDE.md instructs — dies with ServiceNotConfiguredError (ADR 0079).
-        policy_engine=PolicyEngine(
-            policy_config,
-            # Durable when a path is given. An audit trail that dies with the
-            # interpreter is not one you can consult after an incident, which
-            # is the only time anybody consults one (ADR 0083).
-            audit_log=FileAuditLogWriter(Path(audit_log_path)) if audit_log_path else None,
-        ),
+        policy=policy_config,
+        judge_rubric=dict(judge_rubric or {"quality": 1.0}),
+        audit_log=FileAuditLogWriter(Path(audit_log_path)) if audit_log_path else None,
     )
     # Without this an adopter cannot produce a FAILING run from the CLI, so the
     # workflow LOOP.md documents ("record scenarios that fail as well as ones

@@ -165,10 +165,8 @@ def cmd_record(args: argparse.Namespace) -> int:
     from aef.cli.run import load_graph_module
 
     graph = load_graph_module(args.module)
-    from aef.kernel import Services
-    from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
-    from aef.security.tool import PolicyEngine
     from aef.services.memory.in_memory import InMemoryMemoryStore
+    from aef.services.runtime import agent_services
     from aef.state import AEFState
 
     recorded = record_to_corpus(
@@ -189,15 +187,9 @@ def cmd_record(args: argparse.Namespace) -> int:
         # reflect node, and a bare Services() cannot run one. Recording is
         # useless if it cannot record the agent the adopter was told to build
         # (ADR 0073).
-        Services(
-            memory=InMemoryMemoryStore(),
-            critic=RuleBasedCritic(),
-            judge=RuleBasedJudge(rubric={"quality": 1.0}),
-            # Deny-by-default. Without it an agent whose tool calls go through
-            # `aef.security.tool.Tool` — which the generated CLAUDE.md instructs —
-            # dies with ServiceNotConfiguredError (ADR 0079).
-            policy_engine=PolicyEngine(),
-        ),
+        # Same list the gates use, so a scenario recorded here can be
+        # re-executed there (aef/services/runtime.py, ADR 0091).
+        agent_services(memory=InMemoryMemoryStore()),
         scenario_id=args.scenario_id,
         split=Split(args.split),
         recorded_at=datetime.now(UTC),

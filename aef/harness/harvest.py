@@ -43,14 +43,12 @@ from aef.harness.corpus import (
 )
 from aef.harness.corpus import fixed_clock as _fixed_clock
 from aef.harness.outcome import is_recovered
-from aef.harness.scenario_runner import DEFAULT_RUBRIC
 from aef.harness.trace_codec import decode_trace, dumps, encode_trace, loads
 from aef.kernel import GraphExecutor, Services
 from aef.kernel.executor import NodeExecutionRecord
 from aef.kernel.graph import Graph
-from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
-from aef.security.tool import PolicyEngine
 from aef.services.memory.in_memory import InMemoryMemoryStore
+from aef.services.runtime import agent_services
 from aef.state import AEFState
 
 DEFAULT_DAILY_LIMIT = 5
@@ -151,13 +149,7 @@ class HarvestOutcome:
 def _reexecution_services(scenario: Scenario) -> Services:
     """Mirrors `scenario_runner.run_scenario` — harvest asks the same
     question the gates do, so it has to ask it of the same environment."""
-    return Services(
-        clock=_fixed_clock(scenario),
-        memory=InMemoryMemoryStore(),
-        critic=RuleBasedCritic(),
-        judge=RuleBasedJudge(rubric=dict(DEFAULT_RUBRIC)),
-        policy_engine=PolicyEngine(),
-    )
+    return agent_services(clock=_fixed_clock(scenario), memory=InMemoryMemoryStore())
 
 
 def _reexecutes_identically(run: RecordedRun, graph: Graph) -> bool:

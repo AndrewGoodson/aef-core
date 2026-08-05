@@ -28,12 +28,12 @@ from typing import Any
 from aef.harness.corpus import Scenario, fixed_clock
 from aef.harness.evaluation import score_of
 from aef.harness.outcome import classify
-from aef.kernel import GraphExecutor, HumanApprovalRequiredError, Services
+from aef.kernel import GraphExecutor, HumanApprovalRequiredError
 from aef.kernel.graph import Graph
-from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
-from aef.security.tool import PolicyConfig, PolicyEngine
+from aef.security.tool import PolicyConfig
 from aef.services.eval.rule_based import RuleBasedEvaluator
 from aef.services.memory.in_memory import InMemoryMemoryStore
+from aef.services.runtime import agent_services
 
 # The same rubric `aef run` and `aef loop record` default to. A gate that
 # re-executed a recorded scenario under a different rubric would be comparing
@@ -131,24 +131,17 @@ def run_scenario(
     would let a gate run mutate the evidence a later proposal is built from.
     Both services are rule-based and deterministic, which the sandbox requires.
     """
-    services = Services(
+    # One list, shared with `aef run` — see aef/services/runtime.py. Four
+    # separate defects were "the gate path lacks a service the node needs"
+    # (ADR 0073/0075/0079/0089); the cause each time was drift between two
+    # lists nobody compared (ADR 0091).
+    services = agent_services(
         clock=fixed_clock(scenario),
+        policy=policy,
+        # Memory is in-process and thrown away: writing to the adopter's
+        # durable store would let a gate run mutate the evidence a later
+        # proposal is built from.
         memory=InMemoryMemoryStore(),
-        critic=RuleBasedCritic(),
-        judge=RuleBasedJudge(rubric=dict(DEFAULT_RUBRIC)),
-        # Deny-by-default, the same engine an unconfigured production run
-        # gets. Omitting it was ADR 0075's defect one service over: an agent
-        # that followed the generated CLAUDE.md and put its tool calls behind
-        # `aef.security.tool.Tool` crashed here with
-        # `ServiceNotConfiguredError: policy_engine`, scoring candidate,
-        # incumbent and every cohort member 0.0 — so G3 rejected every
-        # candidate forever (ADR 0079).
-        #
-        # Denials are then RECORDED rather than fatal, which is what makes
-        # `Outcome.policy_denials` a real regression signal: a candidate that
-        # starts tripping the policy engine more than the incumbent did is
-        # visible to G2.
-        policy_engine=PolicyEngine(policy),
     )
     try:
         result = GraphExecutor(graph.compile(), services).run(
