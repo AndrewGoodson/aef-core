@@ -524,6 +524,31 @@ def test_redaction_is_identical_for_equal_values_of_every_accepted_type() -> Non
     assert redacted_form(str(ValueError("db down"))) == redacted_form("db down")
 
 
+def test_prepare_refuses_none_the_same_way_known_does() -> None:
+    """Round 5. `Known` refused None and its sibling did not, so the same
+    "nothing to compare" value that could not become a green panel could still
+    become a `null` in the export — and a null in JSON reads as a value that
+    happens to be empty, not as an absence.
+
+    Two APIs enforcing one rule differently is the seam three of ten defects
+    lived in during the predecessor program: each half correct, the join wrong.
+    """
+    digest = Digest(
+        since=datetime(2026, 1, 1, tzinfo=UTC),
+        until=datetime(2026, 2, 1, tzinfo=UTC),
+    )
+    assert digest.acceptance_rate is None, "precondition"
+
+    with pytest.raises(DisclosureError, match="was given None"):
+        prepare("pass_rate", digest.acceptance_rate)
+    with pytest.raises(DisclosureError, match="was given None"):
+        prepare("tenant_tag", None)
+
+    # ...and a legitimately empty value still passes, because empty is not absent.
+    assert prepare("kill_switch_reason", "") == ""
+    assert prepare("merged", 0) == 0
+
+
 def test_emittable_is_gone() -> None:
     """It is not deprecated, it is removed. A boolean over a three-valued
     policy reads as 'safe to emit' at every call site, and leaving it importable

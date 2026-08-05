@@ -601,6 +601,22 @@ def prepare(field: str, value: object) -> object:
             f"export needs something about it, emit a different field with its own "
             f"disclosure decision — a count, a boolean, a type name."
         )
+    # Round 5: this passed None straight through for a PUBLIC field, which is
+    # A1 again one layer down — `Known` refuses None and its sibling did not,
+    # so the same "nothing to compare" value that could not become a green
+    # panel could still become a `null` in the export, and a null in JSON reads
+    # as a value that happens to be empty rather than as an absence.
+    #
+    # Two APIs enforcing the same rule differently is the seam three of ten
+    # defects lived in during the predecessor program: each half correct, the
+    # join wrong.
+    if value is None:
+        raise DisclosureError(
+            f"field {field!r} was given None. As with Known(value=None), the None branch "
+            f"of an optional IS the absent case — omit the field, or emit a companion "
+            f"field that says why it is absent. A null in the export reads as a value "
+            f"that happens to be empty."
+        )
     if disclosure is Disclosure.REDACTED:
         # The literal tuple, not a named constant: mypy narrows on the
         # former and not the latter, and a second list of the same types

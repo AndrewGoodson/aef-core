@@ -270,6 +270,49 @@ constant, which `mypy` will not narrow on — and a second list of the same type
 is precisely the drift ADR 0091 names. `redacted_form`'s signature is the single
 source of truth, and it is the one the type checker actually reads.
 
+## The fifth adversarial round — and the round limit
+
+One defect, and the program's hard stop at five rounds within a single
+milestone is now reached. **This milestone did not close on a dry round.**
+
+**E1 — `prepare()` passed `None` straight through for a PUBLIC field.** That is
+A1 again, one layer down: `Known` refuses `None` and its sibling did not, so
+the same "nothing to compare" value that could not become a green panel could
+still become a `null` in the export — and a null in JSON reads as a value that
+happens to be empty, not as an absence. Two APIs enforcing one rule differently
+is the seam three of ten defects lived in during the predecessor program: each
+half correct, the join wrong. Fixed, with `""` and `0` still passing, because
+empty is not absent.
+
+Three attacks in round 5 did **not** land, and they are worth recording because
+a list of failed attacks is evidence where a claim of completeness is not:
+
+- `PANELS_BY_KEY` has no backing dict bound at module level — the D1 defect was
+  specific to the other registry, checked rather than assumed.
+- `redacted_form(True)` and `redacted_form(1)` produce different digests, so
+  `bool` being a subclass of `int` does not collide them.
+- Mutating a list held inside a frozen `Known` after construction does not
+  change the panel's state.
+
+And one check aimed at this document rather than the code: the ADR claims the
+backing dict stays reachable through `gc.get_referents` after `del`. Verified —
+`True`. The stated bound is accurate rather than a hedge, which is the failure
+mode four earlier ADRs in this repo record.
+
+### What the round limit means here
+
+The rule says a milestone that hits five rounds needs a human, not another
+round. The honest reading of these five is that **the defect rate did not fall**
+— 3, 3, 4, 2, 1 — and that two of the fourteen were introduced by the fix for a
+defect found one round earlier (round 4's D1 was round 3's own freeze; the
+`REDACTABLE_TYPES` constant was round 4's own fix). That is the same pattern the
+predecessor program recorded, in a module small enough to hold in one screen.
+
+The declining tail (4 → 2 → 1) is suggestive and is not two dry rounds, which is
+the actual bar. Milestone 1 is therefore **complete but not closed**: its
+acceptance tests run green and the contract is in use, and the program's own
+stopping rule was not satisfied.
+
 ## Consequences
 
 Milestone 2's export must map every optional source through `Known.optional`
