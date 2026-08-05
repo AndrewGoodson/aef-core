@@ -67,7 +67,8 @@ gates, a full audit trail via `AuditLogWriter`), not detection.
 now all implemented — and recommends **against** enabling Tier-1
 auto-merge. Its three load-bearing findings: criteria 1 and 6 have never run
 against the live traffic and real tenants their text names; a shadow node
-doing direct file I/O is not contained by the tool policy (demonstrated);
+doing direct file I/O is not contained by the tool policy (demonstrated, and
+now fixable by running the candidate in a container — opt-in, ADR 0105);
 and every adversarial round in the program found a defect, six for six, in
 freshly written code believed correct. Residual risk is stated as a number
 (5-10 false accepts per 100 gated candidates) with its basis and its

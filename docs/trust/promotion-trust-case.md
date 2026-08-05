@@ -139,9 +139,9 @@ the one that most damages criterion 1.**
   A7 reach harness code through evaluator.suites          held
 ```
 
-### 2.1 The shadow's containment rests on the candidate's good manners
+### 2.1 The shadow's containment — bypass found, then closed
 
-**A5 is a demonstrated bypass, not an argument.** A shadow node that opens a
+**A5 was a demonstrated bypass, not an argument.** A shadow node that opens a
 file directly wrote to disk during a shadow run:
 
 ```
@@ -150,25 +150,63 @@ file directly wrote to disk during a shadow run:
 
 The suppression is `PolicyEngine` with an empty scope set. That denies **tool
 calls**. A node that imports `pathlib` and writes is not making a tool call.
-A4 is the same finding wearing a declaration: a node may declare
-`EXTERNAL_CALL` and be shadowed, because what is refused is `MUTATING`, and the
-policy is expected to catch the rest.
+A4 is the same finding wearing a declaration.
 
-ADR 0103 states this boundary in prose. Stating it and demonstrating it are
-different weights of evidence, and this is the demonstration.
+**It is now fixed, and the fix is verified in both directions** (ADR 0105).
+`contained_candidate_graph` runs the candidate's nodes inside the Milestone 4
+container — no network, read-only root — via the inverted-control worker, so
+the parent still owns state and routing and a contained candidate cannot forge
+an "identical" final state to hide a divergence.
 
-**It is fixable**: run the shadow inside the container from Milestone 4, which
-has no network and a read-only filesystem. That composition is not built. Until
-it is, **criterion 1 holds only for candidates that confine their effects to
-the tool interface** — which is precisely the assumption an adversarial
-candidate would not honour.
+```
+BEFORE  — in-process shadow
+  host marker written: True    <-- the bypass
+
+AFTER   — same candidate, executed inside the container
+  host marker written: False
+  divergence recorded: candidate_failed='NodeEvaluationError: FileNotFoundError…'
+  served to user     : incumbent state, working_memory={}
+```
+
+The read-only root is verified on paths the image really has, because the run
+above is contained partly by the host path being absent — which would be
+containment by accident:
+
+```
+  /etc/hosts                       OSError
+  /opt/aef/aef/__init__.py         OSError
+  /tmp/x                           OSError
+  /aef-workspace/ok.txt            WROTE   <-- the workspace, deliberately
+```
+
+**Three things this does not fix, and they are why reason #2 in §4 survives at
+reduced weight.** It is **opt-in**: `ShadowRunner` with an in-process graph
+still behaves exactly as before, and that is still the default — the
+in-process bypass is pinned by a test asserting it is *still real*. It
+requires the operator to supply an **image with `aef` importable**, which is
+their build, not this repo's. And the candidate can still write to its own
+**workspace**, which is a host directory — that is what a workspace is, and
+containment means it cannot reach anywhere else.
+
+Reproduce the image the tests use:
+
+```
+FROM python:3.13-slim
+RUN pip install --no-cache-dir "pydantic>=2.9,<3" "pyyaml>=6.0,<7" \
+    "opentelemetry-api>=1.27,<2" "opentelemetry-sdk>=1.27,<2"
+COPY aef /opt/aef/aef
+ENV PYTHONPATH=/opt/aef
+```
+`docker build -t aef-worker:test .` from a directory holding `aef/`. Without
+it, `tests/harness/test_contained_shadow.py` skips rather than passing.
 
 **And neither criterion 1 nor 6 has run against what its text names.** The
 criteria say "against live traffic" and "stratified by tenant tag". Shadow was
 exercised with a synthetic incumbent and candidate; the canary against sample
 arrays, not tenants. What exists is a mechanism that would do those things
 correctly when connected to something real. That gap is not one more test
-away — it needs an adopter with traffic.
+away — it needs an adopter with traffic, and **it is unaffected by the fix
+above**.
 
 ### 2.2 The canary cannot see a narrow enough regression
 
@@ -290,10 +328,13 @@ Four reasons, in order of weight:
    synthetic inputs. Enabling on that basis would be accepting a mechanism for
    the evidence it was designed to produce rather than for the evidence it has
    produced.
-2. **The shadow's containment is demonstrably incomplete** (§2.1). A candidate
-   that writes to disk directly is not contained by the policy engine, and
-   shadow execution is the criterion doing the most work in any case for
-   promotion.
+2. **The shadow's containment is fixed but opt-in** (§2.1). The demonstrated
+   bypass is closed by running the candidate inside the Milestone 4 container,
+   verified in both directions. But the in-process path is unchanged and still
+   the default, and the fix needs an operator-supplied image. This reason has
+   weakened since the first draft of this document and has not disappeared:
+   the criterion doing the most work for promotion is contained only when
+   someone opts in.
 3. **Every adversarial round in this program has found a defect, six for six,
    in freshly written code believed correct** — including one that revoked an
    entire milestone. There is no basis in the observed data for expecting the
@@ -312,7 +353,9 @@ Not more tests. In rough order of value:
 - **An adopter with real traffic**, running shadow execution for a fixed
   period, with the divergence rate published. This is the single highest-value
   missing item and it converts criteria 1 and 6 from mechanisms into evidence.
-- **Shadow executed inside the Milestone 4 container**, closing §2.1.
+- ~~Shadow executed inside the Milestone 4 container~~ — **done** (ADR 0105).
+  What remains is making it the default rather than the opt-in, which needs a
+  decision about requiring an image.
 - **A keyed tenant hash**, closing §2.3.
 - **An adversarial review by someone who did not write this**, targeting the
   four attacks that held.

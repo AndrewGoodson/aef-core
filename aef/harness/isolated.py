@@ -26,7 +26,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
 from typing import Any
+from uuid import uuid4
 
+from aef.harness.container import ContainerRuntime, _force_remove, container_argv
 from aef.harness.sandbox import SandboxPolicy, child_preexec, kill_process_group, scrubbed_env
 from aef.harness.trace_codec import decode_route
 from aef.kernel.contracts import Context, Edge, Node, Route, Services, SideEffect
@@ -34,6 +36,12 @@ from aef.kernel.graph import Graph
 from aef.state import AEFState, StateDelta
 
 WORKER_MODULE = "aef.harness.node_worker"
+
+# The interpreter INSIDE the image. `sys.executable` is the parent's path and
+# means nothing in a container — a venv path from the host resolves to nothing
+# there, and the failure reads as a broken entrypoint rather than a wrong
+# interpreter.
+PYTHON_IN_CONTAINER = "python"
 
 
 def _frame(value: Any) -> str:
@@ -79,6 +87,8 @@ class NodeWorkerSession:
         sandbox: SandboxPolicy,
         extra_env: dict[str, str] | None = None,
         step_timeout_s: float | None = None,
+        container: ContainerRuntime | None = None,
+        read_only_mounts: dict[str, str] | None = None,
     ) -> None:
         """The worker gets the SAME confinement a sandboxed command gets.
 
@@ -95,18 +105,51 @@ class NodeWorkerSession:
         self._sandbox = sandbox
         self._timed_out = False
         self._step_timeout_s = step_timeout_s if step_timeout_s is not None else sandbox.timeout_s
+        self._container = container
         env = scrubbed_env(sandbox)
         env.update(extra_env or {})
-        self._proc = subprocess.Popen(
-            [sys.executable, "-m", WORKER_MODULE, entrypoint],
-            cwd=str(workdir),
-            env=env,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            preexec_fn=child_preexec(sandbox),
-        )
+
+        if container is not None:
+            # The worker runs INSIDE the container, so the node functions the
+            # parent proxies to execute with no network and a read-only root.
+            # This is what closes the shadow bypass: the policy engine denies
+            # tool CALLS, and a node that simply opened a file was outside it
+            # — demonstrated, not argued (trust case §2.1).
+            #
+            # The inverted control is unchanged and is the reason this is
+            # worth doing at all: the parent still owns state, routing and the
+            # step count, so a contained candidate cannot forge the final
+            # state a shadow comparison reads (ADR 0094).
+            argv = container_argv(
+                [PYTHON_IN_CONTAINER, "-m", WORKER_MODULE, entrypoint],
+                runtime=container,
+                policy=sandbox,
+                workdir=workdir,
+                name=f"aef-worker-{uuid4().hex[:16]}",
+                interactive=True,
+                read_only_mounts=read_only_mounts,
+            )
+            self._container_name = argv[argv.index("--name") + 1]
+            self._proc = subprocess.Popen(
+                argv,
+                env=env,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        else:
+            self._container_name = ""
+            self._proc = subprocess.Popen(
+                [sys.executable, "-m", WORKER_MODULE, entrypoint],
+                cwd=str(workdir),
+                env=env,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                preexec_fn=child_preexec(sandbox),
+            )
         self.description = self._handshake(entrypoint)
 
     def _handshake(self, entrypoint: str) -> dict[str, Any]:
@@ -212,9 +255,18 @@ class NodeWorkerSession:
 
     def close(self) -> None:
         if self._proc.poll() is None:
-            # The GROUP, not just the child: `child_preexec` gave it its own
-            # session precisely so descendants can be reached (ADR 0093).
-            kill_process_group(self._proc.pid)
+            if self._container is not None:
+                # Ask the DAEMON. Killing the `docker run` client leaves the
+                # container running — Milestone 4 reproduced exactly that, one
+                # still alive two seconds after the gate reported a timeout,
+                # and it is ADR 0093's defect in a third place. The daemon owns
+                # the container's lifetime, so nothing else ends it.
+                _force_remove(self._container.binary, self._container_name)
+            else:
+                # The GROUP, not just the child: `child_preexec` gave it its
+                # own session precisely so descendants can be reached
+                # (ADR 0093).
+                kill_process_group(self._proc.pid)
             self._proc.kill()
         for stream in (self._proc.stdin, self._proc.stdout, self._proc.stderr):
             if stream is None:

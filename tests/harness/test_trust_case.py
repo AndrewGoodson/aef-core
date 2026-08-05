@@ -72,6 +72,17 @@ def test_a_fully_passing_candidate_still_escalates() -> None:
     assert not enabled_true, f"Tier-1 is enabled somewhere in aef/: {enabled_true}"
 
 
+def test_the_contained_shadow_path_the_document_claims_exists(text: str) -> None:
+    """§2.1 now claims the bypass is closed by running the candidate inside a
+    container. A document claiming a fix that is not importable is worse than
+    one that never claimed it."""
+    from aef.harness.shadow import contained_candidate_graph
+
+    assert callable(contained_candidate_graph)
+    assert "now fixed, and the fix is verified in both directions" in text
+    assert "opt-in" in text, "the document must not claim the fix is the default"
+
+
 def test_the_residual_risk_is_a_number_with_a_basis(text: str) -> None:
     """6c: "None" is not an answer, it is an absence of one."""
     assert "5 to 10 false accepts" in text
@@ -103,10 +114,13 @@ def test_the_known_canary_limit_is_still_a_limit() -> None:
     )
 
 
-def test_the_shadow_bypass_is_still_real() -> None:
-    """§2.1 is the finding that carries the recommendation. If it were fixed
-    and the document still claimed it, the case would be arguing against
-    enabling on evidence that no longer holds."""
+def test_the_in_process_shadow_bypass_is_still_real() -> None:
+    """§2.1 says the bypass is CLOSED for the contained path and unchanged for
+    the in-process one, which is still the default. This pins the second half.
+
+    If the in-process path ever contains its candidates, §2.1 is understating
+    the harness and reason #2 in §4 should shrink again.
+    """
     import tempfile
 
     from aef.harness.shadow import ShadowRunner
@@ -136,6 +150,6 @@ def test_the_shadow_bypass_is_still_real() -> None:
         AEFState(run_id="r", agent_id="a", objective="o"), agent_services()
     )
     assert marker.exists(), (
-        "the shadow no longer performs direct I/O: §2.1 of the trust case is stale, and "
-        "the recommendation rests partly on it"
+        "the in-process shadow no longer performs direct I/O: §2.1 of the trust case is "
+        "stale, and reason #2 of the recommendation rests partly on it"
     )

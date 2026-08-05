@@ -39,8 +39,12 @@ diff answers in a fraction of the space.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
+from aef.harness.container import ContainerRuntime
+from aef.harness.isolated import NodeWorkerSession, graph_from
+from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
 from aef.kernel.contracts import Services, SideEffect
 from aef.kernel.executor import GraphExecutor
 from aef.kernel.graph import Graph
@@ -262,3 +266,50 @@ def _is_denial(entry: dict[str, Any]) -> bool:
     from aef.harness.outcome import POLICY_DENIED_KEY
 
     return bool(entry.get(POLICY_DENIED_KEY))
+
+
+def contained_candidate_graph(
+    entrypoint: str,
+    *,
+    workdir: Path,
+    runtime: ContainerRuntime,
+    sandbox: SandboxPolicy | None = None,
+    read_only_mounts: dict[str, str] | None = None,
+) -> tuple[Graph, NodeWorkerSession]:
+    """The candidate, as a graph whose nodes execute INSIDE a container.
+
+    Closes the bypass the trust case demonstrated (§2.1). Suppression by
+    `PolicyEngine` denies tool CALLS; a node that imported `pathlib` and wrote
+    to disk was never making one, and it wrote. A container has no network and
+    a read-only root, so the same node now fails at the filesystem instead of
+    succeeding quietly.
+
+    **The inverted control is why this is worth doing rather than just
+    sandboxing the whole run.** The parent keeps state, routing and the step
+    count; the worker evaluates one node and returns `(delta, route)`. A
+    contained candidate therefore cannot forge the final state a shadow
+    comparison reads — which matters more here than in the gate, because a
+    forged "identical" state hides a divergence and makes the candidate look
+    SAFER than it is (ADR 0094).
+
+    Returns the graph and the session, because the caller must close the
+    session: an unclosed one leaves a container running, which is ADR 0093's
+    defect in its third location.
+    """
+    session = NodeWorkerSession(
+        entrypoint,
+        workdir=workdir,
+        sandbox=sandbox or SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED),
+        container=runtime,
+        read_only_mounts=read_only_mounts,
+    )
+    try:
+        graph = graph_from(session)
+        # Still refused, container or not. Containment stops a node reaching
+        # the host; it does not stop a MUTATING node mutating whatever it was
+        # declared to mutate, and shadowing runs it on live input.
+        assert_shadowable(graph)
+    except BaseException:
+        session.close()
+        raise
+    return graph, session

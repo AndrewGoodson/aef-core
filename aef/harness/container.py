@@ -33,7 +33,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
@@ -222,6 +222,8 @@ def container_argv(
     policy: SandboxPolicy,
     workdir: Path,
     name: str | None = None,
+    interactive: bool = False,
+    read_only_mounts: Mapping[str, str] | None = None,
 ) -> list[str]:
     """The full command line, built in one place so it can be asserted on.
 
@@ -239,6 +241,15 @@ def container_argv(
     - `--env` is NOT passed through: the container starts from the image's
       environment, which is a stronger version of the env scrubbing the
       in-process path does by allowlist.
+
+    `interactive` keeps stdin open, which a long-lived worker driven over a
+    line protocol needs (`NodeWorkerSession`). It grants the container
+    nothing — the pipe already existed for the in-process worker.
+
+    `read_only_mounts` are exactly that: every one is appended `:ro`, asserted
+    rather than trusted, so "the workspace is the only WRITABLE mount" stays
+    true while an operator can still supply an image's dependencies from the
+    host.
     """
     command = [
         runtime.binary,
@@ -256,6 +267,13 @@ def container_argv(
         "--volume",
         f"{workdir.resolve()}:{WORKDIR_MOUNT}",
     ]
+    if interactive:
+        command.append("--interactive")
+    for source, target in sorted((read_only_mounts or {}).items()):
+        mount = f"{Path(source).resolve()}:{target}:ro"
+        if not mount.endswith(":ro"):  # pragma: no cover - constructed above
+            raise SandboxUnavailableError(f"read-only mount {mount} is not read-only")
+        command += ["--volume", mount]
     if name:
         # A handle for the timeout path. Without one there is nothing to kill
         # but the client, and killing the client leaves the container
