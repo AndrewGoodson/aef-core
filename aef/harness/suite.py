@@ -32,7 +32,7 @@ from aef.harness.git import GitRepo
 from aef.harness.outcome import Outcome
 from aef.harness.proposer import ControlCohortGenerator, ProposalError
 from aef.harness.sandbox import SandboxPolicy, run_sandboxed
-from aef.harness.scenario_runner import result_marker
+from aef.harness.scenario_runner import RESULT_MARKER_PREFIX, result_marker
 from aef.harness.trace_codec import dumps
 from aef.harness.workspace import build_candidate_workspace
 from aef.harness.zones import ZonePolicy
@@ -69,7 +69,20 @@ def _parse(label: str, stdout: str, nonce: str) -> VariantRun:
     # candidate can print a valid-looking marker — and then there are two, and
     # two is not one.
     marker = result_marker(nonce)
+    # The PREFIX is counted too. `str.count` is non-overlapping, so a
+    # candidate writing `PREFIX + nonce` with no suffix let the runner's own
+    # leading NUL complete a match — count stayed 1 while two partial markers
+    # were present, and the payload read was the runner's marker text rather
+    # than JSON. That surfaced as an ordinary parse failure, not as the
+    # forgery it is (ADR 0090).
+    prefix_hits = stdout.count(RESULT_MARKER_PREFIX)
     found = stdout.count(marker)
+    if prefix_hits > 1:
+        raise SuiteError(
+            f"variant {label!r} emitted {prefix_hits} result-marker prefixes and the runner "
+            f"writes one. Agent-authored code is forging the evidence that judges it — this "
+            f"is a security event, not a bad candidate."
+        )
     if found == 0:
         raise SuiteError(
             f"variant {label!r} produced no runner result — the process exited without "

@@ -314,3 +314,104 @@ def test_this_repos_own_demo_agent_still_passes_g0() -> None:
 
     source = (REPO_ROOT / "agents" / "demo" / "graph.py").read_text()
     assert not scan_source("agents/demo/graph.py", source, DEFAULT_IMPORT_ALLOWLIST)
+
+
+# --------------------------------------------------------------------------
+# ADR 0090 — a gate that raises, and a marker that is almost right
+# --------------------------------------------------------------------------
+
+
+def test_a_gate_that_raises_fails_instead_of_escaping() -> None:
+    """A raising gate escaped `run_pipeline`, out of `gate()`, out of
+    `cmd_gate`, and out of the process — so the candidate got no verdict and
+    the ledger got no GATED entry at all. A hole in a tamper-evident audit
+    trail, and candidate-triggerable: a graph whose factory fails to load
+    reaches it (ADR 0090)."""
+    from dataclasses import dataclass
+
+    from aef.harness.candidate import CandidateDiff, CandidateVerdict
+    from aef.harness.gates.base import Gate, GateContext, GateOutcome, run_pipeline
+    from aef.harness.git import GitRepo
+    from aef.harness.zones import ZonePolicy, ZoneVerdict
+
+    @dataclass(frozen=True)
+    class Exploding(Gate):
+        id: str = "G2"
+
+        def run(self, ctx: GateContext) -> object:
+            raise RuntimeError("the gate could not judge")
+
+    ctx = GateContext(
+        repo=GitRepo(root=Path("/nowhere")),
+        base_ref="main",
+        head_ref="cand",
+        verdict=CandidateVerdict(
+            diff=CandidateDiff(
+                base_ref="main", head_ref="cand", base_sha="a" * 40, head_sha="b" * 40, entries=()
+            ),
+            zones=ZoneVerdict(verdicts=()),
+            mode_violations=(),
+        ),
+        workdir=Path("/tmp/w"),
+        zone_policy=ZonePolicy(),
+    )
+
+    result = run_pipeline([Exploding()], ctx)  # type: ignore[list-item]
+    assert result.results[0].outcome is GateOutcome.FAIL
+    assert "RuntimeError" in result.results[0].reason, "the operator must see WHICH failure"
+    assert not result.passed
+
+
+def test_a_keyboard_interrupt_still_stops_the_run() -> None:
+    """`Exception`, not `BaseException`. Swallowing an interrupt would make
+    the loop hard to stop, which is what `KillSwitch` exists to avoid."""
+    from dataclasses import dataclass
+
+    from aef.harness.candidate import CandidateDiff, CandidateVerdict
+    from aef.harness.gates.base import Gate, GateContext, run_pipeline
+    from aef.harness.git import GitRepo
+    from aef.harness.zones import ZonePolicy, ZoneVerdict
+
+    @dataclass(frozen=True)
+    class Interrupted(Gate):
+        id: str = "G0"
+
+        def run(self, ctx: GateContext) -> object:
+            raise KeyboardInterrupt
+
+    ctx = GateContext(
+        repo=GitRepo(root=Path("/nowhere")),
+        base_ref="main",
+        head_ref="cand",
+        verdict=CandidateVerdict(
+            diff=CandidateDiff(
+                base_ref="main", head_ref="cand", base_sha="a" * 40, head_sha="b" * 40, entries=()
+            ),
+            zones=ZoneVerdict(verdicts=()),
+            mode_violations=(),
+        ),
+        workdir=Path("/tmp/w"),
+        zone_policy=ZonePolicy(),
+    )
+    with pytest.raises(KeyboardInterrupt):
+        run_pipeline([Interrupted()], ctx)  # type: ignore[list-item]
+
+
+def test_a_partial_marker_is_a_security_event_not_a_parse_error() -> None:
+    """`str.count` is non-overlapping, so a candidate writing PREFIX+nonce
+    with no suffix let the runner's own leading NUL complete a match — the
+    count stayed 1 while two partial markers were present, and the payload
+    read was the runner's marker text rather than JSON. That surfaced as an
+    ordinary parse failure rather than the forgery it is (ADR 0090)."""
+    from aef.harness.scenario_runner import RESULT_MARKER_PREFIX
+
+    nonce = "abc123"
+    stdout = (
+        RESULT_MARKER_PREFIX
+        + nonce
+        + result_marker(nonce)
+        + '{"s1": {"outcome": {"terminated": true, "plan_status": "done", "error_count": 0, '
+        '"policy_denials": 0, "node_path": []}, "score": 1.0}}'
+    )
+    with pytest.raises(SuiteError, match="forging the evidence"):
+        _parse("partial", stdout, nonce)

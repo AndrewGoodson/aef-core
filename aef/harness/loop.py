@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from aef.config import build_policy_config
-from aef.config.loader import load_agent_config_text
+from aef.config.loader import AgentConfigError, load_agent_config_text
 from aef.harness import archive, ledger
 from aef.harness.candidate import CandidateVerdict, inspect_candidate
 from aef.harness.corpus import Corpus
@@ -164,6 +164,13 @@ class GateRun:
     halted: bool = False
 
 
+class PolicyConfigError(RuntimeError):
+    """`--config` was given and could not be turned into a policy.
+
+    Loud, because the alternative was silent deny-by-default: a run that
+    looks configured, is not, and says nothing (ADR 0090)."""
+
+
 class LoopStateInsideRepoError(RuntimeError):
     """The loop's state directory sits inside the repository it judges."""
 
@@ -238,13 +245,38 @@ def _policy_from_base_ref(config: LoopConfig) -> PolicyConfig | None:
     """
     if config.config_path is None:
         return None
+
+    # `--repo`, `--state` and `--workdir` are all filesystem paths, so an
+    # absolute `--config` is the natural thing to type — and `git show
+    # <ref>:/abs/path` finds nothing, so the configured policy was silently
+    # discarded and the run continued deny-by-default with no message. A
+    # policy that quietly does not apply is worse than one that refuses
+    # (ADR 0090).
+    if Path(config.config_path).is_absolute():
+        raise PolicyConfigError(
+            f"--config must be a path INSIDE the repository, relative to its root — got "
+            f"{config.config_path!r}. The gate reads it from the base ref via `git show`, "
+            f"which cannot resolve an absolute path."
+        )
+
     if not config.repo.path_exists_at(config.base_ref, config.config_path):
-        return None
+        raise PolicyConfigError(
+            f"{config.config_path!r} does not exist at {config.base_ref!r}. The gate reads "
+            f"policy from the base ref so a candidate cannot widen its own rules; a config "
+            f"that exists only on the candidate branch is exactly what that prevents."
+        )
+
     try:
         raw = config.repo.show(config.base_ref, config.config_path)
         agent_config = load_agent_config_text(raw, source=f"{config.base_ref}:{config.config_path}")
-    except Exception:  # noqa: BLE001 - an unreadable policy is deny-by-default
-        return PolicyConfig()
+    except AgentConfigError as exc:
+        # Deny-by-default is the right VALUE and silence was the wrong
+        # delivery: an invalid config became indistinguishable from a
+        # deliberately restrictive one.
+        raise PolicyConfigError(
+            f"agent config at {config.base_ref}:{config.config_path} did not load, so no "
+            f"policy could be built: {exc}"
+        ) from exc
     return build_policy_config(agent_config.tools, agent_config.policies)
 
 

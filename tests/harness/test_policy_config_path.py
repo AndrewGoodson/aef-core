@@ -20,7 +20,12 @@ import pytest
 
 from aef.config import PoliciesConfig, ToolsConfig, build_policy_config
 from aef.harness.git import GitRepo
-from aef.harness.loop import LoopConfig, LoopPaths, _policy_from_base_ref
+from aef.harness.loop import (
+    LoopConfig,
+    LoopPaths,
+    PolicyConfigError,
+    _policy_from_base_ref,
+)
 from aef.security.tool import PolicyConfig
 
 BASE_YAML = """extends: _base
@@ -166,15 +171,32 @@ def test_no_config_path_means_deny_by_default(tmp_path: Path) -> None:
     assert _policy_from_base_ref(_config(repo, tmp_path, config_path=None)) is None
 
 
-def test_an_unreadable_policy_denies_rather_than_passing(tmp_path: Path) -> None:
-    """A config that does not parse must not silently become "no restrictions"."""
+def test_an_unreadable_policy_refuses_rather_than_denying_silently(tmp_path: Path) -> None:
+    """Deny-by-default was the right VALUE and silence was the wrong delivery:
+    an invalid config became indistinguishable from a deliberately
+    restrictive one, and the run continued looking configured (ADR 0090)."""
     repo = _repo(tmp_path, yaml_text="this: [is, not, a, valid, agent, config\n")
-    assert _policy_from_base_ref(_config(repo, tmp_path)) == PolicyConfig()
+    with pytest.raises(PolicyConfigError, match="did not load"):
+        _policy_from_base_ref(_config(repo, tmp_path))
 
 
-def test_a_missing_config_at_the_base_ref_is_not_an_error(tmp_path: Path) -> None:
+def test_a_config_missing_at_the_base_ref_refuses(tmp_path: Path) -> None:
+    """A config that exists only on the candidate branch is exactly what
+    reading from the base ref prevents — so saying so is more useful than
+    quietly falling back."""
     repo = _repo(tmp_path)
-    assert _policy_from_base_ref(_config(repo, tmp_path, config_path="nope.yaml")) is None
+    with pytest.raises(PolicyConfigError, match="does not exist at"):
+        _policy_from_base_ref(_config(repo, tmp_path, config_path="nope.yaml"))
+
+
+def test_an_absolute_config_path_refuses(tmp_path: Path) -> None:
+    """`--repo`, `--state` and `--workdir` are all filesystem paths, so an
+    absolute `--config` is the natural thing to type — and `git show
+    <ref>:/abs/path` finds nothing, so the configured policy was silently
+    discarded and the run continued deny-by-default with no message."""
+    repo = _repo(tmp_path)
+    with pytest.raises(PolicyConfigError, match="INSIDE the repository"):
+        _policy_from_base_ref(_config(repo, tmp_path, config_path=str(repo / "aef.yaml")))
 
 
 # --------------------------------------------------------------------------

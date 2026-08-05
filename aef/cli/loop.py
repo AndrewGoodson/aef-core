@@ -28,6 +28,7 @@ from aef.harness.loop import (
     EXIT_REJECTED,
     LoopConfig,
     LoopPaths,
+    PolicyConfigError,
     default_digest_window,
 )
 from aef.harness.loop import digest as loop_digest
@@ -84,6 +85,9 @@ def cmd_gate(args: argparse.Namespace) -> int:
             now=datetime.now(UTC),
             workdir=Path(args.workdir),
         )
+    except PolicyConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
     except LoopHaltedError as exc:
         print(f"HALTED: {exc}")
         return EXIT_HALTED
@@ -111,6 +115,9 @@ def cmd_monitor(args: argparse.Namespace) -> int:
 
     try:
         run = loop_monitor(config, now=datetime.now(UTC))
+    except PolicyConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
     except LoopHaltedError as exc:
         print(f"HALTED: {exc}")
         return EXIT_HALTED
@@ -213,6 +220,9 @@ def cmd_harvest(args: argparse.Namespace) -> int:
     config = _config(args)
     try:
         config.paths.kill_switch.check()
+    except PolicyConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
     except LoopHaltedError as exc:
         print(f"HALTED: {exc}")
         return EXIT_HALTED
@@ -270,6 +280,9 @@ def cmd_cycle(args: argparse.Namespace) -> int:
             memory=FileMemoryStore(path=Path(args.memory)) if args.memory else None,
             agent_path=args.agent_path,
         )
+    except PolicyConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
     except LoopHaltedError as exc:
         print(f"HALTED: {exc}")
         return EXIT_HALTED
@@ -285,6 +298,9 @@ def cmd_bless(args: argparse.Namespace) -> int:
     config = _config(args)
     try:
         config.paths.kill_switch.check()
+    except PolicyConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
     except LoopHaltedError as exc:
         print(f"HALTED: {exc}")
         return EXIT_HALTED

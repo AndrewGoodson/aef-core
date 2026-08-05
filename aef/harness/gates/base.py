@@ -122,6 +122,36 @@ def run_pipeline(gates: list[Gate] | tuple[Gate, ...], ctx: GateContext) -> Pipe
 
 
 def _run_traced(gate: Gate, ctx: GateContext) -> GateResult:
+    """Run one gate, converting any raise into a FAIL.
+
+    A gate that raises escaped `run_pipeline` entirely — out of `gate()`, out
+    of `cmd_gate`, and out of the process — so the candidate got no verdict
+    and the ledger got no `GATED` entry at all. That is a hole in a
+    tamper-evident audit trail, and it is candidate-triggerable: a graph
+    whose factory fails to load reaches it (ADR 0090).
+
+    FAIL, not skip. A gate that could not judge has not cleared the
+    candidate, and the reason names the exception so the operator can tell a
+    broken gate from a bad candidate.
+
+    `Exception`, not `BaseException`: a KeyboardInterrupt or SystemExit is
+    the operator stopping the run, and swallowing that would make the loop
+    hard to stop — which `KillSwitch` exists precisely to avoid.
+    """
+    try:
+        return _run_untraced(gate, ctx)
+    except Exception as exc:  # noqa: BLE001 - a raising gate is a failed gate
+        return GateResult(
+            gate=gate.id,
+            outcome=GateOutcome.FAIL,
+            reason=(
+                f"gate raised {type(exc).__name__}: {exc}. A gate that could not judge has "
+                f"not cleared this candidate."
+            ),
+        )
+
+
+def _run_untraced(gate: Gate, ctx: GateContext) -> GateResult:
     if ctx.tracer is None:
         return gate.run(ctx)
     with ctx.tracer.span(f"aef.harness.gate.{gate.id}", {"aef.gate.id": gate.id}) as span:

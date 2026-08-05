@@ -32,6 +32,19 @@ class MalformedTraceError(RuntimeError):
     in — reproduced directly (see docs/adr/0023), not hypothetical."""
 
 
+def _verification_copy(state: AEFState) -> AEFState:
+    """A deep copy for re-execution, falling back to the live object.
+
+    Same fallback as `StateDelta.apply`: a value that cannot be deep-copied
+    cannot be checkpointed either, so refusing to replay it would be a
+    harder rule than the one that recorded it (ADR 0089).
+    """
+    try:
+        return state.model_copy(deep=True)
+    except (TypeError, ValueError):
+        return state
+
+
 class ReplayEngine:
     def __init__(self, compiled: CompiledGraph, services: Services) -> None:
         self._graph = compiled.graph
@@ -87,8 +100,14 @@ class ReplayEngine:
                         f"cannot reveal that because it raises by construction."
                     )
             elif node.deterministic:
+                # A COPY. ADR 0087 stopped the executor handing the live
+                # state to a node and left replay doing exactly that — so a
+                # node that mutates its input rewrote the record replay was
+                # verifying, and the chain check then passed only because
+                # replay had reproduced the mutation into its own copy
+                # (ADR 0090). Verification must not alter its evidence.
                 replayed_delta, replayed_route = node.fn(
-                    record.input_state, record.context, self._services
+                    _verification_copy(record.input_state), record.context, self._services
                 )
                 if replayed_delta != record.delta:
                     raise DeterminismViolationError(

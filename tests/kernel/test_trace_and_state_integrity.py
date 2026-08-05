@@ -234,3 +234,53 @@ def test_deep_purity_still_holds_for_ordinary_data() -> None:
     result = StateDelta(working_memory={"x": 1}).apply(state)
     result.working_memory["cfg"]["deep"] = 999
     assert state.working_memory["cfg"] == {"deep": 1}
+
+
+def test_replay_does_not_rewrite_the_record_it_is_verifying() -> None:
+    """ADR 0087 stopped the executor handing the live state to a node and
+    left `ReplayEngine` doing exactly that. A node that mutates its input
+    rewrote the record replay was verifying — and the chain check then passed
+    only BECAUSE replay had reproduced the mutation into its own copy, which
+    is a check validating its own side effect (ADR 0090)."""
+
+    def mutating(state, ctx, services):  # type: ignore[no-untyped-def]
+        state.working_memory.setdefault("log", []).append("m")
+        return StateDelta(working_memory={"done": True}), END
+
+    graph = Graph(
+        id="g",
+        version="1",
+        nodes={"n": Node(id="n", version="1", fn=mutating, deterministic=True)},
+        edges=[],
+        entry_node="n",
+    )
+    run = GraphExecutor(graph.compile(), Services()).run(
+        AEFState(run_id="r", agent_id="a", objective="o", working_memory={"log": []}),
+        record_trace=True,
+    )
+    assert run.trace is not None
+    before = list(run.trace[0].input_state.working_memory["log"])
+
+    ReplayEngine(graph.compile(), Services()).replay(run.trace)
+
+    assert run.trace[0].input_state.working_memory["log"] == before
+
+
+def test_an_honest_deterministic_replay_still_verifies() -> None:
+    """The control: the copy must not break re-execution, which is the whole
+    point of declaring a node deterministic."""
+
+    def clean(state, ctx, services):  # type: ignore[no-untyped-def]
+        return StateDelta(working_memory={"x": 1}), END
+
+    graph = Graph(
+        id="g",
+        version="1",
+        nodes={"n": Node(id="n", version="1", fn=clean, deterministic=True)},
+        edges=[],
+        entry_node="n",
+    )
+    run = GraphExecutor(graph.compile(), Services()).run(
+        AEFState(run_id="r", agent_id="a", objective="o"), record_trace=True
+    )
+    assert ReplayEngine(graph.compile(), Services()).replay(run.trace).working_memory == {"x": 1}
