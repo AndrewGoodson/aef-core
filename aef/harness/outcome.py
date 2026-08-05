@@ -29,6 +29,9 @@ from typing import Any
 
 from aef.kernel.executor import NodeExecutionRecord
 from aef.state import AEFState
+from aef.state.schema import RECOVERED_KEY
+
+__all__ = ["RECOVERED_KEY", "Comparison", "Outcome", "classify", "is_recovered"]
 
 # The key a node sets when a call was refused by policy. Explicit, because
 # guessing from error TEXT was measured and is roughly ANTI-correlated: it
@@ -39,22 +42,6 @@ from aef.state import AEFState
 # A signal that fires more often on the wrong input than the right one is
 # worse than no signal, because it is acted on (ADR 0064).
 POLICY_DENIED_KEY = "policy_denied"
-
-# The key a node sets when it hit an error and then RECOVERED from it. Same
-# shape as POLICY_DENIED_KEY and for the same reason: explicit, never
-# inferred from error text.
-#
-# Without it, a run that recovered from a transient failure was
-# indistinguishable from one that failed outright — both had
-# `Outcome.passed == False`, because any error at all disqualified the run.
-# So a candidate that taught the agent to recover scored exactly like one
-# that changed nothing, and graceful recovery, one of the more valuable
-# things an agent can learn, was unrewardable by the objective the loop
-# optimises. Harvest also promoted recovered runs as failures (ADR 0076).
-#
-# Absent means not recovered, so an agent that sets nothing behaves exactly
-# as before.
-RECOVERED_KEY = "recovered"
 
 
 @dataclass(frozen=True)

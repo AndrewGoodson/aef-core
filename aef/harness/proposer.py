@@ -38,6 +38,11 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from aef.harness.corpus import Corpus, Split
+from aef.harness.transformations import (
+    TransformationError,
+    _node_constructions,
+    add_deterministic_fallback,
+)
 from aef.services.memory.base import MemoryRecord, MemoryStore
 
 
@@ -250,6 +255,21 @@ def _check_citations(citations: Sequence[Citation]) -> None:
         )
 
 
+def _handler_candidates(source: str) -> tuple[str, ...]:
+    """Node ids that could serve as a fallback, in declaration order.
+
+    Every declared node except the failing one is a candidate; the
+    transformation itself refuses the cases that do not make sense. Order is
+    declaration order so the choice is deterministic — a proposer that picked
+    differently on each run would make its own proposals unreproducible.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return ()
+    return tuple(_node_constructions(tree))
+
+
 @dataclass(frozen=True)
 class RuleBasedProposer:
     """Deterministic, evidence-first. Emits one proposal per constant it can
@@ -275,6 +295,11 @@ class RuleBasedProposer:
         citations = evidence.citations()
         if not citations:
             return ()
+
+        structural = self._structural(evidence, proposal_id=proposal_id, path=path, source=source)
+        if structural:
+            return structural
+
         summary = (
             "; ".join(str(c.detail) for c in citations[:3] if c.detail)
             or f"{len(citations)} recorded failure(s)"
@@ -286,6 +311,43 @@ class RuleBasedProposer:
             citations=citations,
             rationale=f"grounded in recorded failures — {summary}",
         )
+
+    def _structural(
+        self, evidence: MemoryEvidence, *, proposal_id: str, path: str, source: str
+    ) -> tuple[Proposal, ...]:
+        """A change from the bounded catalogue, when the memory supports one.
+
+        Preferred over a numeric tweak because it is the change the failure
+        actually argues for: the memory says node X raised, so node X gets a
+        fallback. The numeric proposer remains as what happens when no
+        transformation applies (ADR 0096).
+        """
+        handlers = _handler_candidates(source)
+        for failing_node, record_id in evidence.failing_nodes():
+            for handler in handlers:
+                if handler == failing_node:
+                    continue
+                try:
+                    change = add_deterministic_fallback(
+                        source=source,
+                        failing_node=failing_node,
+                        handler=handler,
+                        citation=record_id,
+                    )
+                except TransformationError:
+                    continue
+                return (
+                    Proposal(
+                        id=f"{proposal_id}-{change.name}",
+                        path=path,
+                        original=source,
+                        proposed=change.source,
+                        rationale=change.rationale,
+                        # The citation names the record that named the node.
+                        grounded_in=(evidence.cite(record_id, change.rationale),),
+                    ),
+                )
+        return ()
 
     def propose(
         self,
@@ -455,6 +517,25 @@ class MemoryEvidence:
         admissible = tuple(r for r in found if r.run_id not in off_limits)
         blocked = tuple(r.id for r in found if r.run_id in off_limits)
         return cls(records=admissible, excluded=blocked)
+
+    def failing_nodes(self) -> tuple[tuple[str, str], ...]:
+        """`(node_id, citing_record_id)` for every node a failure blames.
+
+        The pairing is the point: a structural proposal must name the record
+        that motivated it, and the record must name the node the proposal
+        targets. A citation that does not constrain the change is decoration
+        (ADR 0096).
+
+        Records written before `failing_nodes` existed simply contribute
+        nothing — absence is "no structural proposal available", not an
+        error.
+        """
+        seen: dict[str, str] = {}
+        for record in self.records:
+            for node_id in record.content.get("failing_nodes", ()) or ():
+                if isinstance(node_id, str) and node_id and node_id not in seen:
+                    seen[node_id] = record.id
+        return tuple(seen.items())
 
     @property
     def ids(self) -> frozenset[str]:

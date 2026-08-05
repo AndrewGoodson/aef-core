@@ -20,6 +20,23 @@ from aef.services.memory.base import MemoryKind, MemoryRecord
 from aef.state import AEFState, StateDelta
 
 
+def _failing_nodes(state: AEFState) -> list[str]:
+    """Node ids that appended an error, in first-seen order.
+
+    Order preserved rather than sorted: the first failure is usually the
+    cause and the rest are consequences, and a set would throw that away.
+    Entries with no `node_id` are skipped — an error whose origin was not
+    recorded cannot be attributed to a node, and guessing is worse than
+    omitting.
+    """
+    seen: list[str] = []
+    for entry in state.errors:
+        node_id = entry.get("node_id")
+        if isinstance(node_id, str) and node_id and node_id not in seen:
+            seen.append(node_id)
+    return seen
+
+
 def make_reflect_node(
     *,
     node_id: str = "reflect",
@@ -51,7 +68,19 @@ def make_reflect_node(
                     "score": judgment.score,
                     "rubric": dict(judgment.rubric),
                     "rationale": judgment.rationale,
+                    # The node that OBSERVED the failure. Kept, and no longer
+                    # the only one recorded — see `failing_nodes` below.
                     "node_id": ctx.node_id,
+                    # The nodes that CAUSED it. `ctx.node_id` here is the
+                    # reflect node, so a reader of this record could not tell
+                    # which node had actually failed — the failing id sat in
+                    # `state.errors[i]["node_id"]`, which this node read to
+                    # build the feedback text and then discarded.
+                    #
+                    # A numeric proposer never needed it. A structural one
+                    # cannot begin without it: "add a fallback to the flaky
+                    # node" requires knowing which node was flaky (ADR 0096).
+                    "failing_nodes": _failing_nodes(state),
                     "graph_version": ctx.graph_version,
                     "objective": state.objective,
                 },

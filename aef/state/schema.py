@@ -47,6 +47,16 @@ class Plan(_StrictModel):
     reusable_key: str | None = None
 
 
+# The key a node — or the executor's fallback path — sets on an error entry
+# to say the run RECOVERED from it. Lives here, not in the harness, because
+# both the kernel (which sets it when a declared fallback takes over) and the
+# gates (which read it) need it, and the kernel must not import the harness.
+#
+# Absent means not recovered, so an agent that sets nothing behaves exactly as
+# it did before the marker existed (ADR 0076, ADR 0097).
+RECOVERED_KEY = "recovered"
+
+
 class AEFState(_StrictModel):
     schema_version: str = CURRENT_SCHEMA_VERSION
     run_id: str
