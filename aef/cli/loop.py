@@ -36,6 +36,7 @@ from aef.harness.loop import monitor as loop_monitor
 from aef.harness.loop import status as loop_status
 from aef.harness.monitoring import LoopHaltedError
 from aef.harness.recorder import record_to_corpus
+from aef.harness.zones import DEFAULT_AGENT_ROOT, ZonePolicy
 
 
 def _build_commands(args: argparse.Namespace) -> tuple[tuple[str, ...], ...] | None:
@@ -62,6 +63,11 @@ def _config(args: argparse.Namespace) -> LoopConfig:
         build_commands=_build_commands(args),
         entrypoint=getattr(args, "entrypoint", None),
         config_path=getattr(args, "config", None),
+        # Both sides of G5's drift metric must describe the SAME tree.
+        # `bless` took an agent_root and `_config` never set a zone_policy,
+        # so a non-default root gave the baseline and the candidate two
+        # different trees — the ADR 0074 defect, latent (ADR 0084).
+        zone_policy=ZonePolicy(agent_root=getattr(args, "agent_root", DEFAULT_AGENT_ROOT)),
         # Never wired to a flag. Enabling Tier-1 auto-merge is an owner
         # action against the source, not something a CI invocation can do by
         # passing an argument (ADR 0045).
@@ -287,6 +293,7 @@ def cmd_bless(args: argparse.Namespace) -> int:
             repo_root=Path(args.repo),
             state_root=config.paths.root,
             agent_path=args.agent_path,
+            agent_root=args.agent_root,
             graph_id=args.graph_id,
             at=datetime.now(UTC),
             note=args.note,
@@ -326,6 +333,15 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
             "--state", required=True, help="loop state dir (ledger, archive, kill switch)"
         )
         sub.add_argument("--graph-id", default="default")
+        sub.add_argument(
+            "--agent-root",
+            default=DEFAULT_AGENT_ROOT,
+            help=(
+                "the Zone A root — the only directory the loop may propose changes to. "
+                "Both sides of G5's drift metric are read from it, so `bless` and the "
+                "gate must be given the same value or they describe different trees."
+            ),
+        )
 
     p_gate = loop_subs.add_parser("gate", help="evaluate one candidate branch")
     _common(p_gate)

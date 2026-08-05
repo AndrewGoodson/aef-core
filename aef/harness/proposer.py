@@ -146,6 +146,17 @@ def find_constants(source: str) -> tuple[NumericConstant, ...]:
         if not isinstance(target, ast.Name) or not target.id.isupper():
             continue
         value = node.value
+        # `X = -2` parses as UnaryOp(USub, Constant), not Constant — so every
+        # negative constant was invisible here while `_CONSTANT_RE` happily
+        # allowed `-?\d+`. A dead regex branch, and an agent whose tunable
+        # was negative had nothing the proposer could reach (ADR 0084).
+        if (
+            isinstance(value, ast.UnaryOp)
+            and isinstance(value.op, ast.USub)
+            and isinstance(value.operand, ast.Constant)
+            and isinstance(value.operand.value, int | float)
+        ):
+            value = ast.Constant(value=-value.operand.value)
         if isinstance(value, ast.Constant) and isinstance(value.value, int | float):
             # Only constants the rewriter can actually rewrite. The AST
             # accepts strictly more than the line-level regex does —
@@ -178,13 +189,22 @@ def rewrite_constant(source: str, constant: NumericConstant, new_value: float) -
         raise ProposalError(f"constant {constant.name!r} is not on line {constant.line}")
 
     rendered = str(int(new_value)) if constant.is_int else repr(new_value)
-    match = _CONSTANT_RE.match(lines[index].rstrip("\n"))
+    match = _CONSTANT_RE.match(lines[index].rstrip("\r\n"))
     if match is None or match.group("name") != constant.name:
         raise ProposalError(
             f"line {constant.line} does not look like an assignment of {constant.name!r}; "
             f"refusing to rewrite it"
         )
-    ending = "\n" if lines[index].endswith("\n") else ""
+    # The line's OWN ending, not a hardcoded "\n". Rewriting a CRLF line as
+    # LF left one mixed ending in an otherwise-CRLF file, so the proposal was
+    # not the pure single-value edit its rationale described (ADR 0084).
+    original_line = lines[index]
+    if original_line.endswith("\r\n"):
+        ending = "\r\n"
+    elif original_line.endswith("\n"):
+        ending = "\n"
+    else:
+        ending = ""
     # A trailing comment is the author's, not the proposer's, and dropping it
     # would make the diff say more than the proposal does.
     comment = f"  {match.group('comment')}" if match.group("comment") else ""

@@ -90,6 +90,24 @@ class EvolutionSettings(_StrictModel):
 
 class AgentConfig(_StrictModel):
     extends: str = "_base"
+
+    @field_validator("extends")
+    @classmethod
+    def _inheritance_is_not_implemented(cls, value: str) -> str:
+        # Nothing resolves a base config — not a missing one, and not a
+        # present one either. The field validated any string, so
+        # `extends: production-base` loaded clean and silently inherited
+        # nothing: an owner could believe a shared policy applied when no
+        # code had ever read it. Rejecting the non-default is the smallest
+        # honest answer until inheritance exists (ADR 0014, ADR 0084).
+        if value != "_base":
+            raise ValueError(
+                f"config inheritance is not implemented, so extends={value!r} would be "
+                f"silently ignored — nothing resolves a base config. Inline the settings "
+                f"you need, or leave extends at its default '_base'."
+            )
+        return value
+
     model_provider: ModelProviderConfig
     memory: MemoryConfig
     knowledge_graph: KnowledgeGraphConfig | None = None

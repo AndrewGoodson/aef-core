@@ -716,7 +716,15 @@ def monitor(config: LoopConfig, *, now: datetime, restore_to: Path | None = None
     rolled: list[str] = []
     gated_rollback = False
 
-    for merge in merges:
+    # NEWEST FIRST. `archive.rollback(v)` APPENDS v's content as a new
+    # version, so reverting in ledger order made each rollback undo the
+    # previous one: with v2 and v3 both un-settled, reverting v2 restored the
+    # baseline and reverting v3 then restored v2 — reinstating the first
+    # regression, having reported both as rolled back. Reverting newest-first
+    # unwinds the stack in the order it was built (ADR 0084).
+    for merge in sorted(
+        merges, key=lambda e: int(e.detail.get("archive_version") or 0), reverse=True
+    ):
         version = merge.detail.get("archive_version")
         if version is None or version in rolled_back_versions:
             continue
