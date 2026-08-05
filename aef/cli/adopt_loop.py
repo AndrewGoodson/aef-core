@@ -175,6 +175,40 @@ what it audits. The driver refuses it.
 
 Exit codes: `0` escalated · `1` rejected · `2` halted (do not retry).
 
+## Driving it with a coding agent
+
+Hand this to Claude Code (or any agent harness) as a `/loop` prompt. It
+self-paces; it does not need an interval.
+
+```
+/loop Run one self-rewiring cycle and report.
+
+  aef loop cycle --repo . --state ~/.aef-loop-state --workdir /tmp/loop \\
+    --module <your.module> --corpus corpus \\
+    --entrypoint <your.module>:build_graph \\
+    --memory ~/.aef-loop-state/memory.jsonl \\
+    --build-command "<your green bar>"
+
+Exit 0 = escalated to a human (the NORMAL outcome; Tier-1 is off).
+Exit 1 = rejected. Exit 2 = HALTED — do not retry, investigate.
+
+Each run:
+  - If it says "no admissible failure memory", the reflect node is producing
+    no evidence. Check --memory points at the file `aef run --memory` writes,
+    and that a node actually ROUTES to reflect (an Edge alone does not).
+  - If a gate rejected, read the ledger's reason and say whether the
+    rejection was CORRECT. A candidate rejected on merit is the system
+    working, not a failure to fix.
+  - If exit 2, report the halt reason and STOP the loop. Do not clear
+    ~/.aef-loop-state/HALTED — resuming is the owner's decision.
+  - Weekly: `aef loop digest`, and `aef loop monitor` to settle open windows.
+
+NEVER: enable Tier-1 auto-merge; edit anything under corpus/, evals/ or
+.github/workflows/ to make a candidate pass; relabel a tripwire; or widen a
+zone. A diff reaching those paths is a security event that halts the loop,
+not a rejection to retry.
+```
+
 ## Stopping it
 
 ```

@@ -507,3 +507,49 @@ def test_the_documented_eval_sequence_includes_the_flag_it_needs() -> None:
     text = render_agent_integration_md("adoptee")
     step = text[text.index("5. Execute, score") :]
     assert "--checkpoints-dir" in step[:900]
+
+
+# --------------------------------------------------------------------------
+# The prompts an adopting repo's agents are handed
+# --------------------------------------------------------------------------
+
+
+def test_the_integration_guide_carries_the_onboarding_task() -> None:
+    """`aef adopt` writes the onboarding kit; an agent reading it should not
+    need a prompt pasted in from elsewhere to know the job."""
+    from aef.cli.adopt import render_agent_integration_md
+
+    text = render_agent_integration_md("adoptee")
+    for probe in (
+        "aef loop doctor",
+        "--expected must_fail",
+        "--working-memory",
+        "--entrypoint",
+        "aef loop bless",
+        "reward hack",
+        "exit 2",
+    ):
+        assert probe in text, probe
+
+
+def test_loop_md_carries_the_ongoing_loop_prompt() -> None:
+    """The owner needs something to hand a coding agent for the recurring
+    cycle, not just the raw commands."""
+    from aef.cli.adopt_loop import render_loop_md
+
+    text = render_loop_md("adoptee")
+    assert "/loop Run one self-rewiring cycle" in text
+    assert "aef loop cycle" in text
+    assert "Do not clear" in text, "the halt file must stay the owner's decision"
+
+
+def test_the_emitted_prompts_contain_no_unrendered_format_braces() -> None:
+    """A literal `{` in an f-string template raises at render time and would
+    make `aef adopt` crash for every adopter — the exact failure that shipped
+    once already (ADR 0072)."""
+    from aef.cli.adopt import render_agent_integration_md
+    from aef.cli.adopt_loop import render_loop_md
+
+    for render in (render_agent_integration_md, render_loop_md):
+        text = render("adoptee")
+        assert "{{" not in text and "}}" not in text, render.__name__

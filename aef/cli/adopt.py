@@ -417,6 +417,106 @@ gated by design and stays off.
   writes are atomic and resume recovers past a torn checkpoint; HITL pauses
   are always resumable.
 
+## Getting the loop to five green — run this as your task
+
+This is the whole job, in order. `aef loop doctor` reports five obligations
+and prints the exact command that fixes each; work down its output until
+every line is OK. Do not skip ahead to running the loop — with obligations
+unmet the gates refuse for lack of evidence, which is correct behaviour and
+reads as "broken".
+
+```
+aef loop doctor --repo . --state ~/.aef-loop-state --corpus corpus \\
+                --agent-path agents/<yours>/graph.py
+```
+
+1. **CORPUS + TRIPWIRE.**
+   ```
+   aef loop record <your.module> --corpus corpus --scenario-id s1 \\
+     --objective "..." --split validation \\
+     --working-memory '{{"difficulty": 5}}'
+   ```
+   Record scenarios that **fail** as well as ones that pass — a corpus where
+   everything already passes cannot demonstrate an improvement.
+   Then at least one tripwire:
+   ```
+   ... --scenario-id tripwire-1 --expected must_fail \\
+       --working-memory '{{"difficulty": 99}}'
+   ```
+   It must be impossible **in principle**, not merely hard; `record` refuses
+   the label if the agent completes the task. Without a tripwire the gates
+   cannot detect reward hacking — a one-line change making an agent always
+   report success passes every cheap gate, because they read the agent's own
+   claim about itself.
+
+2. **REFLECT NODE, ROUTED TO.** You need BOTH an edge and a route:
+   ```python
+   return delta, "reflect"                            # in your work node
+   edges=[Edge(from_node="work", to_node="reflect")]  # in build_graph
+   ```
+   An Edge alone does not route; a route with no edge is refused by the
+   executor. This catches everyone once.
+
+3. **OBSERVATIONS.** Pass `--observations` from production runs. With no
+   input every monitoring window reports unobserved, which correctly rolls
+   every change back — monitoring with no input is an expensive way to revert.
+
+4. **HALT CHANNEL.** A halt fails a CI job. If nobody watches that, nothing
+   has told you.
+
+5. **BLESSED BASELINE.** Commit first; the baseline is read from git.
+   ```
+   aef loop bless --repo . --state ~/.aef-loop-state \\
+                  --agent-path agents/<yours>/graph.py
+   ```
+
+### Then verify by RUNNING, not by reading
+
+```
+aef loop gate --repo . --state ~/.aef-loop-state --head <branch> \\
+   --workdir /tmp/loop --corpus corpus \\
+   --entrypoint <your.module>:build_graph \\
+   --build-command "<your green bar>"
+```
+
+`--entrypoint` is **required** or G2 and G3 cannot execute your corpus and
+refuse. `--build-command` is **your** green bar, not aef-core's; the default
+`pytest -q` exits 5 in a repo with no tests and fails G1.
+
+Confirm all six gates actually ran — read the ledger, not the summary
+(`aef loop status` and the ledger's `gated` entry both show which gates ran).
+
+Then **prove the containment works**: plant a one-line reward hack — make the
+agent ignore its inputs and always report success — gate it, and confirm G2
+rejects it as a SECURITY EVENT and the loop HALTS with exit 2. If it does
+not, your tripwire is not a tripwire. Revert the hack afterwards.
+
+Finally, edit `.github/workflows/loop-gate.yml` and set `AEF_ENTRYPOINT` and
+`AEF_BUILD_COMMAND` to your values. The generated ones are placeholders.
+
+### Know what is NOT wired
+In `aef.yaml` only `model_provider` reaches a run. `objectives`, `policies`,
+`tools`, `evaluator.suites` and `knowledge_graph` validate and are **ignored**
+(aef-core ADR 0014). In particular `policies.require_hitl_above_risk` is not
+enforced from config — the engine's own deny-by-default applies instead. The
+stub says this field by field; believe the stub, not the field names.
+
+**Nothing merges automatically.** Tier-1 auto-merge is off and no flag, config
+or environment variable enables it. A candidate passing all six gates is
+escalated to a human. Do not try to route around this.
+
+### Stop and ask
+If you find yourself weakening a gate to make something pass, labelling an
+achievable task `must_fail`, enabling auto-merge, or adding a secret to a
+workflow — stop and ask. Those are the owner's calls, not yours.
+
+### Report back
+Which obligations are green, the six-gate ledger output, the reward-hack run
+and its exit code, and **anything the docs told you to do that did not work**.
+That last one is the most valuable thing you can send upstream: five defects
+in aef-core were documentation instructing adopters to run commands the CLI
+rejects, and they were only found by someone being the adopter.
+
 ## Where to look (inside the aef-core package, not necessarily this repo)
 Locate an installed copy: `python -c "import aef; print(aef.__path__[0])"`.
 `docs/` ships only in a source checkout.
