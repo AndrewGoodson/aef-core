@@ -27,7 +27,7 @@ does not yet, and what only you can decide.
 *escalated to you*, not merged. Turning it on is a deliberate source change,
 not a config flag — see aef-core ADR 0045 for why that distinction is kept.
 
-## Three things you must supply before the loop can approve anything
+## Four things you must supply before the loop can approve anything
 
 1. **A corpus.** `corpus/` starts empty, and an empty corpus makes G2 and G3
    refuse — correctly: absence of evidence is not evidence of non-regression.
@@ -54,6 +54,12 @@ not a config flag — see aef-core ADR 0045 for why that distinction is kept.
 3. **Halt notification.** When the loop halts, it fails a CI job. If nobody
    watches that, nothing has told you. Wire a channel you actually read.
 
+4. **A blessed baseline.** G5 measures drift against an archived version you
+   have approved. Until one exists it refuses every candidate with "no
+   owner-blessed baseline" — correctly, since it has no reference point.
+   Archive your starting state once, deliberately, before expecting the loop
+   to accept anything.
+
 ## Zones — what agents may and may not touch
 
 | Zone | Path | Agent-writable |
@@ -71,10 +77,25 @@ faces the original one.
 
 ```
 aef loop status  --repo . --state ~/.aef-loop-state
-aef loop gate    --repo . --state ~/.aef-loop-state --head <branch> --workdir /tmp/loop
+aef loop harvest <your.graph.module> --repo . --state ~/.aef-loop-state \\
+                 --runs ~/.aef-loop-state/runs --corpus corpus
+aef loop gate    --repo . --state ~/.aef-loop-state --head <branch> \\
+                 --workdir /tmp/loop --build-command "python -m pytest -q"
+aef loop cycle   --repo . --state ~/.aef-loop-state --workdir /tmp/loop \\
+                 --module <your.graph.module> --corpus corpus \\
+                 --memory ~/.aef-loop-state/memory.jsonl \\
+                 --build-command "python -m pytest -q"
 aef loop monitor --repo . --state ~/.aef-loop-state
-aef loop digest  --repo . --state ~/.aef-loop-state
+aef loop digest  --repo . --state ~/.aef-loop-state --runs ~/.aef-loop-state/runs
 ```
+
+**`--build-command` is your green bar, not ours.** G1 runs it against your
+tree; the default is `pytest -q` alone because anything more is
+repo-specific. Repeat the flag for each command.
+
+**`--memory` must point at the file your reflect node writes.** Without it
+the proposer has no recorded failures to ground in and will never propose —
+it will report "no admissible failure memory" every cycle and look broken.
 
 **`--state` must be outside this repository.** Inside, `git add -A` sweeps
 the ledger and archive into candidate diffs, making the audit trail part of

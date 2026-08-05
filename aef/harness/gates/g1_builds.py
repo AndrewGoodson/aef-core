@@ -31,10 +31,12 @@ from aef.harness.gates.base import Gate, GateContext, GateOutcome, GateResult
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy, run_sandboxed
 from aef.harness.workspace import build_candidate_workspace
 
-DEFAULT_BUILD_COMMANDS: tuple[tuple[str, ...], ...] = (
-    ("python", "-m", "mypy", "--strict", "aef"),
-    ("python", "-m", "pytest", "-q"),
-)
+# Deliberately NOT aef-core's own green bar. `mypy --strict aef` runs against
+# the ADOPTING repo, which has no `aef/` directory, so it failed every
+# candidate in every adopting repo — forever, and silently, since the failure
+# looks like an ordinary gate rejection (ADR 0069). A repo's build command is
+# repo-specific; the only safe default is the one every Python repo shares.
+DEFAULT_BUILD_COMMANDS: tuple[tuple[str, ...], ...] = (("python", "-m", "pytest", "-q"),)
 
 
 @dataclass(frozen=True)

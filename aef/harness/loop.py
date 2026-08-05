@@ -104,6 +104,7 @@ class LoopConfig:
     # in this repo passes True. Turning it on is an owner action (ADR 0045).
     tier1_enabled: bool = False
     entrypoint: str = "agents.graph:build_graph"
+    build_commands: tuple[tuple[str, ...], ...] | None = None
     cohort_size: int = 5
     cohort_seed: int = 0
     now_for_gates: datetime | None = None
@@ -134,7 +135,7 @@ class LoopConfig:
         """
         return (
             G0StaticSafety(),
-            G1Builds(),
+            G1Builds(commands=self.build_commands) if self.build_commands else G1Builds(),
             G4SeparationOfPowers(),
             G5RateAndDrift(),
             G2OutcomeNonRegression(corpus=self.corpus),

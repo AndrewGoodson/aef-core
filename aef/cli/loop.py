@@ -35,6 +35,18 @@ from aef.harness.monitoring import LoopHaltedError
 from aef.harness.recorder import record_to_corpus
 
 
+def _build_commands(args: argparse.Namespace) -> tuple[tuple[str, ...], ...] | None:
+    """Repo-specific build commands, or None to take G1's default.
+
+    Each `--build-command` is a whole shell-free command, split on spaces.
+    Repeatable, because a green bar is usually more than one command.
+    """
+    raw = getattr(args, "build_command", None)
+    if not raw:
+        return None
+    return tuple(tuple(c.split()) for c in raw)
+
+
 def _config(args: argparse.Namespace) -> LoopConfig:
     corpus_dir = Path(args.corpus) if getattr(args, "corpus", None) else None
     return LoopConfig(
@@ -44,6 +56,7 @@ def _config(args: argparse.Namespace) -> LoopConfig:
         graph_id=args.graph_id,
         corpus=load_corpus(corpus_dir) if corpus_dir and corpus_dir.is_dir() else None,
         network_isolated=bool(getattr(args, "network_isolated", False)),
+        build_commands=_build_commands(args),
         # Never wired to a flag. Enabling Tier-1 auto-merge is an owner
         # action against the source, not something a CI invocation can do by
         # passing an argument (ADR 0045).
@@ -144,6 +157,16 @@ def cmd_harvest(args: argparse.Namespace) -> int:
     from aef.cli.run import load_graph_module
     from aef.harness.harvest import harvest
 
+    # Harvest writes to corpus/, which IS the evidence every behavioural gate
+    # is measured against. A halted loop must not have its gate evidence
+    # changed underneath it (ADR 0069).
+    config = _config(args)
+    try:
+        config.paths.kill_switch.check()
+    except LoopHaltedError as exc:
+        print(f"HALTED: {exc}")
+        return EXIT_HALTED
+
     outcome = harvest(
         Path(args.runs),
         Path(args.corpus),
@@ -174,7 +197,7 @@ def _halt_notifier() -> object:
 def cmd_cycle(args: argparse.Namespace) -> int:
     from aef.cli.run import load_graph_module
     from aef.harness.loop import cycle as loop_cycle
-    from aef.services.memory.in_memory import InMemoryMemoryStore
+    from aef.harness.memory_store import FileMemoryStore
 
     config = _config(args)
     graph = load_graph_module(args.module) if args.module else None
@@ -186,7 +209,10 @@ def cmd_cycle(args: argparse.Namespace) -> int:
             runs_dir=Path(args.runs) if args.runs else None,
             corpus_root=Path(args.corpus) if args.corpus else None,
             graph=graph,
-            memory=InMemoryMemoryStore(),
+            # Durable, not in-process: a store constructed here would be
+            # empty every invocation and the proposer would never see a
+            # recorded failure (ADR 0069).
+            memory=FileMemoryStore(path=Path(args.memory)),
             agent_path=args.agent_path,
         )
     except LoopHaltedError as exc:
@@ -221,6 +247,13 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         help="attest that the caller (a CI container) provides network isolation. "
         "A process cannot revoke its own network access; passing this without real "
         "isolation makes the sandbox's report untrue.",
+    )
+    p_gate.add_argument(
+        "--build-command",
+        action="append",
+        default=None,
+        help="a command G1 must pass, e.g. 'python -m pytest -q'. Repeatable. "
+        "Defaults to pytest only — anything more is repo-specific.",
     )
     p_gate.set_defaults(handler=cmd_gate)
 
@@ -259,6 +292,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_harvest = loop_subs.add_parser(
         "harvest", help="promote recorded production runs into corpus scenarios"
     )
+    _common(p_harvest)
     p_harvest.add_argument("module", help="importable module exposing build_graph()")
     p_harvest.add_argument("--runs", required=True, help="dir of runs from `aef run --record-runs`")
     p_harvest.add_argument("--corpus", required=True)
@@ -289,4 +323,17 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_cycle.add_argument("--runs", default=None, help="dir from `aef run --record-runs`")
     p_cycle.add_argument("--corpus", default=None)
     p_cycle.add_argument("--agent-path", default="agents/demo/graph.py")
+    p_cycle.add_argument(
+        "--memory",
+        default=None,
+        help="path to the durable memory JSONL the reflect node writes. Without it the "
+        "proposer has no recorded failures to ground in and will never propose.",
+    )
+    p_cycle.add_argument(
+        "--build-command",
+        action="append",
+        default=None,
+        help="a command G1 must pass, e.g. 'python -m pytest -q'. Repeatable. "
+        "Defaults to pytest only — anything more is repo-specific.",
+    )
     p_cycle.set_defaults(handler=cmd_cycle)
