@@ -265,6 +265,23 @@ def _has_recovery_marker(source: str) -> bool:
     )
 
 
+def _raises_approval_required(source: str) -> bool:
+    """Does this source raise (or construct) `HumanApprovalRequiredError`?"""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        name: str | None = None
+        if isinstance(node, ast.Name):
+            name = node.id
+        elif isinstance(node, ast.Attribute):
+            name = node.attr
+        if name == "HumanApprovalRequiredError":
+            return True
+    return False
+
+
 def scan_weakened_controls(
     path: str, base_source: str, head_source: str
 ) -> tuple[MetadataFinding, ...]:
@@ -296,6 +313,26 @@ def scan_weakened_controls(
                     ),
                 )
             )
+
+    # Defence in depth. `hitl_paused` is set only where the kernel's
+    # exception is CAUGHT, in Zone B — a candidate cannot write it. But a
+    # candidate CAN raise `HumanApprovalRequiredError` from its own node and
+    # thereby declare its own runs paused, which is a claim about a control
+    # rather than an ordinary error. The zone rule already makes the marker
+    # unforgeable; this makes the claim visible too (ADR 0081).
+    if _raises_approval_required(head_source) and not _raises_approval_required(base_source):
+        findings.append(
+            MetadataFinding(
+                path=path,
+                line=0,
+                field="HumanApprovalRequiredError",
+                problem=(
+                    "raises HumanApprovalRequiredError from agent code, declaring its own "
+                    "runs paused at a gate. Whether a run stopped at a human-approval gate "
+                    "is the kernel's finding to report, not the candidate's to assert"
+                ),
+            )
+        )
 
     if _has_recovery_marker(head_source) and not _has_recovery_marker(base_source):
         findings.append(

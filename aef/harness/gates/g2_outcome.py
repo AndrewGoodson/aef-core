@@ -38,6 +38,25 @@ RUNNER_MODULE = "aef.harness.scenario_runner"
 GATED_SPLITS: tuple[Split, ...] = (Split.TRAIN, Split.VALIDATION)
 
 
+def _paused_note(paused: int, added: int) -> str:
+    """Say out loud that the harness did not approve anything.
+
+    The gate deliberately supplies no `hitl_approvals`, so a HITL-gated
+    scenario cannot be scored on behaviour. That is a real limit on what this
+    verdict covers, and a verdict that does not state its own limits invites
+    being read as broader than it is (ADR 0081).
+    """
+    if not paused:
+        return ""
+    note = (
+        f" {paused} scenario(s) stopped at a human-approval gate and were NOT approved by "
+        f"the harness — their behaviour is unmeasured, not passing."
+    )
+    if added:
+        note += f" {added} of those are gates the incumbent did not have."
+    return note
+
+
 class G2ExecutionError(RuntimeError):
     pass
 
@@ -140,6 +159,8 @@ class G2OutcomeNonRegression(Gate):
 
         regressions = [c for c in comparisons if c.regressed]
         diverged = [c for c in comparisons if c.routing_diverged and not c.regressed]
+        paused = [c for c in comparisons if c.candidate.hitl_paused]
+        added = [c for c in comparisons if c.gate_added]
 
         if regressions:
             return GateResult(
@@ -158,8 +179,9 @@ class G2OutcomeNonRegression(Gate):
             reason=(
                 f"{len(comparisons)} scenario(s) re-executed; every previously-passing one "
                 f"still passes. {len(diverged)} changed routing (reported, not rejected)."
+                + _paused_note(len(paused), len(added))
             ),
-            evidence=tuple(c.summary for c in diverged),
+            evidence=tuple(c.summary for c in diverged + added),
         )
 
     def _execute(

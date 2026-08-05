@@ -28,7 +28,7 @@ from typing import Any
 from aef.harness.corpus import Scenario, fixed_clock
 from aef.harness.evaluation import score_of
 from aef.harness.outcome import classify
-from aef.kernel import GraphExecutor, Services
+from aef.kernel import GraphExecutor, HumanApprovalRequiredError, Services
 from aef.kernel.graph import Graph
 from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
 from aef.security.tool import PolicyEngine
@@ -108,6 +108,32 @@ def run_scenario(scenario: Scenario, graph: Graph) -> dict[str, Any]:
         result = GraphExecutor(graph.compile(), services).run(
             scenario.initial_state, record_trace=True
         )
+    except HumanApprovalRequiredError as exc:
+        # A PAUSE, not a failure — and deliberately NOT an approval.
+        #
+        # `Services.hitl_approvals` is left empty on purpose. Supplying it
+        # here would mean the gate approves things on the owner's behalf so
+        # that the corpus can execute, which is the harness granting itself
+        # the permission the edge exists to withhold. The cost is that a
+        # HITL-gated scenario cannot be scored on behaviour; the benefit is
+        # that the gate is never bypassed to make measurement convenient.
+        #
+        # This is the only place `hitl_paused` is set, and it is set from a
+        # caught kernel exception rather than from anything the candidate
+        # wrote (ADR 0081).
+        return {
+            "outcome": {
+                "terminated": False,
+                "plan_status": None,
+                "error_count": 0,
+                "policy_denials": 0,
+                "node_path": [],
+                "hitl_paused": True,
+            },
+            "score": 0.0,
+            "cost_tokens": 0,
+            "paused": f"{exc}",
+        }
     except Exception as exc:  # noqa: BLE001 - any failure is an outcome, not a crash
         return {
             "outcome": {
