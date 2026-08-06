@@ -10,7 +10,7 @@ CHECKLIST:
 - [x] 1.2 — pipeline: offline layout, deterministic seeding only (weighted centroid of positioned neighbours; perimeter by hash of stable ID; never Math.random)
 - [x] 1.3 — pipeline: carry previous_x/previous_y forward; bounded relaxation within a hard displacement budget of ~1 node diameter per layout version; store layout_reason
 - [x] 1.4 — pipeline: embed graph + positions + history + generated_at + data_through + expected interval in a <script type="application/json"> block
-- [ ] 2.1 — vendor d3-force (8.3 KB min, ISC) locally; never fetched at view time
+- [x] 2.1 — d3-force NOT vendored, and that is the resolution: the delivered file runs no simulation, so it would be 8300 bytes of dead code. Replaced by a permanent ban on runtime-layout primitives (see DECISIONS.md)
 - [ ] 2.2 — hand-written Canvas renderer: node channels per §4.1 (position/radius/fill/border/interior glyph/birth flag; ≤3 preattentive variables; no glow, ever)
 - [ ] 2.3 — two-layer edge model per §4.2: history rail width = log1p(lifetime_traversal_count), activity core luminance = recency
 - [ ] 2.4 — the five endpoint states, each visually distinct: never-observed / dormant / retired / unknown / stale
@@ -31,10 +31,10 @@ CHECKLIST:
 - [ ] 6.1 — dual themes via prefers-color-scheme with identical semantic ordering (§3f verdict B)
 - [ ] 6.2 — MANUAL: on-hardware polarity A/B (light vs dark) for "find the abandoned path" and "find the missing-reporting node"
 - [ ] 6.3 — MANUAL: comparison-mode A/B (difference-map vs two-pane vs scrubber) measured on error rate and time, not FPS
-NEXT: 2.1 — vendor d3-force (8.3 KB min, ISC) locally into the repo; never fetched at view time
+NEXT: 2.2 — hand-written Canvas renderer: node channels per §4.1 (position/radius/fill/border/interior glyph/birth flag; ≤3 preattentive variables; no glow, ever)
 BLOCKERS: none
 MANUAL_CHECKS:
 - headless browser load of dist/index.html from file:// with network blocked — no headless browser confirmed available in this environment yet; the forbidden-token scan and single-file check run, the actual offline load does not
 - 6.2 and 6.3 are operator task-tests on target hardware and cannot be automated
-LAST_RUN: 2026-08-05 — increment 1.4, Stage 1 COMPLETE. pipeline/emit.py wraps the payload in the document shell and dist/index.html EXISTS for the first time. VERIFIER IS FULLY GREEN: 89/89, no red lines. The page computes every visible age in-browser from the embedded generated_at/data_through, so a file opened three days later says so — a static artifact reporting a fixed age lies more convincingly the longer it sits. No renderer yet, and the page SAYS that rather than showing an empty canvas: an empty canvas is indistinguishable from a broken one. Escaping probed with the real strings (</script><img onerror=, U+2028) — none survived, and the payload still round-trips intact, which is the check that catches escaping that produces valid-looking but corrupted data. Published: https://claude.ai/code/artifact/25d6e2a4-2058-4afa-b728-67b3523c4d80
-Verified: self-test PASS (19 detections); verify 89/89 PASS.
+LAST_RUN: 2026-08-05 — increment 2.1, resolved as NOT NEEDED rather than done. d3-force was obtainable (local copy found, network reachable) so this was a real decision, not a forced one. Verified the report's own size claim instead of repeating it: 8300 bytes min, 3009 gzip — accurate. But the delivered page carries BAKED coordinates and 774 characters of JS doing staleness only; it runs no simulation, so d3-force would be 8300 bytes of dead code — the same 'declared thing with no caller' class this loop has caught four times. Section 3(a)'s adjudicated verdict (bake coordinates, no runtime layout) is more specific than Section 5(a)'s renderer advice and wins where they conflict. Replaced with something stronger than vendoring: a PERMANENT BAN on runtime-layout primitives in the delivered file (forceSimulation, forceLink, forceManyBody, velocityDecay, .tick()), each with a planted fault in the self-test.
+Verified: self-test PASS (19 planted tokens + 5 gate checks = 24 detections, no false positives); verify 94/94 PASS.

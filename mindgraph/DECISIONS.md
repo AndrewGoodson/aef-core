@@ -361,3 +361,43 @@ is identical to the symptom of no escaping at all.
 So the check also parses the embedded blob back out and asserts the hostile
 strings survive *as data*, byte-for-byte. Both properties are required and
 neither implies the other.
+
+---
+
+## 2026-08-05 · d3-force is NOT vendored, and that is the resolution of 2.1
+
+**Spec appears to require it.** Section 5(a)'s verdict is "hand-write the
+renderer on Canvas and inline only d3-force (8.3 KB)".
+
+**Chosen.** Do not vendor it. Ban runtime layout outright instead.
+
+**This was a real decision, not a forced one.** d3-force was obtainable — a
+local copy exists at `node_modules/d3-force/dist/d3-force.min.js` and the
+network was reachable. The report's size claim was verified rather than
+repeated: **8300 bytes minified, 3009 gzipped**, which matches "8.3 KB min"
+and confirms the "~3 KB gzip" it had flagged as unverified.
+
+**Why not vendor it.** The delivered page carries coordinates baked at
+generation time and 774 characters of JavaScript, all of it computing
+staleness. It runs no simulation and never will. d3-force would therefore be
+8300 bytes of code nothing calls — the "declared thing with no caller" defect
+class this loop has now caught four times, and the one that reads as a present
+feature to anyone auditing the file.
+
+**Where the report conflicts with itself, the adjudicated verdict wins.**
+Section 5(a) recommends inlining d3-force because it assumes the page runs the
+simulation. Section 3(a) — an explicitly adjudicated dispute, decided for
+Report B — rules that coordinates are baked at generation time and there is no
+runtime layout. The second is more specific, later, and reasoned; it governs.
+
+**What replaced it is stronger than vendoring would have been.** Rather than
+shipping a physics engine and trusting nobody calls it, the verifier now bans
+the primitives outright in the delivered file: `forceSimulation`, `forceLink`,
+`forceManyBody`, `velocityDecay`, `.tick(`. Each has a planted fault in
+`--self-test`, so the ban is demonstrated rather than asserted. A future
+contributor who reaches for a runtime layout fails the build instead of quietly
+destroying the persistence property.
+
+The physics still exists — in `pipeline/layout.py`, offline, in Python, already
+verified deterministic and independent of input ordering. It is on the correct
+side of the boundary.

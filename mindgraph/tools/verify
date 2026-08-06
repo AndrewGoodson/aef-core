@@ -33,6 +33,16 @@ FORBIDDEN: tuple[tuple[str, str], ...] = (
     ("external ref: @import", r"@import\b"),
     ("external ref: url(http", r"url\(\s*['\"]?https?:"),
     ("non-determinism: Math.random", r"\bMath\.random\b"),
+    # A runtime layout would recompute positions on open, which is exactly
+    # what Section 3(a)'s verdict rules out: the same data would render
+    # differently every time and the reader's spatial memory — the whole value
+    # — would be worthless. Coordinates are baked; nothing in the delivered
+    # file may simulate.
+    ("runtime layout: forceSimulation", r"\bforceSimulation\b"),
+    ("runtime layout: forceLink", r"\bforceLink\b"),
+    ("runtime layout: forceManyBody", r"\bforceManyBody\b"),
+    ("runtime layout: velocityDecay", r"\bvelocityDecay\b"),
+    ("runtime layout: simulation.tick", r"\.tick\s*\("),
 )
 
 # A static file must never claim to be live. The staleness it reports has to
@@ -626,6 +636,11 @@ def self_test() -> int:
         ("@import", "<style>@import url(x.css);</style>"),
         ("url(http", "<style>body{background:url(https://x/y.png)}</style>"),
         ("Math.random", "<script>var p=Math.random()</script>"),
+        ("forceSimulation", "<script>d3.forceSimulation(nodes)</script>"),
+        ("forceLink", "<script>.force('link', forceLink(links))</script>"),
+        ("forceManyBody", "<script>forceManyBody().strength(-30)</script>"),
+        ("velocityDecay", "<script>sim.velocityDecay(0.4)</script>"),
+        ("simulation.tick", "<script>sim.tick(120)</script>"),
         ("LIVE", "<p>LIVE</p>"),
     ]
     failures = []
