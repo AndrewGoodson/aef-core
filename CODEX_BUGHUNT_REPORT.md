@@ -471,3 +471,84 @@ empty result.
 - `ruff check .`: clean
 - `ruff format --check aef tests examples`: 193 files already formatted
 - MindGraph verification: 287 checks passed; self-test detected all 29 planted failures with no false positives
+
+## Round 7 — swallowed failures and resource lifecycle
+
+### Looked at
+
+Broad exception handlers, subprocess ownership, worker startup and graph
+reconstruction, process-group termination, container cleanup, sandbox timeout
+paths, tracing context managers, halt notification, corpus loading, atomic file
+writes, and temporary-state use.
+
+### Confirmed and fixed
+
+The isolated evaluation path had one subprocess-lifecycle defect with three
+observable parts:
+
+1. A worker that printed a syntactically valid but type-invalid handshake such
+   as `{"graph": null}` raised `TypeError` outside `_handshake()`'s explicit
+   cleanup branches. `NodeWorkerSession.__init__()` then failed while the
+   already-started child kept running.
+2. After a valid session started, an exception from parent-side graph
+   reconstruction or compilation returned failed scenario results without
+   closing that session.
+3. `NodeWorkerSession.close()` killed a live process but did not wait for it,
+   leaving child reaping to a later, unrelated `Popen` cleanup pass.
+
+Reproduction before the fix:
+
+```text
+pytest -q tests/harness/test_isolated_evaluation.py \
+  -k 'malformed_handshake or reconstruction_failure'
+
+2 failed
+malformed {"graph":null}: os.waitpid(pid, WNOHANG) reported the worker still alive
+parent graph reconstruction failure: session.closed was False
+```
+
+Expected: once `Popen` succeeds, every exit from initialization and parent
+setup terminates and reaps the owned worker before the gate returns.
+
+Fix: make initialization cleanup unconditional for every `BaseException`,
+validate the graph frame is an object, close an acquired session on parent
+graph-setup failure, and wait after killing a live worker. The regression uses
+a real sleeping child and verifies that it is no longer waitable by the parent;
+the reconstruction test verifies both the explicit closed marker and a reaped
+return code.
+
+This violated ADR 0093/0095's process-lifetime containment claim: the parent
+reported evaluation complete while candidate code could still be executing.
+
+### Ruled out
+
+- Sandbox command timeouts kill the whole process group and then reap through
+  `communicate()`.
+- Contained shadow graph construction already closes its session on every
+  `BaseException` after acquisition.
+- Candidate node failures are intentionally converted into failed scenario or
+  shadow outcomes; they are not silently accepted as passing evidence.
+- Gate exceptions become explicit failed gate results, cohort-construction
+  failures preserve G2/G3 refusal, and halt-notification delivery failures are
+  returned to the caller.
+- Tracing context managers record raised exceptions and end/detach spans in
+  `finally` blocks.
+- Container forced removal suppresses only secondary cleanup errors so it does
+  not replace the primary timeout result.
+
+### Suspected, deferred
+
+- `_atomic_write_text()` can leave its fixed-name temporary file behind if a
+  disk write, fsync, or replace fails. A subsequent same-process write truncates
+  that path, and no production corruption or unbounded accumulation was
+  reproduced, so it is not classified as a defect here.
+- The test suite itself has legacy `tempfile.mkdtemp()` fixtures without
+  explicit removal. They do not establish a production runtime defect.
+
+### Round gate
+
+- `pytest -q`: 1428 passed, 93 warnings
+- `mypy --strict aef`: 107 source files clean
+- `ruff check .`: clean
+- `ruff format --check aef tests examples`: 193 files already formatted
+- MindGraph verification: 287 checks passed; self-test detected all 29 planted failures with no false positives
