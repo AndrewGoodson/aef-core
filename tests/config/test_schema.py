@@ -7,6 +7,7 @@ from aef.config import (
     AgentConfig,
     AgentConfigError,
     EvolutionSettings,
+    MemoryConfig,
     PoliciesConfig,
     load_agent_config,
 )
@@ -85,6 +86,16 @@ def test_missing_required_field_rejected() -> None:
     raw = {"memory": {"impl": "in_memory"}, "objectives": "x"}  # missing model_provider
     with pytest.raises(ValidationError):
         AgentConfig.model_validate(raw)
+
+
+def test_memory_config_rejects_unwired_implementation() -> None:
+    with pytest.raises(ValidationError, match="in_memory"):
+        MemoryConfig(impl="mem0")
+
+
+def test_memory_config_rejects_ignored_backend() -> None:
+    with pytest.raises(ValidationError, match="backend"):
+        MemoryConfig(impl="in_memory", backend="sqlite")
 
 
 def test_load_agent_config_missing_file_raises_readable_error() -> None:

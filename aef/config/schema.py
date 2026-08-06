@@ -32,6 +32,28 @@ class MemoryConfig(_StrictModel):
     impl: str
     backend: str | None = None
 
+    @field_validator("impl")
+    @classmethod
+    def _must_name_constructible_memory(cls, value: str) -> str:
+        if value != "in_memory":
+            raise ValueError(
+                f"memory.impl={value!r} names no runtime builder. Implemented: in_memory. "
+                "A config that names an unwired store would silently run against volatile "
+                "in-memory storage; see docs/adr/0014."
+            )
+        return value
+
+    @field_validator("backend")
+    @classmethod
+    def _reject_ignored_backend(cls, value: str | None) -> str | None:
+        if value is not None:
+            raise ValueError(
+                f"memory.backend={value!r} is not wired and would be ignored. Remove it "
+                "until a runtime builder supports durable memory configuration; see "
+                "docs/adr/0014."
+            )
+        return value
+
 
 class KnowledgeGraphConfig(_StrictModel):
     impl: str
