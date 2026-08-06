@@ -205,3 +205,113 @@ confirmed production failure in this round.
 - `ruff check .`: clean
 - `ruff format --check aef tests examples`: 192 files formatted
 - MindGraph verification: 287 checks passed; self-test 29 detections passed
+
+## Round 4 — concurrency and shared mutable state
+
+### Looked at
+
+The in-memory audit, memory, durability, and tracing backends; fallback-provider
+construction; graph/container ownership; state/delta snapshot semantics; and
+concurrent reads and writes against mutable stores.
+
+### Confirmed and fixed
+
+Four boundaries retained caller-owned mutable data after the API operation had
+logically completed:
+
+1. `InMemoryAuditLogWriter.write()` stored the original `AuditEntry`. Although
+   its dataclasses are frozen, nested `ToolCall.arguments` are not. Mutating the
+   caller's nested dict rewrote the recorded security decision's history.
+2. `InMemoryMemoryStore.write()` stored the original `MemoryRecord`, and both
+   `get()` and `query()` returned the stored object. A writer or reader could
+   therefore rewrite durable-in-process memory without another `write()`.
+3. `FallbackProvider` retained the constructor's list. Clearing it after the
+   non-empty invariant check produced `ModelProviderError('all providers
+   failed: ')` without calling a provider.
+4. `InMemoryTracer` only shallow-copied the top-level attributes dict and
+   retained values passed to `set_attribute()`. Later nested mutation rewrote
+   already-recorded telemetry.
+
+Direct reproduction before the fixes:
+
+```text
+audit_history_after_caller_mutation= {'nested': {'secret': 'after'}}
+memory_after_input_mutation= {'nested': {'fact': 'after-write'}}
+memory_after_output_mutation= {'nested': {'fact': 'after-read'}}
+fallback_after_caller_list_clear= ModelProviderError 'all providers failed: '
+
+pytest -q <the four ownership regressions>
+4 failed
+
+pytest -q tests/observability/test_in_memory.py::test_start_span_snapshots_nested_attributes
+FAILED: recorded attempt changed from 1 to 2
+pytest -q tests/observability/test_in_memory.py::test_set_attribute_snapshots_nested_value
+FAILED: recorded attempt changed from 1 to 2
+```
+
+Expected: an audit entry, memory write/read, constructed fallback chain, and
+recorded telemetry value are point-in-time snapshots. Later caller mutation
+must not retroactively alter them.
+
+Fixes: deep-copy audit and telemetry records at their ownership boundaries;
+deep-copy memory content on write and read; and snapshot the fallback order as
+a tuple. The audit copy deliberately fails closed if a value cannot be copied:
+returning a policy decision while silently keeping a rewriteable audit record
+would be the unsafe outcome.
+
+### Confirmed concurrent-access defect and fixed
+
+`InMemoryMemoryStore.query()` iterated `_records.values()` without
+synchronization while `write()` could resize the dict. A two-thread stress
+probe reproduced `RuntimeError: dictionary changed size during iteration`.
+The committed regression forces the exact interleaving by suspending a query
+comparison, completing a write, then resuming the invalidated iterator; it
+failed deterministically before the fix.
+
+```text
+python <200000-write concurrent query probe>
+['RuntimeError: dictionary changed size during iteration']
+
+pytest -q tests/services/memory/test_in_memory.py::test_query_and_write_can_run_concurrently
+FAILED: RuntimeError('dictionary changed size during iteration')
+```
+
+Expected: the real default memory backend may be shared by concurrent agent
+work without leaking an implementation-level iteration failure. Fix: protect
+compound write/query/get operations with an `RLock`, while preserving snapshot
+returns. The deterministic regression now passes.
+
+These defects contradict the claims that audit/telemetry are historical
+records and that the in-memory memory backend is a real default backend. A
+frozen outer dataclass was presentation, not isolation, until the nested
+ownership boundary was enforced.
+
+### Ruled out
+
+- `Graph.__post_init__()` already snapshots node and edge collections and
+  exposes the node map through `MappingProxyType`.
+- State deltas and execution traces deep-copy ordinary mutable payloads; their
+  documented fallback for non-copyable runtime handles is explicit.
+- `InMemoryDurabilityBackend` round-trips checkpoints through JSON, preventing
+  caller mutation from rewriting stored checkpoint content. A 200,000-write
+  concurrent load/list stress probe did not reproduce a failure; this is not a
+  proof of thread safety and no such guarantee is documented.
+- Fallback ordering and all-failed aggregation still behave identically after
+  converting the internal provider collection to a tuple.
+
+### Suspected, deferred
+
+`Services.tools` and `RuleBasedEvaluator.domain_gates` retain caller-owned
+mappings despite frozen containers. No executing core path currently resolves
+tools from `Services.tools`, and live evaluator reconfiguration may be an
+intentional API choice, so neither was classified as a defect here. The
+factory/config round will test whether configuration mutation crosses an
+unexpected boundary.
+
+### Round gate
+
+- `pytest -q`: 1411 passed
+- `mypy --strict aef`: 107 source files clean
+- `ruff check .`: clean
+- `ruff format --check .`: 192 files already formatted
+- MindGraph verification: 287 checks passed; self-test detected all 29 planted failures with no false positives
