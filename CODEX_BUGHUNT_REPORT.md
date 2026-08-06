@@ -392,3 +392,82 @@ letting deployment configuration overstate persistence.
 - `ruff check .`: clean
 - `ruff format --check aef tests examples`: 193 files already formatted
 - MindGraph verification: 287 checks passed; self-test detected all 29 planted failures with no false positives
+
+## Round 6 — boundary values and hostile identifiers
+
+### Looked at
+
+Identifier/path boundaries, checkpoint sequence semantics, collection limits,
+retrieval budgets, empty and negative values, and the agreement between public
+contracts and backend behavior.
+
+### Confirmed and fixed
+
+Four boundary defects were reproduced:
+
+1. `FileDurabilityBackend` applied its run-id containment check to writes and
+   `load_latest()`, but not to `load_checkpoint()`, `list_checkpoints()`, or
+   `load_cursor()`. A read using `../outside/victim` successfully loaded a
+   sibling backend's checkpoint or cursor. Read-only calls also created the
+   requested run directory as a side effect.
+2. `AEFState` accepted a negative `checkpoint_seq`. The file backend wrote
+   `-1.json`, while checkpoint discovery recognizes only digit-only stems, so
+   the successfully saved checkpoint immediately disappeared from listings.
+3. Both memory backends accepted a negative query `limit`. The in-memory
+   backend interpreted `-1` as Python's “all but the last item” slice, while
+   the Mem0 adapter sent `top_k=-1` to the provider and then sliced its result.
+4. `MemoryRetriever` accepted zero or negative `candidates_per_kind` and
+   `max_token_budget` at construction. These invalid caps survived until
+   retrieval, producing empty or contradictory behavior instead of a clear
+   configuration error.
+
+Reproduction before the fixes:
+
+```text
+pytest -q <ten boundary regressions>
+10 failed
+
+load_checkpoint('../outside/victim', 0): returned sibling checkpoint
+list_checkpoints('../outside/victim'): returned [0]
+load_cursor('../outside/victim'): returned 'node_b'
+AEFState(checkpoint_seq=-1): validated successfully
+InMemoryMemoryStore.query(limit=-1): returned all but the last match
+Mem0Adapter.query(limit=-1): called the provider with top_k=-1
+MemoryRetriever with each zero/negative cap: constructed successfully
+```
+
+Expected: an untrusted run id cannot escape the durability root on any read or
+write; checkpoint sequence values agree with the backend's discoverable file
+format; query limits are non-negative and consistent across adapters; and
+invalid retrieval caps fail at the configuration boundary.
+
+Fixes: route every durability path through one validated single-segment
+resolver and avoid directory creation on reads; constrain checkpoint sequence
+to non-negative integers; define and enforce non-negative memory query limits
+with zero as an empty query; and validate retriever caps in `__post_init__()`.
+Each regression passed after its narrow fix.
+
+The durability defect violated the backend's documented containment boundary,
+and the negative-sequence defect violated the save/list round-trip property.
+The two limit defects violated behavioral substitutability between the real
+memory backends and allowed invalid configuration to masquerade as a valid
+empty result.
+
+### Ruled out
+
+- Empty and missing durability runs return `None` or an empty list without
+  creating directories.
+- Zero memory query limits now return no records consistently; Mem0 identity
+  scope is still validated before that early return.
+- Existing positive retrieval caps and finite token budgets preserve their
+  previous ordering and truncation behavior.
+- Previously covered path classes (null bytes, backslashes, symlink modes, and
+  case variants) were not re-reported as new findings.
+
+### Round gate
+
+- `pytest -q`: 1426 passed, 93 warnings
+- `mypy --strict aef`: 107 source files clean
+- `ruff check .`: clean
+- `ruff format --check aef tests examples`: 193 files already formatted
+- MindGraph verification: 287 checks passed; self-test detected all 29 planted failures with no false positives
