@@ -3,6 +3,7 @@ when no real OTel exporter is configured."""
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,7 +23,7 @@ class InMemorySpan(Span):
         self._recorded = recorded
 
     def set_attribute(self, key: str, value: Any) -> None:
-        self._recorded.attributes[key] = value
+        self._recorded.attributes[key] = deepcopy(value)
 
     def record_exception(self, exc: BaseException) -> None:
         self._recorded.exceptions.append(exc)
@@ -36,6 +37,6 @@ class InMemoryTracer(Tracer):
         self.spans: list[RecordedSpan] = []
 
     def start_span(self, name: str, attributes: dict[str, Any] | None = None) -> Span:
-        recorded = RecordedSpan(name=name, attributes=dict(attributes or {}))
+        recorded = RecordedSpan(name=name, attributes=deepcopy(attributes or {}))
         self.spans.append(recorded)
         return InMemorySpan(recorded)
