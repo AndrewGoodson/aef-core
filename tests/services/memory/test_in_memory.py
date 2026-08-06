@@ -26,6 +26,26 @@ def test_write_backfills_created_at_when_missing() -> None:
     assert fetched.created_at == fixed_time
 
 
+def test_falsey_explicit_clock_is_not_replaced() -> None:
+    expected = datetime(2020, 1, 2, tzinfo=UTC)
+
+    class FalseyClock:
+        def __bool__(self) -> bool:
+            return False
+
+        def __call__(self) -> datetime:
+            return expected
+
+    store = InMemoryMemoryStore(clock=FalseyClock())
+    record = MemoryRecord(kind="semantic", content={"text": "x"})
+
+    store.write(record)
+
+    fetched = store.get(record.id)
+    assert fetched is not None
+    assert fetched.created_at == expected
+
+
 def test_write_preserves_explicit_created_at() -> None:
     explicit_time = datetime(2020, 1, 1, tzinfo=UTC)
     store = InMemoryMemoryStore()

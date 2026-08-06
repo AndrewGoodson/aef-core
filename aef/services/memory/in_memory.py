@@ -15,7 +15,7 @@ from aef.services.memory.base import MemoryKind, MemoryRecord, MemoryStore
 class InMemoryMemoryStore(MemoryStore):
     def __init__(self, clock: Callable[[], datetime] | None = None) -> None:
         self._records: dict[str, MemoryRecord] = {}
-        self._clock = clock or (lambda: datetime.now(UTC))
+        self._clock = clock if clock is not None else (lambda: datetime.now(UTC))
         self._lock = RLock()
 
     def write(self, record: MemoryRecord) -> str:
