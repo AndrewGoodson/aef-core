@@ -235,8 +235,20 @@ class FileDurabilityBackend(DurabilityBackend):
             raise CorruptedCheckpointError(
                 f"cursor {cursor_path} (run_id={run_id!r}) is not valid JSON: {exc}"
             ) from exc
+        if not isinstance(data, dict) or "next_node" not in data:
+            raise CorruptedCheckpointError(
+                f"cursor {cursor_path} (run_id={run_id!r}) must be a JSON object "
+                "containing next_node"
+            )
         next_node = data.get("next_node")
-        return next_node if isinstance(next_node, str) else None
+        if next_node is not None and not isinstance(next_node, str):
+            raise CorruptedCheckpointError(
+                f"cursor {cursor_path} (run_id={run_id!r}) has invalid next_node; "
+                "expected a string or null"
+            )
+        if isinstance(next_node, str):
+            return next_node
+        return None
 
 
 class PostgresDurabilityBackend(DurabilityBackend):

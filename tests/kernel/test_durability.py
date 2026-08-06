@@ -167,6 +167,21 @@ def test_load_cursor_raises_named_error_on_corrupted_cursor_file(tmp_path: Path)
         backend.load_cursor("r1")
 
 
+@pytest.mark.parametrize(
+    "payload",
+    ['{"next_node": 7}', "{}", "[]", '"node_b"'],
+)
+def test_load_cursor_rejects_valid_json_with_invalid_schema(tmp_path: Path, payload: str) -> None:
+    """A schema-invalid cursor must not be treated as a completed run."""
+    root = tmp_path / "checkpoints"
+    backend = FileDurabilityBackend(root)
+    backend.save_cursor("r1", "node_b")
+    (root / "r1" / "cursor.json").write_text(payload)
+
+    with pytest.raises(CorruptedCheckpointError, match="r1"):
+        backend.load_cursor("r1")
+
+
 def test_save_checkpoint_is_atomic_no_torn_file_visible(tmp_path: Path) -> None:
     """A completed save_checkpoint must leave a fully-valid file — never a
     temp/partial artifact visible in the run dir. Verifies the temp+replace
