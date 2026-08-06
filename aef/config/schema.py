@@ -171,9 +171,10 @@ class EvolutionSettings(_StrictModel):
     def _must_stay_disabled(cls, value: bool) -> bool:
         if value:
             raise ValueError(
-                "evolution.enabled=True is rejected in Phase 0/1 — none of the Phase 4 "
-                "gate criteria are implemented yet; see docs/roadmap.md Phase 4 and "
-                "aef.evolution.engine for the full list"
+                "evolution.enabled=True is rejected: all seven Phase 4 safety mechanisms "
+                "are implemented, but have not been validated against live traffic and real "
+                "tenants. Enabling evolution remains an explicit owner decision; see "
+                "docs/roadmap.md Phase 4 and docs/trust/promotion-trust-case.md"
             )
         return value
 

@@ -4,9 +4,11 @@ specialization, gated by shadow execution, a null-hypothesis-baseline
 control, and bounded/reversible deployment.
 
 DISABLED BY DEFAULT (constraint #7): `EvolutionConfig.enabled` defaults to
-`False` and every class below raises `NotImplementedError`. Re-enabling
-this subsystem requires ALL of the following Phase 4 gate criteria to be
-satisfied first, not just a flag flip:
+`False` and every interface below remains abstract. The seven supporting
+mechanisms are now implemented in `aef/harness/`, but live-traffic and
+real-tenant evidence does not yet support enabling this subsystem. Re-enabling
+also remains an explicit owner decision, not a flag this package may infer from
+unit-test completeness. The criteria that decision must assess are:
 
   1. Shadow execution: every structural mutation runs against live traffic
      in read-only, no-side-effect mode for a minimum trace count before
@@ -40,7 +42,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class EvolutionConfig:
-    enabled: bool = False  # must stay False until every gate above ships
+    enabled: bool = False  # owner-gated; live validation is still missing
     max_mutations_per_window: int = 0
     canary_traffic_fraction: float = 0.0
     require_hitl_above_risk: float = 0.0
@@ -48,10 +50,10 @@ class EvolutionConfig:
     def __post_init__(self) -> None:
         if self.enabled:
             raise NotImplementedError(
-                "evolution.enabled=True is rejected: none of the Phase 4 gate criteria "
-                "(shadow execution, null-hypothesis baseline, golden-trace regression, "
-                "bounded mutation rate, cumulative-drift monitoring, canary rollout, HITL "
-                "approval) are implemented yet. See docs/roadmap.md Phase 4."
+                "evolution.enabled=True is rejected: all seven Phase 4 safety mechanisms "
+                "are implemented, but have not been validated against live traffic and real "
+                "tenants. Enabling evolution remains an explicit owner decision; see "
+                "docs/roadmap.md Phase 4 and docs/trust/promotion-trust-case.md."
             )
 
 

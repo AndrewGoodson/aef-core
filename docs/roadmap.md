@@ -137,10 +137,11 @@ against changing that. See
 ## Phase 4 — Evolution engine with full safety rails — **STUBBED, DISABLED**
 
 `aef/evolution/engine.py`: `MutationProposer`, `ArchiveStore`, `EvalGate`,
-`CanaryController`, `EvolutionConfig`. Every method raises
-`NotImplementedError`; `EvolutionConfig(enabled=True)` itself raises,
-naming every unmet gate criterion. See ADR 0006 for why this is enforced
-in code, not just documented. Re-enabling requires implementing ALL of:
+`CanaryController`, `EvolutionConfig`. The evolution interfaces remain abstract;
+`EvolutionConfig(enabled=True)` itself raises and explains that live-traffic and
+real-tenant validation is still missing. See ADR 0006 for why disablement is
+enforced in code, not just documented. Re-enabling requires owner acceptance of
+ALL of:
 
 1. Shadow execution against live traffic before promotion eligibility —
    **BUILT** (`aef/harness/shadow.py`, ADR 0103). Refuses any candidate
