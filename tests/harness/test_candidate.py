@@ -115,6 +115,37 @@ def test_shas_are_resolved_for_the_record(repo: GitRepo) -> None:
     assert diff.base_sha != diff.head_sha
 
 
+def test_a_moving_head_ref_cannot_mix_two_candidate_snapshots(
+    repo: GitRepo, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _branch(repo, "cand")
+    (repo.root / "agents" / "planner.py").write_text("SMALL = 1\n")
+    _commit(repo, "small candidate")
+    small_sha = repo.rev_parse("cand")
+
+    (repo.root / "agents" / "planner.py").write_text(
+        "".join(f"HUGE_{index} = {index}\n" for index in range(600))
+    )
+    _commit(repo, "large candidate")
+    large_sha = repo.rev_parse("cand")
+    _git(repo.root, "update-ref", "refs/heads/cand", small_sha)
+
+    original_numstat = GitRepo.numstat_diff
+
+    def advance_head_after_counting(self: GitRepo, base_ref: str, head_ref: str) -> bytes:
+        result = original_numstat(self, base_ref, head_ref)
+        _git(self.root, "update-ref", "refs/heads/cand", large_sha)
+        return result
+
+    monkeypatch.setattr(GitRepo, "numstat_diff", advance_head_after_counting)
+
+    diff = read_candidate(repo, "base", "cand")
+
+    assert diff.head_sha == small_sha
+    assert diff.changed_lines == 2
+    assert repo.show(diff.head_sha, "agents/planner.py") == "SMALL = 1\n"
+
+
 def test_an_unknown_ref_fails_loudly(repo: GitRepo) -> None:
     with pytest.raises(GitError):
         read_candidate(repo, "base", "no-such-branch")
