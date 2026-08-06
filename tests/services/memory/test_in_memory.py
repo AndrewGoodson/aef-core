@@ -2,6 +2,8 @@ import threading
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import pytest
+
 from aef.services.memory.base import MemoryRecord
 from aef.services.memory.in_memory import InMemoryMemoryStore
 
@@ -86,6 +88,14 @@ def test_query_respects_limit_and_recency_order() -> None:
     assert len(results) == 2
     assert results[0].content["n"] == 2  # most recent first
     assert results[1].content["n"] == 1
+
+
+def test_query_rejects_negative_limit() -> None:
+    store = InMemoryMemoryStore()
+    store.write(MemoryRecord(kind="success", content={"n": 1}))
+
+    with pytest.raises(ValueError, match="limit must be non-negative"):
+        store.query("success", limit=-1)
 
 
 def test_get_missing_returns_none() -> None:

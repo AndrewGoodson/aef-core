@@ -38,6 +38,8 @@ class InMemoryMemoryStore(MemoryStore):
         tags: tuple[str, ...] = (),
         limit: int = 10,
     ) -> list[MemoryRecord]:
+        if limit < 0:
+            raise ValueError(f"limit must be non-negative; got {limit}")
         with self._lock:
             wanted_tags = set(tags)
             matches = [
