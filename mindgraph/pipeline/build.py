@@ -32,6 +32,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import contract as contract_mod  # noqa: E402
+import exceptions as exceptions_mod  # noqa: E402
 import fleet as fleet_mod  # noqa: E402
 import layout as layout_mod  # noqa: E402
 import traversal as traversal_mod  # noqa: E402
@@ -179,6 +180,26 @@ def build(
     else:
         fleet_payload = {"coverage": None, "rows": []}
 
+    # The exception queue. Built from the fleet rows, the gates and the cohort
+    # — and deliberately NOT from ordinary rejections, which are the gate
+    # working as designed.
+    registry_payload = (
+        json.loads(registry_path.read_text(encoding="utf-8")) if registry_path.is_file() else {}
+    )
+    cohort = registry_payload.get("cohort")
+    exceptions = exceptions_mod.collect(
+        fleet_rows=fleet_payload["rows"],
+        gates=[g for g in topology.get("gates", []) if g.get("disposition")],
+        cohort=cohort,
+        data_through=data_through,
+    )
+    exceptions_payload = {
+        "items": [e.to_payload() for e in exceptions],
+        "excluded": exceptions_mod.excluded_outcomes(cohort),
+        "gaps": list(exceptions_mod.KNOWN_GAPS),
+        "decision_sla_hours": exceptions_mod.DEFAULT_DECISION_SLA_HOURS,
+    }
+
     node_payloads = []
     for node in nodes:
         body = node.to_payload()
@@ -226,6 +247,7 @@ def build(
             "expected_report_interval_seconds", 3600
         ),
         "fleet": fleet_payload,
+        "exceptions": exceptions_payload,
         "nodes": sorted(node_payloads, key=lambda n: str(n["id"])),
         "edges": [
             _edge_render(e.to_payload(), data_through, dormancy_days, gates) for e in edges

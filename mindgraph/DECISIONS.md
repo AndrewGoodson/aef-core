@@ -729,3 +729,55 @@ rendered as a calm empty fleet — a fleet page with no rows is indistinguishabl
 from a fleet with nothing wrong. And `oldest_overdue_seconds` is `None` rather
 than `0` when nothing is overdue, because a zero would read as "the oldest
 overdue report is 0 seconds old", a measurement of a thing that does not exist.
+
+---
+
+## 2026-08-05 · The exception queue is defined by what it excludes
+
+**Spec is explicit and the reason is worth restating.** Section 4.4: the queue
+is for rollbacks, gate errors, stale reporting, long-pending decisions and
+abnormal collapse or surge — **not** ordinary rejections.
+
+Most candidates are rejected. That is the designed behaviour of a system whose
+job is to reject things. A queue that listed them would be long, boring and
+permanently full, so the operator would learn to skip it — and the next
+genuinely abnormal thing would be sitting in a list nobody reads. The panel's
+value is entirely in its exclusions.
+
+So the exclusion is explicit (`ROUTINE_OUTCOMES`) rather than an accident of
+which branches happened to be checked, and **the page states it**: "not listed,
+because these are the gate working as designed", followed by the names. An
+empty queue is only trustworthy if the reader can see what it chose not to
+list; otherwise "no exceptions" is indistinguishable from "nothing was checked".
+
+**Out-of-band cuts both ways, and that is the subtle half.** A routine
+rejection is never abnormal *because it was rejected* — but the RATE moving is
+a different claim. A collapse to 1% means the gate stopped rejecting; a surge to
+100% means the generator broke. Both are flagged, and both were verified.
+
+**Two stated numbers rather than discovered ones.** "Long-pending" has no figure
+in the report, so a 24h default is chosen and PRINTED on the page. An awaiting
+gate with no `pending_since` is raised regardless — not knowing how long a human
+has been blocking the loop is itself worth attention.
+
+**One named gap.** Repeated proposal loops need per-proposal identity across
+cycles, which the available data does not carry. Listed as undetectable rather
+than approximated by something that would resemble it.
+
+---
+
+## 2026-08-05 · Reusing a class name broke five unrelated checks
+
+**Reproduced regression, and the fix belonged at the source.**
+
+The queue's footnote was rendered as `<p class="caption">`. The legend was
+already `<p class="caption">`, and the verifier located it by splitting on that
+string — so the footnote, appearing earlier in the document, silently became
+the element five legend checks were reading. All five failed at once.
+
+The tempting fix is to make the test cleverer: search all captions, or take the
+last match. That would leave the ambiguity in place for the next element that
+wants the class. The legend now has a stable `id`, and the checks target that.
+
+A selector that was unambiguous when written is not unambiguous forever; the
+fix is to make the thing identifiable, not to teach the test to guess.

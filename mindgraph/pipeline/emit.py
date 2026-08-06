@@ -33,11 +33,10 @@ from typing import Any
 # plainly. An empty canvas would be indistinguishable from a broken one, and
 # this whole project is about not letting absence look like something else.
 STAGE_NOTICE = (
-    "The coverage strip leads the page because every number below it is "
-    "conditional on it. The fleet is built from the registry and telemetry is "
-    "joined in, so a repo that stops reporting goes loud and rises to the top "
-    "instead of quietly leaving the list. Exception queue and cohort flow "
-    "arrive next."
+    "The exception queue lists only conditions meaning the system is not "
+    "behaving as designed. Ordinary rejections are the gate WORKING and are "
+    "deliberately absent \u2014 a queue that listed them would always be full, "
+    "and a full queue is one nobody reads. The cohort flow arrives next."
 )
 
 
@@ -120,6 +119,61 @@ def _coverage_strip(payload: dict[str, Any]) -> str:
         f"<span>{' &middot; '.join(parts)}</span></div>"
         f'<div class="scroll"><table class="fleet">{cells}</table></div>'
     )
+
+
+def _exception_queue(payload: dict[str, Any]) -> str:
+    """Only what is abnormal, and a visible account of what was left out.
+
+    An empty queue is only trustworthy if the reader can see what it CHOSE not
+    to list. Otherwise "no exceptions" is indistinguishable from "nothing was
+    checked" — which is this project's cardinal failure wearing a different
+    hat.
+    """
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    import fleet  # noqa: PLC0415
+
+    block = payload.get("exceptions") or {}
+    items = block.get("items") or []
+    excluded = block.get("excluded") or []
+    gaps = block.get("gaps") or []
+    sla = block.get("decision_sla_hours")
+
+    if items:
+        rows = "".join(
+            f'<tr class="ex {html.escape(str(i["kind"]))}">'
+            f'<td class="kd">{html.escape(str(i["kind"]).replace("_", " "))}</td>'
+            f'<td class="sb">{html.escape(str(i["subject"]))}</td>'
+            f'<td class="dt">{html.escape(str(i["detail"]))}</td>'
+            f'<td class="ag">{html.escape(fleet.humanise(i.get("age_seconds")) or "")}</td>'
+            "</tr>"
+            for i in items
+        )
+        body = f'<div class="scroll"><table class="exq">{rows}</table></div>'
+        head = f'<div class="strip bad"><strong>Exceptions</strong><span><b>{len(items)}</b> needing attention</span></div>'
+    else:
+        body = ""
+        head = (
+            '<div class="strip ok"><strong>Exceptions</strong>'
+            "<span>nothing abnormal in this window</span></div>"
+        )
+
+    notes = []
+    if excluded:
+        notes.append(
+            "Not listed, because these are the gate working as designed: "
+            + ", ".join(html.escape(e.replace("_", " ")) for e in excluded)
+            + "."
+        )
+    if sla:
+        notes.append(f"A human decision counts as overdue after {int(sla)}h.")
+    for gap in gaps:
+        notes.append("Not detectable from the available data: " + html.escape(gap) + ".")
+
+    footnote = f'<p class="caption exq-note">{" ".join(notes)}</p>' if notes else ""
+    return head + body + footnote
 
 
 def _legend_text(payload: dict[str, Any]) -> str:
@@ -223,6 +277,8 @@ def emit(payload: dict[str, Any]) -> str:
     ).replace("__ROWS__", _summary_rows(payload)).replace(
         "__STRIP__", _coverage_strip(payload)
     ).replace(
+        "__EXCEPTIONS__", _exception_queue(payload)
+    ).replace(
         "__LEGEND__", _legend_text(payload)
     ).replace(
         "__NOTICE__", html.escape(STAGE_NOTICE)
@@ -245,6 +301,7 @@ _SHELL = """<!doctype html>
     <p class="stamp" id="stamp"></p>
   </header>
   __STRIP__
+  __EXCEPTIONS__
   <p class="notice">__NOTICE__</p>
   <div class="stage"><canvas id="c" width="900" height="560"></canvas></div>
   <div class="legend">
@@ -260,7 +317,7 @@ _SHELL = """<!doctype html>
     <span class="lg"><i class="tab"></i>age when this picture was taken</span>
     <span class="lg"><i class="gt"></i>[H] human gate &#8212; &#8230; awaiting, &#10003; approved, &#10007; rejected</span>
   </div>
-  <p class="caption">__LEGEND__</p>
+  <p class="caption" id="encoding-legend">__LEGEND__</p>
   <section>
     <h2>Embedded payload</h2>
     <div class="scroll"><table>__ROWS__</table></div>
@@ -352,6 +409,15 @@ tr.fl.stale .st{color:var(--stale)}
 tr.fl.degraded .st{color:var(--bad)}
 tr.fl.unknown .st{color:var(--warn)}
 tr.fl.unknown .rp,tr.fl.degraded .rp{font-weight:600}
+table.exq{font:12px/1.5 var(--mono);width:100%}
+table.exq td{padding:.3rem .9rem .3rem 0;border-bottom:1px solid var(--line);
+  vertical-align:top}
+table.exq .kd{color:var(--bad);white-space:nowrap}
+table.exq .sb{color:var(--fg);white-space:nowrap}
+table.exq .dt{color:var(--muted)}
+table.exq .ag{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.ex.not_reporting .kd{color:var(--warn)}
+tr.ex.out_of_band .kd{color:var(--warn)}
 """
 
 # `age()` is the only logic in the shell, and it is the load-bearing one: the

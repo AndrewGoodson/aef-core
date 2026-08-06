@@ -20,7 +20,7 @@ CHECKLIST:
 - [x] 3.2 — birth-flag tab ("NEW"/"3h"/"2d") computed from now − first_seen_at against embedded generated_at; static, not a halo (§3d verdict B)
 - [x] 3.3 — staleness self-display: all visible ages computed from embedded timestamps; never labelled LIVE
 - [x] 4.1 — dashboard: registry LEFT-JOIN telemetry; coverage + freshness strip first
-- [ ] 4.2 — dashboard: exception queue (rollbacks, gate-eval errors, stale reporting, long-pending decisions) — NOT ordinary rejections
+- [x] 4.2 — dashboard: exception queue (rollbacks, gate-eval errors, stale reporting, long-pending decisions) — NOT ordinary rejections
 - [ ] 4.3 — dashboard: CONSORT-style cohort flow, neutral colours for expected rejection branches, red only for operationally abnormal (§3b verdict B)
 - [ ] 4.4 — dashboard: Shewhart process-stability bands beneath the flow
 - [ ] 4.5 — dashboard: fleet table with state-timelines; stale repos float to TOP; never retain a last green fill as dominant after reporting stops
@@ -31,13 +31,14 @@ CHECKLIST:
 - [ ] 6.1 — dual themes via prefers-color-scheme with identical semantic ordering (§3f verdict B)
 - [ ] 6.2 — MANUAL: on-hardware polarity A/B (light vs dark) for "find the abandoned path" and "find the missing-reporting node"
 - [ ] 6.3 — MANUAL: comparison-mode A/B (difference-map vs two-pane vs scrubber) measured on error rate and time, not FPS
-NEXT: 4.2 — dashboard: exception queue (rollbacks, gate-eval errors, stale reporting, long-pending human decisions, rollback-adjusted anomalies) — NOT ordinary rejections, which are the gate working
+NEXT: 4.3 — CONSORT-style cohort flow (§3b verdict B): branches with count, % of cohort, comparison to the repo's own historical expected range, and top structured rejection categories. NEUTRAL colours for expected rejection branches; red reserved for the operationally abnormal. Not a funnel — a funnel's grammar implies leakage=loss, and a rejected proposal is the gate working.
 BLOCKERS: none
 MANUAL_CHECKS:
 - (CLOSED 2026-08-05) headless browser load — Google Chrome was found at /Applications/Google Chrome.app. The verifier now opens dist/index.html from file:// headless with NetworkService disabled, twice, and compares canvas pixels. This is no longer a manual check.
 - 6.2 and 6.3 are operator task-tests on target hardware and cannot be automated
-LAST_RUN: 2026-08-05 — increment 4.1. pipeline/fleet.py assembles the fleet from the REGISTRY and left-joins telemetry into it. The join direction is the whole thesis: build the list from whoever emitted data and a repo that stops reporting does not go red, it stops EXISTING — the page looks calm, every row is green, and the one thing you needed to know is the row that is not there.
-Measured: 1/4 reporting fresh · 1 stale · 1 never reported · 1 telemetry error · oldest overdue 7d13h. Render order is error, never, stale, fresh — every non-reporting repo sorts ABOVE the healthy one, and within a state the longest-overdue sorts first because the climb is itself the signal.
-Four states kept distinct, and 'error' is deliberately not 'never': a collector that failed means we know we CANNOT SEE, rather than seeing nothing, and conflating them lets a broken exporter masquerade as a quiet agent. Only 'fresh' maps to the healthy treatment, so nothing keeps a green fill after going quiet.
-Probe found nothing: a silent repo cannot vanish, cannot sort below a healthy one, cannot keep green; an unregistered emitter is surfaced rather than dropped (the registry being stale is itself a finding); an empty registry is refused rather than rendered as a calm empty fleet; and nothing-overdue reports None rather than 0.
-Verified: self-test PASS (24 detections); verify 165/165 PASS. Published to the stable URL.
+LAST_RUN: 2026-08-05 — increment 4.2. The exception queue lists only conditions meaning the system is not behaving as designed. The rule that decides the panel: an ordinary rejection is the GATE WORKING and never appears. A queue listing them would always be full, and a full queue is one nobody reads — so the next genuinely abnormal thing would sit in a list nobody opens.
+Queue on the fixture: 1 rollback, 3 not-reporting. Zero routine rejections, and the page STATES what it excluded ('the gate working as designed'), states the 24h overdue-decision window, and states what it cannot detect at all. An empty queue is only trustworthy if the reader can see what it chose not to list.
+out_of_band fires BOTH ways, verified: a rejection rate collapsing to 1% (the gate stopped) and surging to 100% (the generator broke) both raise. An awaiting gate with no pending_since is raised too — not knowing how long a human has blocked the loop is itself worth attention.
+NOT DERIVABLE, reported rather than approximated: repeated proposal loops need per-proposal identity across cycles, which the available data does not carry.
+REGRESSION CAUGHT AND FIXED: adding the queue's footnote reused class="caption", which made a previously unambiguous selector ambiguous — five legend checks silently began reading the wrong element. Fixed at the source with a stable id rather than by making the test cleverer.
+Verified: self-test PASS (24 detections); verify 176/176 PASS. Published to the stable URL.

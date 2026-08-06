@@ -726,7 +726,11 @@ def check_render_edges(result: Result) -> None:
     sys.path.insert(0, str(ROOT / "pipeline"))
     import contract as contract_mod  # type: ignore[import-not-found]
 
-    caption = html_text.split('<p class="caption">')[1].split("</p>")[0]
+    # Targeted by id, not by class. When the exception footnote reused the
+    # `caption` class, this selector silently began reading the wrong element
+    # and five legend checks failed at once — the selector was ambiguous, not
+    # the legend.
+    caption = html_text.split('id="encoding-legend">')[1].split("</p>")[0]
     for name, value in (
         ("RADIUS_MIN", contract_mod.RADIUS_MIN),
         ("RADIUS_K", contract_mod.RADIUS_K),
@@ -1071,7 +1075,11 @@ def check_staleness(result: Result) -> None:
         )
 
     # A window length is a configured integer; printing 14.0 invents precision.
-    caption = html_text.split('<p class="caption">')[1].split("</p>")[0]
+    # Targeted by id, not by class. When the exception footnote reused the
+    # `caption` class, this selector silently began reading the wrong element
+    # and five legend checks failed at once — the selector was ambiguous, not
+    # the legend.
+    caption = html_text.split('id="encoding-legend">')[1].split("</p>")[0]
     result.add("window lengths print without invented precision", ".0-day" not in caption)
 
 
@@ -1156,6 +1164,89 @@ def check_fleet(result: Result) -> None:
         html_text.split('id="mind-data">', 1)[1].split("</script>", 1)[0]
     )["fleet"]["rows"])):
         result.add(f"fleet row rendered for {repo}", repo in html_text)
+
+
+def check_exceptions(result: Result) -> None:
+    """Stage 4.2 — the queue's value is in what it EXCLUDES.
+
+    A rejection is the gate working. A queue listing them would always be full,
+    and a full queue is one nobody reads — so the exclusion is checked as
+    carefully as the inclusion.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    import exceptions as exc  # type: ignore[import-not-found]
+
+    through = datetime(2026, 8, 5, 17, 42, tzinfo=UTC)
+    cohort = json.loads((ROOT / "fixtures" / "fleet.json").read_text())["cohort"]
+
+    items = exc.collect(fleet_rows=[], gates=[], cohort=cohort, data_through=through)
+    listed = {i.subject for i in items}
+    leaked = sorted(listed & exc.ROUTINE_OUTCOMES)
+    result.add(
+        "no ordinary rejection reaches the queue",
+        not leaked,
+        f"leaked: {leaked}" if leaked else "",
+    )
+    result.add("a rollback does reach the queue", any(i.kind == "rollback" for i in items))
+
+    # Out-of-band must fire in BOTH directions. A gate that stopped rejecting
+    # and a generator that broke look opposite and are both abnormal.
+    def band(count: int) -> list[Any]:
+        return exc.collect(
+            fleet_rows=[],
+            gates=[],
+            cohort={
+                "proposed": 412,
+                "branches": [
+                    {"outcome": "static_rejected", "count": count,
+                     "expected_range": [40, 52], "tone": "neutral"}
+                ],
+            },
+            data_through=through,
+        )
+
+    result.add(
+        "a collapsed rejection rate is flagged (the gate stopped)",
+        any(i.kind == "out_of_band" for i in band(4)),
+    )
+    result.add(
+        "a surging rejection rate is flagged (the generator broke)",
+        any(i.kind == "out_of_band" for i in band(410)),
+    )
+
+    def gate(hours: float | None, disposition: str = "awaiting") -> list[Any]:
+        entry: dict[str, Any] = {"edge": ["a", "b"], "disposition": disposition}
+        if hours is not None:
+            entry["pending_since"] = (
+                (through - timedelta(hours=hours)).isoformat().replace("+00:00", "Z")
+            )
+        return exc.collect(fleet_rows=[], gates=[entry], cohort=None, data_through=through)
+
+    result.add("a decision pending 30h is flagged", any(i.kind == "decision_overdue" for i in gate(30)))
+    result.add("a decision pending 2h is not flagged", not gate(2))
+    result.add(
+        "an awaiting gate with no start time is still raised",
+        bool(gate(None)),
+    )
+    result.add("a decided gate raises nothing", not gate(1, "approved"))
+
+    if not DIST.is_file():
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+    result.add(
+        "the page states what the queue deliberately excluded",
+        "the gate working as designed" in html_text,
+    )
+    result.add(
+        "the page states what it cannot detect at all",
+        "Not detectable from the available data" in html_text,
+    )
+    result.add(
+        "the overdue-decision window is stated on the page",
+        "counts as overdue after" in html_text,
+    )
 
 
 def check_dist(result: Result) -> None:
@@ -1306,6 +1397,7 @@ def main(argv: list[str]) -> int:
     check_birth_flag(result)
     check_staleness(result)
     check_fleet(result)
+    check_exceptions(result)
     check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()
