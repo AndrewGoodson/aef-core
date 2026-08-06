@@ -1477,6 +1477,80 @@ def check_rails(result: Result) -> None:
     )
 
 
+def check_comparison(result: Result) -> None:
+    """Stage 4.6 — a one-sided measurement must not read as a verdict."""
+    import re as _re
+
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    import comparison as comp  # type: ignore[import-not-found]
+
+    raw = json.loads((ROOT / "fixtures" / "fleet.json").read_text())
+    built = comp.build(raw["loop_vs_human"], raw["cohort"])
+    assert built is not None
+
+    result.add(
+        "with no counterfactual stored, it does NOT claim to be a comparison",
+        built.is_comparison is False,
+    )
+    result.add("the payload denies a causal claim", built.to_payload()["causal_claim"] is False)
+    result.add(
+        "the payload explains why it stays observational",
+        "not randomized" in built.to_payload()["why_observational"],
+    )
+
+    for bad in ("CAUSAL", "proven", ""):
+        try:
+            comp.build(
+                {"label": bad, "counterfactual_stored": False, "counterfactual_note": "x"}, None
+            )
+            refused = False
+        except comp.ComparisonError:
+            refused = True
+        result.add(f"a {bad or 'blank'!r} label is refused", refused)
+
+    try:
+        comp.build({"label": "OBSERVATIONAL", "counterfactual_stored": False}, None)
+        refused = False
+    except comp.ComparisonError:
+        refused = True
+    result.add(
+        "a missing counterfactual with no explanation is refused",
+        refused,
+    )
+
+    if not DIST.is_file():
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+    panel = html_text.split('id="comparison-panel"')[1].split('id="comparison-note"')[0]
+
+    present = [term for term in comp.COMPARATIVE_TERMS if term.lower() in panel.lower()]
+    result.add(
+        "the panel contains no comparative language",
+        not present,
+        f"found: {present}" if present else "",
+    )
+    ratios = _re.findall(r"\d+(?:\.\d+)?\s*[x\u00d7]\b", panel)
+    result.add(
+        "the panel renders no ratio",
+        not ratios,
+        f"found: {ratios}" if ratios else "",
+    )
+    result.add(
+        "the panel discloses that no comparator was recorded",
+        "no comparator recorded" in panel,
+    )
+    result.add("the OBSERVATIONAL label is rendered", "OBSERVATIONAL" in html_text)
+    result.add(
+        "the panel names the supporting metrics it lacks",
+        all(name in panel for name in built.absent),
+        str(built.absent),
+    )
+    result.add(
+        "throughput is shown beside change-fail rate (the DORA pair)",
+        "change-fail rate" in panel and built.rollback_rate_pct is not None,
+    )
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -1629,6 +1703,7 @@ def main(argv: list[str]) -> int:
     check_cohort(result)
     check_stability(result)
     check_rails(result)
+    check_comparison(result)
     check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()

@@ -1,5 +1,5 @@
 STATUS: IN_PROGRESS
-STAGE: 4 — Dashboard around absence (Stages 0-3 complete) (Stages 0 and 1 complete; dist/index.html now exists)
+STAGE: 5 — Temporal modes (Stages 0-4 complete) (Stages 0 and 1 complete; dist/index.html now exists)
 CHECKLIST:
 - [x] init.scaffold — pipeline/ dist/ fixtures/ tools/ created; RESEARCH_REPORT.md installed
 - [x] init.fixtures — synthetic dataset covering every required edge case (fixtures/fleet.json)
@@ -24,20 +24,20 @@ CHECKLIST:
 - [x] 4.3 — dashboard: CONSORT-style cohort flow, neutral colours for expected rejection branches, red only for operationally abnormal (§3b verdict B)
 - [x] 4.4 — dashboard: stability BANDS (not control charts — no series exists; see DECISIONS.md) beneath the flow
 - [x] 4.5 — fleet table with FRESHNESS RAILS (state-timeline needs history the registry lacks; see DECISIONS.md); stale repos float to TOP; never retain a last green fill as dominant after reporting stops
-- [ ] 4.6 — loop-vs-human panel labelled OBSERVATIONAL; disclose that the direct-human-edit counterfactual is not stored
+- [x] 4.6 — loop-vs-human panel labelled OBSERVATIONAL; disclose that the direct-human-edit counterfactual is not stored
 - [ ] 5.1 — temporal mode 1: default accumulated present
 - [ ] 5.2 — temporal mode 2: two-date difference-map, two synced panes (primary "what changed")
 - [ ] 5.3 — temporal mode 3: opt-in scrubber, staged transitions, explicit user action only; respect prefers-reduced-motion; all static end-states fully interpretable
 - [ ] 6.1 — dual themes via prefers-color-scheme with identical semantic ordering (§3f verdict B)
 - [ ] 6.2 — MANUAL: on-hardware polarity A/B (light vs dark) for "find the abandoned path" and "find the missing-reporting node"
 - [ ] 6.3 — MANUAL: comparison-mode A/B (difference-map vs two-pane vs scrubber) measured on error rate and time, not FPS
-NEXT: 4.6 — loop-vs-human panel, labelled OBSERVATIONAL. fixtures/fleet.json already carries loop_vs_human with counterfactual_stored=false, so the panel must disclose that the direct-human-edit counterfactual is NOT stored and that this is an adjusted association, never a causal claim.
+NEXT: 5.1 — temporal mode 1: default accumulated present. This is arguably already what the page shows; 5.1 is naming it explicitly as one of three modes and making the mode itself visible, so 5.2's difference-map and 5.3's scrubber have something to switch away from.
 BLOCKERS: none
 MANUAL_CHECKS:
 - (CLOSED 2026-08-05) headless browser load — Google Chrome was found at /Applications/Google Chrome.app. The verifier now opens dist/index.html from file:// headless with NetworkService disabled, twice, and compares canvas pixels. This is no longer a manual check.
 - 6.2 and 6.3 are operator task-tests on target hardware and cannot be automated
-LAST_RUN: 2026-08-05 — increment 4.5. §4.4 asks for two things per repo and the registry supports one. A Grafana-style state TIMELINE needs a SEQUENCE of transitions — that is what makes duration-as-length meaningful, because the lengths sit side by side. The registry carries one last_report_at per repo and no transitions. Checked, not assumed.
-Built the FRESHNESS RAIL, which is the half carrying the requirement's substance: bar length = how long the repo has held its CURRENT state, scaled across the fleet so the longest-quiet has the longest bar. marlin at 7d13h renders 100%; raptor and voltbot render ~0%. Normalising each row to its own maximum would have flattened exactly the climb that is the signal.
-A repo that NEVER reported gets no bar at all — zero length would read as 'held this state for no time', and a full bar would invent a duration nobody measured. It gets the broken outline and no score, matching §4.4's 'NEVER REPORTED with no score'.
-Probe found nothing: never-reported draws no bar and reports None rather than 0; a stale repo cannot keep the healthy treatment; the longest-quiet repo has the longest bar; no segment carries a series; and the page states the timeline it cannot draw.
-Verified: self-test PASS (24 detections); verify 217/217 PASS. Published to the stable URL.
+LAST_RUN: 2026-08-05 — increment 4.6, STAGE 4 COMPLETE. The loop-vs-human panel is NOT a comparison, and says so. The record states it outright: counterfactual_stored=false, 'the comparison cannot be made from this data'. There is one side of a two-sided question — the loop's throughput is measured, the human alternative was never recorded.
+A panel titled 'loop vs human' showing a single number would answer a question it has no data for, and the reader would supply the missing comparator from imagination, favourably. So: no ratio, no delta, no arrow, no second bar — each of those renders a comparison where none exists. Verified against the RENDERED panel: no comparative language, no ratio-like text, and 'no comparator recorded' present.
+The OBSERVATIONAL label is load-bearing, not decorative — a non-OBSERVATIONAL label FAILS THE BUILD, as does a missing counterfactual with no explanation. The label is a statement about study design, not a placeholder: even a stored comparator would give an adjusted association, because nothing was randomized or matched on repo, size, subsystem or risk.
+DORA framing honestly: throughput (2.7 durable changes per review hour) shown beside change-fail rate (5.6% of merges rolled back). Both halves are loop-side, so the pair is computable without a comparator — and throughput alone is the number that flatters.
+Verified: self-test PASS (24 detections); verify 230/230 PASS. Published to the stable URL.

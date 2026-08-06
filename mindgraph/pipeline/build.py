@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import contract as contract_mod  # noqa: E402
 import cohort as cohort_mod  # noqa: E402
+import comparison as comparison_mod  # noqa: E402
 import exceptions as exceptions_mod  # noqa: E402
 import fleet as fleet_mod  # noqa: E402
 import stability as stability_mod  # noqa: E402
@@ -199,6 +200,9 @@ def build(
     cohort_built = cohort_mod.build(cohort)
     cohort_payload = None if cohort_built is None else cohort_built.to_payload()
 
+    built_comparison = comparison_mod.build(registry_payload.get("loop_vs_human"), cohort)
+    comparison_payload = None if built_comparison is None else built_comparison.to_payload()
+
     stability_payload = stability_mod.build(cohort, fleet_payload.get("coverage"))
 
     exceptions_payload = {
@@ -258,6 +262,7 @@ def build(
         "exceptions": exceptions_payload,
         "cohort": cohort_payload,
         "stability": stability_payload,
+        "comparison": comparison_payload,
         "nodes": sorted(node_payloads, key=lambda n: str(n["id"])),
         "edges": [
             _edge_render(e.to_payload(), data_through, dormancy_days, gates) for e in edges

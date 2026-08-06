@@ -33,10 +33,10 @@ from typing import Any
 # plainly. An empty canvas would be indistinguishable from a broken one, and
 # this whole project is about not letting absence look like something else.
 STAGE_NOTICE = (
-    "Each repo carries a freshness rail whose LENGTH is how long it has held "
-    "its current state, scaled across the fleet \u2014 so the one that has been "
-    "quiet longest has the longest bar. A repo that never reported gets no bar "
-    "at all: zero length would read as 'in this state for no time'."
+    "The loop-vs-human panel is NOT a comparison: the direct-human-edit "
+    "counterfactual was never recorded, so only one side exists. It shows the "
+    "loop's own throughput beside its own change-fail rate, labelled "
+    "OBSERVATIONAL, with no ratio and no verdict."
 )
 
 
@@ -333,6 +333,58 @@ def _stability(payload: dict[str, Any]) -> str:
     )
 
 
+def _comparison(payload: dict[str, Any]) -> str:
+    """One side of a two-sided question, named as one.
+
+    No ratio, no delta, no arrow, no second bar — each of those renders a
+    comparison in a place where no comparison exists, and the reader would
+    supply the missing half from imagination, favourably.
+    """
+    block = payload.get("comparison")
+    if not block:
+        return ""
+
+    rate = block.get("durable_per_review_hour")
+    rate_text = "\u2014" if rate is None else f"{rate:g}"
+    rows = (
+        f'<div class="br unknown"><div class="bl">durable changes</div>'
+        f'<div class="gg none"></div><div class="bn">{html.escape(rate_text)}</div>'
+        f'<div class="bx">per human review hour &mdash; <b>no comparator recorded</b>'
+        f'<span class="rsn">{html.escape(block["counterfactual_note"])}</span></div></div>'
+    )
+    if block.get("rollback_rate_pct") is not None:
+        rows += (
+            f'<div class="br neutral"><div class="bl">change-fail rate</div>'
+            f'<div class="gg none"></div>'
+            f'<div class="bn">{block["rollback_rate_pct"]:.1f}%</div>'
+            f'<div class="bx">merged changes later rolled back &mdash; the DORA pair for '
+            f"throughput, and both halves are loop-side so neither needs a comparator</div></div>"
+        )
+    if block.get("durable_yield_pct") is not None:
+        rows += (
+            f'<div class="br neutral"><div class="bl">durable yield</div>'
+            f'<div class="gg none"></div>'
+            f'<div class="bn">{block["durable_yield_pct"]:.1f}%</div>'
+            f'<div class="bx">of proposals that merged and stayed merged</div></div>'
+        )
+    for name in block.get("absent", []):
+        rows += (
+            f'<div class="br unknown"><div class="bl">{html.escape(name)}</div>'
+            f'<div class="gg none"></div><div class="bn">\u2014</div>'
+            f'<div class="bx">not recorded</div></div>'
+        )
+
+    return (
+        f'<div class="strip unknown" id="comparison-head">'
+        f'<strong>{html.escape(block["label"])}</strong>'
+        f"<span>one side of a two-sided question &middot; not a causal claim</span></div>"
+        f'<div class="flow" id="comparison-panel">{rows}</div>'
+        f'<p class="caption" id="comparison-note">'
+        f'{html.escape(block["why_observational"]).capitalize()}. '
+        f"No ratio or verdict is shown, because there is nothing to compare against.</p>"
+    )
+
+
 def _legend_text(payload: dict[str, Any]) -> str:
     """The legend, DERIVED from the contract's constants and from edges that
     actually exist in this graph.
@@ -440,6 +492,8 @@ def emit(payload: dict[str, Any]) -> str:
     ).replace(
         "__STABILITY__", _stability(payload)
     ).replace(
+        "__COMPARISON__", _comparison(payload)
+    ).replace(
         "__LEGEND__", _legend_text(payload)
     ).replace(
         "__NOTICE__", html.escape(STAGE_NOTICE)
@@ -466,6 +520,7 @@ _SHELL = """<!doctype html>
   <p class="notice">__NOTICE__</p>
   __COHORT__
   __STABILITY__
+  __COMPARISON__
   <div class="stage"><canvas id="c" width="900" height="560"></canvas></div>
   <div class="legend">
     <span class="lg"><i class="sw normal"></i>normal — executed within the window</span>

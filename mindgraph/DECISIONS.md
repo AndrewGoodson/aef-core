@@ -892,3 +892,34 @@ state for no time"; a full bar would invent a duration nobody measured. It gets
 the broken outline and no score, which is what §4.4 asks for in words —
 "NEVER REPORTED with no score" — and the payload carries `held_seconds: null`
 rather than `0`.
+
+---
+
+## 2026-08-05 · "Loop vs human" is not a comparison, and the panel says so
+
+**The record settles it.** `counterfactual_stored: false`, with a note reading
+"the comparison cannot be made from this data". The loop's throughput is
+measured; what the same changes would have cost a human editing directly was
+never recorded.
+
+**Chosen.** Render one side of a two-sided question, named as one side.
+
+**Why the naming matters more than the number.** A panel titled "loop vs human"
+showing a single figure answers a question it has no data for — and the reader
+supplies the missing comparator from imagination, favourably. So the panel
+carries **no ratio, no delta, no arrow and no second bar**, because each of
+those renders a comparison in a place where no comparison exists. Checked
+against the rendered panel, not the source: no comparative language, no
+ratio-like text, and "no comparator recorded" present.
+
+**OBSERVATIONAL is load-bearing.** A non-OBSERVATIONAL label fails the build,
+and so does a missing counterfactual with no explanation. The label is a
+statement about study design rather than a placeholder waiting for data: the
+report is explicit that this stays observational "unless randomized or matched
+on repo, size, subsystem, and risk", so even a stored comparator would yield an
+adjusted association, not a causal claim.
+
+**DORA, honestly.** Throughput (2.7 durable changes per review hour) is shown
+beside change-fail rate (5.6% of merges rolled back). Both halves are loop-side,
+so the pair is computable without a comparator — and throughput alone is the
+number that flatters, which is exactly why the pairing exists.
