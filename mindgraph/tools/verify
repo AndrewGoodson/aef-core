@@ -489,6 +489,51 @@ def check_build(result: Result) -> None:
             result.add(f"payload carries {key}", key in after)
 
 
+def check_emit(result: Result) -> None:
+    """Stage 1.4. Escaping is verified against the REAL hostile strings, and
+    the payload must survive the escaping intact — a mangled payload is a
+    different failure with the same symptom."""
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    try:
+        import emit  # type: ignore[import-not-found]
+    except ImportError as exc:
+        result.add("emit module importable", False, str(exc))
+        return
+    result.add("emit module importable", True)
+
+    breakout = "</script><img src=x onerror=alert(1)>"
+    separator = "a\u2028b=1"
+    payload = {
+        "schema_version": 1,
+        "graph_id": breakout,
+        "layout_version": 1,
+        "generated_at": "2026-08-05T18:00:00Z",
+        "data_through": "2026-08-05T17:42:00Z",
+        "expected_report_interval_seconds": 3600,
+        "nodes": [{"id": separator, "layout_reason": "carried", "x": 1, "y": 2}],
+        "edges": [{"source": separator, "target": separator, "edge_state": "active"}],
+    }
+    page = emit.emit(payload)
+    result.add("script-block breakout does not survive", "</script><img" not in page)
+    result.add("raw onerror handler does not survive", "<img src=x onerror" not in page)
+    result.add("U+2028 is escaped (a JS line terminator)", "\u2028" not in page)
+
+    blob = page.split('id="mind-data">', 1)[1].split("</script>", 1)[0]
+    try:
+        back = json.loads(blob)
+        intact = back["graph_id"] == breakout and back["nodes"][0]["id"] == separator
+    except json.JSONDecodeError:
+        intact = False
+    result.add("payload round-trips through the escaping intact", intact)
+
+    # Staleness must be computed in the page, not baked at build time.
+    built = DIST.read_text(encoding="utf-8") if DIST.is_file() else ""
+    result.add(
+        "visible ages are computed in the page from embedded timestamps",
+        "Date.now()" in built and "generated_at" in built,
+    )
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -625,6 +670,7 @@ def main(argv: list[str]) -> int:
     check_traversal(result)
     check_layout(result)
     check_build(result)
+    check_emit(result)
     check_dist(result)
     return result.report()
 

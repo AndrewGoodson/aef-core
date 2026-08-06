@@ -189,6 +189,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state", type=Path, default=root / "build" / STATE_FILENAME)
     parser.add_argument("--out", type=Path, default=root / "build" / "payload.json")
     parser.add_argument(
+        "--html", type=Path, default=root / "dist" / "index.html",
+        help="the delivered single-file artifact",
+    )
+    parser.add_argument(
         "--generated-at",
         default="2026-08-05T18:00:00Z",
         help="pinned rather than read from the clock, so the build is reproducible",
@@ -208,12 +212,17 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(payload, sort_keys=True, separators=(",", ":"), indent=2) + "\n",
         encoding="utf-8",
     )
+    import emit as emit_mod
+
+    args.html.parent.mkdir(parents=True, exist_ok=True)
+    args.html.write_text(emit_mod.emit(payload), encoding="utf-8")
+
     reasons: dict[str, int] = {}
     for node in payload["nodes"]:
         reasons[node["layout_reason"]] = reasons.get(node["layout_reason"], 0) + 1
     print(
         f"built {len(payload['nodes'])} nodes, {len(payload['edges'])} edges "
-        f"-> {args.out}  (layout v{payload['layout_version']}, {reasons})"
+        f"-> {args.html}  (layout v{payload['layout_version']}, {reasons})"
     )
     return 0
 

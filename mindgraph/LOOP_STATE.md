@@ -1,5 +1,5 @@
 STATUS: IN_PROGRESS
-STAGE: 1 — Generation pipeline (Stage 0 complete)
+STAGE: 2 — Renderer (Stages 0 and 1 complete; dist/index.html now exists)
 CHECKLIST:
 - [x] init.scaffold — pipeline/ dist/ fixtures/ tools/ created; RESEARCH_REPORT.md installed
 - [x] init.fixtures — synthetic dataset covering every required edge case (fixtures/fleet.json)
@@ -9,7 +9,7 @@ CHECKLIST:
 - [x] 1.1 — pipeline: derive traversal graph from the event log
 - [x] 1.2 — pipeline: offline layout, deterministic seeding only (weighted centroid of positioned neighbours; perimeter by hash of stable ID; never Math.random)
 - [x] 1.3 — pipeline: carry previous_x/previous_y forward; bounded relaxation within a hard displacement budget of ~1 node diameter per layout version; store layout_reason
-- [ ] 1.4 — pipeline: embed graph + positions + history + generated_at + data_through + expected interval in a <script type="application/json"> block
+- [x] 1.4 — pipeline: embed graph + positions + history + generated_at + data_through + expected interval in a <script type="application/json"> block
 - [ ] 2.1 — vendor d3-force (8.3 KB min, ISC) locally; never fetched at view time
 - [ ] 2.2 — hand-written Canvas renderer: node channels per §4.1 (position/radius/fill/border/interior glyph/birth flag; ≤3 preattentive variables; no glow, ever)
 - [ ] 2.3 — two-layer edge model per §4.2: history rail width = log1p(lifetime_traversal_count), activity core luminance = recency
@@ -31,10 +31,10 @@ CHECKLIST:
 - [ ] 6.1 — dual themes via prefers-color-scheme with identical semantic ordering (§3f verdict B)
 - [ ] 6.2 — MANUAL: on-hardware polarity A/B (light vs dark) for "find the abandoned path" and "find the missing-reporting node"
 - [ ] 6.3 — MANUAL: comparison-mode A/B (difference-map vs two-pane vs scrubber) measured on error rate and time, not FPS
-NEXT: 1.4 — embed graph + positions + history + generated_at + data_through + expected interval in a <script type="application/json"> block. build.py already emits the payload; 1.4 wraps it in the document shell.
+NEXT: 2.1 — vendor d3-force (8.3 KB min, ISC) locally into the repo; never fetched at view time
 BLOCKERS: none
 MANUAL_CHECKS:
 - headless browser load of dist/index.html from file:// with network blocked — no headless browser confirmed available in this environment yet; the forbidden-token scan and single-file check run, the actual offline load does not
 - 6.2 and 6.3 are operator task-tests on target hardware and cannot be automated
-LAST_RUN: 2026-08-05 — increment 1.3. pipeline/build.py owns a persisted layout state so coordinates outlive the process. REPRODUCED this increment's own central property failing: building twice over UNCHANGED inputs moved all seven nodes, because relaxation ran unconditionally and each build seeded from the last build's output and drifted further. The layout is now recomputed when the TOPOLOGY changes, not when a build runs; layout_version tracks the layout rather than the build count. Adding a node still relaxes, and the worst carried displacement measured 45.6px against a 52px budget. Timestamps are passed in rather than read from the clock — datetime.now() would make every build differ over identical data. Probes: corrupt state, wrong graph_id, unknown state version and naive timestamps all refused; nothing landed.
-Verified: self-test PASS (19 detections); verify 64/65 PASS including byte-identical rebuilds across three separate processes; dist/index.html FAIL — expected until Stage 2.
+LAST_RUN: 2026-08-05 — increment 1.4, Stage 1 COMPLETE. pipeline/emit.py wraps the payload in the document shell and dist/index.html EXISTS for the first time. VERIFIER IS FULLY GREEN: 89/89, no red lines. The page computes every visible age in-browser from the embedded generated_at/data_through, so a file opened three days later says so — a static artifact reporting a fixed age lies more convincingly the longer it sits. No renderer yet, and the page SAYS that rather than showing an empty canvas: an empty canvas is indistinguishable from a broken one. Escaping probed with the real strings (</script><img onerror=, U+2028) — none survived, and the payload still round-trips intact, which is the check that catches escaping that produces valid-looking but corrupted data. Published: https://claude.ai/code/artifact/25d6e2a4-2058-4afa-b728-67b3523c4d80
+Verified: self-test PASS (19 detections); verify 89/89 PASS.

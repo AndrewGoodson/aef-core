@@ -328,3 +328,36 @@ then silently rewrite the layout everyone else sees. The delivered file is a
 snapshot of the positions it was built with; the state file is the pipeline's
 memory. `build/` is gitignored — it is derived, and committing it would invite
 someone to edit the memory directly.
+
+---
+
+## 2026-08-05 · The renderer-less page says so, rather than showing an empty canvas
+
+**Spec silent on.** Stage 1.4 delivers the embedded payload; the renderer is
+Stage 2. Nothing says what the page should look like in between.
+
+**Chosen.** A visible notice stating that the data is complete and the renderer
+arrives in Stage 2, plus a table of what the payload actually contains.
+
+**Why.** An empty canvas is indistinguishable from a broken one. Shipping an
+intermediate artifact that *looks* failed would train exactly the wrong
+reflex in whoever opens it, and this project's whole thesis is that absence
+must never be mistaken for something else — including the absence of a
+renderer. The summary table also means the intermediate page is genuinely
+useful: it shows node and edge counts by state, which is what you would check
+first anyway.
+
+---
+
+## 2026-08-05 · Escaping is verified by round-trip, not only by absence
+
+**Method note, recorded because the obvious test is insufficient.**
+
+Checking that `</script><img` does not appear in the output proves the escaper
+ran. It does not prove the escaper was correct: an over-aggressive one would
+pass that check while mangling the payload, and the symptom — a blank page —
+is identical to the symptom of no escaping at all.
+
+So the check also parses the embedded blob back out and asserts the hostile
+strings survive *as data*, byte-for-byte. Both properties are required and
+neither implies the other.
