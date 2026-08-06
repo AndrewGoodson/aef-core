@@ -163,7 +163,7 @@ def run_graph_module(
         retriever=retriever,
         durability=durability,
         policy=policy_config,
-        judge_rubric=dict(judge_rubric or {"quality": 1.0}),
+        judge_rubric=judge_rubric,
         audit_log=FileAuditLogWriter(Path(audit_log_path)) if audit_log_path else None,
     )
     # Without this an adopter cannot produce a FAILING run from the CLI, so the

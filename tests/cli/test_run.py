@@ -33,6 +33,16 @@ def test_run_graph_module_executes_and_returns_final_state(graph_module: str) ->
     assert final_state.working_memory == {"objective_seen": "do the thing"}
 
 
+def test_run_graph_module_rejects_explicit_empty_judge_rubric(graph_module: str) -> None:
+    with pytest.raises(ValueError, match="must not be empty"):
+        run_graph_module(
+            graph_module,
+            agent_id="a1",
+            objective="do the thing",
+            judge_rubric={},
+        )
+
+
 def test_run_graph_module_missing_build_graph_raises(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
