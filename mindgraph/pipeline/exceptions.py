@@ -45,7 +45,13 @@ ROUTINE_OUTCOMES = frozenset(
     {"static_rejected", "behavioral_rejected", "human_rejected", "escalated_pending"}
 )
 
-SEVERITY_ORDER = {"rollback": 0, "gate_error": 1, "not_reporting": 2, "out_of_band": 3, "decision_overdue": 4}
+SEVERITY_ORDER = {
+    "rollback": 0,
+    "gate_error": 1,
+    "not_reporting": 2,
+    "out_of_band": 3,
+    "decision_overdue": 4,
+}
 
 # How long a human decision may sit before the loop is considered blocked on a
 # person. The report says "long-pending" without a number, so this is a stated
@@ -130,7 +136,10 @@ def collect(
                 Exception_(
                     kind="decision_overdue",
                     subject=" → ".join(gate.get("edge", ["?", "?"])),
-                    detail=f"awaiting a human decision beyond the {int(decision_sla_hours)}h window",
+                    detail=(
+                        f"awaiting a human decision beyond the "
+                        f"{int(decision_sla_hours)}h window"
+                    ),
                     age_seconds=waited,
                 )
             )
@@ -147,7 +156,10 @@ def collect(
                     Exception_(
                         kind="rollback",
                         subject=outcome,
-                        detail=f"{count} of {total} — changes that passed every gate and were undone",
+                        detail=(
+                            f"{count} of {total} — changes that passed every gate "
+                            f"and were undone"
+                        ),
                         age_seconds=None,
                     )
                 )

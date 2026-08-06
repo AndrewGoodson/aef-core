@@ -31,14 +31,14 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import contract as contract_mod  # noqa: E402
 import cohort as cohort_mod  # noqa: E402
 import comparison as comparison_mod  # noqa: E402
+import contract as contract_mod  # noqa: E402
 import exceptions as exceptions_mod  # noqa: E402
 import fleet as fleet_mod  # noqa: E402
+import layout as layout_mod  # noqa: E402
 import modes as modes_mod  # noqa: E402
 import stability as stability_mod  # noqa: E402
-import layout as layout_mod  # noqa: E402
 import traversal as traversal_mod  # noqa: E402
 
 STATE_VERSION = 1
@@ -144,7 +144,9 @@ def build(
     topology_changed = set(node_ids) != set(previous)
     if previous and not topology_changed:
         placed = {
-            n: layout_mod.Placed(n, previous[n][0], previous[n][1], previous[n][0], previous[n][1], "carried")
+            n: layout_mod.Placed(
+                n, previous[n][0], previous[n][1], previous[n][0], previous[n][1], "carried"
+            )
             for n in sorted(node_ids)
         }
     else:
@@ -244,7 +246,9 @@ def build(
             "glyph": resolved["node.glyph"].value if resolved["node.glyph"].is_measured else "?",
             "birth_flag": birth,
             "annotation": (
-                "" if resolved["node.fill"].is_measured else contract_mod.UNKNOWN_TREATMENT["annotation"]
+                ""
+                if resolved["node.fill"].is_measured
+                else contract_mod.UNKNOWN_TREATMENT["annotation"]
             ),
         }
         node_payloads.append(body)

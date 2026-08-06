@@ -166,7 +166,10 @@ EDGE_CHANNELS: tuple[Channel, ...] = (
     Channel(
         name="edge.endpoint_state",
         backing=("edge_state", "telemetry_coverage"),
-        describes="never_observed / dormant / retired / unknown — dead is never inferred from inactivity",
+        describes=(
+            "never_observed / dormant / retired / unknown — dead is never inferred "
+            "from inactivity"
+        ),
     ),
 )
 
@@ -174,7 +177,9 @@ GATE_CHANNELS: tuple[Channel, ...] = (
     Channel(
         name="gate.glyph",
         backing=("disposition",),
-        describes="human checkpoint state: awaiting / approved / rejected / escalated / rolled_back",
+        describes=(
+            "human checkpoint state: awaiting / approved / rejected / escalated / rolled_back"
+        ),
         transform="rectangle interrupting the edge — not a diamond, which would imply branching",
     ),
 )

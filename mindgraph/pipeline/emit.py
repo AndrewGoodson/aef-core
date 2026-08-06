@@ -172,7 +172,10 @@ def _exception_queue(payload: dict[str, Any]) -> str:
             for i in items
         )
         body = f'<div class="scroll"><table class="exq">{rows}</table></div>'
-        head = f'<div class="strip bad"><strong>Exceptions</strong><span><b>{len(items)}</b> needing attention</span></div>'
+        head = (
+            '<div class="strip bad"><strong>Exceptions</strong>'
+            f'<span><b>{len(items)}</b> needing attention</span></div>'
+        )
     else:
         body = ""
         head = (
@@ -580,7 +583,8 @@ _SHELL = """<!doctype html>
     <span class="lg"><i class="ln cap"></i>&#9866; retired by a person</span>
     <span class="lg">? nothing was watching</span>
     <span class="lg"><i class="tab"></i>age when this picture was taken</span>
-    <span class="lg"><i class="gt"></i>[H] human gate &#8212; &#8230; awaiting, &#10003; approved, &#10007; rejected</span>
+    <span class="lg"><i class="gt"></i>[H] human gate &#8212; &#8230; awaiting,
+      &#10003; approved, &#10007; rejected</span>
   </div>
   <p class="caption" id="encoding-legend">__LEGEND__</p>
   <section>
