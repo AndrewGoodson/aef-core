@@ -138,6 +138,22 @@ def test_a_non_positive_budget_is_an_error_not_an_empty_list() -> None:
             _retriever(memory).retrieve("fetch", token_budget=budget)
 
 
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"candidates_per_kind": 0}, "candidates_per_kind must be positive"),
+        ({"candidates_per_kind": -1}, "candidates_per_kind must be positive"),
+        ({"max_token_budget": 0}, "max_token_budget must be positive"),
+        ({"max_token_budget": -1}, "max_token_budget must be positive"),
+    ],
+)
+def test_invalid_retriever_limits_fail_at_construction(
+    kwargs: dict[str, int], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        MemoryRetriever(memory=InMemoryMemoryStore(), agent_id="a", **kwargs)
+
+
 def test_a_chunk_never_costs_zero_tokens() -> None:
     """A zero-cost chunk lets an unbounded number through a finite budget."""
     assert estimate_tokens("") == 1
