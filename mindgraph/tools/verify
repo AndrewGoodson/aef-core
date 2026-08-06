@@ -322,6 +322,80 @@ def check_traversal(result: Result) -> None:
     )
 
 
+def check_layout(result: Result) -> None:
+    """Stage 1.2. Determinism is the whole property; everything else follows."""
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    from datetime import datetime
+
+    try:
+        import layout  # type: ignore[import-not-found]
+        import traversal  # type: ignore[import-not-found]
+    except ImportError as exc:
+        result.add("layout module importable", False, str(exc))
+        return
+    result.add("layout module importable", True)
+
+    events = traversal.read_events(ROOT / "fixtures" / "events.jsonl")
+    topo = json.loads((ROOT / "fixtures" / "topology.json").read_text())
+    nodes, edges = traversal.derive(
+        events, topo, data_through=datetime.fromisoformat("2026-08-05T17:42:00+00:00")
+    )
+    ids = [n.id for n in nodes]
+    el = [(e.source, e.target, e.lifetime_traversal_count or 0) for e in edges]
+
+    first = layout.compute(ids, el)
+    second = layout.compute(ids, el)
+    result.add(
+        "layout is deterministic across runs",
+        {k: (v.x, v.y) for k, v in first.items()} == {k: (v.x, v.y) for k, v in second.items()},
+    )
+    shuffled = layout.compute(list(reversed(ids)), list(reversed(el)))
+    result.add(
+        "layout does not depend on input ordering",
+        {k: (v.x, v.y) for k, v in first.items()} == {k: (v.x, v.y) for k, v in shuffled.items()},
+    )
+
+    # No RNG anywhere in the pipeline, checked as source rather than trusted.
+    for module in ("layout.py", "traversal.py", "contract.py"):
+        src = (ROOT / "pipeline" / module).read_text()
+        clean = "import random" not in src and "random." not in src
+        result.add(f"pipeline/{module} uses no RNG", clean)
+
+    # Carried nodes stay within the displacement budget when a new node joins.
+    previous = {k: (v.x, v.y) for k, v in first.items()}
+    grown = layout.compute(
+        [*ids, "fraud_check"],
+        [*el, ("classify", "fraud_check", 9), ("fraud_check", "emit", 9)],
+        previous,
+    )
+    over = layout.over_budget(grown)
+    result.add(
+        f"carried nodes stay within the {layout.DISPLACEMENT_BUDGET:.0f}px displacement budget",
+        not over,
+        "" if not over else f"over: {over}",
+    )
+    result.add(
+        "a new node with positioned neighbours is seeded by centroid, not perimeter",
+        grown["fraud_check"].layout_reason == "seeded_centroid",
+        grown["fraud_check"].layout_reason,
+    )
+    result.add(
+        "layout_reason distinguishes carried from newly placed",
+        {p.layout_reason for p in grown.values()} & {"carried", "relaxed"} != set(),
+    )
+    result.add(
+        "coordinates are rounded so the artifact does not churn",
+        all(round(p.x, layout.PRECISION) == p.x for p in first.values()),
+    )
+    for bad in (float("inf"), float("nan")):
+        try:
+            layout.compute(ids, el, {ids[0]: (bad, 1.0)})
+            refused = False
+        except layout.LayoutError:
+            refused = True
+        result.add(f"non-finite carried position refused ({bad})", refused)
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -456,6 +530,7 @@ def main(argv: list[str]) -> int:
     check_fixtures(result)
     check_contract(result)
     check_traversal(result)
+    check_layout(result)
     check_dist(result)
     return result.report()
 

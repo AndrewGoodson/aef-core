@@ -221,3 +221,55 @@ in each case was to loosen the classifier instead.
    every downstream assertion about it would have been vacuous. Fixed by
    rerouting the log — the old runs now go `fetch_invoice -> emit` — so the
    never-observed edge is one somebody configured and nothing has ever used.
+
+---
+
+## 2026-08-05 · blake2b instead of the builtin `hash()` for perimeter placement
+
+**Spec silent on.** Section 6 Stage 1 says "perimeter by hash of stable ID"
+without saying which hash.
+
+**Chosen.** `blake2b`, from the standard library.
+
+**Why, demonstrated rather than assumed.** Python salts string hashing per
+process by default. Two processes were run and asked for `hash("retry_guard")`:
+
+```
+-6126072786797140866
+-260026301298584743
+```
+
+So `hash()` would place the same node somewhere different on every build —
+exactly the non-determinism this module exists to eliminate, arriving through a
+function that looks pure and has no obvious RNG in it. `blake2b` is stable
+across processes, platforms and versions.
+
+---
+
+## 2026-08-05 · Fixed iteration count rather than convergence
+
+**Spec silent on.** It calls for "bounded relaxation" without a stopping rule.
+
+**Chosen.** A fixed `ITERATIONS` count.
+
+**Why.** A convergence test ("stop when total movement < epsilon") has a result
+that can depend on floating-point summation order, which is a difference that
+survives into the coordinates and therefore into the committed artifact. A
+fixed count is boring, reproducible and testable, and the layout quality
+difference at this graph size is not observable.
+
+---
+
+## 2026-08-05 · Non-finite carried positions refused, not sanitised
+
+**Reproduced defect, recorded because the choice between refusing and
+repairing was a real one.**
+
+An infinite or NaN carried coordinate propagated through the simulation and
+would have been serialised by `json.dumps` as a bare `Infinity`/`NaN` — not
+valid JSON, so `JSON.parse` throws and the entire page renders empty from one
+coordinate. This is the same failure class as ADR 0108's D2 in the host repo.
+
+Refused at the boundary rather than clamped to something sensible, because a
+silently corrected position is a position the operator cannot trust: the node
+would appear somewhere plausible, having come from a value that meant nothing.
