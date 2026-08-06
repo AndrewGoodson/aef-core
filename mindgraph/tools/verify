@@ -33,6 +33,14 @@ FORBIDDEN: tuple[tuple[str, str], ...] = (
     ("external ref: @import", r"@import\b"),
     ("external ref: url(http", r"url\(\s*['\"]?https?:"),
     ("non-determinism: Math.random", r"\bMath\.random\b"),
+    # No motion AT ALL. Section 5 requires respecting prefers-reduced-motion;
+    # having nothing to reduce satisfies it unconditionally, and unlike a media
+    # query this cannot be forgotten by the next element that wants a fade.
+    ("motion: css transition", r"\btransition\s*:"),
+    ("motion: css animation", r"\banimation\s*:"),
+    ("motion: keyframes", r"@keyframes\b"),
+    ("motion: requestAnimationFrame", r"\brequestAnimationFrame\b"),
+    ("motion: setInterval", r"\bsetInterval\b"),
     # A runtime layout would recompute positions on open, which is exactly
     # what Section 3(a)'s verdict rules out: the same data would render
     # differently every time and the reader's spatial memory — the whole value
@@ -1551,6 +1559,55 @@ def check_comparison(result: Result) -> None:
     )
 
 
+def check_modes(result: Result) -> None:
+    """Stage 5.1 — the temporal frame is named, and unavailable modes say why."""
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    import modes as modes_mod  # type: ignore[import-not-found]
+
+    if not DIST.is_file():
+        result.add("modes declared", False, "no artifact")
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+    payload = json.loads(html_text.split('id="mind-data">', 1)[1].split("</script>", 1)[0])
+    block = payload["modes"]
+
+    result.add("the current temporal mode is named", block["current"] == modes_mod.ACCUMULATED)
+    result.add(
+        "available_count matches the declared modes",
+        block["available_count"] == sum(1 for m in block["modes"] if m["available"]),
+    )
+    silent = [m["key"] for m in block["modes"] if not m["available"] and not m["requires"]]
+    result.add(
+        "every unavailable mode states what it would need",
+        not silent,
+        f"silent: {silent}" if silent else "",
+    )
+    result.add(
+        "no prior topology is asserted",
+        block["has_prior_topology"] is False,
+    )
+
+    empty = modes_mod.build({"nodes": []})
+    diff = next(m for m in empty["modes"] if m["key"] == modes_mod.DIFFERENCE)
+    result.add(
+        "with no nodes, no partial position data is claimed",
+        diff["partial"] == "",
+    )
+
+    result.add(
+        "the page names the temporal frame it is showing",
+        "accumulated present" in html_text,
+    )
+    result.add(
+        "the page explains it is not a snapshot of an instant",
+        "not a snapshot of an instant" in html_text,
+    )
+    result.add(
+        "the page states it contains no animation at all",
+        "no animation of any kind" in html_text,
+    )
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -1643,6 +1700,11 @@ def self_test() -> int:
         ("@import", "<style>@import url(x.css);</style>"),
         ("url(http", "<style>body{background:url(https://x/y.png)}</style>"),
         ("Math.random", "<script>var p=Math.random()</script>"),
+        ("css transition", "<style>.x{transition: opacity .2s}</style>"),
+        ("css animation", "<style>.x{animation: pulse 2s infinite}</style>"),
+        ("keyframes", "<style>@keyframes pulse{from{opacity:0}}</style>"),
+        ("requestAnimationFrame", "<script>requestAnimationFrame(draw)</script>"),
+        ("setInterval", "<script>setInterval(tick, 1000)</script>"),
         ("forceSimulation", "<script>d3.forceSimulation(nodes)</script>"),
         ("forceLink", "<script>.force('link', forceLink(links))</script>"),
         ("forceManyBody", "<script>forceManyBody().strength(-30)</script>"),
@@ -1704,6 +1766,7 @@ def main(argv: list[str]) -> int:
     check_stability(result)
     check_rails(result)
     check_comparison(result)
+    check_modes(result)
     check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()

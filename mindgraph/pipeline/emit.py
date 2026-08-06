@@ -33,10 +33,10 @@ from typing import Any
 # plainly. An empty canvas would be indistinguishable from a broken one, and
 # this whole project is about not letting absence look like something else.
 STAGE_NOTICE = (
-    "The loop-vs-human panel is NOT a comparison: the direct-human-edit "
-    "counterfactual was never recorded, so only one side exists. It shows the "
-    "loop's own throughput beside its own change-fail rate, labelled "
-    "OBSERVATIONAL, with no ratio and no verdict."
+    "The graph below is the ACCUMULATED PRESENT \u2014 everything observed up to "
+    "data_through, not a snapshot of an instant. Edge width is an edge's entire "
+    "history; the activity core is what is happening now. The other two "
+    "temporal modes are named below with what each would need to be drawn."
 )
 
 
@@ -385,6 +385,45 @@ def _comparison(payload: dict[str, Any]) -> str:
     )
 
 
+def _modes(payload: dict[str, Any]) -> str:
+    """Name the temporal frame, and say what the unavailable modes would need.
+
+    A reader who does not know which temporal frame they are looking at will
+    assume the most flattering one. "This path is thick" means it has carried a
+    lot EVER, not that it is busy now — and those read identically at a glance.
+    """
+    block = payload.get("modes")
+    if not block:
+        return ""
+
+    rows = ""
+    for mode in block["modes"]:
+        current = mode["key"] == block["current"]
+        state = "showing" if current else ("available" if mode["available"] else "not available")
+        cls = "neutral" if current else "unknown"
+        detail = html.escape(mode["describes"])
+        if mode.get("requires"):
+            detail += (
+                f'<span class="rsn">needs {html.escape(mode["requires"])}</span>'
+            )
+        if mode.get("partial"):
+            detail += f'<span class="rsn">{html.escape(mode["partial"])}</span>'
+        rows += (
+            f'<div class="br {cls}"><div class="bl">{html.escape(mode["label"])}</div>'
+            f'<div class="gg none"></div>'
+            f'<div class="bn">{html.escape(state)}</div>'
+            f'<div class="bx">{detail}</div></div>'
+        )
+
+    return (
+        f'<div class="strip" id="modes-head"><strong>Temporal mode</strong>'
+        f"<span><b>{block['available_count']}</b> of {len(block['modes'])} modes available "
+        f"&middot; showing the accumulated present</span></div>"
+        f'<div class="flow" id="modes-panel">{rows}</div>'
+        f'<p class="caption" id="modes-note">{html.escape(block["note"])}.</p>'
+    )
+
+
 def _legend_text(payload: dict[str, Any]) -> str:
     """The legend, DERIVED from the contract's constants and from edges that
     actually exist in this graph.
@@ -494,6 +533,8 @@ def emit(payload: dict[str, Any]) -> str:
     ).replace(
         "__COMPARISON__", _comparison(payload)
     ).replace(
+        "__MODES__", _modes(payload)
+    ).replace(
         "__LEGEND__", _legend_text(payload)
     ).replace(
         "__NOTICE__", html.escape(STAGE_NOTICE)
@@ -521,6 +562,7 @@ _SHELL = """<!doctype html>
   __COHORT__
   __STABILITY__
   __COMPARISON__
+  __MODES__
   <div class="stage"><canvas id="c" width="900" height="560"></canvas></div>
   <div class="legend">
     <span class="lg"><i class="sw normal"></i>normal — executed within the window</span>
@@ -541,7 +583,11 @@ _SHELL = """<!doctype html>
     <div class="scroll"><table>__ROWS__</table></div>
   </section>
   <footer>Read-only. No controls, no requests. Every age above is computed in the
-  page from the embedded timestamps, so this file reports its own staleness.</footer>
+  page from the embedded timestamps, so this file reports its own staleness.
+  <br>This page contains no animation of any kind &mdash; no transitions, no keyframes,
+  no timers, no animation frames. `prefers-reduced-motion` is satisfied
+  unconditionally rather than by a rule that could be forgotten, and every state
+  here is fully interpretable without having watched anything happen.</footer>
 </main>
 <script type="application/json" id="mind-data">__DATA__</script>
 <script>__JS__</script>

@@ -923,3 +923,45 @@ adjusted association, not a causal claim.
 beside change-fail rate (5.6% of merges rolled back). Both halves are loop-side,
 so the pair is computable without a comparator — and throughput alone is the
 number that flatters, which is exactly why the pairing exists.
+
+---
+
+## 2026-08-05 · Naming the temporal frame, and deriving mode availability
+
+**Spec lists three modes (Stage 5); the page has always shown one.** Naming it
+matters for a reason only visible once a second mode exists: a reader who does
+not know which temporal frame they are looking at will assume the most
+flattering one.
+
+"This path is thick" means *it has carried a lot, ever* — not *it is carrying a
+lot now*. Those read identically at a glance and answer opposite questions,
+which is exactly why rail and core are separate channels. The page now says
+which frame it is in: **accumulated present**, explicitly not a snapshot.
+
+**Availability is checked, not assumed.** One layout-state file, overwritten
+each build, so no prior topology exists. But every node carries `previous_x`/
+`previous_y` — so *where a node moved* is answerable while *what was added or
+removed* is not. The difference map declares precisely that asymmetry instead
+of claiming either. A mode selector offering a mode that cannot be drawn is
+worse than one offering fewer and saying why.
+
+---
+
+## 2026-08-05 · Motion is banned outright, not conditionally disabled
+
+**Spec says respect `prefers-reduced-motion` (Stage 5).**
+
+**Chosen.** Have no motion at all, and enforce that as a forbidden-token ban:
+`transition:`, `animation:`, `@keyframes`, `requestAnimationFrame`,
+`setInterval` — each with a planted fault in `--self-test`.
+
+**Why the ban beats the media query.** A `prefers-reduced-motion` rule is a
+promise the *next* element has to remember to keep; the first contributor who
+adds a fade without a matching rule breaks it silently. Having nothing to
+reduce satisfies the preference unconditionally, and it is checkable.
+
+Confirmed before claiming it: zero transitions, zero keyframes, zero animation
+frames, zero timers in the whole document. `text-transform` is typography, not
+motion. The page states the guarantee in its own footer, which also covers
+Stage 5's requirement that every static end-state be interpretable without
+having watched a transition — there are none to have watched.

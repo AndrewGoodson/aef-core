@@ -36,6 +36,7 @@ import cohort as cohort_mod  # noqa: E402
 import comparison as comparison_mod  # noqa: E402
 import exceptions as exceptions_mod  # noqa: E402
 import fleet as fleet_mod  # noqa: E402
+import modes as modes_mod  # noqa: E402
 import stability as stability_mod  # noqa: E402
 import layout as layout_mod  # noqa: E402
 import traversal as traversal_mod  # noqa: E402
@@ -248,7 +249,7 @@ def build(
         }
         node_payloads.append(body)
 
-    return {
+    payload: dict[str, Any] = {
         "schema_version": 1,
         "graph_id": graph_id,
         "layout_version": layout_version,
@@ -268,6 +269,10 @@ def build(
             _edge_render(e.to_payload(), data_through, dormancy_days, gates) for e in edges
         ],
     }
+    # Declared last, because availability is derived from the assembled payload
+    # rather than guessed ahead of it.
+    payload["modes"] = modes_mod.build(payload)
+    return payload
 
 
 GATE_GLYPH = {
