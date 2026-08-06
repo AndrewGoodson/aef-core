@@ -781,3 +781,51 @@ wants the class. The legend now has a stable `id`, and the checks target that.
 
 A selector that was unambiguous when written is not unambiguous forever; the
 fix is to make the thing identifiable, not to teach the test to guess.
+
+---
+
+## 2026-08-05 · CONSORT, not a funnel — and the palette must not smuggle the funnel back
+
+**Spec adjudicates it (§3b, verdict B) and the reasoning is the design.** A
+funnel's grammar says *wider top is success, everything leaking out is loss*.
+Here that is not merely unhelpful, it is backwards: a rejected proposal is the
+gate doing its job, so a funnel would draw the system working correctly as a
+system leaking.
+
+CONSORT treats every exclusion as an expected, counted, reason-annotated
+branch. Nothing leaks; proposals arrive and are accounted for.
+
+**The subtle half is colour.** Removing the funnel's shape but colouring
+rejections red would re-import its claim through the palette. So in-band
+rejection branches are neutral, and red is reserved for a rollback or a rate
+outside its own historical band — the second being a statement about the RATE,
+not about the rejections it counts. Both directions are asserted.
+
+**Every proposal is accounted for, and the zero is shown.** Branches plus
+unclassified must equal the cohort; a remainder is surfaced rather than absorbed
+into rounding. The unclassified row renders **even at zero**, because a hidden
+zero is indistinguishable from a figure nobody computed.
+
+**A branch with no expected range reads `unknown`, not `in`.** It has not been
+compared to anything, and reporting it as within expectations would be a claim
+nobody made.
+
+---
+
+## 2026-08-05 · A pixel check silently started measuring an empty region
+
+**Reproduced regression in the VERIFIER, not the artifact.**
+
+Inserting the cohort flow above the canvas pushed the birth tab below the
+1400px screenshot viewport. The tab-visibility diff then compared two identical
+crops of empty space and reported **0 pixels**.
+
+It failed rather than passed, which is the right direction — but the mechanism
+is exactly this project's cardinal failure aimed at its own verifier: a check
+that quietly stops measuring anything while still appearing to run.
+
+Fixed at the root rather than by nudging the number. The capture size is now
+decided in one place (`_shot_args`, 3200px tall) so no future panel can push
+content out of frame, and the crop offset is generous rather than tight. Two
+call sites previously carried their own duplicate window-size arguments; they
+now share one.

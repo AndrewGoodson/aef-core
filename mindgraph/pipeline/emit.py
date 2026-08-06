@@ -33,10 +33,10 @@ from typing import Any
 # plainly. An empty canvas would be indistinguishable from a broken one, and
 # this whole project is about not letting absence look like something else.
 STAGE_NOTICE = (
-    "The exception queue lists only conditions meaning the system is not "
-    "behaving as designed. Ordinary rejections are the gate WORKING and are "
-    "deliberately absent \u2014 a queue that listed them would always be full, "
-    "and a full queue is one nobody reads. The cohort flow arrives next."
+    "The cohort flow is CONSORT-style, not a funnel. A funnel's grammar says "
+    "wider top is success and everything leaking out is loss \u2014 backwards "
+    "here, where a rejected proposal is the gate doing its job. Rejection "
+    "branches are neutral; red is reserved for the abnormal."
 )
 
 
@@ -176,6 +176,73 @@ def _exception_queue(payload: dict[str, Any]) -> str:
     return head + body + footnote
 
 
+def _cohort_flow(payload: dict[str, Any]) -> str:
+    """Counted, reason-annotated branches. Nothing leaks; everything is
+    accounted for."""
+    block = payload.get("cohort")
+    if not block:
+        return ""
+
+    total = block["proposed"]
+    widest = max((b["pct"] for b in block["branches"]), default=1.0) or 1.0
+    rows = ""
+    for branch in block["branches"]:
+        width = max(2.0, 100.0 * branch["pct"] / widest)
+        band = branch["band"]
+        band_text = (
+            "no historical range"
+            if band == "unknown"
+            else f"expected {branch['expected_low']:.0f}\u2013{branch['expected_high']:.0f}%"
+        )
+        arrow = {"below": " \u25bc below", "above": " \u25b2 above", "in": "", "unknown": ""}[band]
+        reason = (
+            f'<span class="rsn">top reason: {html.escape(str(branch["reason_top"]))}</span>'
+            if branch.get("reason_top")
+            else ""
+        )
+        rows += (
+            f'<div class="br {html.escape(branch["treatment"])}">'
+            f'<div class="bl">{html.escape(branch["outcome"].replace("_", " "))}</div>'
+            f'<div class="bb"><i style="width:{width:.1f}%"></i></div>'
+            f'<div class="bn">{branch["count"]} <em>{branch["pct"]:.1f}%</em></div>'
+            f'<div class="bx">{html.escape(band_text)}{arrow}{reason}</div>'
+            "</div>"
+        )
+
+    # Rendered even at zero. A hidden zero is indistinguishable from a figure
+    # nobody computed, which is this project's cardinal failure in miniature.
+    tone = "neutral" if block["unclassified"] == 0 else "abnormal"
+    rows += (
+        f'<div class="br {tone}"><div class="bl">unclassified</div>'
+        f'<div class="bb"></div>'
+        f'<div class="bn">{block["unclassified"]}</div>'
+        f'<div class="bx">proposals with no recorded outcome</div></div>'
+    )
+    if block["unaccounted"]:
+        rows += (
+            f'<div class="br abnormal"><div class="bl">unaccounted</div>'
+            f'<div class="bb"></div><div class="bn">{block["unaccounted"]}</div>'
+            f'<div class="bx">branches do not sum to the cohort \u2014 proposals are '
+            f"missing between stages</div></div>"
+        )
+
+    notes = [
+        "Rejection branches are neutral: a rejected proposal is the gate working. "
+        "Red marks only the abnormal \u2014 a rollback, or a rate outside its own band."
+    ]
+    notes += [f"Not shown: {html.escape(g)}." for g in block.get("gaps", [])]
+
+    window = (
+        f' over {block["window_days"]} days' if block.get("window_days") else ""
+    )
+    return (
+        f'<div class="strip" id="cohort-head"><strong>Cohort</strong>'
+        f"<span><b>{total}</b> proposed{window}, every one accounted for below</span></div>"
+        f'<div class="flow" id="cohort-flow">{rows}</div>'
+        f'<p class="caption" id="cohort-note">{" ".join(notes)}</p>'
+    )
+
+
 def _legend_text(payload: dict[str, Any]) -> str:
     """The legend, DERIVED from the contract's constants and from edges that
     actually exist in this graph.
@@ -279,6 +346,8 @@ def emit(payload: dict[str, Any]) -> str:
     ).replace(
         "__EXCEPTIONS__", _exception_queue(payload)
     ).replace(
+        "__COHORT__", _cohort_flow(payload)
+    ).replace(
         "__LEGEND__", _legend_text(payload)
     ).replace(
         "__NOTICE__", html.escape(STAGE_NOTICE)
@@ -303,6 +372,7 @@ _SHELL = """<!doctype html>
   __STRIP__
   __EXCEPTIONS__
   <p class="notice">__NOTICE__</p>
+  __COHORT__
   <div class="stage"><canvas id="c" width="900" height="560"></canvas></div>
   <div class="legend">
     <span class="lg"><i class="sw normal"></i>normal — executed within the window</span>
@@ -418,6 +488,21 @@ table.exq .dt{color:var(--muted)}
 table.exq .ag{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 tr.ex.not_reporting .kd{color:var(--warn)}
 tr.ex.out_of_band .kd{color:var(--warn)}
+.flow{display:flex;flex-direction:column;gap:.3rem}
+.br{display:grid;grid-template-columns:11rem minmax(60px,1fr) 6.5rem auto;
+  gap:.75rem;align-items:center;font:12px/1.4 var(--mono);
+  padding:.3rem 0;border-bottom:1px solid var(--line)}
+.br .bl{color:var(--fg)}
+.br .bb{height:9px;background:var(--line);border-radius:2px;overflow:hidden}
+.br .bb i{display:block;height:100%;background:var(--muted)}
+.br.abnormal .bb i{background:var(--bad)}
+.br.unknown .bb{border:1px dashed var(--muted);background:transparent}
+.br .bn{color:var(--fg);font-variant-numeric:tabular-nums;text-align:right}
+.br .bn em{color:var(--muted);font-style:normal}
+.br .bx{color:var(--muted);font-size:11px}
+.br.abnormal .bl{color:var(--bad);font-weight:600}
+.br .rsn{display:block;color:var(--muted);opacity:.8}
+@media(max-width:700px){.br{grid-template-columns:1fr auto}.br .bb,.br .bx{display:none}}
 """
 
 # `age()` is the only logic in the shell, and it is the load-bearing one: the

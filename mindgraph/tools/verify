@@ -818,6 +818,23 @@ def check_artifact_matches_topology(result: Result) -> None:
     )
 
 
+# Tall enough that the whole page is captured. A viewport shorter than the
+# document silently crops whatever was pushed below it, and a pixel diff over a
+# cropped region measures nothing while looking like it measured something.
+SHOT_WIDTH = 1200
+SHOT_HEIGHT = 3200
+
+
+def _shot_args(chrome: str, out: Path, page: Path) -> list[str]:
+    return [
+        chrome, "--headless", "--disable-gpu", "--hide-scrollbars",
+        "--force-device-scale-factor=1",
+        f"--window-size={SHOT_WIDTH},{SHOT_HEIGHT}",
+        "--virtual-time-budget=3000", "--disable-features=NetworkService",
+        f"--screenshot={out}", page.as_uri(),
+    ]
+
+
 CHROME_CANDIDATES = (
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
@@ -879,16 +896,7 @@ def check_pixel_stability(result: Result) -> None:
         for i in (1, 2):
             out = Path(tmp) / f"open{i}.png"
             proc = subprocess.run(
-                [
-                    chrome, "--headless", "--disable-gpu", "--hide-scrollbars",
-                    "--force-device-scale-factor=1", "--window-size=1200,1400",
-                    "--virtual-time-budget=3000",
-                    # Offline, genuinely: the renderer is not allowed to reach
-                    # the network even if something tried.
-                    "--disable-features=NetworkService",
-                    f"--screenshot={out}", DIST.as_uri(),
-                ],
-                capture_output=True, timeout=90,
+                _shot_args(chrome, out, DIST), capture_output=True, timeout=90
             )
             if not out.is_file():
                 result.add(
@@ -902,8 +910,12 @@ def check_pixel_stability(result: Result) -> None:
         first, second = (Image.open(s).convert("RGB") for s in shots)
         result.add("the page renders offline in a headless browser", True)
 
-        # Crop to the canvas band, below the header stamp.
-        box = (0, 260, min(first.width, second.width), min(first.height, second.height))
+        # Crop BELOW the header stamp, which is the only element that is
+        # supposed to differ between opens. The offset is generous rather than
+        # tight so that adding panels above the canvas cannot silently reduce
+        # the compared region to nothing.
+        top = 420
+        box = (0, top, min(first.width, second.width), min(first.height, second.height))
         a, b = first.crop(box), second.crop(box)
         import numpy as np  # type: ignore[import-not-found]
 
@@ -976,10 +988,7 @@ def check_birth_flag(result: Result) -> None:
         )
         for name in ("a", "b"):
             subprocess.run(
-                [chrome, "--headless", "--disable-gpu", "--hide-scrollbars",
-                 "--force-device-scale-factor=1", "--window-size=1200,1400",
-                 "--virtual-time-budget=3000", f"--screenshot={tmpdir}/{name}.png",
-                 (tmpdir / f"{name}.html").as_uri()],
+                _shot_args(chrome, tmpdir / f"{name}.png", tmpdir / f"{name}.html"),
                 capture_output=True, timeout=90,
             )
         if not (tmpdir / "a.png").is_file() or not (tmpdir / "b.png").is_file():
@@ -1249,6 +1258,100 @@ def check_exceptions(result: Result) -> None:
     )
 
 
+def check_cohort(result: Result) -> None:
+    """Stage 4.3 — CONSORT, not a funnel, and every proposal accounted for."""
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    import cohort as cohort_mod  # type: ignore[import-not-found]
+
+    raw = json.loads((ROOT / "fixtures" / "fleet.json").read_text())["cohort"]
+    built = cohort_mod.build(raw)
+    assert built is not None
+    result.add("cohort builds", True)
+
+    counted = sum(b.count for b in built.branches) + built.unclassified
+    result.add(
+        "branches plus unclassified equal the cohort",
+        counted == built.proposed,
+        f"{counted} vs {built.proposed}",
+    )
+    result.add("nothing is unaccounted for", built.unaccounted == 0, str(built.unaccounted))
+    result.add(
+        f"at most {cohort_mod.MAX_BRANCHES} top-level outcomes",
+        len(built.branches) <= cohort_mod.MAX_BRANCHES,
+        f"{len(built.branches)}",
+    )
+
+    # THE verdict: rejection is never abnormal on its own.
+    rejections = [b for b in built.branches if "rejected" in b.outcome]
+    result.add("the fixture exercises rejection branches", len(rejections) >= 2)
+    red = [b.outcome for b in rejections if b.treatment == "abnormal" and b.tone != "abnormal"]
+    result.add(
+        "an in-band rejection branch is NEVER drawn abnormal",
+        not red,
+        f"drawn red: {red}" if red else "",
+    )
+    result.add(
+        "a rollback IS drawn abnormal",
+        any(b.treatment == "abnormal" for b in built.branches if b.tone == "abnormal"),
+    )
+
+    # A branch with no historical range is unknown, not "in band".
+    solo = cohort_mod.build(
+        {"proposed": 10, "branches": [{"outcome": "x", "count": 5, "tone": "neutral"}]}
+    )
+    assert solo is not None
+    result.add(
+        "a branch with no expected range reads unknown, not in-band",
+        solo.branches[0].band == "unknown" and solo.branches[0].treatment == "unknown",
+    )
+    result.add(
+        "missing proposals are surfaced, not absorbed",
+        solo.unaccounted == 5,
+        f"unaccounted={solo.unaccounted}",
+    )
+
+    # An out-of-band rate IS abnormal — that is about the rate, not the rejection.
+    drifted = cohort_mod.build(
+        {"proposed": 100,
+         "branches": [{"outcome": "static_rejected", "count": 5,
+                       "expected_range": [40, 52], "tone": "neutral"}]}
+    )
+    assert drifted is not None
+    result.add(
+        "a rejection rate outside its own band IS abnormal",
+        drifted.branches[0].treatment == "abnormal",
+    )
+
+    for bad, why in (
+        ({"proposed": 0, "branches": []}, "empty cohort"),
+        ({"proposed": 10, "branches": [{"outcome": f"o{i}", "count": 1} for i in range(7)]},
+         "too many branches"),
+    ):
+        try:
+            cohort_mod.build(bad)
+            refused = False
+        except cohort_mod.CohortError:
+            refused = True
+        result.add(f"{why} is refused", refused)
+
+    if not DIST.is_file():
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+    result.add("the cohort flow is rendered", 'id="cohort-flow"' in html_text)
+    result.add(
+        "the unclassified row is rendered even at zero",
+        "unclassified" in html_text and "no recorded outcome" in html_text,
+    )
+    result.add(
+        "the page states that rejection branches are neutral by design",
+        "a rejected proposal is the gate working" in html_text,
+    )
+    result.add(
+        "the page states the per-stage durations it does not have",
+        "time-in-stage" in html_text,
+    )
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -1398,6 +1501,7 @@ def main(argv: list[str]) -> int:
     check_staleness(result)
     check_fleet(result)
     check_exceptions(result)
+    check_cohort(result)
     check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()
