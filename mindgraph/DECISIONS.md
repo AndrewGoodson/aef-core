@@ -965,3 +965,39 @@ frames, zero timers in the whole document. `text-transform` is typography, not
 motion. The page states the guarantee in its own footer, which also covers
 Stage 5's requirement that every static end-state be interpretable without
 having watched a transition — there are none to have watched.
+
+---
+
+## 2026-08-05 · The difference map is not offered, and 5.1 had overclaimed
+
+**Reproduced correction of my own previous increment.**
+
+5.1 declared that because every node carries `previous_x`/`previous_y`, "where
+a node MOVED" was answerable while additions and removals were not. 5.2 checked
+the actual numbers and the first half was wrong.
+
+When the topology is unchanged, `build.py` writes
+`Placed(n, prev, prev, prev, prev, "carried")` — **previous is a copy of
+current from the same build**, not a coordinate from an earlier version. All
+seven nodes had a displacement of exactly 0.0. A diff drawn from that would
+show "nothing moved", and a reader would conclude the layout is stable across
+versions when no second version was ever compared.
+
+**Carrying a previous field is not the same as having a prior version.** The
+availability test is now displacement, not presence.
+
+Proved in both directions with two real builds rather than by reading the
+classifier: an unchanged rebuild yields 0 moved and the mode reports that
+nothing has been compared; a genuine topology change yields 7 of 8 moved and
+the mode reports displacement as answerable. So the map will offer itself the
+moment the data supports it, and not before.
+
+**No empty diff panel is rendered.** An empty diff is precisely the failure
+this project keeps naming — absence rendered as a measurement — and it is the
+more dangerous form, because "no changes" is a satisfying thing to read.
+
+**A second defect, caught by 5.1's own check.** With no nodes at all, the new
+message claimed every node's previous coordinate was a self-copy — but there
+are no nodes to have any. Two different absences ("nodes exist but none moved"
+and "there are no nodes") were conflated, and naming the wrong one sends the
+reader to look for a comparison that was never possible. Now distinguished.

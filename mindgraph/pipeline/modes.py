@@ -56,11 +56,25 @@ class Mode:
 def build(payload: dict[str, Any]) -> dict[str, Any]:
     """Declare the three modes and which of them this artifact can actually offer."""
     nodes = payload.get("nodes") or []
-    # Prior COORDINATES exist per node; a prior TOPOLOGY does not. That
-    # asymmetry is the whole finding here: the pipeline carries where each node
-    # used to sit, but not which nodes and edges used to exist — so "what
-    # moved" is answerable and "what was added or removed" is not.
-    with_previous = [n for n in nodes if n.get("previous_x") is not None]
+    # 5.1 claimed that because every node carries previous_x/previous_y, "where
+    # a node MOVED" was answerable. 5.2 checked, and it was WRONG.
+    #
+    # When the topology is unchanged the build writes
+    # `Placed(n, prev, prev, prev, prev, "carried")` — previous is a COPY OF
+    # CURRENT from the same build, not a coordinate from an earlier version. A
+    # displacement computed from it is identically zero for every node, and a
+    # diff showing "nothing moved" would report stability that was never
+    # measured. Carrying a previous field is not the same as having a prior
+    # version to compare against.
+    #
+    # So the test is displacement, not presence.
+    def _moved(node: dict[str, Any]) -> bool:
+        px, py = node.get("previous_x"), node.get("previous_y")
+        if px is None or py is None:
+            return False
+        return abs(px - node["x"]) > 0.05 or abs(py - node["y"]) > 0.05
+
+    with_previous = [n for n in nodes if _moved(n)]
     has_positions = len(with_previous) > 0
     has_prior_topology = False  # nothing in the record carries a previous node/edge set
 
@@ -86,12 +100,24 @@ def build(payload: dict[str, Any]) -> dict[str, Any]:
                 "topology to compare"
             ),
             partial=(
-                f"partial: {len(with_previous)} of {len(nodes)} nodes carry previous "
-                f"coordinates, so where a node MOVED is answerable; which nodes or edges "
-                f"were added or removed is not"
+                f"partial: {len(with_previous)} of {len(nodes)} nodes moved since the last "
+                f"layout, so displacement is answerable; which nodes or edges were added "
+                f"or removed is not"
             )
             if has_positions
-            else "",
+            else (
+                (
+                    "no displacement either: every node's previous coordinate is a copy of "
+                    "its current one from the same build, so nothing has been compared. An "
+                    "empty diff here would report stability that was never measured"
+                )
+                if nodes
+                # Caught by 5.1's own check: with NO nodes the message above is
+                # false — there are no previous coordinates to be copies of.
+                # Two different absences, and saying the wrong one sends the
+                # reader to look for a comparison that was never possible.
+                else ""
+            ),
         ),
         Mode(
             key=SCRUBBER,

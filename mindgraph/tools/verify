@@ -1608,6 +1608,97 @@ def check_modes(result: Result) -> None:
     )
 
 
+def check_difference_map(result: Result) -> None:
+    """Stage 5.2 — the diff must not report stability that was never measured.
+
+    Carrying a `previous_x` is not the same as having a prior version. When the
+    topology is unchanged the build writes previous := current, so every
+    displacement is zero — and a diff drawn from that would say "nothing moved"
+    about a comparison that never happened.
+    """
+    import subprocess
+    import tempfile
+
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    import modes as modes_mod  # type: ignore[import-not-found]
+
+    if not DIST.is_file():
+        result.add("difference map declared", False, "no artifact")
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+    payload = json.loads(html_text.split('id="mind-data">', 1)[1].split("</script>", 1)[0])
+
+    moved = [
+        n for n in payload["nodes"]
+        if n.get("previous_x") is not None
+        and (abs(n["previous_x"] - n["x"]) > 0.05 or abs(n["previous_y"] - n["y"]) > 0.05)
+    ]
+    diff = next(m for m in payload["modes"]["modes"] if m["key"] == modes_mod.DIFFERENCE)
+
+    result.add(
+        "the difference map is not offered without a prior version",
+        diff["available"] is False,
+    )
+    if not moved:
+        result.add(
+            "with nothing moved, the page says nothing was COMPARED",
+            "never measured" in diff["partial"],
+            diff["partial"][:60],
+        )
+        result.add(
+            "no empty diff panel is rendered",
+            'id="diff-panel"' not in html_text,
+        )
+
+    # The detector must distinguish "carried" from "moved" — proved with two
+    # real builds rather than by reading the classifier.
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        state = tmpdir / "s.json"
+        topo = json.loads((ROOT / "fixtures" / "topology.json").read_text())
+        topo["nodes"].append(
+            {"id": "fraud_check", "kind": "agent", "instrumentation": "new",
+             "telemetry_coverage": "full"}
+        )
+        topo["edges"] += [
+            {"source": "classify", "target": "fraud_check", "telemetry_coverage": "full"},
+            {"source": "fraud_check", "target": "human_gate", "telemetry_coverage": "full"},
+        ]
+        (tmpdir / "t.json").write_text(json.dumps(topo))
+        script = ROOT / "pipeline" / "build.py"
+        ok = True
+        for args in (
+            ["--state", str(state), "--out", str(tmpdir / "a.json"), "--html", str(tmpdir / "a.html")],
+            ["--state", str(state), "--topology", str(tmpdir / "t.json"),
+             "--out", str(tmpdir / "b.json"), "--html", str(tmpdir / "b.html")],
+        ):
+            proc = subprocess.run(
+                [sys.executable, str(script), *args], capture_output=True, cwd=ROOT, timeout=120
+            )
+            ok = ok and proc.returncode == 0
+        result.add("two builds run for the displacement probe", ok)
+        if ok:
+            grown = json.loads((tmpdir / "b.json").read_text())
+            grown_moved = [
+                n for n in grown["nodes"]
+                if n.get("previous_x") is not None
+                and (abs(n["previous_x"] - n["x"]) > 0.05
+                     or abs(n["previous_y"] - n["y"]) > 0.05)
+            ]
+            result.add(
+                "a real topology change DOES register displacement",
+                len(grown_moved) > 0,
+                f"{len(grown_moved)} moved",
+            )
+            grown_diff = next(
+                m for m in modes_mod.build(grown)["modes"] if m["key"] == modes_mod.DIFFERENCE
+            )
+            result.add(
+                "and the mode then reports displacement as answerable",
+                "moved since the last layout" in grown_diff["partial"],
+            )
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -1767,6 +1858,7 @@ def main(argv: list[str]) -> int:
     check_rails(result)
     check_comparison(result)
     check_modes(result)
+    check_difference_map(result)
     check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()
