@@ -278,6 +278,110 @@ def preattentive_load(resolved: dict[str, Resolved]) -> int:
     return sum(1 for name in counted if name in resolved)
 
 
+# --------------------------------------------------------------------------
+# Stage 0's threshold: 100% of node/edge visual properties must have a named
+# backing field, or the build fails.
+# --------------------------------------------------------------------------
+
+# Every visual property the spec's Sections 4.1 and 4.2 say a mark carries.
+# Transcribed from the report, not derived from the catalogue below — deriving
+# it from what we happened to implement would make the check tautological, and
+# a completeness check that cannot fail is decoration.
+REQUIRED_VISUAL_PROPERTIES: frozenset[str] = frozenset(
+    {
+        # Section 4.1 — node channels
+        "node.position",
+        "node.radius",
+        "node.fill",
+        "node.border",
+        "node.glyph",
+        "node.birth_flag",
+        # Section 4.2 — edge channels
+        "edge.rail_width",
+        "edge.core_luminance",
+        "edge.endpoint_state",
+        "gate.glyph",
+    }
+)
+
+# Properties that are FIXED and deliberately encode nothing. Declared, rather
+# than left out: an omission and a decision look identical in a missing entry,
+# and the whole point of this stage is that absence must be explicit.
+CONSTANT_PROPERTIES: Mapping[str, str] = MappingProxyType(
+    {
+        "node.shape": "circles only (Section 4.1) — encodes nothing, so it has no backing field",
+    }
+)
+
+
+def assert_complete(painted: set[str] | None = None) -> None:
+    """Fail the build unless every visual property is accounted for.
+
+    Checked in BOTH directions, because each catches a different mistake:
+
+    - a required property with no channel is an unbacked visual — the painter
+      decides what it means, and the reader cannot tell;
+    - a declared channel nobody paints is a dead entry that reads as a live
+      feature (ADR 0092's defect class), and it inflates any count of "how
+      much of the contract is enforced".
+
+    `painted` is what the renderer says it draws. It is passed IN rather than
+    discovered, because a check that inspects the catalogue to decide what the
+    catalogue should contain proves nothing.
+    """
+    declared = {ch.name for ch in ALL_CHANNELS}
+
+    missing = REQUIRED_VISUAL_PROPERTIES - declared
+    if missing:
+        raise ContractError(
+            f"visual properties with no backing field: {sorted(missing)}. Section 4.1/4.2 "
+            f"require these to be encoded, and an unbacked visual property means whatever "
+            f"the painter felt like."
+        )
+
+    undeclared = declared - REQUIRED_VISUAL_PROPERTIES
+    if undeclared:
+        raise ContractError(
+            f"channels not named in the spec: {sorted(undeclared)}. Either the report "
+            f"requires it and REQUIRED_VISUAL_PROPERTIES is out of date, or this is an "
+            f"invented requirement — and the loop forbids inventing requirements."
+        )
+
+    overlap = REQUIRED_VISUAL_PROPERTIES & set(CONSTANT_PROPERTIES)
+    if overlap:
+        raise ContractError(
+            f"{sorted(overlap)} are declared both as encoding channels and as constants "
+            f"that encode nothing; one of the two is wrong"
+        )
+
+    if painted is None:
+        return
+
+    unpainted = declared - painted
+    if unpainted:
+        raise ContractError(
+            f"declared channels nothing paints: {sorted(unpainted)}. A channel with no "
+            f"painter reads as an enforced encoding and is not one."
+        )
+    unbacked = painted - declared - set(CONSTANT_PROPERTIES)
+    if unbacked:
+        raise ContractError(
+            f"the renderer paints {sorted(unbacked)}, which no channel backs. Every visual "
+            f"property must name the recorded quantity it is drawn from."
+        )
+
+
+def coverage() -> str:
+    """One line for the build log. Prints the ratio rather than 'OK', because a
+    ratio is checkable at a glance and 'OK' is not."""
+    declared = {ch.name for ch in ALL_CHANNELS}
+    covered = len(REQUIRED_VISUAL_PROPERTIES & declared)
+    return (
+        f"{covered}/{len(REQUIRED_VISUAL_PROPERTIES)} required visual properties backed; "
+        f"{len(CONSTANT_PROPERTIES)} declared constant"
+    )
+
+
 def audit_channels() -> list[str]:
     """Every channel, with its backing field — the material the legend and the
     Stage 0 completeness check are both built from."""

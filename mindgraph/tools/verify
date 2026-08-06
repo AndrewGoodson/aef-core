@@ -235,6 +235,14 @@ def check_contract(result: Result) -> None:
         not hasattr(contract, "_UNKNOWN_TREATMENT"),
         "" if not hasattr(contract, "_UNKNOWN_TREATMENT") else "MappingProxyType is a view",
     )
+    try:
+        contract.assert_complete()
+        complete = True
+        detail = contract.coverage()
+    except contract.ContractError as exc:
+        complete, detail = False, str(exc)
+    result.add("Stage 0 threshold — every visual property is backed", complete, detail)
+
     load = contract.preattentive_load(healthy)
     result.add(
         f"preattentive load within budget ({contract.PREATTENTIVE_BUDGET})",
@@ -257,6 +265,63 @@ def check_dist(result: Result) -> None:
         not siblings,
         "" if not siblings else f"found {[p.name for p in siblings]}",
     )
+
+
+def contract_gate_self_test() -> list[str]:
+    """The Stage 0 gate must be able to FAIL, or its green is worthless.
+
+    Four planted faults plus a control. The control matters as much as the
+    faults: a gate that always raised would catch all four and be useless.
+    """
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    try:
+        import contract  # type: ignore[import-not-found]
+    except ImportError:
+        print("  FAIL  contract gate self-test (module not importable)")
+        return ["contract gate"]
+
+    saved = contract.ALL_CHANNELS
+    undetected: list[str] = []
+
+    def expect_raise(label: str, fn) -> None:  # type: ignore[no-untyped-def]
+        try:
+            fn()
+            undetected.append(label)
+            print(f"  FAIL  gate detects {label}")
+        except contract.ContractError:
+            print(f"  PASS  gate detects {label}")
+
+    try:
+        contract.ALL_CHANNELS = tuple(c for c in saved if c.name != "node.border")
+        expect_raise("a required property with no backing field", contract.assert_complete)
+        contract.ALL_CHANNELS = saved
+
+        contract.ALL_CHANNELS = saved + (
+            contract.Channel(name="node.glow", backing=("vibes",), describes="invented"),
+        )
+        expect_raise("a channel the spec never asked for", contract.assert_complete)
+        contract.ALL_CHANNELS = saved
+
+        names = {c.name for c in saved}
+        expect_raise(
+            "a renderer painting an unbacked property",
+            lambda: contract.assert_complete(painted=names | {"node.halo"}),
+        )
+        expect_raise(
+            "a declared channel no painter uses",
+            lambda: contract.assert_complete(painted=names - {"gate.glyph"}),
+        )
+
+        try:
+            contract.assert_complete(painted=names | set(contract.CONSTANT_PROPERTIES))
+            print("  PASS  gate does NOT fire on an honest renderer")
+        except contract.ContractError as exc:
+            undetected.append(f"false positive on honest renderer: {exc}")
+            print("  FAIL  gate does NOT fire on an honest renderer")
+    finally:
+        contract.ALL_CHANNELS = saved
+
+    return undetected
 
 
 def self_test() -> int:
@@ -292,6 +357,9 @@ def self_test() -> int:
     if clean.failed:
         failures.append(f"false positive on a clean document: {clean.failed}")
 
+    gate_checks = 5  # four planted faults plus the honest-renderer control
+    failures.extend(contract_gate_self_test())
+
     for label, snippet in planted:
         mark = "PASS" if label not in failures else "FAIL"
         print(f"  {mark}  detects {label}")
@@ -300,7 +368,13 @@ def self_test() -> int:
     if failures:
         print(f"SELF-TEST: FAIL — undetected: {failures}")
         return 1
-    print(f"SELF-TEST: PASS ({len(planted)} planted faults all detected)")
+    # Count everything that ran, not just the token scan. A self-test that
+    # under-reports its own coverage is the same defect class as a dashboard
+    # that under-reports what it cannot see.
+    print(
+        f"SELF-TEST: PASS ({len(planted)} planted tokens + {gate_checks} contract-gate "
+        f"checks = {len(planted) + gate_checks} detections, no false positives)"
+    )
     return 0
 
 

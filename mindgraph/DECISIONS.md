@@ -127,3 +127,37 @@ open under a different spelling. Two regression checks added to `tools/verify`.
 
 **Constrains later stages:** renderers must copy before adorning. The contract
 hands out a shared read-only treatment by design.
+
+---
+
+## 2026-08-05 · REQUIRED_VISUAL_PROPERTIES is transcribed, not derived
+
+**Spec silent on.** Section 6 Stage 0 sets the threshold — "100% of node/edge
+visual properties must have a named backing field or the build fails" — but not
+where the list of required properties comes from.
+
+**Chosen.** Transcribe it by hand from Sections 4.1 and 4.2, and compare the
+implemented catalogue against it.
+
+**Why.** Deriving the required list from the channels that happen to be
+implemented makes the check tautological: it would report 100% coverage
+whatever was built, including nothing. The list has to come from the spec so
+that forgetting a channel is detectable. The cost is that the transcription can
+drift from the report, which is why `assert_complete` also fails on a channel
+the spec never named — drift is caught from both sides.
+
+---
+
+## 2026-08-05 · `node.shape` is declared a CONSTANT rather than omitted
+
+**Spec ambiguous on.** Section 4.1 lists "Shape: circles only" among the node
+channels, but a fixed shape encodes nothing and so has no backing field.
+
+**Chosen.** A `CONSTANT_PROPERTIES` entry stating it encodes nothing, rather
+than leaving it out of the catalogue.
+
+**Why.** An omission and a decision look identical in a missing entry. Leaving
+`node.shape` out would be indistinguishable from having forgotten it, and the
+whole point of this stage is that absence must be explicit. `assert_complete`
+also refuses a property declared both as a channel and as a constant, so the
+two lists cannot quietly disagree.
