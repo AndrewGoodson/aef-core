@@ -912,6 +912,85 @@ def check_pixel_stability(result: Result) -> None:
         )
 
 
+def check_birth_flag(result: Result) -> None:
+    """Stage 3.2. The tab must be baked, screenshot-stable, and actually
+    VISIBLE — the last one is why §3d chose it over a halo, so it is measured
+    by rendering rather than asserted."""
+    from datetime import UTC, datetime
+
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    import build as build_mod  # type: ignore[import-not-found]
+
+    generated = datetime(2026, 8, 5, 18, 0, tzinfo=UTC)
+    for first, expect in (
+        ("2026-08-05T17:30:00Z", "NEW"),
+        ("2026-08-05T14:00:00Z", "4h"),
+        ("2026-08-03T18:00:00Z", "2d"),
+        ("2026-06-01T00:00:00Z", None),  # beyond the window: not news
+        (None, None),  # never observed: we do not know its birthday
+    ):
+        got = build_mod._birth_flag(first, generated, 14.0)
+        result.add(f"birth flag for {first} is {expect!r}", got == expect, f"got {got!r}")
+
+    try:
+        build_mod._birth_flag("2026-09-01T00:00:00Z", generated, 14.0)
+        refused = False
+    except build_mod.BuildError:
+        refused = True
+    result.add("a birthday after generated_at is refused, not drawn", refused)
+
+    if not DIST.is_file():
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+    js = html_text.split("<script>")[1].split("</script>")[0]
+    result.add(
+        "the tab is read from the payload, never computed in the browser",
+        "R.birth_flag" in js and "birth_flag" not in js.split("BIRTH TAB")[0].split("age(")[0],
+    )
+
+    # Visible-in-a-screenshot is the whole reason §3d chose a tab over a halo,
+    # so it is measured: render with and without, and diff.
+    chrome = _chrome()
+    if chrome is None:
+        result.add("birth tab is visible in a render", False, "no headless browser")
+        return
+    import subprocess
+    import tempfile
+
+    try:
+        import numpy as np  # type: ignore[import-not-found]
+        from PIL import Image  # type: ignore[import-not-found]
+    except ImportError:
+        result.add("birth tab is visible in a render", False, "PIL/numpy unavailable")
+        return
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        (tmpdir / "a.html").write_text(html_text, encoding="utf-8")
+        (tmpdir / "b.html").write_text(
+            html_text.replace("if (R.birth_flag) {", "if (false) {"), encoding="utf-8"
+        )
+        for name in ("a", "b"):
+            subprocess.run(
+                [chrome, "--headless", "--disable-gpu", "--hide-scrollbars",
+                 "--force-device-scale-factor=1", "--window-size=1200,1400",
+                 "--virtual-time-budget=3000", f"--screenshot={tmpdir}/{name}.png",
+                 (tmpdir / f"{name}.html").as_uri()],
+                capture_output=True, timeout=90,
+            )
+        if not (tmpdir / "a.png").is_file() or not (tmpdir / "b.png").is_file():
+            result.add("birth tab is visible in a render", False, "screenshot failed")
+            return
+        a = np.asarray(Image.open(tmpdir / "a.png").convert("RGB"), dtype=int)
+        b = np.asarray(Image.open(tmpdir / "b.png").convert("RGB"), dtype=int)
+        changed = int((np.abs(a - b).sum(axis=2) > 0).sum())
+        result.add(
+            "birth tab is visible in a render (not just in the source)",
+            changed > 50,
+            f"{changed} pixels exist only because of the tab",
+        )
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -1057,6 +1136,7 @@ def main(argv: list[str]) -> int:
     check_render_nodes(result)
     check_render_edges(result)
     check_pixel_stability(result)
+    check_birth_flag(result)
     check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()

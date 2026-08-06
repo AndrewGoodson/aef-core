@@ -170,6 +170,7 @@ def build(
         # re-derives health from a field, so there is no code path in the
         # browser that could produce a healthy circle over a null.
         resolved = contract_mod.resolve_node(body)
+        birth = _birth_flag(body.get("first_seen_at"), generated_at, dormancy_days)
         body["render"] = {
             "construction": (
                 contract_mod.Construction.UNKNOWN.value
@@ -188,6 +189,7 @@ def build(
                 resolved["node.border"].value if resolved["node.border"].is_measured else "broken"
             ),
             "glyph": resolved["node.glyph"].value if resolved["node.glyph"].is_measured else "?",
+            "birth_flag": birth,
             "annotation": (
                 "" if resolved["node.fill"].is_measured else contract_mod.UNKNOWN_TREATMENT["annotation"]
             ),
@@ -218,6 +220,45 @@ GATE_GLYPH = {
     "escalated": "H!",
     "rolled_back": "H\u21b6",
 }
+
+
+def _birth_flag(
+    first_seen: str | None, generated_at: datetime, window_days: float
+) -> str | None:
+    """The static birth tab, computed HERE and baked in.
+
+    Section 3d's verdict calls for a tab that is "deterministic,
+    screenshot-stable". Computing it in the browser from `Date.now()` would be
+    neither: the label would tick while the artifact sat still, two screenshots
+    of the same file would differ, and the canvas pixel-stability check would
+    fail for a reason that is not a defect.
+
+    So the age is measured against the embedded `generated_at` — it says how
+    old the node was WHEN THE PICTURE WAS TAKEN. The header stamp separately
+    says how old the picture is. Together those answer "when did this appear"
+    without either one drifting.
+
+    `None` when the node has never been observed: we do not know when it
+    appeared, and a tab reading "NEW" over a node with no telemetry would be
+    inventing a birthday.
+    """
+    if first_seen is None:
+        return None
+    born = datetime.fromisoformat(first_seen.replace("Z", "+00:00"))
+    seconds = (generated_at - born).total_seconds()
+    if seconds < 0:
+        raise BuildError(
+            f"a node was first seen at {first_seen}, after the artifact's generated_at "
+            f"({generated_at.isoformat()}). A negative age would render as a birthday in "
+            f"the future, and the clock disagreement behind it is worth fixing at source."
+        )
+    if seconds > window_days * 86400:
+        return None  # not news any more
+    if seconds < 3600:
+        return "NEW"
+    if seconds < 86400:
+        return f"{int(seconds // 3600)}h"
+    return f"{int(seconds // 86400)}d"
 
 
 def _edge_render(

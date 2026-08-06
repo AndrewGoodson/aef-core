@@ -33,10 +33,11 @@ from typing import Any
 # plainly. An empty canvas would be indistinguishable from a broken one, and
 # this whole project is about not letting absence look like something else.
 STAGE_NOTICE = (
-    "Human approval gates now interrupt the edges they sit on \u2014 a "
-    "rectangle, not a diamond, because a gate is an accountable checkpoint a "
-    "proposal passes through rather than a branch that chooses between paths. "
-    "Dashboard panels arrive in Stage 4."
+    "A node that appeared recently carries a static age tab \u2014 not a "
+    "pulsing halo, which would be confusable with an alarm, invisible in a "
+    "screenshot, and would imply live motion in a file that has none. The tab "
+    "says how old the node was when this picture was taken. Dashboard panels "
+    "arrive in Stage 4."
 )
 
 
@@ -184,6 +185,7 @@ _SHELL = """<!doctype html>
     <span class="lg"><i class="ln dashed"></i>&#9711; never taken (open rings)</span>
     <span class="lg"><i class="ln cap"></i>&#9866; retired by a person</span>
     <span class="lg">? nothing was watching</span>
+    <span class="lg"><i class="tab"></i>age when this picture was taken</span>
     <span class="lg"><i class="gt"></i>[H] human gate &#8212; &#8230; awaiting, &#10003; approved, &#10007; rejected</span>
   </div>
   <p class="caption">__LEGEND__</p>
@@ -256,6 +258,8 @@ canvas{display:block;width:100%;height:auto}
 .ln.cap{border-top:2px solid var(--muted)}
 .gt{width:20px;height:11px;flex:0 0 auto;display:inline-block;
   border:1.5px solid var(--warn);border-radius:1px}
+.tab{width:18px;height:10px;flex:0 0 auto;display:inline-block;
+  background:var(--accent);border-radius:1px}
 code{font-family:var(--mono);font-size:.95em}
 """
 
@@ -454,6 +458,20 @@ function draw(){
     cx.font = '600 ' + Math.max(8, Math.round(r*0.8)) + 'px ui-monospace,monospace';
     cx.textAlign = 'center'; cx.textBaseline = 'middle';
     cx.fillText(unknown ? '?' : (GLYPH[R.glyph] || '\u25cf'), x, y);
+
+    // BIRTH TAB — static, baked at build time against generated_at. Not a
+    // halo: a halo would be confusable with an alarm, invisible in a
+    // screenshot, and would imply live motion in a file that has none.
+    if (R.birth_flag) {
+      var tw = 8 + R.birth_flag.length * 7;
+      var tx = x + r - 2, ty = y - r - 13;
+      cx.fillStyle = css('--accent');
+      cx.fillRect(tx, ty, tw, 13);
+      cx.fillStyle = css('--ink');
+      cx.font = '600 9px ui-monospace,monospace';
+      cx.textAlign = 'center'; cx.textBaseline = 'middle';
+      cx.fillText(R.birth_flag, tx + tw/2, ty + 7);
+    }
 
     // Label.
     cx.fillStyle = css('--fg');

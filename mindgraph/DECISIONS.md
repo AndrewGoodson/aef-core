@@ -631,3 +631,35 @@ recorded as unautomatable because no browser had been confirmed present. One
 was: `/Applications/Google Chrome.app`. Checking rather than assuming turned a
 manual item into an automated one, which is worth remembering — the earlier
 entry was honest but stale.
+
+---
+
+## 2026-08-05 · The birth tab is measured against `generated_at`, not `Date.now()`
+
+**A real tension in the spec, resolved by its own words.** Section 4.3 requires
+every visible age to be computed in the page so the file self-reports staleness.
+Section 3d requires the birth tab to be "deterministic, screenshot-stable".
+Applied naively, those conflict: an age computed from `Date.now()` ticks, so two
+screenshots of the same artifact differ.
+
+**Chosen.** Compute the tab at build time against the embedded `generated_at`,
+and bake it in.
+
+**Why that is not a violation of 4.3.** The two labels answer different
+questions and neither loses. The tab says *how old the node was when this
+picture was taken*; the header stamp says *how old this picture is*. A reader
+with both knows when the node appeared, and nothing drifts. Computing the tab
+live would also have failed 3.1's canvas pixel-stability check — for a reason
+that is not a defect, which is the worst kind of test failure.
+
+**Visibility is measured, not asserted.** Section 3d chose a tab over a halo
+partly because a halo is invisible in a screenshot. So the verifier renders the
+page twice, once with the tab suppressed, and counts the difference: 503 pixels
+exist only because of the tab. Claiming "the tab is visible" without rendering
+would have repeated exactly the mistake the verdict was correcting.
+
+**Two refusals.** A `first_seen_at` after `generated_at` fails the build — a
+negative age would render as a birthday in the future, and the clock
+disagreement behind it is worth fixing at source rather than clamping. A node
+never observed gets no tab: "NEW" over a node with no telemetry would be
+inventing a birthday.
