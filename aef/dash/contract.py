@@ -368,25 +368,52 @@ def panel_spec(key: str) -> PanelSpec:
 # Read-only (Milestone 1c).
 # --------------------------------------------------------------------------
 
-# Declared here, asserted by the renderer's tests. A dashboard with controls is
-# an unaudited control plane reachable by anyone who can open a file — no
-# authentication, no audit log entry, no HITL gate. The loop's whole approval
-# story routes through a signed manifest held by a person; a button on a web
-# page is a second door into it that nothing in this repo would record.
+# Declared here and imported by the renderer's tests rather than re-listed,
+# because two lists nobody compares drift (ADR 0091).
+#
+# This list used to be WIDER and wrong. It banned `<button`, `onclick=` and
+# `onchange=` as proxies for "a control", and the first page that needed to
+# switch between views tripped it. A tab that changes which locally-loaded data
+# is drawn writes nothing, requests nothing and stores nothing — the proxy was
+# catching INTERACTIVITY when the property being protected is a WRITE PATH.
+#
+# Replaced rather than trimmed, on ADR 0093's precedent, and the replacement is
+# stricter where it counts: it adds sessionStorage, indexedDB, external
+# src/href/@import/url(http...) references, and Math.random — the last of which
+# caught a real violation in mind.py, where edge particle phases were seeded
+# randomly, so identical data drew a different picture on every load.
+#
+# The page still cannot act. A page with a write path is an unaudited control
+# plane reachable by anyone who can open a file: no authentication, no audit
+# entry, no HITL gate — and this loop's approval story routes through a signed
+# manifest held by a person.
 FORBIDDEN_HTML_CONSTRUCTS: tuple[str, ...] = (
+    # Write paths and network egress — the actual property being protected.
     "<form",
-    "<button",
     "<input",
     "<textarea",
-    "onclick=",
     "onsubmit=",
-    "onchange=",
     "fetch(",
     "XMLHttpRequest",
     "navigator.sendBeacon",
     "WebSocket",
-    "localStorage.setItem",
+    "localStorage",
+    "sessionStorage",
+    "indexedDB",
     "document.cookie",
+    # External references the browser would load. A single-file artifact that
+    # pulls a font or a script is not offline, and it fails SILENTLY — the page
+    # still renders, just wrong, which is the worst of the available failures.
+    "@import",
+    'src="http',
+    "src='http",
+    'href="http',
+    "href='http",
+    "url(http",
+    # Non-determinism in layout or rendering. The same data must produce the
+    # same picture, or the persisted layout is a lie and no two screenshots
+    # agree. This one caught a live violation in mind.py.
+    "Math.random",
 )
 
 

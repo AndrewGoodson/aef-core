@@ -43,14 +43,79 @@ class MindNode:
     detail: str = ""
     weight: float = 1.0
     hitl: bool = False
+    # Remembered layout. None means NEW — the page relaxes it in visibly
+    # rather than dropping it at the origin, because the frame in which a node
+    # first appears is the most informative one in the product.
+    x: float | None = None
+    y: float | None = None
+    is_new: bool = False
+    runs: int = 0
+
+    def __post_init__(self) -> None:
+        # ADR 0107's rule, applied to a pixel. In a graph the temptation is
+        # stronger than in a panel, because an un-instrumented node still draws
+        # as a perfectly nice circle — there is no empty space to notice.
+        # Reproduced: MindNode(runs=0, state="healthy") rendered a full,
+        # confident dot for a node nothing has ever executed.
+        if self.runs == 0 and self.state != PanelState.UNKNOWN.value:
+            raise ValueError(
+                f"node {self.id!r} reports state={self.state!r} with runs=0. A node nothing "
+                f"has executed has no health to report — it is UNKNOWN. A healthy-looking "
+                f"circle over no data is the failure this whole design exists to prevent, "
+                f"and on a graph it is invisible because nothing looks missing."
+            )
+        if self.weight < 0:
+            raise ValueError(f"node {self.id!r} has negative weight {self.weight}")
 
 
 @dataclass(frozen=True)
 class MindEdge:
+    """Two quantities, deliberately not collapsed into one.
+
+    `traversals` is cumulative and never decays — it is drawn as THICKNESS and
+    answers "how much has this path ever been used". `liveness` is a recency in
+    [0, 1] drawn as BRIGHTNESS, and is **None when the path has never fired**.
+
+    That separation is the whole point: an abandoned path is thick and dim, a
+    path never taken is thin and dashed. One decayed scalar would render both
+    as the same faint line, which is the failure this design exists to avoid.
+    """
+
     source: str
     target: str
     label: str = ""
     active: bool = False
+    traversals: int = 0
+    liveness: float | None = None
+
+    def __post_init__(self) -> None:
+        # Reproduced: traversals=-5 reaches the canvas as Math.log1p(-5) = NaN,
+        # lineWidth becomes NaN, and the edge SILENTLY DISAPPEARS. A graph that
+        # drops a connection without saying so is worse than one that refuses
+        # to draw, because the missing edge is indistinguishable from an
+        # absent relationship.
+        if self.traversals < 0:
+            raise ValueError(
+                f"edge {self.source}->{self.target} has {self.traversals} traversals. A "
+                f"negative count reaches the canvas as NaN line width and the edge vanishes "
+                f"without a message."
+            )
+        if self.liveness is not None and not 0.0 <= self.liveness <= 1.0:
+            raise ValueError(
+                f"edge {self.source}->{self.target} has liveness {self.liveness}, outside "
+                f"[0, 1]. Alpha clamps silently, so an out-of-range value renders as a "
+                f"perfectly ordinary line that means nothing."
+            )
+        # The invariant the whole encoding rests on: never-traversed is None,
+        # not zero. If a caller passes 0.0 for an edge that never fired it
+        # would draw as merely stale, which is the one confusion this design
+        # exists to prevent.
+        if self.traversals == 0 and self.liveness is not None:
+            raise ValueError(
+                f"edge {self.source}->{self.target} has 0 traversals but liveness="
+                f"{self.liveness}. Never-fired must be None — a 0.0 renders as 'abandoned', "
+                f"and abandoned is a measurement while never-fired is an absence."
+            )
 
 
 @dataclass(frozen=True)
@@ -61,7 +126,18 @@ class MindGraph:
     caption: str = ""
     legend: tuple[tuple[str, str], ...] = field(default_factory=tuple)
 
-    def to_payload(self) -> dict[str, Any]:
+    def __post_init__(self) -> None:
+        ids = [n.id for n in self.nodes]
+        duplicates = sorted({i for i in ids if ids.count(i) > 1})
+        if duplicates:
+            # Reproduced: the JS builds `idx[node.id]`, so a duplicate id keeps
+            # only the last one and every edge silently re-points at it. One
+            # node vanishes and the graph still looks complete.
+            raise ValueError(
+                f"duplicate node ids {duplicates}. The layout indexes nodes by id, so a "
+                f"duplicate silently discards one and re-points its edges — leaving a graph "
+                f"that looks whole and is not."
+            )
         known = {n.id for n in self.nodes}
         dangling = [
             (e.source, e.target)
@@ -77,6 +153,8 @@ class MindGraph:
                 f"dropped silently by every layout engine, which makes an incomplete graph "
                 f"look finished."
             )
+
+    def to_payload(self) -> dict[str, Any]:
         return {
             "title": self.title,
             "caption": self.caption,
@@ -89,11 +167,22 @@ class MindGraph:
                     "detail": n.detail,
                     "weight": n.weight,
                     "hitl": n.hitl,
+                    "x": n.x,
+                    "y": n.y,
+                    "isNew": n.is_new,
+                    "runs": n.runs,
                 }
                 for n in self.nodes
             ],
             "edges": [
-                {"source": e.source, "target": e.target, "label": e.label, "active": e.active}
+                {
+                    "source": e.source,
+                    "target": e.target,
+                    "label": e.label,
+                    "active": e.active,
+                    "traversals": e.traversals,
+                    "liveness": e.liveness,
+                }
                 for e in self.edges
             ],
         }
@@ -113,6 +202,7 @@ def render_mind(graphs: list[MindGraph]) -> str:
             ("degraded", "degraded"),
             ("unknown", "no data"),
             ("hitl", "human approval gate"),
+            ("newnode", "first seen this run"),
         )
     )
     return (
@@ -214,6 +304,7 @@ canvas{display:block;width:100%;height:min(68vh,640px);touch-action:none}
 .dot.degraded{background:var(--bad)}
 .dot.unknown{background:transparent;border:1.5px dashed var(--unk)}
 .dot.hitl{background:transparent;border:2px solid var(--warn)}
+.dot.newnode{background:transparent;border:2px solid var(--accent)}
 .hint{position:absolute;right:1rem;bottom:.9rem;font:11px/1 var(--mono);
   letter-spacing:.05em;color:var(--muted)}
 footer{color:var(--muted);font-size:.78rem;border-top:1px solid var(--line);
@@ -244,12 +335,21 @@ function load(i){
   var cxp=W/2||400, cyp=H/2||300;
   nodes=g.nodes.map(function(n,k){
     var a=(k/g.nodes.length)*Math.PI*2;
-    return Object.assign({},n,{x:cxp+Math.cos(a)*140+(k%3)*7,
-      y:cyp+Math.sin(a)*140+(k%5)*5,vx:0,vy:0,pin:false});
+    // A remembered position is restored and PINNED. Only nodes with no memory
+    // relax into place, so the map stays where the reader left it — the
+    // published work on user-guided layout is explicit that structural
+    // consistency beats optimal aesthetics, because the reader's memory of
+    // where things were IS the value.
+    var placed = (n.x!==null && n.x!==undefined && n.y!==null && n.y!==undefined);
+    return Object.assign({},n,{
+      x: placed ? n.x : cxp+Math.cos(a)*150+(k%3)*7,
+      y: placed ? n.y : cyp+Math.sin(a)*150+(k%5)*5,
+      vx:0, vy:0, pin: placed, born: placed?0:1
+    });
   });
   idx={}; nodes.forEach(function(n){idx[n.id]=n;});
-  edges=g.edges.map(function(e){return {a:idx[e.source],b:idx[e.target],
-    label:e.label,active:e.active,ph:Math.random()};});
+  edges=g.edges.map(function(e,i){return {a:idx[e.source],b:idx[e.target],
+    label:e.label,active:e.active,ph:((i*0.6180339887)%1)};});
   document.querySelectorAll('.tab').forEach(function(b,j){
     b.classList.toggle('on', j===i);});
 }
@@ -279,6 +379,7 @@ function step(){
     n=nodes[i];
     n.vx+=(W/2-n.x)*0.0016; n.vy+=(H/2-n.y)*0.0016;
     if(n.pin||n===drag){n.vx=0;n.vy=0;continue;}
+    if(n.born){ n.born+=1; if(n.born>190){ n.born=0; n.pin=true; } }
     n.vx*=0.86; n.vy*=0.86;
     n.x+=Math.max(-6,Math.min(6,n.vx)); n.y+=Math.max(-6,Math.min(6,n.vy));
     var r=radius(n)+4;
@@ -304,11 +405,22 @@ function draw(){
   edges.forEach(function(e){
     if(!e.a||!e.b)return;
     var lit = hover && (e.a===hover||e.b===hover);
+    // THICKNESS = cumulative traversals, log-scaled so one very hot path does
+    // not flatten every other. Never decays.
+    var w = 1 + Math.log1p(e.traversals||0)*0.85;
+    // BRIGHTNESS = liveness. null means NEVER traversed: drawn thin and
+    // dashed, distinct from an abandoned path which stays THICK and merely
+    // dims. Collapsing those two into one faint line is the failure this
+    // encoding exists to avoid.
+    var never = (e.liveness===null||e.liveness===undefined);
+    var live = never ? 0 : e.liveness;
+    cx.setLineDash(never?[4,4]:[]);
     cx.strokeStyle = lit ? css('--accent') : css('--line');
-    cx.lineWidth = lit ? 1.8 : 1.1;
-    cx.globalAlpha = hover && !lit ? 0.28 : 1;
+    cx.lineWidth = lit ? Math.max(w,1.8) : w;
+    cx.globalAlpha = (hover&&!lit) ? 0.2 : (never ? 0.35 : 0.35+live*0.65);
     cx.beginPath(); cx.moveTo(e.a.x,e.a.y); cx.lineTo(e.b.x,e.b.y); cx.stroke();
-    if(e.active && !CALM){
+    cx.setLineDash([]);
+    if(e.active && !CALM && !never && live>0.15){
       var p=((t*0.35+e.ph)%1);
       var px=e.a.x+(e.b.x-e.a.x)*p, py=e.a.y+(e.b.y-e.a.y)*p;
       cx.fillStyle=css('--accent'); cx.globalAlpha=(hover&&!lit)?0.3:0.95;
@@ -334,7 +446,21 @@ function draw(){
     if(n.state==='unknown'){cx.setLineDash([3,3]);cx.strokeStyle=col;cx.stroke();cx.setLineDash([]);}
     if(n.hitl){
       cx.beginPath(); cx.arc(n.x,n.y,r+4.5,0,6.284);
-      cx.strokeStyle=css('--hitl'); cx.lineWidth=2; cx.stroke();
+      cx.strokeStyle=css('--warn'); cx.lineWidth=2; cx.stroke();
+    }
+    // Seen for the first time this generation: an expanding ring. This is the
+    // frame worth catching — the graph grew, and something caused that.
+    if(n.isNew){
+      if(CALM){
+        cx.beginPath(); cx.arc(n.x,n.y,r+6,0,6.284);
+        cx.strokeStyle=css('--accent'); cx.lineWidth=1.4; cx.stroke();
+      } else {
+        var ring=(t*0.55)%1;
+        cx.beginPath(); cx.arc(n.x,n.y,r+2+ring*18,0,6.284);
+        cx.strokeStyle=css('--accent'); cx.lineWidth=1.4;
+        cx.globalAlpha=(dim?0.2:1)*(1-ring); cx.stroke();
+        cx.globalAlpha=dim?0.25:1;
+      }
     }
     cx.fillStyle=css('--fg'); cx.font='500 11px ui-monospace,SFMono-Regular,Menlo,monospace';
     cx.textAlign='center'; cx.textBaseline='top';

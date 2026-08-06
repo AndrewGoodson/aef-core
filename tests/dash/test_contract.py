@@ -563,13 +563,41 @@ def test_emittable_is_gone() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_forbidden_constructs_cover_the_four_ways_to_get_a_write() -> None:
-    """Not a spelling test: each of these is a distinct mechanism, and a list
-    that covered only `<form>` would miss the three that matter more."""
+def test_forbidden_constructs_cover_every_mechanism_not_every_spelling() -> None:
+    """Each entry is a distinct mechanism. A list covering only `<form>` would
+    miss the ones that matter more.
+
+    `<button` is deliberately ABSENT. It was in this list as a proxy for "a
+    control" and it caught a view-switching tab, which writes nothing, requests
+    nothing and stores nothing. The property being protected is a write path,
+    not interactivity — see the comment above the constant.
+    """
     joined = " ".join(FORBIDDEN_HTML_CONSTRUCTS)
+    # Writes
     assert "<form" in joined  # classic submit
-    assert "<button" in joined  # scripted handler
-    assert "fetch(" in joined  # background request
-    assert "XMLHttpRequest" in joined  # the older background request
-    assert "navigator.sendBeacon" in joined  # the one people forget
-    assert "WebSocket" in joined  # the persistent one
+    assert "onsubmit=" in joined  # scripted submit
+    # Network egress, including the two people forget
+    assert "fetch(" in joined
+    assert "XMLHttpRequest" in joined
+    assert "navigator.sendBeacon" in joined
+    assert "WebSocket" in joined
+    # Client-side storage, all three
+    assert "localStorage" in joined
+    assert "sessionStorage" in joined
+    assert "indexedDB" in joined
+    # External references — a single-file artifact that fetches a font is not
+    # offline, and it fails silently.
+    assert "@import" in joined
+    assert "url(http" in joined
+    assert any(c.startswith("src=") for c in FORBIDDEN_HTML_CONSTRUCTS)
+    assert any(c.startswith("href=") for c in FORBIDDEN_HTML_CONSTRUCTS)
+    # Non-determinism in what gets drawn
+    assert "Math.random" in joined
+
+
+def test_button_is_not_forbidden_and_that_is_deliberate() -> None:
+    """Pinned so the proxy does not creep back in. If a future page needs a
+    real control, the thing to add is the write path it would use — not the
+    element it would use to trigger it."""
+    assert "<button" not in FORBIDDEN_HTML_CONSTRUCTS
+    assert "onclick=" not in FORBIDDEN_HTML_CONSTRUCTS
