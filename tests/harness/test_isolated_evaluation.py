@@ -17,12 +17,14 @@ are built to judge. `test_a_lie_through_the_node_contract_is_still_possible`
 pins that as a deliberate boundary rather than an oversight.
 """
 
+import os
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+import aef.harness.isolated_suite as isolated_suite
 from aef.harness.corpus import Scenario, Split
 from aef.harness.isolated import IsolationError, NodeWorkerSession, graph_from
 from aef.harness.isolated_suite import run_corpus_isolated
@@ -221,6 +223,65 @@ def test_a_graph_that_cannot_be_built_fails_every_scenario(corpus) -> None:  # t
     results = run_corpus_isolated(ws, scenarios, entrypoint="agents.graph:build_graph")
     assert len(results) == 3
     assert all(not r.outcome.passed and r.failure for r in results.values())
+
+
+def test_a_malformed_handshake_cannot_leave_the_worker_running(corpus) -> None:  # type: ignore[no-untyped-def]
+    """A candidate can print a syntactically valid but malformed first frame.
+
+    The parent must still own the process lifetime.  Previously ``graph=null``
+    raised ``TypeError`` outside every cleanup branch in ``_handshake`` and the
+    gate returned while the worker kept running.
+    """
+    ws, scenarios = corpus
+    pid_file = ws / "worker.pid"
+    (ws / "agents" / "graph.py").write_text(
+        "import os, time\n"
+        f"open({str(pid_file)!r}, 'w').write(str(os.getpid()))\n"
+        "print('{\"graph\":null}', flush=True)\n"
+        "time.sleep(60)\n"
+    )
+
+    run_corpus_isolated(ws, scenarios, entrypoint="agents.graph:build_graph")
+    pid = int(pid_file.read_text())
+    try:
+        with pytest.raises(ChildProcessError):
+            os.waitpid(pid, os.WNOHANG)
+    finally:
+        # Keep the reproducer from leaking the exact process it detects when
+        # it is run against the pre-fix implementation.
+        try:
+            os.kill(pid, 9)
+            os.waitpid(pid, 0)
+        except (ChildProcessError, ProcessLookupError):
+            pass
+
+
+def test_graph_reconstruction_failure_closes_and_reaps_the_worker(corpus, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Once a session is acquired, every setup exit must release it."""
+    ws, scenarios = corpus
+    (ws / "agents" / "graph.py").write_text(HONEST)
+    sessions: list[NodeWorkerSession] = []
+
+    def start(*args, **kwargs):  # type: ignore[no-untyped-def]
+        session = NodeWorkerSession(*args, **kwargs)
+        sessions.append(session)
+        return session
+
+    def fail_reconstruction(session):  # type: ignore[no-untyped-def]
+        raise RuntimeError("parent could not reconstruct graph")
+
+    monkeypatch.setattr(isolated_suite, "NodeWorkerSession", start)
+    monkeypatch.setattr(isolated_suite, "graph_from", fail_reconstruction)
+    try:
+        results = isolated_suite.run_corpus_isolated(
+            ws, scenarios, entrypoint="agents.graph:build_graph"
+        )
+        assert all(result.failure for result in results.values())
+        assert sessions[0].closed
+        assert sessions[0].returncode is not None
+    finally:
+        for session in sessions:
+            session.close()
 
 
 def test_the_session_reports_a_worker_that_will_not_start() -> None:

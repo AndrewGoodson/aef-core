@@ -84,6 +84,8 @@ def run_corpus_isolated(
         graph = graph_from(session)
         compiled = graph.compile()
     except (IsolationError, Exception) as exc:  # noqa: BLE001 - a bad graph fails every scenario
+        if session is not None:
+            session.close()
         reason = f"{type(exc).__name__}: {exc}"
         return {s.id: _failed(reason) for s in scenarios}
 
