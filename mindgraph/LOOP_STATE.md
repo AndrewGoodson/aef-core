@@ -1,5 +1,5 @@
 STATUS: IN_PROGRESS
-STAGE: 5 — Temporal modes (Stages 0-4 complete) (Stages 0 and 1 complete; dist/index.html now exists)
+STAGE: 6 — Themes (Stages 0-5 complete)
 CHECKLIST:
 - [x] init.scaffold — pipeline/ dist/ fixtures/ tools/ created; RESEARCH_REPORT.md installed
 - [x] init.fixtures — synthetic dataset covering every required edge case (fixtures/fleet.json)
@@ -27,16 +27,16 @@ CHECKLIST:
 - [x] 4.6 — loop-vs-human panel labelled OBSERVATIONAL; disclose that the direct-human-edit counterfactual is not stored
 - [x] 5.1 — temporal mode 1: default accumulated present, NAMED, with the other two modes stating what they would need
 - [x] 5.2 — difference map NOT OFFERED: nothing has been compared. Detector in place so it becomes available the moment a build actually relaxes (see DECISIONS.md), two synced panes (primary "what changed")
-- [ ] 5.3 — temporal mode 3: opt-in scrubber, staged transitions, explicit user action only; respect prefers-reduced-motion; all static end-states fully interpretable
+- [x] 5.3 — scrubber NOT OFFERED, on two independent blockers (no retained wiring-version sequence; staged transitions are motion, banned). A traffic-window sequence DOES exist and is named as a different question, not repurposed. prefers-reduced-motion verified by rendering both preferences against a control page that proves the flag bites (see DECISIONS.md)
 - [ ] 6.1 — dual themes via prefers-color-scheme with identical semantic ordering (§3f verdict B)
 - [ ] 6.2 — MANUAL: on-hardware polarity A/B (light vs dark) for "find the abandoned path" and "find the missing-reporting node"
 - [ ] 6.3 — MANUAL: comparison-mode A/B (difference-map vs two-pane vs scrubber) measured on error rate and time, not FPS
-NEXT: 5.3 — timeline scrubber. 5.1 established no SEQUENCE of versions is retained (one state file, overwritten each build), and motion is banned outright so §3g's staged transitions cannot be animation anyway. Expect this to be unavailable too; state it and move on rather than inventing a sequence.
+NEXT: 6.1 — dual themes via prefers-color-scheme with identical semantic ordering. :root[data-theme] overrides have existed since Stage 2, so CHECK whether this is already satisfied rather than assuming either way; if it is, the increment is the verification, not new CSS. The reduced-motion harness added in 5.3 (_shot_args plus a control page proving the media-query flag is effective) is directly reusable for prefers-color-scheme.
 BLOCKERS: none
 MANUAL_CHECKS:
 - (CLOSED 2026-08-05) headless browser load — Google Chrome was found at /Applications/Google Chrome.app. The verifier now opens dist/index.html from file:// headless with NetworkService disabled, twice, and compares canvas pixels. This is no longer a manual check.
 - 6.2 and 6.3 are operator task-tests on target hardware and cannot be automated
-LAST_RUN: 2026-08-05 — increment 5.2. The difference map is NOT OFFERED, and finding out why corrected an overclaim I made in 5.1.
+LAST_RUN: 2026-08-05 — increment 5.3. The scrubber is NOT OFFERED, for two reasons either of which is fatal alone: topology.json carries layout_version as a scalar with no history and the state file is overwritten each build, so no earlier wiring version exists to scrub back to; and staged add/remove/persist transitions are motion, which is banned outright, so section 3g's GraphDiaries treatment cannot be drawn here with or without a sequence. Checking the data first paid off: a sequence DOES exist -- the event log spans 3 monthly windows and the edge set carrying traffic changes across them (3 -> 5 -> 5) -- but it is traffic over time, not wiring over time, and the page says so rather than wiring a scrubber to the wrong axis. prefers-reduced-motion is verified by rendering, not asserted: a control page built to differ under the flag proved the instrument bites (160000 px), and the artifact then differed by 0. A probe found _scrubber_partial would write 'spans 1 windows ... a DIFFERENT sequence does exist' if handed fabricated variance; it now refuses, and the verifier measures the windows with a separate implementation so a bug cannot agree with itself.
 5.1 said that because every node carries previous_x/previous_y, 'where a node MOVED' was answerable. Checked it: WRONG. When the topology is unchanged the build writes Placed(n, prev, prev, prev, prev, 'carried') — previous is a COPY OF CURRENT from the same build. All 7 nodes had displacement 0.0. A diff drawn from that would show 'nothing moved' and the reader would conclude the layout is stable across versions, when no second version was ever compared. Carrying a previous field is not the same as having a prior version.
 The test is now displacement, not presence — proved with two REAL builds: unchanged rebuild gives 0 moved and the mode says nothing was compared; a topology change gives 7 of 8 moved and the mode reports displacement as answerable. So the detector is correct in both directions and the mode will offer itself the moment the data supports it.
 No empty diff panel is rendered. An empty diff is exactly the failure this project keeps naming: absence rendered as a measurement.

@@ -1001,3 +1001,81 @@ message claimed every node's previous coordinate was a self-copy — but there
 are no nodes to have any. Two different absences ("nodes exist but none moved"
 and "there are no nodes") were conflated, and naming the wrong one sends the
 reader to look for a comparison that was never possible. Now distinguished.
+
+## 5.3 — the scrubber, and the sequence that is not the one it needs
+
+**Decision: the timeline scrubber is NOT OFFERED, on two independent blockers.**
+
+Either one alone is fatal, and they are stated separately on the page so that
+removing one reason cannot make the mode look available.
+
+1. **No retained sequence of wiring versions.** `topology.json` carries
+   `layout_version` as a single scalar (`7`) and no history array; the layout
+   state file is overwritten on every build. Verified by building twice: the
+   file was byte-identical in length, `layout_version` unchanged, nothing
+   appended. There is no earlier version to scrub back to.
+2. **Staged transitions are motion, and motion is banned.** §3g specifies the
+   GraphDiaries add/remove/persist treatment. `transition:`, `animation:`,
+   `@keyframes`, `requestAnimationFrame` and `setInterval` are all forbidden
+   tokens with planted faults (5.1). So §3g's scrubber cannot be drawn here
+   *with or without* a sequence.
+
+§3g already makes the scrubber SECONDARY and explicitly user-initiated, and
+adjudicates the difference map as the primary surface for "what changed". Its
+absence therefore costs less than 5.2's did.
+
+### What checking the data first actually found
+
+"There is no sequence" would have been FALSE, and stating it would have been
+the same class of error 5.2 caught in 5.1. A sequence does exist: the event log
+spans **3 monthly windows**, and the set of edges carrying traffic changes
+across them — **3 → 5 → 5** distinct edges. The declared edge set (10) never
+changed in any of them.
+
+So the distinction is precise, and the page states it: **that is traffic over
+time, not wiring over time.** A scrubber built on that axis would answer *"when
+did this path go quiet"*, not *"what did the wiring look like at version 5"*.
+Both are worth answering. Presenting the first while labelled as the second is
+exactly the substitution this whole artifact exists to refuse — and it is the
+mistake a later contributor is most likely to make, precisely because the
+timestamps are right there and look sufficient.
+
+It was not built. §3g asks for the versions scrubber; a traffic scrubber is a
+different requirement, and inventing it here would be scope the spec never set.
+Named, measured, and left for the owner to decide on.
+
+### prefers-reduced-motion: proved, not asserted
+
+§5 requires the page to respect `prefers-reduced-motion` and keep every static
+end-state interpretable. With motion banned outright there is no transient
+state, so the static end-state is the *only* state — in both preferences.
+
+That claim is trivially satisfiable and therefore easy to fake, because **a
+null result from a broken instrument is indistinguishable from a null result
+from a true claim.** So the check proves the instrument bites first: a control
+page built to change colour under `@media (prefers-reduced-motion: reduce)` is
+rendered with and without Chrome's `--force-prefers-reduced-motion`. It differed
+by **160000 pixels** — the whole 400×400 control. Only then is the artifact
+measured: **0 differing pixels**.
+
+Probed by pointing the harness at a nonexistent flag. The control failed and
+the parity check reported `not measured — the control proved the flag inert`
+rather than a comfortable pass.
+
+### A probe found a real defect in this increment
+
+Handed fabricated variance on a single window, `_scrubber_partial()` wrote:
+
+> "a DIFFERENT sequence does exist: the event log spans **1 windows** and the
+> set of edges carrying traffic changes across them"
+
+One window is not a sequence. Two fixes, because one was not enough:
+
+- `_scrubber_partial()` now refuses `window_count < 2` itself. The function that
+  writes a claim is the one that must refuse it — delegating that upstream and
+  hoping is how the first version failed.
+- The verifier no longer measures the windows by calling
+  `modes.traffic_windows()`. It parses `events.jsonl` directly with a separate
+  implementation, because a check that shares its subject's code shares its
+  bugs and agrees with itself. Both now agree at `[3, 5, 5]`, and that agreement
+  means something.

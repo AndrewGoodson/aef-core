@@ -25,12 +25,52 @@ cannot be drawn is worse than one that offers fewer modes and says why.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any
 
 ACCUMULATED = "accumulated_present"
 DIFFERENCE = "difference_map"
 SCRUBBER = "scrubber"
+
+
+def traffic_windows(events: Any) -> dict[str, Any] | None:
+    """Measure whether a SEQUENCE of any kind exists in the event log.
+
+    5.3 asked whether the scrubber could be built, and the useful answer turned
+    out not to be a flat no. A sequence does exist — it is simply not the one
+    Section 3g's scrubber is about, and the distinction is worth measuring
+    rather than hand-waving, because "there is a timeline in the data" is
+    exactly the observation that would tempt a later contributor to wire a
+    scrubber onto the wrong axis.
+
+    Returns the per-calendar-month set of edges that carried traffic. `None`
+    when there is nothing to measure.
+    """
+    if not events:
+        return None
+
+    runs: dict[str, list[Any]] = defaultdict(list)
+    for event in events:
+        runs[event.run_id].append(event)
+
+    by_window: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    for entries in runs.values():
+        ordered = sorted(entries, key=lambda e: e.at)
+        window = ordered[0].at.strftime("%Y-%m")
+        for first, second in zip(ordered, ordered[1:], strict=False):
+            by_window[window].add((first.node_id, second.node_id))
+
+    if len(by_window) < 2:
+        return None
+
+    counts = [len(by_window[w]) for w in sorted(by_window)]
+    sets = list(by_window.values())
+    return {
+        "window_count": len(by_window),
+        "edges_per_window": counts,
+        "edge_set_varies": any(s != sets[0] for s in sets),
+    }
 
 
 @dataclass(frozen=True)
@@ -53,7 +93,39 @@ class Mode:
         }
 
 
-def build(payload: dict[str, Any]) -> dict[str, Any]:
+def _scrubber_partial(windows: dict[str, Any] | None) -> str:
+    """State the sequence that DOES exist, and why it answers a different question.
+
+    Saying only "no sequence" would be false — the event log is timestamped and
+    the observed traffic does change across windows. Saying "a sequence exists"
+    without the qualifier would be worse, because the reader would expect the
+    scrubber to arrive by wiring it to that axis, and the resulting control
+    would be labelled "wiring versions" while scrubbing traffic.
+    """
+    if not windows or not windows.get("edge_set_varies"):
+        return ""
+    # Guarded here as well as at the measurement, because this is the function
+    # that writes the sentence. A probe that fabricated `edge_set_varies` on a
+    # single window produced "the event log spans 1 windows and the set of edges
+    # carrying traffic changes across them" — one window is not a sequence, and
+    # the claim would have been false in the exact way the sentence exists to
+    # prevent. The writer of a claim refuses it; it does not delegate that
+    # upstream and hope.
+    if int(windows.get("window_count", 0)) < 2:
+        return ""
+    counts = " → ".join(str(c) for c in windows["edges_per_window"])
+    return (
+        f"a DIFFERENT sequence does exist: the event log spans {windows['window_count']} "
+        f"windows and the set of edges carrying traffic changes across them ({counts} "
+        f"distinct edges). That is traffic over time, not wiring over time — the "
+        f"declared edge set never changed. A scrubber built on it would answer “when "
+        f"did this path go quiet”, not “what did the wiring look like at version "
+        f"5”, and presenting the first as the second is the substitution this page "
+        f"exists to refuse"
+    )
+
+
+def build(payload: dict[str, Any], windows: dict[str, Any] | None = None) -> dict[str, Any]:
     """Declare the three modes and which of them this artifact can actually offer."""
     nodes = payload.get("nodes") or []
     # 5.1 claimed that because every node carries previous_x/previous_y, "where
@@ -122,12 +194,21 @@ def build(payload: dict[str, Any]) -> dict[str, Any]:
         Mode(
             key=SCRUBBER,
             label="timeline scrubber",
-            describes="trajectory across many versions, user-initiated, staged transitions",
+            describes=(
+                "trajectory across many WIRING versions, user-initiated, staged "
+                "add/remove/persist transitions"
+            ),
             available=False,
             requires=(
-                "a SEQUENCE of retained versions. One state file exists and it is "
-                "overwritten on every build, so there is nothing to scrub through"
+                "two independent things, and the absence of either alone is fatal. (1) a "
+                "SEQUENCE of retained wiring versions: topology.json carries layout_version "
+                "as a single scalar and no history, and the layout-state file is overwritten "
+                "on every build, so there is no earlier version to scrub back to. (2) staged "
+                "transitions, which are motion — motion is banned outright in this artifact, "
+                "so the GraphDiaries treatment Section 3g specifies cannot be drawn here at "
+                "all, with or without a sequence"
             ),
+            partial=_scrubber_partial(windows),
         ),
     ]
 
@@ -137,9 +218,17 @@ def build(payload: dict[str, Any]) -> dict[str, Any]:
         "available_count": sum(1 for m in modes if m.available),
         "modes": [m.to_payload() for m in modes],
         "has_prior_topology": has_prior_topology,
+        # Section 5 requires the page to respect prefers-reduced-motion and to keep
+        # every static end-state fully interpretable. With motion banned outright
+        # there is no transient state to end from — the static end-state is the
+        # ONLY state, in both motion preferences. Stated as a field so the
+        # verifier can render both preferences and compare, rather than take the
+        # claim on trust.
+        "static_only": True,
         "note": (
             "Section 3g makes the difference map primary and the scrubber secondary. "
             "Neither is offered here, because offering a mode that cannot be drawn is "
-            "worse than offering fewer and saying why"
+            "worse than offering fewer and saying why. Nothing on this page moves under "
+            "either motion preference, so what you see is already the end state"
         ),
     }

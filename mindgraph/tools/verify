@@ -1608,6 +1608,211 @@ def check_modes(result: Result) -> None:
     )
 
 
+def check_scrubber(result: Result) -> None:
+    """Stage 5.3 — the scrubber, and the sequence that is NOT the one it needs.
+
+    Two independent blockers, either fatal on its own: no retained sequence of
+    wiring versions, and motion banned so staged transitions cannot be drawn.
+    Both are asserted here against the data rather than taken from the prose.
+
+    The subtle half is the third check. A sequence DOES exist in the event log
+    — traffic changes across windows — and that is precisely the observation
+    that would tempt someone to wire a scrubber to the wrong axis and label it
+    "wiring versions". The page must name the distinction, and the measurement
+    behind it must be real.
+    """
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    import modes as modes_mod  # type: ignore[import-not-found]
+    import traversal as traversal_mod  # type: ignore[import-not-found]
+
+    if not DIST.is_file():
+        result.add("scrubber declared", False, "no artifact")
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+    payload = json.loads(html_text.split('id="mind-data">', 1)[1].split("</script>", 1)[0])
+    scrub = next(m for m in payload["modes"]["modes"] if m["key"] == modes_mod.SCRUBBER)
+
+    result.add("the scrubber is not offered", scrub["available"] is False)
+
+    # Blocker 1, checked against the source rather than the sentence: the
+    # declared topology carries a scalar version and no history to scrub.
+    topo = json.loads((ROOT / "fixtures" / "topology.json").read_text(encoding="utf-8"))
+    history = [k for k, v in topo.items() if isinstance(v, list) and "version" in k]
+    result.add(
+        "the declared topology retains no version history",
+        not history and not isinstance(topo.get("layout_version"), list),
+        f"found {history}" if history else "",
+    )
+    result.add(
+        "the page names the missing version sequence",
+        "SEQUENCE of retained wiring versions" in scrub["requires"],
+    )
+    # Blocker 2: staged transitions are motion, and motion is banned. Stated
+    # independently, so removing one reason cannot make the mode look available.
+    result.add(
+        "the page names motion as a second, independent blocker",
+        "motion is banned" in scrub["requires"]
+        and "with or without a sequence" in scrub["requires"],
+    )
+
+    # The sequence that DOES exist, measured here from the raw event log by a
+    # SEPARATE implementation. Calling modes.traffic_windows() would have the
+    # pipeline and its check share a bug and agree with each other — the failure
+    # mode a probe found in this very increment. This reads the JSONL directly.
+    from collections import defaultdict
+
+    runs: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for line in (ROOT / "fixtures" / "events.jsonl").read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("//"):
+            continue
+        rec = json.loads(line)
+        runs[rec["run_id"]].append((rec["at"], rec["node_id"]))
+    independent: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    for entries in runs.values():
+        entries.sort()
+        independent[entries[0][0][:7]].update(
+            (a[1], b[1]) for a, b in zip(entries, entries[1:], strict=False)
+        )
+    observed_sets = [independent[w] for w in sorted(independent)]
+    window_count = len(independent)
+    varies = any(s != observed_sets[0] for s in observed_sets)
+
+    result.add(
+        "a traffic-window sequence is independently measurable",
+        window_count >= 2 and varies,
+        f"{window_count} windows, sets vary: {varies}",
+    )
+    result.add(
+        "the pipeline's window measurement matches an independent one",
+        (modes_mod.traffic_windows(traversal_mod.read_events(ROOT / "fixtures" / "events.jsonl"))
+         or {}).get("edges_per_window") == [len(s) for s in observed_sets],
+    )
+    result.add(
+        "the page reports the window count it actually measured",
+        f"spans {window_count} windows" in scrub["partial"],
+        scrub["partial"][:80],
+    )
+    # A single window is not a sequence. The function that WRITES the sentence
+    # must refuse it, not rely on the measurement upstream having refused first.
+    fabricated = {"window_count": 1, "edges_per_window": [4], "edge_set_varies": True}
+    result.add(
+        "one window is refused as a sequence even when handed variance",
+        modes_mod._scrubber_partial(fabricated) == "",
+        modes_mod._scrubber_partial(fabricated)[:60],
+    )
+    result.add(
+        "the page distinguishes traffic-over-time from wiring-over-time",
+        "traffic over time, not wiring over time" in scrub["partial"],
+    )
+    # A scrubber control must not exist while the mode is unavailable.
+    result.add(
+        "no scrubber control is rendered",
+        'id="scrubber"' not in html_text and 'type="range"' not in html_text,
+    )
+
+    # With one window there is no sequence to report, and the page must not
+    # claim one — the same discipline 5.2's empty-node case forced.
+    single = modes_mod.build({"nodes": []}, None)
+    lone = next(m for m in single["modes"] if m["key"] == modes_mod.SCRUBBER)
+    result.add(
+        "with no windows measured, no sequence is claimed",
+        lone["partial"] == "",
+        lone["partial"][:60],
+    )
+
+
+def check_reduced_motion(result: Result) -> None:
+    """Stage 5.3 — prefers-reduced-motion, verified by rendering both.
+
+    The claim is that nothing on the page depends on the motion preference,
+    because there is no motion. A null result from a broken instrument looks
+    exactly like a null result from a true claim, so the flag is proved to BITE
+    first, against a control page built to differ under it. If the control does
+    not differ, this reports failure rather than a comfortable pass.
+    """
+    chrome = _chrome()
+    if chrome is None:
+        result.add("reduced-motion parity", False, "no headless browser found")
+        return
+    if not DIST.is_file():
+        result.add("reduced-motion parity", False, "no artifact")
+        return
+
+    import subprocess
+    import tempfile
+
+    try:
+        from PIL import Image  # type: ignore[import-not-found]
+        import numpy as np  # type: ignore[import-not-found]
+    except ImportError:
+        result.add("reduced-motion parity", False, "PIL/numpy unavailable")
+        return
+
+    reduce_flag = "--force-prefers-reduced-motion"
+
+    def shoot(page: Path, out: Path, reduced: bool) -> bool:
+        args = _shot_args(chrome, out, page)
+        if reduced:
+            args.insert(1, reduce_flag)
+        subprocess.run(args, capture_output=True, timeout=90)
+        return out.is_file()
+
+    def differing(a: Path, b: Path, top: int) -> int | None:
+        first, second = (Image.open(p).convert("RGB") for p in (a, b))
+        box = (0, top, min(first.width, second.width), min(first.height, second.height))
+        diff = np.abs(
+            np.asarray(first.crop(box), dtype=int) - np.asarray(second.crop(box), dtype=int)
+        )
+        return int((diff.sum(axis=2) > 0).sum())
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        # The control: a page that MUST look different under reduced motion.
+        control = tmpdir / "control.html"
+        control.write_text(
+            "<style>body{margin:0}#c{width:400px;height:400px;background:#c0392b}"
+            "@media (prefers-reduced-motion: reduce){#c{background:#2980b9}}</style>"
+            '<div id="c"></div>',
+            encoding="utf-8",
+        )
+        ctl_off, ctl_on = tmpdir / "ctl_off.png", tmpdir / "ctl_on.png"
+        if not (shoot(control, ctl_off, False) and shoot(control, ctl_on, True)):
+            result.add("the reduced-motion flag is provably effective", False, "capture failed")
+            return
+        control_delta = differing(ctl_off, ctl_on, 0)
+        result.add(
+            "the reduced-motion flag is provably effective (control page differs)",
+            bool(control_delta),
+            f"control differed by {control_delta} pixels",
+        )
+        if not control_delta:
+            # The instrument is dead; a parity result from it would mean nothing.
+            result.add(
+                "reduced-motion parity on the artifact",
+                False,
+                "not measured — the control proved the flag inert",
+            )
+            return
+
+        off, on = tmpdir / "page_off.png", tmpdir / "page_on.png"
+        if not (shoot(DIST, off, False) and shoot(DIST, on, True)):
+            result.add("reduced-motion parity on the artifact", False, "capture failed")
+            return
+        # Cropped below the header stamp for the same reason pixel stability is:
+        # the generated-at age is the one thing allowed to differ between opens.
+        changed = differing(off, on, 420)
+        result.add(
+            "the artifact renders identically under prefers-reduced-motion",
+            changed == 0,
+            f"{changed} differing pixels",
+        )
+        result.add(
+            "the page states the static end-state is the only state",
+            "already the end state" in DIST.read_text(encoding="utf-8"),
+        )
+
+
 def check_difference_map(result: Result) -> None:
     """Stage 5.2 — the diff must not report stability that was never measured.
 
@@ -1859,6 +2064,8 @@ def main(argv: list[str]) -> int:
     check_comparison(result)
     check_modes(result)
     check_difference_map(result)
+    check_scrubber(result)
+    check_reduced_motion(result)
     check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()

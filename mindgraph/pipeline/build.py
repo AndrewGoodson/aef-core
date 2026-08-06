@@ -271,7 +271,7 @@ def build(
     }
     # Declared last, because availability is derived from the assembled payload
     # rather than guessed ahead of it.
-    payload["modes"] = modes_mod.build(payload)
+    payload["modes"] = modes_mod.build(payload, modes_mod.traffic_windows(events))
     return payload
 
 
