@@ -87,3 +87,43 @@ external `src`/`href`/`@import`/`url(http…)` references, and `Math.random`.
 renderer, where edge particle phases were randomly seeded, so identical data
 drew a different picture on every load — quietly incompatible with the
 persisted-layout requirement this spec makes central.
+
+---
+
+## 2026-08-05 · `is_unknown_node` keys on the FILL channel only
+
+**Spec ambiguous on.** Section 4.1 says a null *health* field forces the
+UNKNOWN construction, but a node has six channels and any of them can be null.
+
+**Chosen.** Only `node.fill` — backed by `operational_state` — decides whether
+the whole node is drawn unknown. Other channels resolve unknown independently
+and are drawn that way individually.
+
+**Why.** The spec says "a null *health* field", and health is `operational_state`.
+A node can have a null `lifetime_execution_count` (so an unknown radius) and
+still be a legitimately measured node with a broken counter — drawing the whole
+thing as unknown would overstate the absence. Conversely a node whose
+operational state is null cannot be drawn as anything else, whatever its other
+fields say. The conservative reading is to make the health channel decisive and
+let the rest degrade in place.
+
+---
+
+## 2026-08-05 · UNKNOWN_TREATMENT frozen after a reproduced defect
+
+**Not a judgment call — a defect, recorded because the fix constrains later
+stages.** The treatment was a plain dict handed out as the `value` of every
+unresolved channel, so `resolved.value["fill"] = "solid"` silently changed the
+treatment for every UNKNOWN produced afterwards. Reproduced: one mutation, and
+a fresh resolution of an unrelated node reported `fill='solid'`.
+
+That is the cardinal anti-pattern the report names — *everything looks
+healthy* — reachable by accident from any renderer that thought it was working
+on its own copy.
+
+Frozen with `MappingProxyType`, and the backing dict's name deleted: the proxy
+is a VIEW, so leaving `_UNKNOWN_TREATMENT` bound would have kept the write path
+open under a different spelling. Two regression checks added to `tools/verify`.
+
+**Constrains later stages:** renderers must copy before adorning. The contract
+hands out a shared read-only treatment by design.

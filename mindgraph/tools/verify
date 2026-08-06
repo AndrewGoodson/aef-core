@@ -158,6 +158,91 @@ def check_fixtures(result: Result) -> None:
     )
 
 
+def check_contract(result: Result) -> None:
+    """Stage 0. The contract must make the UNKNOWN construction unreachable by
+    defaulting, and it must actually fire on the fixture's uninstrumented node."""
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    try:
+        import contract  # type: ignore[import-not-found]
+    except ImportError as exc:
+        result.add("contract module importable", False, str(exc))
+        return
+    result.add("contract module importable", True)
+
+    data = json.loads(FIXTURES.read_text())
+    nodes = {n["id"]: n for n in data["nodes"]}
+
+    ghost = contract.resolve_node(nodes["legacy_scorer"])
+    result.add(
+        "uninstrumented node forces the UNKNOWN construction",
+        contract.is_unknown_node(ghost),
+    )
+    result.add(
+        "uninstrumented node gets hatched fill and broken border",
+        ghost["node.fill"].value.get("fill") == "hatched"
+        and ghost["node.fill"].value.get("border") == "broken",
+    )
+    result.add(
+        "unknown radius does not fall back to a normal size",
+        ghost["node.radius"].construction is contract.Construction.UNKNOWN,
+    )
+
+    healthy = contract.resolve_node(nodes["ingest"])
+    result.add(
+        "control — an instrumented node resolves as measured",
+        not contract.is_unknown_node(healthy),
+    )
+    result.add(
+        "control — measured radius differs from the unknown radius",
+        healthy["node.radius"].value != ghost["node.radius"].value,
+    )
+    result.add(
+        "UNKNOWN and MEASURED are distinct constructions",
+        ghost["node.fill"].construction != healthy["node.fill"].construction,
+    )
+
+    edges = {(e["source"], e["target"]): e for e in data["edges"]}
+    unknown_edge = contract.resolve_edge(edges[("legacy_scorer", "emit")])
+    result.add(
+        "unknown-coverage edge makes no zero-count claim",
+        unknown_edge["edge.rail_width"].value.get("makes_zero_claim") is False,
+    )
+    never = contract.resolve_edge(edges[("fetch_invoice", "human_gate")])
+    result.add(
+        "never-observed edge resolves its count (it is a real zero)",
+        never["edge.rail_width"].is_measured and never["edge.rail_width"].value == 0,
+    )
+    result.add(
+        "never-observed and unknown-coverage resolve differently",
+        never["edge.rail_width"].construction != unknown_edge["edge.rail_width"].construction,
+    )
+    result.add(
+        "every declared channel names a backing field",
+        all(ch.backing for ch in contract.ALL_CHANNELS),
+    )
+    # Reproduced in Stage 0's self-critique: UNKNOWN_TREATMENT was a plain dict
+    # handed out as the value of every unresolved channel, so one caller
+    # writing value["fill"] = "solid" turned every subsequent UNKNOWN healthy —
+    # the cardinal anti-pattern as a one-line accident.
+    try:
+        ghost["node.fill"].value["fill"] = "solid"  # type: ignore[index]
+        frozen = False
+    except TypeError:
+        frozen = True
+    result.add("UNKNOWN treatment cannot be mutated by a caller", frozen)
+    result.add(
+        "UNKNOWN treatment's backing dict is not left bound",
+        not hasattr(contract, "_UNKNOWN_TREATMENT"),
+        "" if not hasattr(contract, "_UNKNOWN_TREATMENT") else "MappingProxyType is a view",
+    )
+    load = contract.preattentive_load(healthy)
+    result.add(
+        f"preattentive load within budget ({contract.PREATTENTIVE_BUDGET})",
+        load <= contract.PREATTENTIVE_BUDGET,
+        f"load={load}",
+    )
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -224,6 +309,7 @@ def main(argv: list[str]) -> int:
         return self_test()
     result = Result()
     check_fixtures(result)
+    check_contract(result)
     check_dist(result)
     return result.report()
 
