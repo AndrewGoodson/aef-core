@@ -14,7 +14,7 @@ CHECKLIST:
 - [x] 2.2 — hand-written Canvas renderer: node channels per §4.1 (position/radius/fill/border/interior glyph/birth flag; ≤3 preattentive variables; no glow, ever)
 - [x] 2.3 — two-layer edge model per §4.2: history rail width = log1p(lifetime_traversal_count), activity core luminance = recency
 - [x] 2.4 — the five endpoint states, each visually distinct: never-observed / dormant / retired / unknown / stale
-- [ ] 2.5 — mid-edge gate glyph as a RECTANGLE (§3c verdict B), states [H…] [H✓] [H✗] [H!] [H↶]
+- [x] 2.5 — mid-edge gate glyph as a RECTANGLE (§3c verdict B), states [H…] [H✓] [H✗] [H!] [H↶]
 - [ ] 2.6 — legend with concrete worked examples, windows, numbers, and every log/sqrt transform and cap printed
 - [ ] 3.1 — persistence: a file reopened later renders pixel-identical node positions (threshold: zero coordinate drift between two opens)
 - [ ] 3.2 — birth-flag tab ("NEW"/"3h"/"2d") computed from now − first_seen_at against embedded generated_at; static, not a halo (§3d verdict B)
@@ -31,11 +31,11 @@ CHECKLIST:
 - [ ] 6.1 — dual themes via prefers-color-scheme with identical semantic ordering (§3f verdict B)
 - [ ] 6.2 — MANUAL: on-hardware polarity A/B (light vs dark) for "find the abandoned path" and "find the missing-reporting node"
 - [ ] 6.3 — MANUAL: comparison-mode A/B (difference-map vs two-pane vs scrubber) measured on error rate and time, not FPS
-NEXT: 2.5 — mid-edge gate glyph as a RECTANGLE (§3c verdict B), states [H…] [H✓] [H✗] [H!] [H↶]
+NEXT: 2.6 — legend with concrete worked examples, windows, numbers, and every log/sqrt transform and cap printed. Much of this is already in the caption; 2.6 is auditing it against §4.2's legend requirement and closing gaps.
 BLOCKERS: none
 MANUAL_CHECKS:
 - headless browser load of dist/index.html from file:// with network blocked — no headless browser confirmed available in this environment yet; the forbidden-token scan and single-file check run, the actual offline load does not
 - 6.2 and 6.3 are operator task-tests on target hardware and cannot be automated
-LAST_RUN: 2026-08-05 — increment 2.4. All five edge states now carry a distinguishing MARK rather than only a width: never-observed is dashed with open endpoint rings, retired ends in a perpendicular bar, unknown coverage gets a midpoint '?' and returns before any rail is drawn. A different KIND of mark, not a different magnitude — width alone demands a comparison against another edge, which is a judgement the eye should not have to make.
-REGRESSION FOUND AND FIXED, and it was mine: check_build ran the pipeline without --html, so its 'add a node' test OVERWROTE dist/index.html with a synthetic topology. The published artifact showed a fraud_check node that does not exist. A test contaminating the artifact it is testing is the worst kind of green. All test builds now write to temp paths, and a new check asserts the artifact contains exactly the declared nodes. Proved the guard fires by planting the real fault: FAIL extra=['fraud_check'], 11 edges vs 10 — then restored and green again. My first attempt to plant it was inconclusive because capture_output swallowed the subprocess, which is worth remembering: a planted fault that silently fails to run reads exactly like a guard that works.
-Verified: self-test PASS (24 detections); verify 121/121 PASS. Published to the stable URL.
+LAST_RUN: 2026-08-05 — increment 2.5. Human approval gates interrupt their edges as RECTANGLES (§3c verdict B), not diamonds: a diamond is the flowchart symbol for a decision that BRANCHES, and this gate chooses no path — it is a checkpoint a person signed. Three dispositions exercised: awaiting [H…] drawn louder in warn, approved [H✓], rejected [H✗]. Gate disposition is declared in topology.json and NEVER derived from the event log; deriving an approval would attribute a human decision to nobody. An unrecognised disposition FAILS THE BUILD rather than drawing nothing — a checkpoint that renders as no checkpoint is the one mark an operator must never miss. The glyph is drawn after restore() so it stays upright at any edge angle.
+PROBE DISCIPLINE, second time tonight: the disposition probe first exited non-zero for the WRONG reason (a stale state file from an earlier probe). Re-run with a clean state it failed correctly. An exit code alone is not evidence the check under test fired.
+Verified: self-test PASS (24 detections); verify 129/129 PASS. Published to the stable URL.

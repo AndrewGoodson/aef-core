@@ -112,6 +112,13 @@ def build(
     topology = json.loads(topology_path.read_text(encoding="utf-8"))
     graph_id = topology["graph_id"]
     dormancy_days = float(topology.get("dormancy_window_days", 14))
+    # Gate dispositions are human decisions declared in config. Deriving one
+    # from the event log would attribute an approval to nobody.
+    gates = {
+        (g["edge"][0], g["edge"][1]): g
+        for g in topology.get("gates", [])
+        if not str(g.get("disposition", "")).startswith("_")
+    }
     events = traversal_mod.read_events(events_path)
     nodes, edges = traversal_mod.derive(events, topology, data_through=data_through)
 
@@ -197,12 +204,26 @@ def build(
             "expected_report_interval_seconds", 3600
         ),
         "nodes": sorted(node_payloads, key=lambda n: str(n["id"])),
-        "edges": [_edge_render(e.to_payload(), data_through, dormancy_days) for e in edges],
+        "edges": [
+            _edge_render(e.to_payload(), data_through, dormancy_days, gates) for e in edges
+        ],
     }
 
 
+GATE_GLYPH = {
+    "awaiting": "H\u2026",
+    "approved": "H\u2713",
+    "rejected": "H\u2717",
+    "escalated": "H!",
+    "rolled_back": "H\u21b6",
+}
+
+
 def _edge_render(
-    body: dict[str, Any], data_through: datetime, dormancy_days: float
+    body: dict[str, Any],
+    data_through: datetime,
+    dormancy_days: float,
+    gates: dict[tuple[str, str], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Two channels, computed here and never in the browser.
 
@@ -220,6 +241,22 @@ def _edge_render(
     """
     count = body.get("lifetime_traversal_count")
     last = body.get("last_traversal_at")
+    gate = (gates or {}).get((body["source"], body["target"]))
+    if gate is not None:
+        disposition = gate["disposition"]
+        if disposition not in GATE_GLYPH:
+            raise BuildError(
+                f"gate on {body['source']}->{body['target']} has disposition "
+                f"{disposition!r}, which has no glyph. An unrecognised disposition would "
+                f"draw nothing, and a checkpoint that renders as no checkpoint is the one "
+                f"mark an operator must never miss."
+            )
+        body["gate"] = {
+            "disposition": disposition,
+            "glyph": GATE_GLYPH[disposition],
+            "pending_since": gate.get("pending_since"),
+            "decided_at": gate.get("decided_at"),
+        }
 
     if count is None:
         # Unknown coverage makes no count claim, so it gets no rail width

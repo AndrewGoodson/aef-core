@@ -33,10 +33,10 @@ from typing import Any
 # plainly. An empty canvas would be indistinguishable from a broken one, and
 # this whole project is about not letting absence look like something else.
 STAGE_NOTICE = (
-    "Each edge state now carries its own endpoint marker, so the state is "
-    "readable without comparing widths: open rings mean never taken, a "
-    "perpendicular bar means retired by someone, a midpoint ? means nothing "
-    "was watching. Dashboard panels arrive in Stage 4."
+    "Human approval gates now interrupt the edges they sit on \u2014 a "
+    "rectangle, not a diamond, because a gate is an accountable checkpoint a "
+    "proposal passes through rather than a branch that chooses between paths. "
+    "Dashboard panels arrive in Stage 4."
 )
 
 
@@ -109,6 +109,7 @@ _SHELL = """<!doctype html>
     <span class="lg"><i class="ln dashed"></i>&#9711; never taken (open rings)</span>
     <span class="lg"><i class="ln cap"></i>&#9866; retired by a person</span>
     <span class="lg">? nothing was watching</span>
+    <span class="lg"><i class="gt"></i>[H] human gate &#8212; &#8230; awaiting, &#10003; approved, &#10007; rejected</span>
   </div>
   <p class="caption">Radius = <code>6.0 + 3.4 &#215; sqrt(log1p(executions))</code>, capped at
   26.0. Fill carries measured state only. Border carries how much we can see —
@@ -186,6 +187,8 @@ canvas{display:block;width:100%;height:auto}
 .ln.core{border-top:2px solid var(--accent)}
 .ln.dashed{border-top:2px dashed var(--muted)}
 .ln.cap{border-top:2px solid var(--muted)}
+.gt{width:20px;height:11px;flex:0 0 auto;display:inline-block;
+  border:1.5px solid var(--warn);border-radius:1px}
 code{font-family:var(--mono);font-size:.95em}
 """
 
@@ -309,7 +312,31 @@ function draw(){
     }
     cx.lineCap = 'butt';
 
-    // 3. ENDPOINT MARKERS — the state, readable without comparison.
+    // 3. GATE — a RECTANGLE interrupting the edge (Section 3c, verdict B).
+    // Deliberately not a diamond: a diamond is the flowchart symbol for a
+    // decision that BRANCHES, and this gate chooses no path. It is a
+    // checkpoint an accountable human signed, and it interrupts the line to
+    // say the traffic stopped here for a person.
+    if (ed.gate) {
+      var gx = (a.x + b.x)/2, gy = (a.y + b.y)/2;
+      var gw = 30, gh = 15;
+      cx.save();
+      cx.translate(gx, gy);
+      cx.rotate(Math.atan2(dy, dx));
+      cx.fillStyle = css('--panel');
+      cx.fillRect(-gw/2, -gh/2, gw, gh);
+      cx.strokeStyle = ed.gate.disposition === 'awaiting' ? css('--warn') : css('--muted');
+      cx.lineWidth = ed.gate.disposition === 'awaiting' ? 2 : 1.3;
+      cx.strokeRect(-gw/2, -gh/2, gw, gh);
+      cx.restore();
+      // The glyph is drawn UNROTATED so it stays readable on any edge angle.
+      cx.fillStyle = ed.gate.disposition === 'awaiting' ? css('--warn') : css('--fg');
+      cx.font = '600 10px ui-monospace,monospace';
+      cx.textAlign = 'center'; cx.textBaseline = 'middle';
+      cx.fillText(ed.gate.glyph, gx, gy);
+    }
+
+    // 4. ENDPOINT MARKERS — the state, readable without comparison.
     if (neverTaken) {
       // OPEN rings: the path is configured and has carried nothing. Open
       // rather than filled, because filled would read as a terminus.

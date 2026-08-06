@@ -693,6 +693,30 @@ def check_render_edges(result: Result) -> None:
         js.index("rail_width === null") < js.index("HISTORY RAIL"),
     )
 
+    # 2.5 — the gate. Section 3c's verdict is a rectangle, not a diamond: a
+    # diamond is the flowchart symbol for a decision that BRANCHES, and this
+    # gate chooses no path. It is a checkpoint a person signed.
+    gated = [e for e in payload["edges"] if "gate" in e]
+    result.add("fixture exercises at least one gate", len(gated) > 0, f"{len(gated)} gates")
+    dispositions = {e["gate"]["disposition"] for e in gated}
+    for want in ("awaiting", "approved", "rejected"):
+        result.add(f"gate disposition exercised: {want}", want in dispositions)
+
+    segment = js.split("GATE — a RECTANGLE")[1].split("ENDPOINT MARKERS")[0]
+    result.add("gate is a RECTANGLE, not a diamond", "strokeRect" in segment)
+    result.add(
+        "gate glyph is drawn unrotated so it stays readable at any edge angle",
+        segment.index("restore()") < segment.index("fillText"),
+    )
+    result.add(
+        "an awaiting gate is drawn louder than a decided one",
+        "=== 'awaiting'" in segment,
+    )
+    result.add(
+        "every gate carries a glyph",
+        all(e["gate"].get("glyph") for e in gated),
+    )
+
     # Edges are drawn before nodes, so a node is never hidden by its own wire.
     result.add(
         "edges are drawn before nodes",

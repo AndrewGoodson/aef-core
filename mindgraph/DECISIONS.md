@@ -514,3 +514,38 @@ and looks at one edge cannot tell whether 1.0px is thin without finding a 4.9px
 one to hold it against. A dashed line with open rings is legible on its own.
 Magnitude answers "how much"; kind answers "what is this" — and the states are
 kinds.
+
+---
+
+## 2026-08-05 · An unrecognised gate disposition fails the build
+
+**Spec silent on.** Section 4.2 lists five gate states and their glyphs. It does
+not say what to do with a sixth.
+
+**Chosen.** Raise, and refuse to produce an artifact.
+
+**Why.** The alternatives are to draw nothing or to draw a generic mark. Drawing
+nothing means an edge with a human checkpoint on it renders as an edge without
+one — and the checkpoint is the single mark on this page that says traffic
+stopped here for a person to decide. An operator who cannot see it will assume
+the path is automatic. A generic mark is worse: it asserts a checkpoint exists
+while hiding which way it went.
+
+Verified by planting the fault visibly: a disposition of `probably_fine` fails
+the build with the reason named.
+
+---
+
+## 2026-08-05 · An exit code is not evidence the intended check fired
+
+**Method note, and the second instance tonight.**
+
+The gate-disposition probe exited non-zero and I nearly recorded that as proof
+the guard worked. It had failed on a stale layout-state file left by an earlier
+probe — the disposition check never ran at all.
+
+This is the same shape as the earlier `capture_output=True` mistake: a planted
+fault that fails for an unrelated reason is indistinguishable from a guard
+firing correctly, and both produce the output you were hoping to see. The rule
+now applied to every probe: read the actual error text, not the exit status, and
+confirm it names the check under test.

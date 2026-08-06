@@ -18,6 +18,19 @@
       "id": "legacy_scorer", "kind": "agent",    "instrumentation": "none",    "telemetry_coverage": "none" }
   ],
 
+  "_gates_comment": "A gate's disposition is a HUMAN decision, so it is declared here and never derived from the event log. Section 3c's verdict is a RECTANGLE interrupting the edge, not a diamond: a diamond is the flowchart symbol for a decision/branch and implies conditional logic the gate does not perform. The gate is an accountable checkpoint a proposal passes through.",
+  "gates": [
+    { "_case": "AWAITING — [H\u2026]. A proposal has been sitting here since 11:20 and nobody has decided.",
+      "edge": ["retry_guard", "human_gate"], "disposition": "awaiting",
+      "pending_since": "2026-08-05T11:20:00Z" },
+    { "_case": "APPROVED — [H\u2713].",
+      "edge": ["human_gate", "emit"], "disposition": "approved",
+      "decided_at": "2026-08-05T12:00:00Z" },
+    { "_case": "REJECTED — [H\u2717]. The gate working, not a failure.",
+      "edge": ["classify", "human_gate"], "disposition": "rejected",
+      "decided_at": "2026-08-04T09:15:00Z" }
+  ],
+
   "edges": [
     { "source": "ingest",        "target": "classify",      "telemetry_coverage": "full" },
     { "source": "classify",      "target": "retry_guard",   "telemetry_coverage": "full" },
