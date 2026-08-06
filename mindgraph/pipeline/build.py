@@ -200,6 +200,7 @@ def build(
         "layout_version": layout_version,
         "generated_at": _iso(generated_at),
         "data_through": _iso(data_through),
+        "dormancy_window_days": dormancy_days,
         "expected_report_interval_seconds": topology.get(
             "expected_report_interval_seconds", 3600
         ),

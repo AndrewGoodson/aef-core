@@ -52,6 +52,79 @@ def json_for_script(payload: Any) -> str:
     )
 
 
+def _legend_text(payload: dict[str, Any]) -> str:
+    """The legend, DERIVED from the contract's constants and from edges that
+    actually exist in this graph.
+
+    Section 4.2 requires concrete worked examples with real windows and
+    numbers, and every transform and cap printed. It would be easier to type
+    those into the template — and they were, which made the legend a second
+    copy of the constants that nobody compared. Change `RADIUS_K` and the page
+    would keep printing the old coefficient while drawing the new one: a legend
+    that lies is worse than no legend, because it is believed.
+
+    The worked examples are picked from the payload rather than invented, so
+    every number below is one the reader can find on the canvas.
+    """
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    import contract  # noqa: PLC0415
+
+    missing = [
+        f"{e.get('source')}->{e.get('target')}" for e in payload["edges"] if "render" not in e
+    ]
+    if missing:
+        # Found by extending the verifier: emit() crashed on a payload whose
+        # edges had no render block. Refused rather than tolerated — a legend
+        # built from a payload the contract never resolved would silently omit
+        # its worked examples, and a legend with no examples is precisely the
+        # bare "brighter = more active" the report forbids.
+        raise ValueError(
+            f"edges have no render block: {missing}. The contract resolves these during "
+            f"the build; a payload without them was not produced by this pipeline, and a "
+            f"legend derived from it would quietly lose its worked examples."
+        )
+    edges = [e for e in payload["edges"] if e["render"]["rail_width"] is not None]
+    busiest = max(edges, key=lambda e: e["lifetime_traversal_count"], default=None)
+    abandoned = next(
+        (e for e in edges if e["edge_state"] == "dormant"),
+        None,
+    )
+    never = next((e for e in edges if e["edge_state"] == "never_observed"), None)
+
+    examples = []
+    if busiest is not None:
+        examples.append(
+            f"<code>{busiest['lifetime_traversal_count']} traversals, last today</code> "
+            f"&rarr; widest rail on this graph, core at full brightness"
+        )
+    if abandoned is not None:
+        examples.append(
+            f"<code>{abandoned['lifetime_traversal_count']} traversals, none in the window</code> "
+            f"&rarr; rail just as wide, core gone dark &mdash; abandoned, not absent"
+        )
+    if never is not None:
+        examples.append(
+            "<code>0 observed</code> &rarr; hairline, dashed, open rings, and no core at all"
+        )
+    examples.append(
+        "<code>no telemetry</code> &rarr; patterned line with a midpoint ?, and it "
+        "claims nothing about volume"
+    )
+
+    return (
+        f"Node radius = <code>{contract.RADIUS_MIN} + {contract.RADIUS_K} &#215; "
+        f"sqrt(log1p(executions))</code>, capped at <code>{contract.RADIUS_CAP}</code>. "
+        f"Edge rail = <code>log1p(traversals)</code>, which never decays. "
+        f"Core brightness = recency against a "
+        f"<code>{payload.get('dormancy_window_days', 14)}-day</code> window. "
+        f"Fill carries measured state only; border carries how much we can see. "
+        f"<br>Worked examples from this graph: " + "; ".join(examples) + "."
+    )
+
+
 def _summary_rows(payload: dict[str, Any]) -> str:
     edge_states: dict[str, int] = {}
     for edge in payload["edges"]:
@@ -78,6 +151,8 @@ def emit(payload: dict[str, Any]) -> str:
     return _SHELL.replace("__CSS__", _CSS).replace("__JS__", _JS).replace(
         "__DATA__", json_for_script(payload)
     ).replace("__ROWS__", _summary_rows(payload)).replace(
+        "__LEGEND__", _legend_text(payload)
+    ).replace(
         "__NOTICE__", html.escape(STAGE_NOTICE)
     ).replace("__GRAPH__", html.escape(str(payload["graph_id"])))
 
@@ -111,15 +186,7 @@ _SHELL = """<!doctype html>
     <span class="lg">? nothing was watching</span>
     <span class="lg"><i class="gt"></i>[H] human gate &#8212; &#8230; awaiting, &#10003; approved, &#10007; rejected</span>
   </div>
-  <p class="caption">Radius = <code>6.0 + 3.4 &#215; sqrt(log1p(executions))</code>, capped at
-  26.0. Fill carries measured state only. Border carries how much we can see —
-  solid&nbsp;= full coverage, dashed&nbsp;= partial, broken&nbsp;+&nbsp;? = none,
-  double&nbsp;= newly instrumented.<br>
-  Edge rail = <code>log1p(traversals)</code>. Worked examples from this graph:
-  <code>162 traversals / today</code> = widest rail, bright core;
-  <code>57 / 20 days ago</code> = wide rail, core gone dark (abandoned);
-  <code>0 observed</code> = hairline, no core (never taken);
-  <code>no coverage</code> = patterned, and claims nothing.</p>
+  <p class="caption">__LEGEND__</p>
   <section>
     <h2>Embedded payload</h2>
     <div class="scroll"><table>__ROWS__</table></div>

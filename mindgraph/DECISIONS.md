@@ -549,3 +549,54 @@ fault that fails for an unrelated reason is indistinguishable from a guard
 firing correctly, and both produce the output you were hoping to see. The rule
 now applied to every probe: read the actual error text, not the exit status, and
 confirm it names the check under test.
+
+---
+
+## 2026-08-05 · The legend is derived from the constants, never typed beside them
+
+**Reproduced drift risk.** Section 4.2 requires the legend to print every
+transform and cap. The caption did — as hardcoded text, while `contract.py`
+held the real values. Two copies nobody compared, which is the class ADR 0091
+names.
+
+Demonstrated rather than argued: setting `RADIUS_K = 9.9` and rebuilding, the
+derived legend now prints `6.0 + 9.9 x sqrt(...)`. Before, it would have kept
+printing `3.4` while the renderer drew 9.9 — and a legend that lies is worse
+than no legend, because it is believed.
+
+The worked examples are also selected from edges that exist in the payload
+(`162 traversals`, `57 traversals`, `0 observed`), so every number in the legend
+is one the reader can find on the canvas.
+
+---
+
+## 2026-08-05 · A stale bytecode cache made a restore look like a failure
+
+**Method hazard, and the third probe mistake tonight.**
+
+After the drift test, `cp /tmp/contract.bak pipeline/contract.py` restored
+`RADIUS_K = 3.4`, but the rebuilt page still printed 9.9. The source was
+correct; the build was not.
+
+Cause, confirmed by reading the `.pyc` header directly: Python validates its
+bytecode cache on `(source mtime, source size)`. `3.4` and `9.9` are the same
+byte length, and the restore landed in the same second as the edit — so both
+fields matched and the stale bytecode was reused.
+
+This is worth recording because it is silent, plausible-looking, and would have
+produced a confident wrong conclusion in either direction: a drift test that
+appears to fail when the code is right, or one that appears to pass when it is
+wrong. `__pycache__` is gitignored, and drift probes clear it first.
+
+---
+
+## 2026-08-05 · `emit()` refuses a payload with no render blocks
+
+**Reproduced by extending the verifier.** `_legend_text` crashed with
+`KeyError: 'render'` on the escaping fixture, whose synthetic edges had no
+render block.
+
+Refused rather than tolerated. A `.get()` would have produced a page with a
+legend containing no worked examples — quietly — which is exactly the bare
+"brighter = more active" the report forbids. The verifier's fixture was also
+wrong and now carries the render blocks the real contract always produces.

@@ -521,8 +521,32 @@ def check_emit(result: Result) -> None:
         "generated_at": "2026-08-05T18:00:00Z",
         "data_through": "2026-08-05T17:42:00Z",
         "expected_report_interval_seconds": 3600,
-        "nodes": [{"id": separator, "layout_reason": "carried", "x": 1, "y": 2}],
-        "edges": [{"source": separator, "target": separator, "edge_state": "active"}],
+        "nodes": [
+            {
+                "id": separator,
+                "layout_reason": "carried",
+                "x": 1,
+                "y": 2,
+                "lifetime_execution_count": 3,
+                "render": {
+                    "construction": "measured",
+                    "radius": 10.0,
+                    "fill_state": "normal",
+                    "border": "full",
+                    "glyph": "agent",
+                    "annotation": "",
+                },
+            }
+        ],
+        "edges": [
+            {
+                "source": separator,
+                "target": separator,
+                "edge_state": "active",
+                "lifetime_traversal_count": 3,
+                "render": {"construction": "measured", "rail_width": 1.386, "core_luminance": 1.0},
+            }
+        ],
     }
     page = emit.emit(payload)
     result.add("script-block breakout does not survive", "</script><img" not in page)
@@ -691,6 +715,43 @@ def check_render_edges(result: Result) -> None:
     result.add(
         "unknown coverage returns before any rail is drawn",
         js.index("rail_width === null") < js.index("HISTORY RAIL"),
+    )
+
+    # 2.6 — the legend must be DERIVED from the contract's constants, not
+    # typed alongside them. A legend that prints a coefficient the renderer no
+    # longer uses is worse than no legend, because it is believed.
+    # Imported by name, not re-executed from the file: a second execution of a
+    # module full of dataclasses fails, because dataclasses resolve annotations
+    # through sys.modules and the fresh module was never registered there.
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    import contract as contract_mod  # type: ignore[import-not-found]
+
+    caption = html_text.split('<p class="caption">')[1].split("</p>")[0]
+    for name, value in (
+        ("RADIUS_MIN", contract_mod.RADIUS_MIN),
+        ("RADIUS_K", contract_mod.RADIUS_K),
+        ("RADIUS_CAP", contract_mod.RADIUS_CAP),
+    ):
+        result.add(
+            f"legend is derived — prints the live {name} ({value})",
+            str(value) in caption,
+        )
+    result.add(
+        "legend prints the transform, not a bare 'brighter = more active'",
+        "log1p" in caption and "sqrt" in caption,
+    )
+    # Worked examples must come from edges that exist, so every number in the
+    # legend is one the reader can find on the canvas.
+    counts = {
+        str(e["lifetime_traversal_count"])
+        for e in payload["edges"]
+        if e["lifetime_traversal_count"]
+    }
+    cited = [c for c in counts if c in caption]
+    result.add(
+        "worked examples cite real traversal counts from this graph",
+        len(cited) >= 2,
+        f"cited {sorted(cited)}",
     )
 
     # 2.5 — the gate. Section 3c's verdict is a rectangle, not a diamond: a
