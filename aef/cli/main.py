@@ -25,6 +25,14 @@ def _cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_migrate(args: argparse.Namespace) -> int:
+    from aef.cli.migrate import report, run_migrate
+
+    result = run_migrate(Path(args.dir), force=bool(args.force))
+    print(report(result))
+    return 0
+
+
 def _cmd_adopt(args: argparse.Namespace) -> int:
     result = run_adopt(Path(args.dir))
     print(f"detected framework: {result.framework}")
@@ -147,6 +155,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_adopt = subparsers.add_parser("adopt", help="migrate an existing repo onto AEF")
     p_adopt.add_argument("--dir", default=".")
     p_adopt.set_defaults(handler=_cmd_adopt)
+
+    p_migrate = subparsers.add_parser(
+        "migrate",
+        help="generate node wrappers for this repo's real LLM call sites",
+    )
+    p_migrate.add_argument("--dir", default=".")
+    p_migrate.add_argument(
+        "--force", action="store_true", help="overwrite an existing aef_migrated.py"
+    )
+    p_migrate.set_defaults(handler=_cmd_migrate)
 
     p_doctor = subparsers.add_parser("doctor", help="sanity-check an AEF setup")
     p_doctor.add_argument("--dir", default=".")

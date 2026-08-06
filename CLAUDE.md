@@ -1,12 +1,37 @@
 # AEF scaffold contract
 
-This is `aef-core`: a repo-agnostic Agent Operating System scaffold. It is
-**not** another agent framework — it's the thing that gets dropped into any
-existing repo (via `aef adopt`, see below) so agents there inherit planning,
-graph execution, memory, evaluation, reflection, optimization, knowledge
-graph access, observability, security, telemetry, token optimization,
-context engineering, and continuous learning, without rebuilding any of it
-per agent.
+This is `aef-core`: a Python runtime for agent graphs, plus a scaffold
+generator that drops it into an existing repo (`aef adopt`).
+
+**What an adopting repo actually gets**, and this list is audited against the
+code rather than aspirational: a deterministic graph kernel, shared `AEFState`,
+checkpoint/replay durability, a deny-by-default policy engine with HITL gates
+and an audit trail, memory, a memory-backed context retriever, OTel tracing,
+an eval harness, rule-based reflection, and the self-rewiring loop harness.
+
+**What it does NOT do, stated because the previous version of this paragraph
+claimed otherwise:**
+
+- **It does not migrate your agents.** `aef adopt` writes documentation, a
+  config template, and a stub that raises `NotImplementedError`. It reads none
+  of your existing code. Converting call sites into nodes is manual — that is
+  literally step 5 of the checklist it generates. `aef migrate` (below) does
+  the mechanical half; the semantics are still yours.
+- **Planning, knowledge-graph access and token optimization do not exist.**
+  `aef.reasoning.planner` and `aef.services.graph` were deleted (ADR 0101).
+  `aef/services/tokens/` was an EMPTY DIRECTORY that still imported cleanly,
+  because Python invents a namespace package for one — it is deleted now.
+  The old paragraph listed all three as things you inherit.
+- **LLM-backed reflection and offline optimization are typed interfaces**
+  raising `NotImplementedError` (Phase 3/5). The rule-based reflection slice
+  is real (ADR 0046).
+- **If your "agents" are prompt files rather than Python** — Claude Code
+  subagents, `.md` personas — there is no call site to convert and this
+  runtime has nothing to attach to at the agent layer. It can still govern the
+  Python your prompts call into. That is a narrower and honest pitch.
+
+Only five things are allowed to differ per agent: **Knowledge, Policies,
+Tools, Objectives, Evaluation Metrics** — see the prime directive below.
 
 New here? Read `AGENT_INTEGRATION.md` (canonical ingest-and-start guide) and
 `docs/autonomy/self-improving-loop.md` (the autonomous-loop safety contract)

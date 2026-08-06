@@ -140,11 +140,22 @@ harnesses that read that filename; Copilot/Cursor entry files
 
 ## What AEF is
 
-AEF is not another agent framework — it's a scaffold every agent in the AEF
-ecosystem inherits wholesale. Only five things are allowed to differ per
-agent: **Knowledge, Policies, Tools, Objectives, Evaluation Metrics.**
-Planning, graph execution, memory, evaluation, reflection, optimization,
-observability, security, and token/context engineering are all inherited.
+AEF is a Python runtime for agent graphs. Only five things are allowed to
+differ per agent: **Knowledge, Policies, Tools, Objectives, Evaluation
+Metrics.**
+
+Inherited, audited against the code: graph execution, checkpoint/replay,
+memory, context retrieval, evaluation, rule-based reflection, observability,
+OTel telemetry, and a deny-by-default security policy with HITL gates.
+
+NOT inherited, stated because an earlier version of this text claimed
+otherwise: **planning** and **knowledge-graph access** do not exist (deleted,
+ADR 0101); **token optimization** does not exist; LLM-backed **reflection**
+and **optimization** are typed interfaces raising `NotImplementedError`.
+
+And nothing here is inherited *automatically*. `aef adopt` wrote docs and a
+stub; it read none of your code. `aef migrate --dir .` generates node wrappers
+for your real call sites, but wiring and semantics remain yours.
 
 ## The node contract (non-negotiable)
 
