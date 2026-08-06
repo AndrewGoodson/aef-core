@@ -441,3 +441,30 @@ contract will resolve it without further change.
 
 This is the second time the contract has caught the derivation rather than the
 other way round, which is the layering working as intended.
+
+---
+
+## 2026-08-05 · `core_luminance` is null for never-fired, never 0.0
+
+**Spec implies it; stated because the implementation naturally produces the
+wrong thing.** Section 4.2 says core luminance encodes
+`time_since_last_traversal`. For an edge that has never been traversed there is
+no such time, and the obvious implementation — clamp to zero — makes
+"never fired" render identically to "fired long ago".
+
+**Chosen.** `null`, with the renderer drawing no core at all in that case, and
+a strict `!== null` test rather than a falsy one.
+
+**Why.** Those are different claims. An abandoned path is a *measurement*: the
+agent used it and stopped, which is a fact about its behaviour worth seeing. A
+never-taken path is an *absence*: nothing has happened there at all. A zero
+would present the absence as the measurement.
+
+Measured on the fixture: dormant renders a 4.86px rail with a dark core;
+never-observed renders 1.00px with no core — a 4.9x width ratio, checked in the
+verifier rather than eyeballed.
+
+The falsy test is the specific trap: `if (core)` treats `0.0` and `null`
+identically, so a correct data model would still have collapsed at the last
+step. The check asserts on the strict comparison being present in the shipped
+JS.

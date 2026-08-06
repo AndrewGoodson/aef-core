@@ -25,6 +25,7 @@ import argparse
 import json
 import sys
 from datetime import UTC, datetime
+from math import log1p
 from pathlib import Path
 from typing import Any
 
@@ -110,6 +111,7 @@ def build(
     """
     topology = json.loads(topology_path.read_text(encoding="utf-8"))
     graph_id = topology["graph_id"]
+    dormancy_days = float(topology.get("dormancy_window_days", 14))
     events = traversal_mod.read_events(events_path)
     nodes, edges = traversal_mod.derive(events, topology, data_through=data_through)
 
@@ -195,8 +197,53 @@ def build(
             "expected_report_interval_seconds", 3600
         ),
         "nodes": sorted(node_payloads, key=lambda n: str(n["id"])),
-        "edges": [e.to_payload() for e in edges],
+        "edges": [_edge_render(e.to_payload(), data_through, dormancy_days) for e in edges],
     }
+
+
+def _edge_render(
+    body: dict[str, Any], data_through: datetime, dormancy_days: float
+) -> dict[str, Any]:
+    """Two channels, computed here and never in the browser.
+
+    They are kept independent on purpose, and that independence IS the feature:
+
+    - **rail width** comes from the cumulative traversal count and never
+      decays, so a path that was once busy stays visibly wide forever;
+    - **core luminance** comes from recency alone and decays to zero.
+
+    A single blended "activity" number would collapse the two cases this whole
+    artifact exists to separate — an abandoned path (wide rail, dark core) and
+    a path never taken (hairline rail, no core) would land on the same faint
+    line. `core_luminance` is **null**, never 0.0, when there is nothing to
+    measure: a zero is a reading, and null is the absence of one.
+    """
+    count = body.get("lifetime_traversal_count")
+    last = body.get("last_traversal_at")
+
+    if count is None:
+        # Unknown coverage makes no count claim, so it gets no rail width
+        # claim either.
+        body["render"] = {
+            "construction": "unknown",
+            "rail_width": None,
+            "core_luminance": None,
+        }
+        return body
+
+    if last is None:
+        luminance = None  # never fired: an absence, not a dim reading
+    else:
+        seen = datetime.fromisoformat(str(last).replace("Z", "+00:00"))
+        days = max(0.0, (data_through - seen).total_seconds() / 86400.0)
+        luminance = max(0.0, min(1.0, 1.0 - (days / dormancy_days)))
+
+    body["render"] = {
+        "construction": "measured",
+        "rail_width": round(log1p(count), 4),
+        "core_luminance": None if luminance is None else round(luminance, 4),
+    }
+    return body
 
 
 def _iso(value: datetime) -> str:

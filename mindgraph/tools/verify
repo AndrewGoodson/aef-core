@@ -617,6 +617,67 @@ def check_render_nodes(result: Result) -> None:
     )
 
 
+def check_render_edges(result: Result) -> None:
+    """Stage 2.3. The distinction this artifact exists for, asserted on the
+    payload the renderer consumes and on the drawing code's null handling."""
+    import math
+
+    if not DIST.is_file():
+        result.add("rendered page exists for edge checks", False)
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+    payload = json.loads(html_text.split('id="mind-data">', 1)[1].split("</script>", 1)[0])
+    js = html_text.split("<script>")[1].split("</script>")[0]
+    edges = {(e["source"], e["target"]): e for e in payload["edges"]}
+
+    dormant = edges[("classify", "fetch_invoice")]["render"]
+    never = edges[("fetch_invoice", "human_gate")]["render"]
+    unknown = edges[("legacy_scorer", "emit")]["render"]
+
+    width = lambda r: None if r["rail_width"] is None else 1 + r["rail_width"] * 0.95  # noqa: E731
+    ratio = width(dormant) / width(never)
+    result.add(
+        "dormant rail is unmistakably wider than never-observed",
+        ratio >= 2.0,
+        f"{ratio:.1f}x ({width(dormant):.2f}px vs {width(never):.2f}px)",
+    )
+    result.add(
+        "dormant draws a core (dark), never-observed draws none",
+        dormant["core_luminance"] == 0.0 and never["core_luminance"] is None,
+    )
+    result.add(
+        "unknown coverage claims neither width nor recency",
+        unknown["rail_width"] is None and unknown["core_luminance"] is None,
+    )
+
+    # null must not be coerced to 0 anywhere — that is how the two collapse.
+    result.add(
+        "renderer distinguishes null core strictly, not falsily",
+        "core_luminance !== null" in js,
+    )
+    result.add(
+        "renderer distinguishes null rail strictly, not falsily",
+        "rail_width === null" in js,
+    )
+
+    # The rail must be a pure function of the count, with no decay term.
+    wrong = []
+    for edge in payload["edges"]:
+        count, rail = edge["lifetime_traversal_count"], edge["render"]["rail_width"]
+        if count is None:
+            if rail is not None:
+                wrong.append(f"{edge['source']}->{edge['target']}")
+        elif abs(rail - math.log1p(count)) > 1e-4:
+            wrong.append(f"{edge['source']}->{edge['target']}")
+    result.add("every rail width is exactly log1p(count), never decayed", not wrong, str(wrong))
+
+    # Edges are drawn before nodes, so a node is never hidden by its own wire.
+    result.add(
+        "edges are drawn before nodes",
+        js.index("EDGES FIRST") < js.index("D.nodes.length; i++"),
+    )
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -760,6 +821,7 @@ def main(argv: list[str]) -> int:
     check_build(result)
     check_emit(result)
     check_render_nodes(result)
+    check_render_edges(result)
     check_dist(result)
     return result.report()
 

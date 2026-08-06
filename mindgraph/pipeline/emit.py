@@ -33,9 +33,11 @@ from typing import Any
 # plainly. An empty canvas would be indistinguishable from a broken one, and
 # this whole project is about not letting absence look like something else.
 STAGE_NOTICE = (
-    "Nodes are drawn. Edges arrive in the next increment — until then the "
-    "connections between these nodes are not shown, which is why the canvas "
-    "looks sparse rather than broken."
+    "Two-layer edges are drawn. The outer rail is cumulative traffic and never "
+    "decays; the inner core is recency and does. A path used heavily and then "
+    "abandoned stays WIDE and goes DARK — visibly different from one never "
+    "taken, which is a hairline with no core at all. Endpoint markers for the "
+    "five edge states arrive in the next increment."
 )
 
 
@@ -103,11 +105,18 @@ _SHELL = """<!doctype html>
     <span class="lg"><i class="sw stale"></i>stale — instrumented, nothing recent</span>
     <span class="lg"><i class="sw unknown"></i>no telemetry — makes no claim</span>
     <span class="lg"><i class="sw border"></i>border = evidence quality, never health</span>
+    <span class="lg"><i class="ln rail"></i>rail = cumulative traffic (never decays)</span>
+    <span class="lg"><i class="ln core"></i>core = recency (decays to nothing)</span>
   </div>
   <p class="caption">Radius = <code>6.0 + 3.4 &#215; sqrt(log1p(executions))</code>, capped at
   26.0. Fill carries measured state only. Border carries how much we can see —
   solid&nbsp;= full coverage, dashed&nbsp;= partial, broken&nbsp;+&nbsp;? = none,
-  double&nbsp;= newly instrumented.</p>
+  double&nbsp;= newly instrumented.<br>
+  Edge rail = <code>log1p(traversals)</code>. Worked examples from this graph:
+  <code>162 traversals / today</code> = widest rail, bright core;
+  <code>57 / 20 days ago</code> = wide rail, core gone dark (abandoned);
+  <code>0 observed</code> = hairline, no core (never taken);
+  <code>no coverage</code> = patterned, and claims nothing.</p>
   <section>
     <h2>Embedded payload</h2>
     <div class="scroll"><table>__ROWS__</table></div>
@@ -169,7 +178,10 @@ canvas{display:block;width:100%;height:auto}
 .sw.stale{background:var(--stale)}
 .sw.unknown{background:transparent;border:1.5px dashed var(--muted)}
 .sw.border{background:transparent;border:2px solid var(--fg)}
-.caption{margin:0;color:var(--muted);font-size:.78rem;max-width:70ch}
+.caption{margin:0;color:var(--muted);font-size:.78rem;max-width:74ch;line-height:1.7}
+.ln{width:18px;height:0;flex:0 0 auto;display:inline-block}
+.ln.rail{border-top:5px solid var(--line)}
+.ln.core{border-top:2px solid var(--accent)}
 code{font-family:var(--mono);font-size:.95em}
 """
 
@@ -225,6 +237,50 @@ function draw(){
   var cv = document.getElementById('c');
   var cx = cv.getContext('2d');
   cx.clearRect(0, 0, cv.width, cv.height);
+
+  // EDGES FIRST, so nodes sit on top of their own connections.
+  //
+  // Two independent channels, and the independence is the feature. Rail width
+  // is cumulative and never decays; core luminance is recency and does. A
+  // single blended number would collapse an abandoned path and a never-taken
+  // one onto the same faint line, which is the one confusion this artifact
+  // exists to prevent.
+  var pos = {};
+  for (var k = 0; k < D.nodes.length; k++) { pos[D.nodes[k].id] = D.nodes[k]; }
+
+  for (var e = 0; e < D.edges.length; e++) {
+    var ed = D.edges[e], ER = ed.render;
+    var a = pos[ed.source], b = pos[ed.target];
+    if (!a || !b) { continue; }
+
+    if (ER.rail_width === null) {
+      // No coverage: no width claim. A patterned hairline that asserts
+      // nothing about volume, because nothing was measured.
+      cx.strokeStyle = css('--muted'); cx.lineWidth = 1;
+      cx.setLineDash([3, 5]); cx.globalAlpha = 0.55;
+      cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke();
+      cx.setLineDash([]); cx.globalAlpha = 1;
+      continue;
+    }
+
+    // 1. HISTORY RAIL — cumulative, monotonic, never decays.
+    cx.strokeStyle = css('--line');
+    cx.lineWidth = 1 + ER.rail_width * 0.95;
+    cx.lineCap = 'round';
+    cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke();
+
+    // 2. ACTIVITY CORE — recency only. null means NEVER fired, which draws no
+    // core at all; 0.0 means fired long ago, which draws a dark one. Those are
+    // different claims and they get different marks.
+    if (ER.core_luminance !== null) {
+      cx.globalAlpha = 0.15 + ER.core_luminance * 0.85;
+      cx.strokeStyle = css('--accent');
+      cx.lineWidth = Math.max(1, ER.rail_width * 0.32);
+      cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke();
+      cx.globalAlpha = 1;
+    }
+    cx.lineCap = 'butt';
+  }
 
   for (var i = 0; i < D.nodes.length; i++) {
     var n = D.nodes[i], R = n.render, x = n.x, y = n.y, r = R.radius;
