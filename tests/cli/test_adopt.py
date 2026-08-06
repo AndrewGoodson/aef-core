@@ -140,6 +140,32 @@ def test_run_adopt_never_overwrites_existing_claude_md(tmp_path: Path) -> None:
     assert "CLAUDE.md" in skipped_names
 
 
+def test_run_adopt_does_not_follow_a_dangling_output_symlink(tmp_path: Path) -> None:
+    outside = tmp_path.parent / "outside-claude.md"
+    (tmp_path / "CLAUDE.md").symlink_to(outside)
+
+    result = run_adopt(tmp_path)
+
+    assert not outside.exists()
+    assert tmp_path / "CLAUDE.md" in result.skipped_files
+
+
+def test_run_adopt_does_not_write_through_a_symlinked_parent(tmp_path: Path) -> None:
+    outside = tmp_path.parent / "outside-github"
+    outside.mkdir()
+    (tmp_path / ".github").symlink_to(outside, target_is_directory=True)
+
+    result = run_adopt(tmp_path)
+
+    assert list(outside.iterdir()) == []
+    skipped = {str(path.relative_to(tmp_path)) for path in result.skipped_files}
+    assert {
+        ".github/copilot-instructions.md",
+        ".github/workflows/loop-gate.yml",
+        ".github/workflows/loop-monitor.yml",
+    } <= skipped
+
+
 def test_run_adopt_never_overwrites_existing_aef_yaml(tmp_path: Path) -> None:
     (tmp_path / "aef.yaml").write_text("custom: true\n")
     run_adopt(tmp_path)
