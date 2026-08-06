@@ -316,6 +316,7 @@ unexpected boundary.
 - `ruff format --check .`: 192 files already formatted
 - MindGraph verification: 287 checks passed; self-test detected all 29 planted failures with no false positives
 
+
 ## Round 5 — configuration, factories, and service wiring
 
 ### Looked at
@@ -548,6 +549,93 @@ reported evaluation complete while candidate code could still be executing.
 ### Round gate
 
 - `pytest -q`: 1428 passed, 93 warnings
+- `mypy --strict aef`: 107 source files clean
+- `ruff check .`: clean
+- `ruff format --check aef tests examples`: 193 files already formatted
+- MindGraph verification: 287 checks passed; self-test detected all 29 planted failures with no false positives
+
+
+## Round 8 — CLI adoption and doctor hostile inputs
+
+### Looked at
+
+Adoption into empty and partially populated repositories, dangling leaf
+symlinks, symlinked output directories, ordinary-file parents, preservation of
+existing files, adopted-repository detection, adapter shape validation,
+generated placeholders, invalid Python, invalid YAML, and undecodable input.
+
+### Confirmed and fixed
+
+Three CLI defect classes were reproduced:
+
+1. `aef adopt` followed repository-controlled symlinks. `Path.exists()` is
+   false for a dangling symlink, so a `CLAUDE.md` link caused adoption to
+   create its target outside the repository. A `.github` directory symlink
+   likewise caused Copilot instructions and both workflow files to be written
+   into an external directory.
+2. `aef doctor` could report an adopted adapter as healthy when it was not
+   usable. Removing the generated adapter made the repository look
+   non-adopted, a nested `build_graph()` satisfied the AST scan despite not
+   being importable from the module, and the untouched generated stub was
+   emitted as `ok=True` even though its advisory text said it was not wired.
+3. Non-UTF-8 `aef_adapter.py` or `aef.yaml` files raised raw
+   `UnicodeDecodeError` exceptions. Doctor and the config loader therefore
+   crashed instead of returning the named diagnostic/readable
+   `AgentConfigError` their contracts promise.
+
+Reproduction before the fixes:
+
+```text
+run_adopt(repo containing CLAUDE.md -> ../outside/CLAUDE.md):
+  created ../outside/CLAUDE.md
+run_adopt(repo containing .github -> ../outside):
+  created copilot-instructions.md and two workflow files in ../outside
+
+run_doctor(adopted repo after unlinking aef_adapter.py):
+  no adapter failure
+run_doctor(adapter with only nested build_graph):
+  adapter_importable OK
+run_doctor(pristine generated adapter):
+  adapter_importable ok=True, detail="still the generated stub"
+
+pytest -q \
+  tests/cli/test_doctor.py::test_an_adapter_that_is_not_utf8_is_reported \
+  tests/config/test_schema.py::test_load_agent_config_non_utf8_raises_readable_error
+2 failed with uncaught UnicodeDecodeError
+```
+
+Expected: adoption writes only beneath its target without following links;
+doctor identifies an adopted repository independently of the adapter it is
+checking and requires a top-level callable entrypoint; incomplete generated
+artifacts are visibly warnings, not successes; malformed text produces an
+actionable diagnostic rather than a traceback.
+
+Fixes: reject an existing/symlinked leaf and any symlink or non-directory in
+an output path's parent chain; recognize adoption marker files; require a
+top-level `build_graph()`; make the generated stub an advisory failure; and
+translate decoding failures at both file-reading boundaries. Regression tests
+cover every reproduced shape.
+
+The external writes violated `aef adopt`'s repository-scoped, never-overwrite
+contract. The false-green checks contradicted ADR 0079's claim that doctor
+detects an unwired adapter. The raw decoding failures contradicted the config
+loader's stated readable-error guarantee.
+
+### Ruled out
+
+- Existing regular output files remain byte-for-byte unchanged and are listed
+  as skipped.
+- A normal pristine adoption still creates the complete expected file set.
+- A fresh `aef init` repository remains valid without `CLAUDE.md`; adopted
+  marker files retain the stricter checks.
+- Invalid Python and invalid YAML still become named doctor failures without
+  importing adopter code or executing module-level side effects.
+- Descendants of a regular file used as a would-be directory are skipped
+  rather than overwritten or traversed.
+
+### Round gate
+
+- `pytest -q` (with `.venv` activated): 1435 passed, 93 warnings
 - `mypy --strict aef`: 107 source files clean
 - `ruff check .`: clean
 - `ruff format --check aef tests examples`: 193 files already formatted
