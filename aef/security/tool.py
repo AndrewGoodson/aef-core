@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import math
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -119,7 +120,10 @@ class InMemoryAuditLogWriter(AuditLogWriter):
         self.entries: list[AuditEntry] = []
 
     def write(self, entry: AuditEntry) -> None:
-        self.entries.append(entry)
+        # Frozen dataclasses do not make nested argument values immutable.
+        # Store a point-in-time audit record, not an alias that the caller can
+        # rewrite after policy evaluation.
+        self.entries.append(deepcopy(entry))
 
 
 class FileAuditLogWriter(AuditLogWriter):
