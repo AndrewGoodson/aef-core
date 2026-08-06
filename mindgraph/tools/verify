@@ -1075,6 +1075,89 @@ def check_staleness(result: Result) -> None:
     result.add("window lengths print without invented precision", ".0-day" not in caption)
 
 
+def check_fleet(result: Result) -> None:
+    """Stage 4.1 — the join direction, which is the whole thesis.
+
+    Build the fleet from telemetry and a repo that stops reporting does not go
+    red, it stops EXISTING. Every check here is aimed at that.
+    """
+    from datetime import UTC, datetime
+
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    import fleet as fleet_mod  # type: ignore[import-not-found]
+
+    registry = json.loads((ROOT / "fixtures" / "fleet.json").read_text())["registry"]
+    registry = [e for e in registry if e.get("repo")]
+    through = datetime(2026, 8, 5, 17, 42, tzinfo=UTC)
+    rows = fleet_mod.left_join(registry, data_through=through, expected_interval_seconds=3600)
+
+    result.add(
+        "every registry entry gets a row, always",
+        len(rows) == len(registry),
+        f"{len(rows)} rows for {len(registry)} registered",
+    )
+    order = {r.repo: i for i, r in enumerate(rows)}
+    fresh = [r.repo for r in rows if r.state == "fresh"]
+    result.add(
+        "every non-reporting repo sorts ABOVE every fresh one",
+        all(order[r.repo] < min(order[f] for f in fresh) for r in rows if r.state != "fresh"),
+    )
+    result.add(
+        "only 'fresh' maps to the healthy treatment",
+        [s for s, treat in fleet_mod.STATE_TREATMENT.items() if treat == "normal"] == ["fresh"],
+    )
+    result.add(
+        "a repo that never reported is distinct from one that went stale",
+        fleet_mod.STATE_TREATMENT["never"] != fleet_mod.STATE_TREATMENT["stale"],
+    )
+    result.add(
+        "a collection error is distinct from no data",
+        fleet_mod.STATE_TREATMENT["error"] != fleet_mod.STATE_TREATMENT["never"],
+    )
+
+    ghost = fleet_mod.left_join(
+        registry, data_through=through, expected_interval_seconds=3600,
+        emitters={"ghost-repo"},
+    )
+    result.add(
+        "telemetry from an unregistered repo is surfaced, not dropped",
+        any(r.repo == "ghost-repo" and r.state == "unregistered" for r in ghost),
+    )
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        empty = Path(tmp) / "f.json"
+        empty.write_text(json.dumps({"registry": []}))
+        try:
+            fleet_mod.load_registry(empty)
+            refused = False
+        except fleet_mod.FleetError:
+            refused = True
+    result.add("an empty registry is refused, not rendered as a calm fleet", refused)
+
+    cover = fleet_mod.coverage(
+        [r for r in rows if r.state == "fresh"], expected_interval_seconds=3600
+    )
+    result.add(
+        "nothing overdue reports None, not 0",
+        cover["oldest_overdue_seconds"] is None,
+    )
+
+    if not DIST.is_file():
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+    result.add(
+        "the coverage strip leads the page, above the graph",
+        'class="strip' in html_text
+        and html_text.index('class="strip') < html_text.index("<canvas"),
+    )
+    for repo in (r["repo"] for r in (json.loads(
+        html_text.split('id="mind-data">', 1)[1].split("</script>", 1)[0]
+    )["fleet"]["rows"])):
+        result.add(f"fleet row rendered for {repo}", repo in html_text)
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -1222,6 +1305,7 @@ def main(argv: list[str]) -> int:
     check_pixel_stability(result)
     check_birth_flag(result)
     check_staleness(result)
+    check_fleet(result)
     check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()

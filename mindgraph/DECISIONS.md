@@ -693,3 +693,39 @@ Cosmetic, recorded because it is the same class as the numbers this project
 cares about. The dormancy window is a configured integer; rendering it as a
 float suggests the boundary was measured to one decimal place. Windows now
 print as integers when they are integral.
+
+---
+
+## 2026-08-05 · The fleet is a LEFT JOIN, and the direction is the whole thesis
+
+**Spec is emphatic; recorded because the wrong version is the easier one to
+build.** Section 4.4: assemble the fleet from an authoritative registry and
+left-join telemetry, never from whoever emitted data.
+
+The failure mode is worth stating plainly. Build the list from emitters and a
+repo that stops reporting **does not go red — it stops existing**. The page
+looks calm, every row on it is green, and the one thing you needed to know is
+the row that is not there. The failure removes its own evidence, which is the
+cardinal anti-pattern in its most literal form.
+
+So the registry is authoritative: every registered repo gets a row, always, and
+absence of telemetry is a rendered state rather than a missing row.
+
+**`error` is deliberately not `never`.** A collector that failed means we know
+we *cannot see*; a repo that never reported means we *see nothing*. Conflating
+them lets a broken exporter masquerade as a quiet agent, and those need
+different people to fix them.
+
+**The reverse case is a finding, not a filter.** Telemetry arriving for a repo
+absent from the registry means the registry is stale — somebody stood up an
+agent nobody recorded. It is surfaced as `unregistered` rather than dropped.
+
+**Sorting encodes the requirement.** Non-reporting repos sort above healthy
+ones, and within a state the longest-overdue sorts first, because the climbing
+number is itself the signal and must be able to reach the top.
+
+**Two absences kept as absences.** An empty registry is refused rather than
+rendered as a calm empty fleet — a fleet page with no rows is indistinguishable
+from a fleet with nothing wrong. And `oldest_overdue_seconds` is `None` rather
+than `0` when nothing is overdue, because a zero would read as "the oldest
+overdue report is 0 seconds old", a measurement of a thing that does not exist.

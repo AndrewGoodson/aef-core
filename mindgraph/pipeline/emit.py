@@ -33,11 +33,11 @@ from typing import Any
 # plainly. An empty canvas would be indistinguishable from a broken one, and
 # this whole project is about not letting absence look like something else.
 STAGE_NOTICE = (
-    "A node that appeared recently carries a static age tab \u2014 not a "
-    "pulsing halo, which would be confusable with an alarm, invisible in a "
-    "screenshot, and would imply live motion in a file that has none. The tab "
-    "says how old the node was when this picture was taken. Dashboard panels "
-    "arrive in Stage 4."
+    "The coverage strip leads the page because every number below it is "
+    "conditional on it. The fleet is built from the registry and telemetry is "
+    "joined in, so a repo that stops reporting goes loud and rises to the top "
+    "instead of quietly leaving the list. Exception queue and cohort flow "
+    "arrive next."
 )
 
 
@@ -61,6 +61,65 @@ def _plain(value: float | int) -> str:
     finer than it is.
     """
     return str(int(value)) if float(value).is_integer() else str(value)
+
+
+def _coverage_strip(payload: dict[str, Any]) -> str:
+    """The strip that answers "can I trust the rest of this page?".
+
+    It leads, and that placement is the argument: every panel below it is
+    conditional on coverage. A fleet reporting 1 of 4 makes everything
+    underneath a sample rather than a measurement, and the reader needs that
+    before they read anything else, not after scrolling past it.
+    """
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    import fleet  # noqa: PLC0415
+
+    block = payload.get("fleet") or {}
+    cover = block.get("coverage")
+    rows = block.get("rows") or []
+    if not cover:
+        # No registry is not "everything is fine" — it is the one condition
+        # under which nothing on this page is a measurement of anything.
+        return (
+            '<div class="strip unknown"><strong>No registry</strong>'
+            "<span>the fleet cannot be assembled, so nothing below is a "
+            "measurement of anything</span></div>"
+        )
+
+    tone = "ok" if cover["not_reporting"] == 0 else "bad"
+    oldest = fleet.humanise(cover.get("oldest_overdue_seconds"))
+    parts = [
+        f"<b>{cover['fresh']}/{cover['total']}</b> reporting fresh",
+        f"<b>{cover['stale']}</b> stale",
+        f"<b>{cover['never']}</b> never reported",
+        f"<b>{cover['error']}</b> telemetry error",
+    ]
+    if cover.get("unregistered"):
+        parts.append(f"<b>{cover['unregistered']}</b> unregistered")
+    parts.append(
+        f"oldest overdue <b>{html.escape(oldest)}</b>" if oldest else "nothing overdue"
+    )
+
+    cells = ""
+    for row in rows:
+        overdue = fleet.humanise(row.get("overdue_seconds"))
+        cells += (
+            f'<tr class="fl {html.escape(str(row["treatment"]))}">'
+            f'<td class="rp">{html.escape(str(row["repo"]))}</td>'
+            f'<td class="st">{html.escape(str(row["state"]).replace("_", " "))}</td>'
+            f'<td class="ov">{html.escape(overdue) if overdue else "&mdash;"}</td>'
+            f'<td class="er">{html.escape(str(row.get("telemetry_error") or ""))}</td>'
+            "</tr>"
+        )
+
+    return (
+        f'<div class="strip {tone}"><strong>Coverage</strong>'
+        f"<span>{' &middot; '.join(parts)}</span></div>"
+        f'<div class="scroll"><table class="fleet">{cells}</table></div>'
+    )
 
 
 def _legend_text(payload: dict[str, Any]) -> str:
@@ -162,6 +221,8 @@ def emit(payload: dict[str, Any]) -> str:
     return _SHELL.replace("__CSS__", _CSS).replace("__JS__", _JS).replace(
         "__DATA__", json_for_script(payload)
     ).replace("__ROWS__", _summary_rows(payload)).replace(
+        "__STRIP__", _coverage_strip(payload)
+    ).replace(
         "__LEGEND__", _legend_text(payload)
     ).replace(
         "__NOTICE__", html.escape(STAGE_NOTICE)
@@ -183,6 +244,7 @@ _SHELL = """<!doctype html>
     <h1>__GRAPH__</h1>
     <p class="stamp" id="stamp"></p>
   </header>
+  __STRIP__
   <p class="notice">__NOTICE__</p>
   <div class="stage"><canvas id="c" width="900" height="560"></canvas></div>
   <div class="legend">
@@ -215,18 +277,18 @@ _SHELL = """<!doctype html>
 _CSS = """
 :root{
   --ink:#0a0d12;--panel:#11151d;--line:#1e2531;--fg:#e6e9f0;--muted:#798294;
-  --accent:#7fd1c1;--warn:#e0a94a;--ok:#57c98b;--stale:#8d93a3;
+  --accent:#7fd1c1;--warn:#e0a94a;--ok:#57c98b;--stale:#8d93a3;--bad:#e5665f;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
 }
 @media (prefers-color-scheme: light){
   :root{--ink:#f6f7f9;--panel:#fff;--line:#e2e6ec;--fg:#141922;--muted:#68717f;
-        --accent:#178c78;--warn:#b57d10;--ok:#1d9a63;--stale:#6f7686;}
+        --accent:#178c78;--warn:#b57d10;--ok:#1d9a63;--stale:#6f7686;--bad:#cf4b45;}
 }
 :root[data-theme="dark"]{--ink:#0a0d12;--panel:#11151d;--line:#1e2531;--fg:#e6e9f0;
-  --muted:#798294;--accent:#7fd1c1;--warn:#e0a94a;--ok:#57c98b;--stale:#8d93a3;}
+  --muted:#798294;--accent:#7fd1c1;--warn:#e0a94a;--ok:#57c98b;--stale:#8d93a3;--bad:#e5665f;}
 :root[data-theme="light"]{--ink:#f6f7f9;--panel:#fff;--line:#e2e6ec;--fg:#141922;
-  --muted:#68717f;--accent:#178c78;--warn:#b57d10;--ok:#1d9a63;--stale:#6f7686;}
+  --muted:#68717f;--accent:#178c78;--warn:#b57d10;--ok:#1d9a63;--stale:#6f7686;--bad:#cf4b45;}
 *{box-sizing:border-box}
 body{margin:0;background:var(--ink);color:var(--fg);font:15px/1.55 var(--sans)}
 main{max-width:1100px;margin:0 auto;padding:2rem 1.25rem 3rem;
@@ -271,6 +333,25 @@ canvas{display:block;width:100%;height:auto}
 .tab{width:18px;height:10px;flex:0 0 auto;display:inline-block;
   background:var(--accent);border-radius:1px}
 code{font-family:var(--mono);font-size:.95em}
+.strip{display:flex;flex-wrap:wrap;gap:.25rem 1rem;align-items:baseline;
+  padding:.75rem .95rem;border-radius:10px;border:1px solid var(--line);
+  background:var(--panel);font-size:.85rem}
+.strip strong{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase}
+.strip span{color:var(--muted)}
+.strip b{color:var(--fg);font-variant-numeric:tabular-nums}
+.strip.ok{border-color:var(--ok)} .strip.ok strong{color:var(--ok)}
+.strip.bad{border-color:var(--bad)} .strip.bad strong{color:var(--bad)}
+.strip.unknown{border-style:dashed} .strip.unknown strong{color:var(--warn)}
+table.fleet{font:12px/1.5 var(--mono);width:100%}
+table.fleet td{padding:.3rem .9rem .3rem 0;border-bottom:1px solid var(--line)}
+table.fleet .rp{color:var(--fg)}
+table.fleet .st,table.fleet .ov,table.fleet .er{color:var(--muted)}
+table.fleet .ov{font-variant-numeric:tabular-nums}
+tr.fl.normal .st{color:var(--ok)}
+tr.fl.stale .st{color:var(--stale)}
+tr.fl.degraded .st{color:var(--bad)}
+tr.fl.unknown .st{color:var(--warn)}
+tr.fl.unknown .rp,tr.fl.degraded .rp{font-weight:600}
 """
 
 # `age()` is the only logic in the shell, and it is the load-bearing one: the

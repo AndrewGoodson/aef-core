@@ -19,7 +19,7 @@ CHECKLIST:
 - [x] 3.1 — persistence: a file reopened later renders pixel-identical node positions (threshold: zero coordinate drift between two opens)
 - [x] 3.2 — birth-flag tab ("NEW"/"3h"/"2d") computed from now − first_seen_at against embedded generated_at; static, not a halo (§3d verdict B)
 - [x] 3.3 — staleness self-display: all visible ages computed from embedded timestamps; never labelled LIVE
-- [ ] 4.1 — dashboard: registry LEFT-JOIN telemetry; coverage + freshness strip first
+- [x] 4.1 — dashboard: registry LEFT-JOIN telemetry; coverage + freshness strip first
 - [ ] 4.2 — dashboard: exception queue (rollbacks, gate-eval errors, stale reporting, long-pending decisions) — NOT ordinary rejections
 - [ ] 4.3 — dashboard: CONSORT-style cohort flow, neutral colours for expected rejection branches, red only for operationally abnormal (§3b verdict B)
 - [ ] 4.4 — dashboard: Shewhart process-stability bands beneath the flow
@@ -31,12 +31,13 @@ CHECKLIST:
 - [ ] 6.1 — dual themes via prefers-color-scheme with identical semantic ordering (§3f verdict B)
 - [ ] 6.2 — MANUAL: on-hardware polarity A/B (light vs dark) for "find the abandoned path" and "find the missing-reporting node"
 - [ ] 6.3 — MANUAL: comparison-mode A/B (difference-map vs two-pane vs scrubber) measured on error rate and time, not FPS
-NEXT: 4.1 — dashboard: registry LEFT-JOIN telemetry; coverage + freshness strip first. fixtures/fleet.json already carries the registry with all four telemetry states (fresh/stale/never/error); 4.1 builds the strip from a left join so a repo that stops reporting cannot vanish.
+NEXT: 4.2 — dashboard: exception queue (rollbacks, gate-eval errors, stale reporting, long-pending human decisions, rollback-adjusted anomalies) — NOT ordinary rejections, which are the gate working
 BLOCKERS: none
 MANUAL_CHECKS:
 - (CLOSED 2026-08-05) headless browser load — Google Chrome was found at /Applications/Google Chrome.app. The verifier now opens dist/index.html from file:// headless with NetworkService disabled, twice, and compares canvas pixels. This is no longer a manual check.
 - 6.2 and 6.3 are operator task-tests on target hardware and cannot be automated
-LAST_RUN: 2026-08-05 — increment 3.3, STAGE 3 COMPLETE. Staleness self-display audited and PROVED by simulation: Date.now is overridden before the page script runs and the DOM is read back. Opened +3d the stamp says '3d ago'; opened +30d it says '30d ago'. Inspecting the code would only have shown that an age function exists.
-The 3.2 rule is now enforced structurally: exactly ONE live clock read in the whole page, and it is inside age(), which only the header stamp uses. Everything describing a thing IN the picture is baked. Audited every visible age and classified it — nothing was misfiled.
-One cosmetic defect fixed: the legend printed '14.0-day', which reads as a measurement taken to one decimal place. It is a configured integer, and the float suggested the boundary was finer than it is.
-Verified: self-test PASS (24 detections); verify 152/152 PASS. Published to the stable URL.
+LAST_RUN: 2026-08-05 — increment 4.1. pipeline/fleet.py assembles the fleet from the REGISTRY and left-joins telemetry into it. The join direction is the whole thesis: build the list from whoever emitted data and a repo that stops reporting does not go red, it stops EXISTING — the page looks calm, every row is green, and the one thing you needed to know is the row that is not there.
+Measured: 1/4 reporting fresh · 1 stale · 1 never reported · 1 telemetry error · oldest overdue 7d13h. Render order is error, never, stale, fresh — every non-reporting repo sorts ABOVE the healthy one, and within a state the longest-overdue sorts first because the climb is itself the signal.
+Four states kept distinct, and 'error' is deliberately not 'never': a collector that failed means we know we CANNOT SEE, rather than seeing nothing, and conflating them lets a broken exporter masquerade as a quiet agent. Only 'fresh' maps to the healthy treatment, so nothing keeps a green fill after going quiet.
+Probe found nothing: a silent repo cannot vanish, cannot sort below a healthy one, cannot keep green; an unregistered emitter is surfaced rather than dropped (the registry being stale is itself a finding); an empty registry is refused rather than rendered as a calm empty fleet; and nothing-overdue reports None rather than 0.
+Verified: self-test PASS (24 detections); verify 165/165 PASS. Published to the stable URL.

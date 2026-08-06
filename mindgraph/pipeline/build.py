@@ -32,6 +32,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import contract as contract_mod  # noqa: E402
+import fleet as fleet_mod  # noqa: E402
 import layout as layout_mod  # noqa: E402
 import traversal as traversal_mod  # noqa: E402
 
@@ -160,6 +161,24 @@ def build(
         layout_version += 1
     save_state(state_path, graph_id, placed, layout_version)
 
+    # The fleet is assembled from the REGISTRY and left-joined with telemetry.
+    # Built here so the page receives rows already sorted and already carrying
+    # their treatment — the browser cannot decide a silent repo looks fine.
+    registry_path = topology_path.parent / "fleet.json"
+    interval = fleet_mod.default_interval(topology)
+    if registry_path.is_file():
+        rows = fleet_mod.left_join(
+            fleet_mod.load_registry(registry_path),
+            data_through=data_through,
+            expected_interval_seconds=interval,
+        )
+        fleet_payload = {
+            "coverage": fleet_mod.coverage(rows, expected_interval_seconds=interval),
+            "rows": [r.to_payload() for r in rows],
+        }
+    else:
+        fleet_payload = {"coverage": None, "rows": []}
+
     node_payloads = []
     for node in nodes:
         body = node.to_payload()
@@ -206,6 +225,7 @@ def build(
         "expected_report_interval_seconds": topology.get(
             "expected_report_interval_seconds", 3600
         ),
+        "fleet": fleet_payload,
         "nodes": sorted(node_payloads, key=lambda n: str(n["id"])),
         "edges": [
             _edge_render(e.to_payload(), data_through, dormancy_days, gates) for e in edges
