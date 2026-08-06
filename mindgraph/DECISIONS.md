@@ -663,3 +663,33 @@ negative age would render as a birthday in the future, and the clock
 disagreement behind it is worth fixing at source rather than clamping. A node
 never observed gets no tab: "NEW" over a node with no telemetry would be
 inventing a birthday.
+
+---
+
+## 2026-08-05 · Staleness is proved by simulating the clock, not by reading the code
+
+**Spec states the outcome.** Section 4.3: compute all visible ages from the
+embedded values "so a file opened 3 days later *looks* 3 days stale".
+
+**Chosen.** Override `Date.now` before the page script runs, render in headless
+Chrome, and read the stamp out of the resulting DOM at +0, +3 and +30 days.
+
+**Why.** The requirement is about what a reader sees on a future day, and no
+amount of inspecting `age()` demonstrates that. The simulation does: the stamp
+reads `3d ago` and `30d ago` respectively, and all three differ from each other.
+
+The 3.2 rule is now also enforced structurally rather than by convention: the
+page contains **exactly one** live clock read, and it is inside `age()`, which
+only the header stamp uses. Every age describing a thing *in* the picture is
+baked at build time. Both halves are asserted, so a future increment that
+reaches for `Date.now()` in the canvas fails the check rather than quietly
+breaking pixel stability.
+
+---
+
+## 2026-08-05 · `14.0-day` invents precision it does not have
+
+Cosmetic, recorded because it is the same class as the numbers this project
+cares about. The dormancy window is a configured integer; rendering it as a
+float suggests the boundary was measured to one decimal place. Windows now
+print as integers when they are integral.

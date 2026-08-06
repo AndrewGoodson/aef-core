@@ -53,6 +53,16 @@ def json_for_script(payload: Any) -> str:
     )
 
 
+def _plain(value: float | int) -> str:
+    """Render a window length without inventing precision.
+
+    `14.0-day` reads as a measurement taken to one decimal place. It is a
+    configured integer, and printing it as a float suggests the boundary is
+    finer than it is.
+    """
+    return str(int(value)) if float(value).is_integer() else str(value)
+
+
 def _legend_text(payload: dict[str, Any]) -> str:
     """The legend, DERIVED from the contract's constants and from edges that
     actually exist in this graph.
@@ -120,7 +130,7 @@ def _legend_text(payload: dict[str, Any]) -> str:
         f"sqrt(log1p(executions))</code>, capped at <code>{contract.RADIUS_CAP}</code>. "
         f"Edge rail = <code>log1p(traversals)</code>, which never decays. "
         f"Core brightness = recency against a "
-        f"<code>{payload.get('dormancy_window_days', 14)}-day</code> window. "
+        f"<code>{_plain(payload.get('dormancy_window_days', 14))}-day</code> window. "
         f"Fill carries measured state only; border carries how much we can see. "
         f"<br>Worked examples from this graph: " + "; ".join(examples) + "."
     )

@@ -991,6 +991,90 @@ def check_birth_flag(result: Result) -> None:
         )
 
 
+def check_staleness(result: Result) -> None:
+    """Stage 3.3 — a file opened three days later must LOOK three days stale.
+
+    Tested by simulating it: `Date.now` is overridden before the page script
+    runs and the resulting DOM is read. Inspecting the code would only show
+    that an age function exists.
+    """
+    if not DIST.is_file():
+        result.add("staleness self-display", False, "no artifact")
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+    js = html_text.split("<script>")[1].split("</script>")[0]
+
+    # The 3.2 rule, asserted structurally: exactly one live clock read, and it
+    # is inside age(), which only the header stamp uses. Everything describing
+    # a thing IN the picture is baked.
+    result.add(
+        "exactly one live clock read in the whole page",
+        js.count("Date.now()") == 1,
+        f"{js.count('Date.now()')} occurrences",
+    )
+    if js.count("Date.now()") == 1:
+        where = js.index("Date.now()")
+        start = js.index("function age")
+        nxt = js.index("function ", start + 5)
+        result.add("the live clock read is inside age()", start < where < nxt)
+    result.add(
+        "the birth tab is baked, not clock-derived",
+        "R.birth_flag" in js and "age(" not in js.split("BIRTH TAB")[1].split("Label")[0],
+    )
+
+    chrome = _chrome()
+    if chrome is None:
+        result.add("a file opened later looks stale", False, "no headless browser")
+        return
+
+    import re as _re
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        seen = {}
+        for days in (0, 3, 30):
+            shim = (
+                "<script>(function(){var R=Date.now;Date.now=function(){"
+                f"return R()+{days}*86400000;}};}})();</script>"
+            )
+            page = Path(tmp) / f"d{days}.html"
+            page.write_text(
+                html_text.replace('<script type="application/json"', shim + '<script type="application/json"'),
+                encoding="utf-8",
+            )
+            proc = subprocess.run(
+                [chrome, "--headless", "--disable-gpu", "--virtual-time-budget=3000",
+                 "--dump-dom", page.as_uri()],
+                capture_output=True, text=True, timeout=90,
+            )
+            match = _re.search(r'<p class="stamp" id="stamp">(.*?)</p>', proc.stdout, _re.S)
+            seen[days] = _re.sub(r"<[^>]+>", "", match.group(1)).strip() if match else ""
+
+        result.add(
+            "a file opened 3 days later reports 3 days",
+            "3d ago" in seen.get(3, ""),
+            seen.get(3, "")[:70],
+        )
+        result.add(
+            "a file opened 30 days later reports 30 days",
+            "30d ago" in seen.get(30, ""),
+            seen.get(30, "")[:70],
+        )
+        result.add(
+            "the reported age actually changes with time",
+            seen.get(0) != seen.get(3) != seen.get(30),
+        )
+        result.add(
+            "no stamp ever claims the file is live",
+            not any("LIVE" in v.upper() for v in seen.values()),
+        )
+
+    # A window length is a configured integer; printing 14.0 invents precision.
+    caption = html_text.split('<p class="caption">')[1].split("</p>")[0]
+    result.add("window lengths print without invented precision", ".0-day" not in caption)
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -1137,6 +1221,7 @@ def main(argv: list[str]) -> int:
     check_render_edges(result)
     check_pixel_stability(result)
     check_birth_flag(result)
+    check_staleness(result)
     check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()

@@ -1,5 +1,5 @@
 STATUS: IN_PROGRESS
-STAGE: 3 — Persistence and staleness (Stage 2 complete) (Stages 0 and 1 complete; dist/index.html now exists)
+STAGE: 4 — Dashboard around absence (Stages 0-3 complete) (Stages 0 and 1 complete; dist/index.html now exists)
 CHECKLIST:
 - [x] init.scaffold — pipeline/ dist/ fixtures/ tools/ created; RESEARCH_REPORT.md installed
 - [x] init.fixtures — synthetic dataset covering every required edge case (fixtures/fleet.json)
@@ -18,7 +18,7 @@ CHECKLIST:
 - [x] 2.6 — legend with concrete worked examples, windows, numbers, and every log/sqrt transform and cap printed
 - [x] 3.1 — persistence: a file reopened later renders pixel-identical node positions (threshold: zero coordinate drift between two opens)
 - [x] 3.2 — birth-flag tab ("NEW"/"3h"/"2d") computed from now − first_seen_at against embedded generated_at; static, not a halo (§3d verdict B)
-- [ ] 3.3 — staleness self-display: all visible ages computed from embedded timestamps; never labelled LIVE
+- [x] 3.3 — staleness self-display: all visible ages computed from embedded timestamps; never labelled LIVE
 - [ ] 4.1 — dashboard: registry LEFT-JOIN telemetry; coverage + freshness strip first
 - [ ] 4.2 — dashboard: exception queue (rollbacks, gate-eval errors, stale reporting, long-pending decisions) — NOT ordinary rejections
 - [ ] 4.3 — dashboard: CONSORT-style cohort flow, neutral colours for expected rejection branches, red only for operationally abnormal (§3b verdict B)
@@ -31,12 +31,12 @@ CHECKLIST:
 - [ ] 6.1 — dual themes via prefers-color-scheme with identical semantic ordering (§3f verdict B)
 - [ ] 6.2 — MANUAL: on-hardware polarity A/B (light vs dark) for "find the abandoned path" and "find the missing-reporting node"
 - [ ] 6.3 — MANUAL: comparison-mode A/B (difference-map vs two-pane vs scrubber) measured on error rate and time, not FPS
-NEXT: 3.3 — staleness self-display: all visible ages computed from embedded timestamps; never labelled LIVE. The header stamp already does this; 3.3 is auditing every visible age against that rule and adding a check that no age is baked where it should tick.
+NEXT: 4.1 — dashboard: registry LEFT-JOIN telemetry; coverage + freshness strip first. fixtures/fleet.json already carries the registry with all four telemetry states (fresh/stale/never/error); 4.1 builds the strip from a left join so a repo that stops reporting cannot vanish.
 BLOCKERS: none
 MANUAL_CHECKS:
 - (CLOSED 2026-08-05) headless browser load — Google Chrome was found at /Applications/Google Chrome.app. The verifier now opens dist/index.html from file:// headless with NetworkService disabled, twice, and compares canvas pixels. This is no longer a manual check.
 - 6.2 and 6.3 are operator task-tests on target hardware and cannot be automated
-LAST_RUN: 2026-08-05 — increment 3.2. Recently-appeared nodes carry a static age tab, baked at BUILD time against generated_at. §3d's verdict calls for it to be 'deterministic, screenshot-stable', which settles a real tension: computing it in the browser from Date.now() would be neither, would make two screenshots of the same file differ, and would fail 3.1's canvas pixel check for a reason that is not a defect. The tab says how old the node was WHEN THE PICTURE WAS TAKEN; the header stamp separately says how old the picture is. Neither drifts.
-VISIBILITY MEASURED, NOT ASSERTED: §3d chose a tab over a halo partly because a halo is invisible in a screenshot, so the verifier renders the page twice — once with the tab suppressed — and counts the difference. 503 pixels exist only because of the tab.
-A first_seen_at after generated_at is REFUSED rather than drawn: a negative age would render as a birthday in the future, and the clock disagreement behind it is worth fixing at source. A node never observed gets no tab at all — 'NEW' over a node with no telemetry would be inventing a birthday.
-Verified: self-test PASS (24 detections); verify 144/144 PASS. Published to the stable URL.
+LAST_RUN: 2026-08-05 — increment 3.3, STAGE 3 COMPLETE. Staleness self-display audited and PROVED by simulation: Date.now is overridden before the page script runs and the DOM is read back. Opened +3d the stamp says '3d ago'; opened +30d it says '30d ago'. Inspecting the code would only have shown that an age function exists.
+The 3.2 rule is now enforced structurally: exactly ONE live clock read in the whole page, and it is inside age(), which only the header stamp uses. Everything describing a thing IN the picture is baked. Audited every visible age and classified it — nothing was misfiled.
+One cosmetic defect fixed: the legend printed '14.0-day', which reads as a measurement taken to one decimal place. It is a configured integer, and the float suggested the boundary was finer than it is.
+Verified: self-test PASS (24 detections); verify 152/152 PASS. Published to the stable URL.
