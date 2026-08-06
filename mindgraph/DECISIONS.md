@@ -866,3 +866,29 @@ timeouts`) are not recorded at all. The unbanded ones render dashed and read
 "no baseline" — never as passing — and the absent ones are listed with the
 reason. A panel that silently omitted three of its seven named metrics would
 read as a complete panel, which is the same failure as a green row over no data.
+
+---
+
+## 2026-08-05 · A freshness rail, because a timeline needs history the registry lacks
+
+**Spec asks for two things per repo (§4.4 item 5); the data supports one.**
+
+A "Grafana-style state-timeline" draws *duration as length* across a sequence of
+states — and the lengths only mean anything because they sit side by side. The
+registry carries one `last_report_at` per repo and no transitions. Checked, not
+assumed: the only per-repo fields are `repo`, `telemetry`, `last_report_at` and
+`telemetry_error`.
+
+**Chosen.** Build the freshness rail — one segment, length = how long the repo
+has held its *current* state — and state plainly that the multi-segment timeline
+is not derivable. Same move as 4.4's missing series, for the same reason.
+
+**Scaled across the fleet, not per row.** `marlin` at 7d13h renders at 100% and
+the others near zero. Normalising each row to its own maximum would make every
+bar full and flatten exactly the climb that is the signal.
+
+**A repo that never reported gets NO bar.** Zero length would read as "held this
+state for no time"; a full bar would invent a duration nobody measured. It gets
+the broken outline and no score, which is what §4.4 asks for in words —
+"NEVER REPORTED with no score" — and the payload carries `held_seconds: null`
+rather than `0`.

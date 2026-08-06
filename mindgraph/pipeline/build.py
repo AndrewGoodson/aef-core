@@ -178,6 +178,7 @@ def build(
         fleet_payload = {
             "coverage": fleet_mod.coverage(rows, expected_interval_seconds=interval),
             "rows": [r.to_payload() for r in rows],
+            "rails": fleet_mod.rails(rows),
         }
     else:
         fleet_payload = {"coverage": None, "rows": []}

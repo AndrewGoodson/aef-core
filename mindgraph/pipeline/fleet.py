@@ -157,6 +157,59 @@ def left_join(
     return sorted(rows, key=lambda r: r.sort_key)
 
 
+# Section 4.4 asks for two things per repo, and the registry supports one.
+#
+# A "Grafana-style state-timeline" needs a SEQUENCE of state changes — that is
+# what makes duration-as-length meaningful, because the lengths sit side by
+# side. The registry carries one `last_report_at` per repo and no transitions,
+# so there is no sequence to draw. Checked, not assumed.
+#
+# The FRESHNESS RAIL is derivable and is the half carrying the requirement's
+# substance: how long this repo has been in its current state, drawn as length,
+# with a treatment per state. One segment, honestly labelled as one segment.
+TIMELINE_GAP = (
+    "per-repo state timeline \u2014 the registry records one last_report_at per repo "
+    "and no state transitions, so there is no sequence to lay out; the rail below "
+    "shows the CURRENT state's duration only"
+)
+
+
+def rails(rows: list[FleetRow]) -> dict[str, Any]:
+    """One segment per repo: how long it has held its current state.
+
+    Scaled against the longest duration in the fleet, so the repo that has been
+    quiet longest has the longest bar — the climb is the signal, and a rail that
+    normalised each row to its own maximum would flatten exactly that.
+
+    A repo that has NEVER reported gets no bar at all. Zero-length would read as
+    "in this state for no time", and a full-length bar would invent a duration;
+    it gets the broken outline and no score instead.
+    """
+    durations = [r.overdue_seconds for r in rows if r.overdue_seconds is not None]
+    longest = max(durations, default=0.0) or 1.0
+    return {
+        "gap": TIMELINE_GAP,
+        "longest_seconds": max(durations, default=None),
+        "segments": [
+            {
+                "repo": r.repo,
+                "state": r.state,
+                "treatment": STATE_TREATMENT.get(r.state, "unknown"),
+                # None, never 0.0 — "never reported" is an absence of duration,
+                # not a duration of nothing.
+                "held_seconds": r.overdue_seconds,
+                "length_pct": (
+                    None
+                    if r.overdue_seconds is None
+                    else round(100.0 * r.overdue_seconds / longest, 1)
+                ),
+                "scored": r.state != "never",
+            }
+            for r in rows
+        ],
+    }
+
+
 def coverage(rows: list[FleetRow], *, expected_interval_seconds: float) -> dict[str, Any]:
     """The strip that answers "can I trust the rest of this page?".
 

@@ -1419,6 +1419,64 @@ def check_stability(result: Result) -> None:
     result.add("no trend line is drawn anywhere", "polyline" not in html_text)
 
 
+def check_rails(result: Result) -> None:
+    """Stage 4.5 — the freshness rail, and the timeline that is not drawn."""
+    from datetime import UTC, datetime
+
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    import fleet as fleet_mod  # type: ignore[import-not-found]
+
+    registry = [
+        e for e in json.loads((ROOT / "fixtures" / "fleet.json").read_text())["registry"]
+        if e.get("repo")
+    ]
+    rows = fleet_mod.left_join(
+        registry, data_through=datetime(2026, 8, 5, 17, 42, tzinfo=UTC),
+        expected_interval_seconds=3600,
+    )
+    rails = fleet_mod.rails(rows)
+    seg = {s["repo"]: s for s in rails["segments"]}
+
+    never = seg["databento-ingestion"]
+    result.add("a never-reported repo draws NO bar", never["length_pct"] is None)
+    result.add(
+        "a never-reported repo reports no duration, not a duration of zero",
+        never["held_seconds"] is None,
+    )
+    result.add("a never-reported repo carries no score", never["scored"] is False)
+
+    result.add(
+        "a stale repo does not keep the healthy treatment",
+        seg["marlin"]["treatment"] != "normal",
+        seg["marlin"]["treatment"],
+    )
+
+    lengths = {k: v["length_pct"] for k, v in seg.items() if v["length_pct"] is not None}
+    result.add(
+        "the longest-quiet repo has the longest bar",
+        max(lengths, key=lambda k: lengths[k]) == "marlin",
+        str(lengths),
+    )
+    result.add("the missing state timeline is disclosed", bool(rails.get("gap")))
+    result.add(
+        "no segment carries a series",
+        not any(isinstance(s.get("held_seconds"), list) for s in rails["segments"]),
+    )
+
+    if not DIST.is_file():
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+    result.add("the fleet table renders rails", 'class="rail' in html_text)
+    result.add(
+        "the never-reported repo renders the no-bar treatment",
+        'class="rail none"' in html_text,
+    )
+    result.add(
+        "the page states the timeline it cannot draw",
+        "no state transitions" in html_text,
+    )
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -1570,6 +1628,7 @@ def main(argv: list[str]) -> int:
     check_exceptions(result)
     check_cohort(result)
     check_stability(result)
+    check_rails(result)
     check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()

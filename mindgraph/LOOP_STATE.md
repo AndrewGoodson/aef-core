@@ -23,7 +23,7 @@ CHECKLIST:
 - [x] 4.2 — dashboard: exception queue (rollbacks, gate-eval errors, stale reporting, long-pending decisions) — NOT ordinary rejections
 - [x] 4.3 — dashboard: CONSORT-style cohort flow, neutral colours for expected rejection branches, red only for operationally abnormal (§3b verdict B)
 - [x] 4.4 — dashboard: stability BANDS (not control charts — no series exists; see DECISIONS.md) beneath the flow
-- [ ] 4.5 — dashboard: fleet table with state-timelines; stale repos float to TOP; never retain a last green fill as dominant after reporting stops
+- [x] 4.5 — fleet table with FRESHNESS RAILS (state-timeline needs history the registry lacks; see DECISIONS.md); stale repos float to TOP; never retain a last green fill as dominant after reporting stops
 - [ ] 4.6 — loop-vs-human panel labelled OBSERVATIONAL; disclose that the direct-human-edit counterfactual is not stored
 - [ ] 5.1 — temporal mode 1: default accumulated present
 - [ ] 5.2 — temporal mode 2: two-date difference-map, two synced panes (primary "what changed")
@@ -31,13 +31,13 @@ CHECKLIST:
 - [ ] 6.1 — dual themes via prefers-color-scheme with identical semantic ordering (§3f verdict B)
 - [ ] 6.2 — MANUAL: on-hardware polarity A/B (light vs dark) for "find the abandoned path" and "find the missing-reporting node"
 - [ ] 6.3 — MANUAL: comparison-mode A/B (difference-map vs two-pane vs scrubber) measured on error rate and time, not FPS
-NEXT: 4.5 — fleet table with state-timelines; stale repos float to TOP; never retain a last green fill as dominant. NOTE: the fleet table and sorting already exist from 4.1; 4.5 is the per-repo state-timeline (duration as length), which may need per-repo history the registry does not carry — check before building, and report the absence if so.
+NEXT: 4.6 — loop-vs-human panel, labelled OBSERVATIONAL. fixtures/fleet.json already carries loop_vs_human with counterfactual_stored=false, so the panel must disclose that the direct-human-edit counterfactual is NOT stored and that this is an adjusted association, never a causal claim.
 BLOCKERS: none
 MANUAL_CHECKS:
 - (CLOSED 2026-08-05) headless browser load — Google Chrome was found at /Applications/Google Chrome.app. The verifier now opens dist/index.html from file:// headless with NetworkService disabled, twice, and compares canvas pixels. This is no longer a manual check.
 - 6.2 and 6.3 are operator task-tests on target hardware and cannot be automated
-LAST_RUN: 2026-08-05 — increment 4.4. Delivered BANDS, not control charts, and the page says why. A Shewhart chart needs successive observations; the record carries per-window counts and expected ranges but NO series — checked, not assumed: the fixture's only numeric arrays are the expected_range pairs, which are bands.
-The half the data supports is the half carrying the report's own worked example, and it reproduces exactly: 90% against an 88-93% band reads healthy, 55% reads BELOW (the gate stopped), 100% reads ABOVE (the generator broke). That judgement needs one observation and one band, not a series.
-6 metrics have a band, 2 have a reading with no baseline, 2 are not recorded at all — and all four categories are STATED on the page rather than omitted. A metric with no baseline reads 'no baseline' and dashed, never as one that passed. A panel that silently omitted three of its seven metrics would read as a complete panel.
-Faking it was the alternative and it is worse than nothing: a single observation drawn with a trend line implies a history nobody recorded, and an operator would read direction out of one point. The absence of a series is itself information — it says nobody is keeping the sequence, which is fixable, and drawing over it would hide the fix.
-Verified: self-test PASS (24 detections); verify 207/207 PASS, including 'no trend line is drawn anywhere'. Published to the stable URL.
+LAST_RUN: 2026-08-05 — increment 4.5. §4.4 asks for two things per repo and the registry supports one. A Grafana-style state TIMELINE needs a SEQUENCE of transitions — that is what makes duration-as-length meaningful, because the lengths sit side by side. The registry carries one last_report_at per repo and no transitions. Checked, not assumed.
+Built the FRESHNESS RAIL, which is the half carrying the requirement's substance: bar length = how long the repo has held its CURRENT state, scaled across the fleet so the longest-quiet has the longest bar. marlin at 7d13h renders 100%; raptor and voltbot render ~0%. Normalising each row to its own maximum would have flattened exactly the climb that is the signal.
+A repo that NEVER reported gets no bar at all — zero length would read as 'held this state for no time', and a full bar would invent a duration nobody measured. It gets the broken outline and no score, matching §4.4's 'NEVER REPORTED with no score'.
+Probe found nothing: never-reported draws no bar and reports None rather than 0; a stale repo cannot keep the healthy treatment; the longest-quiet repo has the longest bar; no segment carries a series; and the page states the timeline it cannot draw.
+Verified: self-test PASS (24 detections); verify 217/217 PASS. Published to the stable URL.

@@ -33,10 +33,10 @@ from typing import Any
 # plainly. An empty canvas would be indistinguishable from a broken one, and
 # this whole project is about not letting absence look like something else.
 STAGE_NOTICE = (
-    "Stability is shown as BANDS, not control charts. A Shewhart chart needs "
-    "successive observations and the record carries none \u2014 so run rules "
-    "and trends are not drawn. Two metrics have a reading but no baseline, and "
-    "two are not recorded at all; all four say so rather than being omitted."
+    "Each repo carries a freshness rail whose LENGTH is how long it has held "
+    "its current state, scaled across the fleet \u2014 so the one that has been "
+    "quiet longest has the longest bar. A repo that never reported gets no bar "
+    "at all: zero length would read as 'in this state for no time'."
 )
 
 
@@ -102,22 +102,42 @@ def _coverage_strip(payload: dict[str, Any]) -> str:
         f"oldest overdue <b>{html.escape(oldest)}</b>" if oldest else "nothing overdue"
     )
 
+    rails = {s["repo"]: s for s in (block.get("rails") or {}).get("segments", [])}
     cells = ""
     for row in rows:
         overdue = fleet.humanise(row.get("overdue_seconds"))
+        seg = rails.get(str(row["repo"]), {})
+        if seg.get("length_pct") is None:
+            # No bar at all. Zero length would read as "held this state for no
+            # time"; a full bar would invent a duration nobody measured.
+            rail = '<div class="rail none" title="never reported"></div>'
+        else:
+            rail = (
+                f'<div class="rail {html.escape(str(seg["treatment"]))}">'
+                f'<i style="width:{seg["length_pct"]:.1f}%"></i></div>'
+            )
         cells += (
             f'<tr class="fl {html.escape(str(row["treatment"]))}">'
             f'<td class="rp">{html.escape(str(row["repo"]))}</td>'
             f'<td class="st">{html.escape(str(row["state"]).replace("_", " "))}</td>'
+            f'<td class="rl">{rail}</td>'
             f'<td class="ov">{html.escape(overdue) if overdue else "&mdash;"}</td>'
             f'<td class="er">{html.escape(str(row.get("telemetry_error") or ""))}</td>'
             "</tr>"
         )
 
+    gap = (block.get("rails") or {}).get("gap")
+    note = (
+        f'<p class="caption" id="fleet-note">Rail length is how long each repo has held '
+        f"its current state, scaled across the fleet. Not shown: {html.escape(str(gap))}.</p>"
+        if gap
+        else ""
+    )
     return (
         f'<div class="strip {tone}"><strong>Coverage</strong>'
         f"<span>{' &middot; '.join(parts)}</span></div>"
-        f'<div class="scroll"><table class="fleet">{cells}</table></div>'
+        f'<div class="scroll"><table class="fleet" id="fleet-table">{cells}</table></div>'
+        f"{note}"
     )
 
 
@@ -552,6 +572,13 @@ tr.fl.stale .st{color:var(--stale)}
 tr.fl.degraded .st{color:var(--bad)}
 tr.fl.unknown .st{color:var(--warn)}
 tr.fl.unknown .rp,tr.fl.degraded .rp{font-weight:600}
+table.fleet .rl{width:34%;min-width:120px}
+.rail{height:9px;background:var(--line);border-radius:2px;overflow:hidden}
+.rail i{display:block;height:100%;background:var(--muted)}
+.rail.normal i{background:var(--ok)}
+.rail.stale i{background:var(--stale)}
+.rail.degraded i{background:var(--bad)}
+.rail.none{background:transparent;border:1px dashed var(--muted);opacity:.7}
 table.exq{font:12px/1.5 var(--mono);width:100%}
 table.exq td{padding:.3rem .9rem .3rem 0;border-bottom:1px solid var(--line);
   vertical-align:top}
