@@ -52,6 +52,11 @@ class _FakeClient:
         self.messages = _FakeMessages(response=response, error=error)
 
 
+class _FalseyFakeClient(_FakeClient):
+    def __bool__(self) -> bool:
+        return False
+
+
 def _request(**overrides: Any) -> CompletionRequest:
     defaults: dict[str, Any] = {
         "messages": (
@@ -80,6 +85,30 @@ def test_complete_extracts_text_and_usage() -> None:
     assert result.input_tokens == 10
     assert result.output_tokens == 5
     assert result.stop_reason == "end_turn"
+
+
+def test_explicit_falsey_client_dependency_is_honored(monkeypatch: pytest.MonkeyPatch) -> None:
+    injected_response = _FakeResponse(
+        model="injected", content=[_FakeTextBlock(text="injected")], usage=_FakeUsage(1, 1)
+    )
+    constructed_response = _FakeResponse(
+        model="constructed", content=[_FakeTextBlock(text="constructed")], usage=_FakeUsage(1, 1)
+    )
+    injected = _FalseyFakeClient(response=injected_response)
+    constructed = _FakeClient(response=constructed_response)
+    constructor_calls = 0
+
+    def _construct_anthropic(*args: Any, **kwargs: Any) -> _FakeClient:
+        nonlocal constructor_calls
+        constructor_calls += 1
+        return constructed
+
+    monkeypatch.setattr(anthropic, "Anthropic", _construct_anthropic)
+
+    result = AnthropicProvider(client=injected).complete(_request())
+
+    assert result.content == "injected"
+    assert constructor_calls == 0
 
 
 def test_complete_separates_system_from_messages() -> None:

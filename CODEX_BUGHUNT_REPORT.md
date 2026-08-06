@@ -136,3 +136,72 @@ and migration policy before unattended use with caller-controlled node IDs.
 `InMemoryAuditLogWriter` stores `ToolCall.arguments` by reference, so caller
 mutation may rewrite audit history. Reserved for the shared-mutable-state
 round; not yet reproduced here.
+
+## Round 3 — provider fallback and vendor error boundaries
+
+### Looked at
+
+`aef/providers/base.py`, `aef/providers/anthropic_provider.py`, the installed
+Anthropic SDK's exception and request types, fallback ordering, aggregate
+failure reporting, translation failures, metadata, and injected-client
+construction.
+
+### Confirmed and fixed
+
+`AnthropicProvider.__init__()` selected its injected client with boolean `or`.
+A valid falsey client was discarded and a new vendor client was constructed.
+The call then used the constructed client, crossing both the caller's DI and
+network/configuration boundary.
+
+Expected: only `None` means “construct the default SDK client.” An explicit
+implementation must be used regardless of domain-defined truthiness.
+
+Reproduction before the fix:
+
+```text
+constructor_called=True
+result_content=constructed
+
+pytest -q tests/providers/test_anthropic_provider.py::test_explicit_falsey_client_dependency_is_honored
+FAILED: expected 'injected', got 'constructed'
+```
+
+Fix: use an explicit `client is not None` selection. The regression verifies
+both the returned content and that `anthropic.Anthropic()` was never called.
+All 16 provider tests pass.
+
+This contradicts the repository's DI-only contract and the adapter's stated
+purpose of permitting fake-client injection without network access. In an
+application, it could silently replace a controlled client with one using
+ambient vendor configuration.
+
+### Ruled out
+
+- Fallback stops after the first success and reaches a third provider after
+  two ordinary provider failures.
+- When all providers fail, the aggregate error names every provider and
+  preserves every reason.
+- Adapter-programming errors outside the vendor exception hierarchy propagate
+  instead of being mislabeled and silently retried.
+- Every installed Anthropic SDK exception derives from `AnthropicError` at the
+  adapter boundary, including the non-`APIError` path pinned by ADR 0037.
+- `metadata.user_id` is passed through and unrelated vendor-neutral metadata is
+  deliberately omitted as documented in ADR 0015.
+
+### Suspected, not changed
+
+The vendor-neutral `Role` type admits `"tool"`, but the Anthropic adapter
+forwards that string as a message role. The installed SDK's `MessageParam`
+contract admits only `user`, `assistant`, and `system`; Anthropic tool results
+are structured content blocks, which `ProviderMessage(content: str)` cannot
+represent. No repository caller currently constructs a tool-role message, and
+no live API call was made, so this is an interface mismatch rather than a
+confirmed production failure in this round.
+
+### Round gate
+
+- `pytest -q`: 1404 passed
+- `mypy --strict aef`: 107 source files clean
+- `ruff check .`: clean
+- `ruff format --check aef tests examples`: 192 files formatted
+- MindGraph verification: 287 checks passed; self-test 29 detections passed
