@@ -727,3 +727,233 @@ and SHA proceeded through the gates.
 - `ruff check .`: clean
 - `ruff format --check aef tests examples`: 193 files already formatted
 - MindGraph verification and planted-failure self-test: both exited cleanly
+
+## Round 10 — documentation and ADR claim audit
+
+### Looked at
+
+ADR 0047's isolation claims, the actual CI and local harness entry paths,
+`BaseRefHarness` integration, the two evolution-enable rejection paths, the
+Phase 4 roadmap, and the corresponding claims in `README.md`, `CLAUDE.md`, and
+harness module docstrings.
+
+### Confirmed and fixed
+
+Two documentation/contract defects were reproduced:
+
+1. Both evolution-enable guards said that none of the seven Phase 4 safety
+   mechanisms existed. The roadmap now records every mechanism as built; the
+   remaining blockers are live-traffic/real-tenant validation and owner
+   acceptance. The guard was correctly closed, but its explanation was
+   materially false.
+2. ADR 0047 and several docstrings described `BaseRefHarness` as the integrated
+   loader for every gate, corpus, suite, workflow, and evaluator byte. A call-site
+   search found no production loop-driver use of `BaseRefHarness`. The supplied
+   CI workflow does establish the intended boundary by checking out and
+   installing trusted `main` before fetching the candidate as data, and candidate
+   workspaces are reconstructed from Git objects. An arbitrary local caller that
+   first imports AEF from an untrusted candidate checkout does not receive that
+   protection from the library itself.
+
+Reproduction before the fixes:
+
+```text
+pytest -q \
+  tests/test_phase2_5_stubs.py::test_evolution_rejection_names_the_missing_live_evidence \
+  tests/config/test_schema.py::test_evolution_enabled_true_rejection_names_the_missing_live_evidence
+
+2 failed: both messages claimed the seven mechanisms were not implemented
+
+rg -n "BaseRefHarness" aef --glob '*.py'
+
+only the class definition in aef/harness/trust.py; no loop-driver call site
+```
+
+Expected: disabled features explain their actual unsatisfied criteria, and the
+isolation claim distinguishes a trusted launcher/runtime from candidate
+workspace reconstruction.
+
+Fixes: retained both hard guards and rewrote their errors and roadmap/contract
+text around the missing live evidence; corrected ADR 0047 and harness docs to
+state the real trust boundary without changing gate behavior. Focused tests
+passed (`2 passed` and `59 passed`, respectively). Commits: `0a7cf05`,
+`666f837`.
+
+### Ruled out
+
+- `EvolutionConfig(enabled=True)` and YAML `evolution.enabled: true` still fail
+  closed; no Tier 1 path was enabled.
+- The supplied GitHub Actions loop checks out trusted `main`, installs it, and
+  only then fetches and reconstructs the candidate as data.
+- Candidate graph-worker processes receive the base-ref `aef/` package rather
+  than candidate-modified evaluator code.
+- No gate, policy threshold, approval route, workflow permission, or secret
+  handling changed in this round.
+
+### Suspected, not a library defect
+
+A third-party local launcher can defeat the isolation property by importing AEF
+from the candidate checkout before invoking any harness API. Preventing that
+requires a trusted orchestration boundary; it cannot be repaired by code that
+has already been imported from the untrusted tree. The corrected ADR now makes
+that deployment obligation explicit.
+
+### Round gate
+
+- `pytest -q`: 1440 passed, 93 warnings
+- `mypy --strict aef`: 107 source files clean
+- `ruff check .`: clean
+- `ruff format --check aef tests examples`: 193 files already formatted
+- MindGraph verification: 287 checks passed; self-test detected all 29 planted
+  failures with no false positives
+
+## Final ranked assessment
+
+Across ten adversarial rounds, 26 defect classes were fixed and one confirmed
+defect was deliberately left unchanged because the bug-hunt contract forbids
+altering HITL routing. Every behavioral fix has a pre-fix failing regression,
+and every round ended with the full green bar and MindGraph self-test.
+
+### A. Confirmed defects — ranked by likely production impact
+
+1. **Critical — movable candidate refs could mix two snapshots (Round 9,
+   fixed).** Candidate size could be measured from one commit while changed
+   paths and the recorded SHA came from another. This directly contradicted ADR
+   0047's immutable-candidate claim. The real-Git ref-advance regression failed
+   before `95a4c3e` and passes after it.
+2. **High — adoption could write outside the target repository through
+   symlinks (Round 8, fixed).** Both a dangling output-leaf symlink and a
+   symlinked parent directory escaped the selected adoption root. This violated
+   the CLI's non-overwrite/target-boundary contract. Real-filesystem regressions
+   failed before `d875164` and pass after it.
+3. **High — HITL approval-key delimiter collision (Round 2, confirmed and
+   open).** `hitl_approval_key("a->b", "c")` equals
+   `hitl_approval_key("a", "b->c")`; approval for one edge can authorize the
+   other. This contradicts ADR 0011's edge-specific approval claim. The exact
+   collision command/test is recorded in Round 2. It was not fixed because this
+   engagement explicitly prohibits changes to HITL routing; it requires an
+   owner-approved compatibility/migration decision.
+4. **High — candidate worker failures leaked or orphaned child processes
+   (Round 7, fixed).** A type-invalid handshake, parent-side graph construction
+   failure, and close-after-kill path each left lifecycle gaps. This made
+   unattended evaluation capable of accumulating live or zombie candidate-code
+   processes. Process-state regressions failed before `254eb28` and pass after.
+5. **High — durability reads escaped the configured root (Round 6, fixed).**
+   Hostile run identifiers traversed out of the checkpoint directory on load,
+   cursor load, and listing even though writes were contained. This violated
+   the storage boundary. Filesystem regressions failed before `a1f06d7`.
+6. **High — audit behavior could be disabled or historical evidence rewritten
+   (Rounds 2 and 4, fixed).** A falsey injected audit writer was silently
+   replaced, and nested caller-owned arguments remained mutable after append.
+   These contradicted the complete-audit-trail claim. Regressions failed before
+   `4527555` and `c752262`.
+7. **Medium-high — reconstructed workspaces were not always the exact pinned
+   Git tree (Round 9, fixed).** The trusted base ref remained movable, nonempty
+   destinations preserved stale files, destination symlinks escaped, and base
+   executable bits were lost. These contradicted ADR 0047. Five real-Git/filesystem
+   tests failed before `9363e23`.
+8. **Medium-high — resume accepted malformed but valid JSON as cursor state
+   (Round 1, fixed).** Missing or numeric `next_node` could be interpreted as a
+   completed run, while top-level arrays/scalars leaked `AttributeError`. This
+   violated fail-closed replay/resume expectations. Regression fixed by
+   `b801032`.
+9. **Medium — dependency injection silently replaced valid falsey objects
+   (Rounds 2, 3, and 5, fixed).** Policy clock/config/writer, Anthropic client,
+   memory clock, and empty judge rubric were substituted by defaults. The
+   provider case could unexpectedly cross the network boundary. Focused
+   regressions fixed by `4527555`, `89306bb`, and `24ef885`/`77ba503`.
+10. **Medium — memory/checkpoint boundary and ownership failures (Rounds 4 and
+    6, fixed).** Concurrent query/write could raise `RuntimeError`; stored and
+    returned records shared nested caller state; negative query limits and
+    retriever capacities were accepted; negative checkpoint sequence values
+    produced invalid filenames/order. Regressions fixed by `46ebeef`,
+    `97bd2ba`, `020a861`, `718ec25`, and `732192f`.
+11. **Medium — configuration and doctor could report a runnable system that was
+    not runnable (Rounds 5 and 8, fixed).** Unsupported memory wiring passed
+    validation, a missing adapter was classified as “not adopted,” nested
+    `build_graph` definitions passed, and undecodable config/adapter files
+    escaped as raw exceptions. Regressions fixed by `881af1e`, `c3988d2`, and
+    `b73968b`.
+12. **Medium-low — frozen-looking service values retained caller mutation
+    (Round 4, fixed).** Memory stores, fallback-provider ordering, and nested
+    tracer attributes could change after the boundary call. Regressions fixed
+    by `46ebeef` and `d18fc7c`.
+13. **Documentation correctness — evolution disablement rationale was false
+    (Round 10, fixed).** The closed guard remains correct, but its error and
+    scaffold contract denied mechanisms the roadmap marks built. Corrected in
+    `0a7cf05` without enabling evolution.
+14. **Documentation correctness — ADR 0047 attributed isolation to an
+    unintegrated library loader (Round 10, fixed).** The supplied CI provides a
+    trusted launcher; `BaseRefHarness` was not the universal execution path the
+    ADR claimed. Corrected in `666f837`.
+
+### B. Suspected but unconfirmed
+
+- The vendor-neutral provider interface admits a `tool` role that the Anthropic
+  adapter cannot faithfully encode as its current string-only message. No
+  repository caller constructs that role and no live API failure was run.
+- `_atomic_write_text()` can leave its fixed-name temporary file after an
+  injected write/fsync/replace failure. A subsequent write truncates it, and no
+  production corruption or unbounded accumulation was reproduced.
+- `ModelProviderConfig.model` appears declarative while each completion request
+  carries its own model. No end-to-end disagreement was demonstrated.
+- `Services.tools` and `RuleBasedEvaluator.domain_gates` retain caller-owned
+  mappings. No executing core path was shown to produce a corrupted result from
+  later mutation.
+- A local third-party launcher can load evaluator code from an untrusted
+  checkout. This is a deployment-boundary risk, not a reproducible defect in a
+  process already launched from the supplied trusted CI path.
+
+### C. Documentation claims exceeding implementation
+
+- ADR 0047's universal base-ref-loader claim was inaccurate and is now
+  corrected. Isolation depends first on launching from trusted code; object-based
+  reconstruction protects the candidate workspace after that boundary.
+- The evolution error and scaffold contract claimed seven mechanisms were
+  absent when the roadmap marks them built. They now name the actual missing
+  live evidence and acceptance.
+- ADR 0011 still overstates edge-specific HITL authorization because the
+  delimiter-based approval key collides. This remains the one confirmed open
+  contradiction.
+- Previously documented limitations remain material and were not relabeled as
+  new findings: sample coverage lacks model/tool/policy/routing traffic; the
+  ledger is tamper-evident rather than tamper-proof; the sandbox does not block
+  network or confine the whole filesystem; numeric-only change generation lacks
+  demonstrated value; aliased `Node`/`Edge` imports evade G4; and halt
+  notification remains unresolved. Their severity was not understated: taken
+  together, they prevent a defensible unattended real-tenant claim today.
+
+### D. What I would not run unattended
+
+- Tier 1/evolution against real repositories or tenants until the roadmap's
+  live-traffic, cross-platform, rollback-recovery, long-haul, and owner-acceptance
+  evidence exists. The code correctly keeps this disabled.
+- Any loop launched by importing AEF from the candidate checkout. Use the
+  supplied trusted-main launcher pattern or an equivalent immutable runtime.
+- HITL-gated mutations where node identifiers are not constrained away from the
+  approval-key delimiter, until the Round 2 collision has an approved fix and
+  migration story.
+- Candidate execution where network and host-filesystem effects matter unless
+  it is additionally confined by an external sandbox/container. Current
+  timeout/process cleanup is necessary but not sufficient containment.
+
+### E. What held up under adversarial testing
+
+- Deterministic nodes are re-executed on replay, including fallback routes;
+  nondeterministic reasoning I/O is correctly declared nondeterministic.
+- Checkpoint state/delta snapshots are copied, corrupt-newest recovery rewinds
+  safely, and ordinary HITL resume does not re-run the gated node.
+- Policy remains deny-by-default; risk validation and audit-writer failures fail
+  closed. No hard stop was weakened during this hunt.
+- Provider fallback classification, all-failed aggregation, metadata handling,
+  and vendor-exception isolation behaved as documented.
+- Object-based candidate reconstruction correctly ignores working-tree filters,
+  `.gitignore`, export-ignore, and unusual checkout configuration; it rejects
+  candidate symlink/submodule modes, traversal, null bytes, backslashes, case
+  collisions, and file/directory collisions.
+- The supplied CI workflow establishes the trusted-main/candidate-as-data
+  boundary it now claims. Vendor isolation, node dependency injection, and the
+  no-environment-read node constraints remained clean under static checks.
+- Final verification is green: 1440 tests, strict mypy over 107 source files,
+  Ruff lint/format over 193 files, 287 MindGraph checks, and all 29 planted
+  MindGraph failures detected with no false positives.
