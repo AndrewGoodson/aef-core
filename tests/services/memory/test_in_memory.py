@@ -1,4 +1,6 @@
+import threading
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from aef.services.memory.base import MemoryRecord
 from aef.services.memory.in_memory import InMemoryMemoryStore
@@ -69,3 +71,82 @@ def test_query_respects_limit_and_recency_order() -> None:
 def test_get_missing_returns_none() -> None:
     store = InMemoryMemoryStore()
     assert store.get("does-not-exist") is None
+
+
+def test_write_snapshots_nested_record_content() -> None:
+    content = {"nested": {"value": "at-write"}}
+    record = MemoryRecord(kind="semantic", content=content)
+    store = InMemoryMemoryStore()
+
+    store.write(record)
+    content["nested"]["value"] = "rewritten-later"
+
+    fetched = store.get(record.id)
+    assert fetched is not None
+    assert fetched.content == {"nested": {"value": "at-write"}}
+
+
+def test_read_returns_snapshot_not_mutable_store_reference() -> None:
+    record = MemoryRecord(kind="semantic", content={"nested": {"value": "stored"}})
+    store = InMemoryMemoryStore()
+    store.write(record)
+
+    fetched = store.get(record.id)
+    assert fetched is not None
+    fetched.content["nested"]["value"] = "rewritten-by-reader"
+
+    fetched_again = store.get(record.id)
+    assert fetched_again is not None
+    assert fetched_again.content == {"nested": {"value": "stored"}}
+
+
+def test_query_and_write_can_run_concurrently() -> None:
+    entered_comparison = threading.Event()
+    release_comparison = threading.Event()
+    writer_started = threading.Event()
+    writer_finished = threading.Event()
+    errors: list[BaseException] = []
+
+    class _BlockingKind:
+        def __eq__(self, other: object) -> bool:
+            entered_comparison.set()
+            assert release_comparison.wait(timeout=2)
+            return other == "working"
+
+    store = InMemoryMemoryStore()
+    store.write(
+        MemoryRecord(
+            kind=cast(Any, _BlockingKind()),
+            content={"position": "first"},
+        )
+    )
+
+    def query() -> None:
+        try:
+            store.query("working")
+        except BaseException as exc:
+            errors.append(exc)
+
+    def write() -> None:
+        writer_started.set()
+        store.write(MemoryRecord(kind="working", content={"position": "second"}))
+        writer_finished.set()
+
+    query_thread = threading.Thread(target=query)
+    writer_thread = threading.Thread(target=write)
+    query_thread.start()
+    assert entered_comparison.wait(timeout=1)
+    writer_thread.start()
+    assert writer_started.wait(timeout=1)
+
+    # Without synchronization the write completes while the query's dict
+    # iterator is suspended, deterministically invalidating that iterator.
+    writer_finished.wait(timeout=0.1)
+    release_comparison.set()
+    query_thread.join(timeout=2)
+    writer_thread.join(timeout=2)
+
+    assert not query_thread.is_alive()
+    assert not writer_thread.is_alive()
+    assert errors == []
+    assert writer_finished.is_set()
