@@ -1079,3 +1079,84 @@ One window is not a sequence. Two fixes, because one was not enough:
   implementation, because a check that shares its subject's code shares its
   bugs and agrees with itself. Both now agree at `[3, 5, 5]`, and that agreement
   means something.
+
+## 6.1 — dual themes, and what "identical semantic ordering" actually constrains
+
+**Decision: both themes already existed; the increment was the verification,
+which had never been run.** `prefers-color-scheme` and the `:root[data-theme]`
+overrides have been in the CSS since Stage 2. Nothing was added. What was
+missing was any evidence that the second theme preserved meaning, and §3f's
+clause — *identical semantic ordering, never auto-invert luminance meaning* —
+is precisely the thing an unchecked palette gets wrong.
+
+### Two channels, two different tests, because they are different kinds of channel
+
+**Recency is ORDERED**, encoded as alpha over the ground. This is the one that
+looked most likely to break, because on a dark ground the accent composites
+*brighter* as recency approaches 1.0, and on a light ground it composites
+*darker*. Opposite directions in absolute luminance — and that is correct, not
+a bug. What must be identical is the direction in **salience**, and it is:
+
+| recency | dark salience | light salience |
+|---------|---------------|----------------|
+| 0.00    | 0.017         | 0.161          |
+| 0.25    | 0.073         | 0.354          |
+| 0.50    | 0.174         | 0.511          |
+| 0.75    | 0.326         | 0.634          |
+| 1.00    | 0.536         | 0.727          |
+
+Strictly increasing in both. The most recent edge is the most salient edge in
+either polarity, which is what "do not invert the meaning" asks for. The alpha
+formula is **read out of the artifact's own JS** by regex rather than restated
+in the check, so a change to the renderer cannot leave this validating a
+formula the page no longer uses.
+
+**State is CATEGORICAL**, encoded as hue. There is no magnitude to preserve, so
+what must survive is *identity*: `--bad` must still be the red one after the
+swap. Worst measured drift across themes is **6.2°** (`--ok`). Probed by
+turning the light theme's `--bad` green: drift 134.8°, check fired.
+
+### What is deliberately NOT asserted, and why
+
+Contrast-against-ground does **not** hold its ordering across themes:
+
+```
+dark : accent > ok > warn > stale > bad > muted
+light: muted > stale > bad > accent > ok > warn
+```
+
+This was tempting to call a defect. It is not one, and calling it one would
+have been inventing a requirement — the failure mode this loop has hit twice
+already. Contrast-vs-ground is not a declared semantic channel for the state
+colours; **hue is**. The design encodes severity categorically, consistently,
+in both polarities, which is also what keeps it inside the ≤3 preattentive
+variables budget. Asserting an order the design never claimed would have
+manufactured a finding.
+
+What *is* asserted instead is a **floor**: every state stays readable against
+its own ground (dark min 5.03, light min 3.32, both above 3.0). A state that
+vanishes into its background is not a state an operator can act on — and that
+is a real requirement, not an invented one.
+
+### The documented flag was wrong, and assuming it would have been silent
+
+The loop prompt suggested `--force-dark-mode`. Probed against a control page:
+**headless Chrome already defaults to DARK**, and `--force-dark-mode`,
+`--force-prefers-color-scheme=light`, `--force-light-mode` and
+`--disable-features=WebContentsForceDark` *all* left the control unchanged.
+
+Taking the documented flag on trust would have produced two identical renders,
+compared them, and passed — a green check measuring nothing. This is the same
+lesson 5.3 recorded and the reason its harness proves the instrument bites
+before trusting a null result. The flag that actually works is
+`--blink-settings=preferredColorScheme=0` (dark) / `=1` (light), confirmed
+against the control in both directions.
+
+### A hole in my own check, found by reading its output
+
+The first version of the palette parser matched only 6-digit hex, so it
+silently dropped `--panel:#fff` and reported `9 light` tokens against `10
+dark` while passing. No token under test was affected, so nothing failed — a
+check that skips what it cannot parse reports on a subset while looking like it
+reported on everything. Fixed to accept both hex forms and normalise; the
+completeness assertion now covers surfaces as well as states.

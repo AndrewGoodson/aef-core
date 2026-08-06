@@ -1813,6 +1813,231 @@ def check_reduced_motion(result: Result) -> None:
         )
 
 
+def _srgb_luminance(rgb: tuple[float, float, float]) -> float:
+    def channel(value: float) -> float:
+        c = value / 255.0
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = rgb
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+
+def _hex_rgb(value: str) -> tuple[float, float, float]:
+    return tuple(float(int(value[i : i + 2], 16)) for i in (1, 3, 5))  # type: ignore[return-value]
+
+
+def _contrast(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
+    la, lb = _srgb_luminance(a), _srgb_luminance(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+def _hue(rgb: tuple[float, float, float]) -> float:
+    import colorsys
+
+    r, g, b = (c / 255.0 for c in rgb)
+    return colorsys.rgb_to_hsv(r, g, b)[0] * 360.0
+
+
+def check_themes(result: Result) -> None:
+    """Stage 6.1 — both themes exist, and neither inverts what the other means.
+
+    Section 3f verdict B: author both polarities via prefers-color-scheme with
+    *identical semantic ordering*, never auto-inverting luminance meaning. Two
+    channels carry meaning here and they are checked differently, because they
+    are different kinds of channel:
+
+    - **Recency is ordered**, encoded as alpha over the ground. Its ordering
+      must survive the theme change: the most recent edge must be the most
+      salient in BOTH polarities. On a dark ground the accent composites
+      brighter as it approaches 1.0; on a light ground it composites darker.
+      Opposite directions in absolute luminance, same direction in salience —
+      which is exactly what "do not invert the MEANING" asks for.
+    - **State is categorical**, encoded as hue. There is no magnitude to
+      preserve, so what must survive is identity: `--bad` must still be the red
+      one after the swap. Hue drift is measured per token.
+
+    Contrast-against-ground is deliberately NOT asserted to hold its ordering
+    across themes. It is not a declared semantic channel for the state colours
+    — hue is — and the measured orderings do differ (dark: accent > ok > warn >
+    stale > bad > muted; light: muted > stale > bad > accent > ok > warn).
+    Asserting an order the design never claimed would be inventing a
+    requirement. What IS asserted is a contrast FLOOR in both, so no state
+    becomes unreadable on either ground.
+    """
+    import re
+
+    if not DIST.is_file():
+        result.add("themes declared", False, "no artifact")
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+    css = html_text.split("<style>", 1)[1].split("</style>", 1)[0]
+
+    def palette(block: str) -> dict[str, str]:
+        # Both hex forms. The first version of this parser matched only 6-digit
+        # values and silently dropped `--panel:#fff` — a check that skips what
+        # it cannot parse reports on a subset while looking like it reported on
+        # everything, which is the failure this whole artifact is about.
+        found = re.findall(r"--([a-z]+):(#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}))\b", block)
+        return {
+            name: value if len(value) == 7 else "#" + "".join(c * 2 for c in value[1:])
+            for name, value in found
+        }
+
+    dark = palette(css.split(":root{", 1)[1].split("}", 1)[0])
+    light = palette(css.split("prefers-color-scheme: light){", 1)[1].split("}", 1)[0])
+
+    tokens = ("accent", "ok", "warn", "bad", "stale", "muted")
+    surfaces = ("ink", "panel", "line", "fg")
+    missing = [t for t in tokens + surfaces if t not in dark or t not in light]
+    result.add(
+        "both polarities define every semantic token and surface",
+        not missing,
+        f"missing: {missing}" if missing else f"{len(dark)} dark / {len(light)} light",
+    )
+    result.add(
+        "the two polarities are actually different palettes",
+        any(dark[t] != light[t] for t in tokens),
+    )
+
+    # Categorical channel: identity must survive, so hue must not drift far.
+    drift = {t: min(abs(_hue(_hex_rgb(dark[t])) - _hue(_hex_rgb(light[t]))),
+                    360 - abs(_hue(_hex_rgb(dark[t])) - _hue(_hex_rgb(light[t]))))
+             for t in tokens}
+    worst_token = max(drift, key=lambda t: drift[t])
+    result.add(
+        "every state keeps its hue identity across themes",
+        drift[worst_token] <= 15.0,
+        f"worst drift --{worst_token} {drift[worst_token]:.1f}deg",
+    )
+
+    # Readability floor on both grounds. A state that vanishes into its own
+    # background is not a state the operator can act on.
+    floors = {
+        name: min(_contrast(_hex_rgb(p[t]), _hex_rgb(p["ink"])) for t in tokens)
+        for name, p in (("dark", dark), ("light", light))
+    }
+    result.add(
+        "every state stays readable against its own ground in both themes",
+        min(floors.values()) >= 3.0,
+        f"dark min {floors['dark']:.2f}, light min {floors['light']:.2f}",
+    )
+
+    # Ordered channel: recency must rank the same way in both polarities. The
+    # alpha formula is READ OUT OF THE ARTIFACT rather than restated here, so a
+    # change to the renderer cannot leave this check validating the old one.
+    js = html_text.split("<script>")[1].split("</script>")[0]
+    formula = re.search(
+        r"globalAlpha\s*=\s*([0-9.]+)\s*\+\s*ER\.core_luminance\s*\*\s*([0-9.]+)", js
+    )
+    result.add(
+        "the recency alpha formula is readable from the artifact",
+        formula is not None,
+        "renderer changed shape — this check must be re-derived, not relaxed",
+    )
+    if formula is None:
+        return
+    base, span = float(formula.group(1)), float(formula.group(2))
+
+    def composite(fg: str, bg: str, alpha: float) -> tuple[float, float, float]:
+        f, b = _hex_rgb(fg), _hex_rgb(bg)
+        return tuple(f[i] * alpha + b[i] * (1 - alpha) for i in range(3))  # type: ignore[return-value]
+
+    ramp = (0.0, 0.25, 0.5, 0.75, 1.0)
+    for name, pal in (("dark", dark), ("light", light)):
+        ground = _srgb_luminance(_hex_rgb(pal["ink"]))
+        salience = [
+            abs(_srgb_luminance(composite(pal["accent"], pal["ink"], base + lum * span)) - ground)
+            for lum in ramp
+        ]
+        rising = all(b > a for a, b in zip(salience, salience[1:], strict=False))
+        result.add(
+            f"{name} theme: more recent is more salient, monotonically",
+            rising,
+            " ".join(f"{s:.3f}" for s in salience),
+        )
+
+    # And the rendered proof: the page must actually RESPOND to the preference,
+    # and the ground must actually flip. Measured, because a page that ignored
+    # the media query entirely would satisfy every check above.
+    chrome = _chrome()
+    if chrome is None:
+        result.add("themes render in both polarities", False, "no headless browser found")
+        return
+
+    import subprocess
+    import tempfile
+
+    try:
+        from PIL import Image  # type: ignore[import-not-found]
+    except ImportError:
+        result.add("themes render in both polarities", False, "PIL unavailable")
+        return
+
+    # Blink's own setting, not --force-dark-mode. Probed: headless already
+    # defaults to DARK, and every --force-*-color-scheme variant left the
+    # control page unchanged. Assuming the documented flag would have produced
+    # two identical renders and a green check measuring nothing.
+    def scheme_args(chrome_path: str, out: Path, page: Path, light_mode: bool) -> list[str]:
+        args = _shot_args(chrome_path, out, page)
+        args.insert(1, f"--blink-settings=preferredColorScheme={1 if light_mode else 0}")
+        return args
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        control = tmpdir / "control.html"
+        control.write_text(
+            "<style>body{margin:0}#c{width:200px;height:200px;background:#ff0000}"
+            "@media (prefers-color-scheme: dark){#c{background:#0000ff}}</style>"
+            '<div id="c"></div>',
+            encoding="utf-8",
+        )
+        probes = {}
+        for mode in (True, False):
+            out = tmpdir / f"ctl_{'light' if mode else 'dark'}.png"
+            subprocess.run(scheme_args(chrome, out, control, mode), capture_output=True, timeout=90)
+            if not out.is_file():
+                result.add("both polarities are reachable in this browser", False, "capture failed")
+                return
+            probes[mode] = Image.open(out).convert("RGB").getpixel((100, 100))
+        result.add(
+            "both polarities are reachable in this browser (control page flips)",
+            probes[True] != probes[False],
+            f"light={probes[True]} dark={probes[False]}",
+        )
+        if probes[True] == probes[False]:
+            result.add(
+                "the artifact honours prefers-color-scheme",
+                False,
+                "not measured — the control proved the browser cannot switch polarity",
+            )
+            return
+
+        shots = {}
+        for mode in (True, False):
+            out = tmpdir / f"page_{'light' if mode else 'dark'}.png"
+            subprocess.run(scheme_args(chrome, out, DIST, mode), capture_output=True, timeout=90)
+            if not out.is_file():
+                result.add("the artifact honours prefers-color-scheme", False, "capture failed")
+                return
+            shots[mode] = Image.open(out).convert("RGB")
+
+        # x=10 is the body margin beside the centred main column, so it is the
+        # page ground itself rather than any panel painted over it.
+        grounds = {m: shots[m].getpixel((10, 600)) for m in (True, False)}
+        result.add(
+            "the artifact honours prefers-color-scheme (renders differently)",
+            grounds[True] != grounds[False],
+            f"light ground {grounds[True]}, dark ground {grounds[False]}",
+        )
+        light_lum = _srgb_luminance(grounds[True])
+        dark_lum = _srgb_luminance(grounds[False])
+        result.add(
+            "the light theme really is the light one and the dark really is dark",
+            light_lum > 0.5 > dark_lum,
+            f"light luminance {light_lum:.3f}, dark {dark_lum:.3f}",
+        )
+
+
 def check_difference_map(result: Result) -> None:
     """Stage 5.2 — the diff must not report stability that was never measured.
 
@@ -2066,6 +2291,7 @@ def main(argv: list[str]) -> int:
     check_difference_map(result)
     check_scrubber(result)
     check_reduced_motion(result)
+    check_themes(result)
     check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()

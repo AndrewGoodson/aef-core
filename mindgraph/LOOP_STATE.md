@@ -1,5 +1,5 @@
-STATUS: IN_PROGRESS
-STAGE: 6 — Themes (Stages 0-5 complete)
+STATUS: DONE
+STAGE: COMPLETE — all six stages verified; only the two on-hardware operator tests remain, and they are owner-blocked
 CHECKLIST:
 - [x] init.scaffold — pipeline/ dist/ fixtures/ tools/ created; RESEARCH_REPORT.md installed
 - [x] init.fixtures — synthetic dataset covering every required edge case (fixtures/fleet.json)
@@ -28,15 +28,64 @@ CHECKLIST:
 - [x] 5.1 — temporal mode 1: default accumulated present, NAMED, with the other two modes stating what they would need
 - [x] 5.2 — difference map NOT OFFERED: nothing has been compared. Detector in place so it becomes available the moment a build actually relaxes (see DECISIONS.md), two synced panes (primary "what changed")
 - [x] 5.3 — scrubber NOT OFFERED, on two independent blockers (no retained wiring-version sequence; staged transitions are motion, banned). A traffic-window sequence DOES exist and is named as a different question, not repurposed. prefers-reduced-motion verified by rendering both preferences against a control page that proves the flag bites (see DECISIONS.md)
-- [ ] 6.1 — dual themes via prefers-color-scheme with identical semantic ordering (§3f verdict B)
+- [x] 6.1 — dual themes VERIFIED (both already existed since Stage 2; the increment was the check, which had never run). Ordered channel (recency->salience) monotone in BOTH polarities; categorical channel (state->hue) drifts at most 6.2deg; contrast floor held on both grounds; page proven to respond to the preference by rendering, against a control page proving the browser can switch
 - [ ] 6.2 — MANUAL: on-hardware polarity A/B (light vs dark) for "find the abandoned path" and "find the missing-reporting node"
 - [ ] 6.3 — MANUAL: comparison-mode A/B (difference-map vs two-pane vs scrubber) measured on error rate and time, not FPS
-NEXT: 6.1 — dual themes via prefers-color-scheme with identical semantic ordering. :root[data-theme] overrides have existed since Stage 2, so CHECK whether this is already satisfied rather than assuming either way; if it is, the increment is the verification, not new CSS. The reduced-motion harness added in 5.3 (_shot_args plus a control page proving the media-query flag is effective) is directly reusable for prefers-color-scheme.
-BLOCKERS: none
+NEXT: nothing automatable remains. 6.2 and 6.3 are on-hardware operator task-tests and are OWNER-BLOCKED — see BLOCKERS.
+BLOCKERS: 6.2 and 6.3 only, and both are owner-blocked BY DESIGN rather than by any missing code.
+  - 6.2 polarity A/B (light vs dark) for 'find the abandoned path' and 'find the missing-reporting node'.
+  - 6.3 comparison-mode A/B (difference-map vs two-pane vs scrubber) on ERROR RATE AND TIME, not FPS.
+  Both need human operators in front of the actual target display. The report (section 6) names them as the
+  thing that SETTLES two open questions -- the best contrast polarity, and the max useful graph density
+  before aggregation -- and it is explicit that both are empirical and hardware-dependent. Nothing in this
+  repo can answer them, and a synthetic substitute would be exactly the kind of unearned green this artifact
+  refuses. 6.3 additionally cannot be run as specified here: two of its three arms (difference map, scrubber)
+  are NOT OFFERED, for reasons recorded in DECISIONS.md 5.2 and 5.3.
+
+ACCEPTANCE — evidence per hard constraint (273 automated checks, 0 failures; self-test 29 detections)
+
+  single file, no external refs   check_dist finds no sibling assets in dist/; src=http, href=http,
+                                  @import and url(http are banned tokens, each self-tested against the
+                                  REAL token rather than a paraphrase.
+  no network                      fetch(, XMLHttpRequest, WebSocket, sendBeacon banned + self-tested.
+  no forms, no storage            <form, localStorage, sessionStorage, indexedDB banned + self-tested.
+  deterministic / read-only       Math.random banned; layout seeded by blake2b over stable IDs, never
+                                  hash(); two opens of the file render with 0 differing canvas pixels.
+  no runtime layout               forceSimulation, forceLink, forceManyBody, velocityDecay and
+                                  simulation.tick banned + self-tested.
+  no motion                       transition:, animation:, @keyframes, requestAnimationFrame, setInterval
+                                  banned + self-tested. Verified by RENDERING: a control page built to
+                                  differ under --force-prefers-reduced-motion moved 160000 px, proving the
+                                  instrument bites; the artifact then differed by 0 px.
+  never labelled LIVE             banned token; all ages derive from embedded timestamps.
+  data in application/json        payload parses from the <script type="application/json"> block and
+                                  carries generated_at and data_through.
+  null never coerced to 0         renderer asserts core_luminance !== null and rail_width === null
+                                  strictly; never-fired and fired-long-ago are different marks.
+  no glow                         the Stage-0 contract gate REJECTS node.glow as a channel the spec never
+                                  asked for -- proved by planting it and watching the gate raise.
+  ages                            exactly one live clock read, inside age(), for the age of the PICTURE;
+                                  every age of a thing IN the picture is baked at build time. Both halves
+                                  asserted.
+  both themes, same meaning       recency->salience monotone in both polarities; state hue drift <= 6.2deg;
+                                  contrast floor 5.03 dark / 3.32 light; the page proven to respond to the
+                                  preference by rendering, against a control proving the browser can switch.
+
+  WHAT THIS ARTIFACT DOES NOT CLAIM, and where each absence is argued:
+    no control charts (bands instead)        no series is recorded          DECISIONS 4.4
+    no per-repo state timeline (rails)       no transitions are recorded    DECISIONS 4.5
+    no loop-vs-human comparison (one side)   counterfactual not stored      DECISIONS 4.6
+    no difference map                        previous == current            DECISIONS 5.2
+    no timeline scrubber                     no wiring-version sequence,
+                                             and staged transitions are
+                                             motion, which is banned        DECISIONS 5.3
+  Each of these is stated ON THE PAGE, not only here. That is the point of the whole exercise: the half
+  the data supports is built, and the half it does not is NAMED rather than drawn convincingly.
+
 MANUAL_CHECKS:
 - (CLOSED 2026-08-05) headless browser load — Google Chrome was found at /Applications/Google Chrome.app. The verifier now opens dist/index.html from file:// headless with NetworkService disabled, twice, and compares canvas pixels. This is no longer a manual check.
 - 6.2 and 6.3 are operator task-tests on target hardware and cannot be automated
-LAST_RUN: 2026-08-05 — increment 5.3. The scrubber is NOT OFFERED, for two reasons either of which is fatal alone: topology.json carries layout_version as a scalar with no history and the state file is overwritten each build, so no earlier wiring version exists to scrub back to; and staged add/remove/persist transitions are motion, which is banned outright, so section 3g's GraphDiaries treatment cannot be drawn here with or without a sequence. Checking the data first paid off: a sequence DOES exist -- the event log spans 3 monthly windows and the edge set carrying traffic changes across them (3 -> 5 -> 5) -- but it is traffic over time, not wiring over time, and the page says so rather than wiring a scrubber to the wrong axis. prefers-reduced-motion is verified by rendering, not asserted: a control page built to differ under the flag proved the instrument bites (160000 px), and the artifact then differed by 0. A probe found _scrubber_partial would write 'spans 1 windows ... a DIFFERENT sequence does exist' if handed fabricated variance; it now refuses, and the verifier measures the windows with a separate implementation so a bug cannot agree with itself.
+LAST_RUN: 2026-08-06 -- increment 6.1, the last automatable item. Both themes had existed since Stage 2, so the increment was the VERIFICATION, which had never been run. Section 3f's load-bearing clause is 'identical semantic ordering, never auto-invert luminance meaning', and the two channels needed different tests because they are different kinds of channel. RECENCY is ordered and encoded as alpha over the ground: on dark it composites brighter toward 1.0, on light it composites darker -- opposite in absolute luminance, SAME in salience, which is what not-inverting-the-meaning actually means. Measured monotone increasing in both (dark .017 .073 .174 .326 .536 / light .161 .354 .511 .634 .727). STATE is categorical and encoded as hue, so what must survive is identity, not magnitude: worst drift 6.2deg (--ok). Contrast floor held on both grounds (dark 5.03, light 3.32). Deliberately NOT asserted: that contrast ORDERING survives, because it does not (dark accent>ok>warn>stale>bad>muted, light muted>stale>bad>accent>ok>warn) and the design never claimed contrast as the state channel -- asserting it would have invented a requirement. Probing found the documented flag wrong: headless Chrome already defaults to DARK and every --force-*-color-scheme variant left the control page unchanged, so assuming it would have produced two identical renders and a green check measuring nothing; --blink-settings=preferredColorScheme=0/1 actually switches. Also fixed a hole in my own check: the palette regex matched only 6-digit hex and silently dropped --panel:#fff.
 5.1 said that because every node carries previous_x/previous_y, 'where a node MOVED' was answerable. Checked it: WRONG. When the topology is unchanged the build writes Placed(n, prev, prev, prev, prev, 'carried') — previous is a COPY OF CURRENT from the same build. All 7 nodes had displacement 0.0. A diff drawn from that would show 'nothing moved' and the reader would conclude the layout is stable across versions, when no second version was ever compared. Carrying a previous field is not the same as having a prior version.
 The test is now displacement, not presence — proved with two REAL builds: unchanged rebuild gives 0 moved and the mode says nothing was compared; a topology change gives 7 of 8 moved and the mode reports displacement as answerable. So the detector is correct in both directions and the mode will offer itself the moment the data supports it.
 No empty diff panel is rendered. An empty diff is exactly the failure this project keeps naming: absence rendered as a measurement.
