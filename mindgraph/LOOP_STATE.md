@@ -16,7 +16,7 @@ CHECKLIST:
 - [x] 2.4 — the five endpoint states, each visually distinct: never-observed / dormant / retired / unknown / stale
 - [x] 2.5 — mid-edge gate glyph as a RECTANGLE (§3c verdict B), states [H…] [H✓] [H✗] [H!] [H↶]
 - [x] 2.6 — legend with concrete worked examples, windows, numbers, and every log/sqrt transform and cap printed
-- [ ] 3.1 — persistence: a file reopened later renders pixel-identical node positions (threshold: zero coordinate drift between two opens)
+- [x] 3.1 — persistence: a file reopened later renders pixel-identical node positions (threshold: zero coordinate drift between two opens)
 - [ ] 3.2 — birth-flag tab ("NEW"/"3h"/"2d") computed from now − first_seen_at against embedded generated_at; static, not a halo (§3d verdict B)
 - [ ] 3.3 — staleness self-display: all visible ages computed from embedded timestamps; never labelled LIVE
 - [ ] 4.1 — dashboard: registry LEFT-JOIN telemetry; coverage + freshness strip first
@@ -31,11 +31,12 @@ CHECKLIST:
 - [ ] 6.1 — dual themes via prefers-color-scheme with identical semantic ordering (§3f verdict B)
 - [ ] 6.2 — MANUAL: on-hardware polarity A/B (light vs dark) for "find the abandoned path" and "find the missing-reporting node"
 - [ ] 6.3 — MANUAL: comparison-mode A/B (difference-map vs two-pane vs scrubber) measured on error rate and time, not FPS
-NEXT: 3.1 — persistence: a file reopened later renders pixel-identical node positions (threshold: zero coordinate drift between two opens). build.py already proves byte-identical rebuilds; 3.1 is proving the OPEN side — the page must not move anything at view time.
+NEXT: 3.2 — birth-flag tab ("NEW"/"3h"/"2d") computed from now - first_seen_at against embedded generated_at; static, not a halo (§3d verdict B)
 BLOCKERS: none
 MANUAL_CHECKS:
-- headless browser load of dist/index.html from file:// with network blocked — no headless browser confirmed available in this environment yet; the forbidden-token scan and single-file check run, the actual offline load does not
+- (CLOSED 2026-08-05) headless browser load — Google Chrome was found at /Applications/Google Chrome.app. The verifier now opens dist/index.html from file:// headless with NetworkService disabled, twice, and compares canvas pixels. This is no longer a manual check.
 - 6.2 and 6.3 are operator task-tests on target hardware and cannot be automated
-LAST_RUN: 2026-08-05 — increment 2.6, STAGE 2 COMPLETE. The legend is now DERIVED from contract.py's constants and from edges that actually exist, rather than typed alongside them. It was a second copy nobody compared: proved by setting RADIUS_K=9.9 and watching the legend follow, where before it would have kept printing 3.4 while the renderer drew 9.9. A legend that lies is worse than no legend, because it is believed.
-THREE DEFECTS THIS INCREMENT, all reproduced. (1) The legend/constant drift above. (2) emit() crashed on a payload whose edges had no render block — now refused loudly, since a legend built from an unresolved payload would silently lose its worked examples and become the bare 'brighter = more active' the report forbids; the verifier's own fixture was also missing those blocks and now carries them. (3) A STALE BYTECODE CACHE made a restore appear to fail: '3.4' and '9.9' are the same byte length, the edit landed in the same second, and Python's (mtime, size) check saw no change — confirmed by reading the .pyc header. __pycache__ is now gitignored and cleared before drift probes.
-Verified: self-test PASS (24 detections); verify 134/134 PASS. Published to the stable URL.
+LAST_RUN: 2026-08-05 — increment 3.1. Persistence is now proved by RENDERING, not by reasoning: Chrome headless opens dist/index.html from file:// twice with NetworkService disabled and the canvas pixels are compared. 0 differing pixels. Planted real view-time drift (x + Date.now()%7 in the DELIVERED page) and the check failed with 8802 differing pixels, then passed again on restore.
+The canvas is CROPPED before comparison and that is not a convenience: the header stamp reports the file's own age from Date.now(), so it is supposed to change between opens. Comparing whole pages would be flaky in a way that punishes the staleness feature for working correctly.
+MANUAL_CHECK CLOSED: the headless offline load is automated now. Only 6.2/6.3 remain owner-blocked.
+Verified: self-test PASS (24 detections); verify 136/136 PASS. Page unchanged this increment, so not republished.

@@ -600,3 +600,34 @@ Refused rather than tolerated. A `.get()` would have produced a page with a
 legend containing no worked examples — quietly — which is exactly the bare
 "brighter = more active" the report forbids. The verifier's fixture was also
 wrong and now carries the render blocks the real contract always produces.
+
+---
+
+## 2026-08-05 · Persistence is proved by rendering, and the canvas is cropped
+
+**Spec sets the threshold.** Stage 3 requires "zero coordinate drift between
+two opens of the same artifact".
+
+**Chosen.** Open the delivered file twice in headless Chrome from `file://`
+with `NetworkService` disabled, and compare the canvas pixels.
+
+**Why not reason about it.** Inspecting the drawing code would show that
+today's code reads baked coordinates. It would not show that the page as
+delivered puts the same marks in the same places — which is the actual claim.
+Rendering it does.
+
+**Why the canvas is cropped rather than comparing whole pages.** The header
+stamp reports the file's own age from `Date.now()`, so it is *supposed* to
+differ between opens. A whole-page comparison would be flaky in the worst
+possible way: it would fail intermittently, and the failure would be the
+staleness feature working correctly. The canvas carries the coordinates; the
+stamp carries time; they are compared separately.
+
+Proved by planting real drift into the DELIVERED page — `x + Date.now()%7` —
+which produced 8802 differing pixels, then passed again on restore.
+
+**This also closes a standing MANUAL_CHECK.** The offline headless load was
+recorded as unautomatable because no browser had been confirmed present. One
+was: `/Applications/Google Chrome.app`. Checking rather than assuming turned a
+manual item into an automated one, which is worth remembering — the earlier
+entry was honest but stale.

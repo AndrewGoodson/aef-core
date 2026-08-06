@@ -814,6 +814,104 @@ def check_artifact_matches_topology(result: Result) -> None:
     )
 
 
+CHROME_CANDIDATES = (
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/usr/bin/chromium",
+    "/usr/bin/google-chrome",
+)
+
+
+def _chrome() -> str | None:
+    import shutil
+
+    for candidate in CHROME_CANDIDATES:
+        if Path(candidate).is_file():
+            return candidate
+    for name in ("chromium", "google-chrome", "chrome"):
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+
+def check_pixel_stability(result: Result) -> None:
+    """Stage 3.1 — zero coordinate drift between two OPENS, tested by actually
+    opening the file twice in a headless browser and comparing pixels.
+
+    Reasoning about the drawing code would only show that today's code reads
+    baked coordinates. Rendering it proves the page as delivered puts the same
+    marks in the same places.
+
+    **The canvas is cropped out before comparison, and that is not a
+    convenience.** The header stamp reports the file's own age from
+    `Date.now()`, so it is SUPPOSED to change between opens — comparing whole
+    pages would be flaky in a way that punishes the staleness feature for
+    working. The canvas region carries the coordinates; the stamp carries time.
+    """
+    chrome = _chrome()
+    if chrome is None:
+        result.add(
+            "pixel stability across two opens",
+            False,
+            "no headless browser found — recorded in MANUAL_CHECKS, not skipped",
+        )
+        return
+    if not DIST.is_file():
+        result.add("pixel stability across two opens", False, "no artifact")
+        return
+
+    import subprocess
+    import tempfile
+
+    try:
+        from PIL import Image  # type: ignore[import-not-found]
+    except ImportError:
+        result.add("pixel stability across two opens", False, "PIL unavailable")
+        return
+
+    with tempfile.TemporaryDirectory() as tmp:
+        shots = []
+        for i in (1, 2):
+            out = Path(tmp) / f"open{i}.png"
+            proc = subprocess.run(
+                [
+                    chrome, "--headless", "--disable-gpu", "--hide-scrollbars",
+                    "--force-device-scale-factor=1", "--window-size=1200,1400",
+                    "--virtual-time-budget=3000",
+                    # Offline, genuinely: the renderer is not allowed to reach
+                    # the network even if something tried.
+                    "--disable-features=NetworkService",
+                    f"--screenshot={out}", DIST.as_uri(),
+                ],
+                capture_output=True, timeout=90,
+            )
+            if not out.is_file():
+                result.add(
+                    "pixel stability across two opens",
+                    False,
+                    f"screenshot failed: {proc.stderr[-160:]!r}",
+                )
+                return
+            shots.append(out)
+
+        first, second = (Image.open(s).convert("RGB") for s in shots)
+        result.add("the page renders offline in a headless browser", True)
+
+        # Crop to the canvas band, below the header stamp.
+        box = (0, 260, min(first.width, second.width), min(first.height, second.height))
+        a, b = first.crop(box), second.crop(box)
+        import numpy as np  # type: ignore[import-not-found]
+
+        diff = np.abs(np.asarray(a, dtype=int) - np.asarray(b, dtype=int))
+        changed = int((diff.sum(axis=2) > 0).sum())
+        result.add(
+            "zero coordinate drift between two opens (canvas pixels identical)",
+            changed == 0,
+            f"{changed} differing pixels",
+        )
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -958,6 +1056,7 @@ def main(argv: list[str]) -> int:
     check_emit(result)
     check_render_nodes(result)
     check_render_edges(result)
+    check_pixel_stability(result)
     check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()
