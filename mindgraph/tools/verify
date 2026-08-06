@@ -396,6 +396,99 @@ def check_layout(result: Result) -> None:
         result.add(f"non-finite carried position refused ({bad})", refused)
 
 
+def check_build(result: Result) -> None:
+    """Stage 1.3. The property is that build N+1 reproduces build N, across
+    PROCESSES — not within one."""
+    import subprocess
+    import tempfile
+
+    root = ROOT
+    py = sys.executable
+    script = root / "pipeline" / "build.py"
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        state = tmpdir / "layout-state.json"
+        outs = [tmpdir / f"p{i}.json" for i in (1, 2, 3)]
+        ok = True
+        for out in outs:
+            proc = subprocess.run(
+                [py, str(script), "--state", str(state), "--out", str(out)],
+                capture_output=True,
+                text=True,
+                cwd=root,
+            )
+            ok = ok and proc.returncode == 0
+        result.add("build runs three times cleanly", ok)
+        if not ok:
+            return
+
+        bodies = [o.read_text() for o in outs]
+        result.add(
+            "builds 2 and 3 are byte-identical over unchanged inputs",
+            bodies[1] == bodies[2],
+            "" if bodies[1] == bodies[2] else "the artifact churns on every build",
+        )
+        payloads = [json.loads(b) for b in bodies]
+        pos = [{n["id"]: (n["x"], n["y"]) for n in p["nodes"]} for p in payloads]
+        result.add("coordinates survive a second process", pos[0] == pos[1])
+        result.add(
+            "layout_version does not bump when nothing changed",
+            payloads[1]["layout_version"] == payloads[2]["layout_version"],
+        )
+        result.add(
+            "an unchanged rebuild reports every node as carried",
+            {n["layout_reason"] for n in payloads[2]["nodes"]} == {"carried"},
+        )
+
+        # Adding a node must accommodate it WITHOUT breaking the budget.
+        topo = json.loads((root / "fixtures" / "topology.json").read_text())
+        topo["nodes"].append(
+            {
+                "id": "fraud_check",
+                "kind": "agent",
+                "instrumentation": "new",
+                "telemetry_coverage": "full",
+            }
+        )
+        topo["edges"] += [
+            {"source": "classify", "target": "fraud_check", "telemetry_coverage": "full"},
+            {"source": "fraud_check", "target": "human_gate", "telemetry_coverage": "full"},
+        ]
+        topo_path = tmpdir / "topo2.json"
+        topo_path.write_text(json.dumps(topo))
+        grown = tmpdir / "p4.json"
+        proc = subprocess.run(
+            [py, str(script), "--state", str(state), "--topology", str(topo_path),
+             "--out", str(grown)],
+            capture_output=True, text=True, cwd=root,
+        )
+        result.add("build accepts a new node", proc.returncode == 0, proc.stderr[-160:])
+        if proc.returncode != 0:
+            return
+        after = json.loads(grown.read_text())
+        pa = {n["id"]: (n["x"], n["y"]) for n in after["nodes"]}
+        import math
+
+        worst = max(math.dist(pos[2][k], pa[k]) for k in pos[2])
+        result.add(
+            "existing nodes stay within the displacement budget when one is added",
+            worst <= 52.0 + 0.1,
+            f"max {worst:.1f}px",
+        )
+        new_node = next(n for n in after["nodes"] if n["id"] == "fraud_check")
+        result.add(
+            "the new node is seeded by centroid, not dropped on the perimeter",
+            new_node["layout_reason"] == "seeded_centroid",
+            new_node["layout_reason"],
+        )
+        result.add(
+            "layout_version bumps when the topology DOES change",
+            after["layout_version"] == payloads[2]["layout_version"] + 1,
+        )
+        for key in ("generated_at", "data_through", "expected_report_interval_seconds"):
+            result.add(f"payload carries {key}", key in after)
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -531,6 +624,7 @@ def main(argv: list[str]) -> int:
     check_contract(result)
     check_traversal(result)
     check_layout(result)
+    check_build(result)
     check_dist(result)
     return result.report()
 

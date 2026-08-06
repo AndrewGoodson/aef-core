@@ -273,3 +273,58 @@ coordinate. This is the same failure class as ADR 0108's D2 in the host repo.
 Refused at the boundary rather than clamped to something sensible, because a
 silently corrected position is a position the operator cannot trust: the node
 would appear somewhere plausible, having come from a value that meant nothing.
+
+---
+
+## 2026-08-05 · Layout is recomputed when the topology changes, not when a build runs
+
+**Reproduced defect. Recorded because the naive reading of "bounded relaxation
+each build" is what produced it.**
+
+Building twice over unchanged inputs moved all seven nodes. Relaxation was
+applied on every build, so each run seeded from the previous run's output and
+drifted a little further. Each individual step was inside the displacement
+budget, so nothing failed — the map just decayed, permanently, for no reason.
+
+The fix is a semantic one, not a tolerance one: an unchanged node set means
+there is nothing to accommodate, so carried coordinates are returned verbatim
+and no simulation runs. `layout_version` likewise bumps only when the topology
+changes — versioning the build count would make "which version of the map am I
+looking at" meaningless, and the report states the displacement budget *per
+layout version*.
+
+Clamping harder would have hidden this. The drift was legal under the budget;
+it was the unconditional recomputation that was wrong.
+
+---
+
+## 2026-08-05 · Timestamps are inputs, never read from the clock
+
+**Spec silent on.** Section 4.3 requires `generated_at` and `data_through` to be
+embedded; it does not say where the pipeline gets them.
+
+**Chosen.** Both are parameters, and `build.py` refuses a naive datetime.
+
+**Why.** A pipeline that stamps `datetime.now()` produces a different artifact
+on every run over identical data. That defeats the byte-stability the layout
+state exists to provide, and it makes "did anything actually change?"
+unanswerable from a diff — every build looks like a change. Naive timestamps
+are refused because every visible age on the page is computed from these, and a
+naive one means a different instant depending on where the page is opened.
+
+---
+
+## 2026-08-05 · The layout state file is separate from the artifact
+
+**Spec silent on.** It says to carry `previous_x`/`previous_y` forward, not
+where they live between builds.
+
+**Chosen.** A `build/layout-state.json` the pipeline owns, distinct from the
+delivered page.
+
+**Why.** Reading coordinates back out of the rendered HTML would make the
+artifact an input to its own generation: a corrupted or hand-edited page would
+then silently rewrite the layout everyone else sees. The delivered file is a
+snapshot of the positions it was built with; the state file is the pipeline's
+memory. `build/` is gitignored — it is derived, and committing it would invite
+someone to edit the memory directly.

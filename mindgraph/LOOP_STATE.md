@@ -8,7 +8,7 @@ CHECKLIST:
 - [x] 0.2 — build fails unless 100% of node/edge visual properties have a named backing field (report §6 Stage 0 threshold)
 - [x] 1.1 — pipeline: derive traversal graph from the event log
 - [x] 1.2 — pipeline: offline layout, deterministic seeding only (weighted centroid of positioned neighbours; perimeter by hash of stable ID; never Math.random)
-- [ ] 1.3 — pipeline: carry previous_x/previous_y forward; bounded relaxation within a hard displacement budget of ~1 node diameter per layout version; store layout_reason
+- [x] 1.3 — pipeline: carry previous_x/previous_y forward; bounded relaxation within a hard displacement budget of ~1 node diameter per layout version; store layout_reason
 - [ ] 1.4 — pipeline: embed graph + positions + history + generated_at + data_through + expected interval in a <script type="application/json"> block
 - [ ] 2.1 — vendor d3-force (8.3 KB min, ISC) locally; never fetched at view time
 - [ ] 2.2 — hand-written Canvas renderer: node channels per §4.1 (position/radius/fill/border/interior glyph/birth flag; ≤3 preattentive variables; no glow, ever)
@@ -31,10 +31,10 @@ CHECKLIST:
 - [ ] 6.1 — dual themes via prefers-color-scheme with identical semantic ordering (§3f verdict B)
 - [ ] 6.2 — MANUAL: on-hardware polarity A/B (light vs dark) for "find the abandoned path" and "find the missing-reporting node"
 - [ ] 6.3 — MANUAL: comparison-mode A/B (difference-map vs two-pane vs scrubber) measured on error rate and time, not FPS
-NEXT: 1.3 — carry previous_x/previous_y forward with the displacement budget and layout_reason. NOTE: layout.py already implements carry + budget + reason; 1.3 is therefore wiring them through a build entry point and proving carry across two SEPARATE builds via a persisted file, not in one process.
+NEXT: 1.4 — embed graph + positions + history + generated_at + data_through + expected interval in a <script type="application/json"> block. build.py already emits the payload; 1.4 wraps it in the document shell.
 BLOCKERS: none
 MANUAL_CHECKS:
 - headless browser load of dist/index.html from file:// with network blocked — no headless browser confirmed available in this environment yet; the forbidden-token scan and single-file check run, the actual offline load does not
 - 6.2 and 6.3 are operator task-tests on target hardware and cannot be automated
-LAST_RUN: 2026-08-05 — increment 1.2. pipeline/layout.py computes positions offline with zero RNG. blake2b for perimeter placement rather than builtin hash(): DEMONSTRATED that hash('retry_guard') differs across two Python processes, so hash() would move a node on every build through a function that looks pure. Sorted iteration everywhere so input ordering cannot reach the coordinates — verified by laying out the reversed input and comparing. Fixed iteration count rather than convergence, since a convergence test can depend on float ordering. Adversarial probe found one: a non-finite CARRIED position propagated through the simulation and would serialise as bare Infinity, blanking the page — same class as ADR 0108's D2, now refused at the boundary rather than sanitised.
-Verified: self-test PASS (19 detections); verify 52/53 PASS including determinism across runs, independence from input ordering, no-RNG source scan over all three pipeline modules, and the 52px displacement budget holding when a new node joins; dist/index.html FAIL — expected until Stage 2.
+LAST_RUN: 2026-08-05 — increment 1.3. pipeline/build.py owns a persisted layout state so coordinates outlive the process. REPRODUCED this increment's own central property failing: building twice over UNCHANGED inputs moved all seven nodes, because relaxation ran unconditionally and each build seeded from the last build's output and drifted further. The layout is now recomputed when the TOPOLOGY changes, not when a build runs; layout_version tracks the layout rather than the build count. Adding a node still relaxes, and the worst carried displacement measured 45.6px against a 52px budget. Timestamps are passed in rather than read from the clock — datetime.now() would make every build differ over identical data. Probes: corrupt state, wrong graph_id, unknown state version and naive timestamps all refused; nothing landed.
+Verified: self-test PASS (19 detections); verify 64/65 PASS including byte-identical rebuilds across three separate processes; dist/index.html FAIL — expected until Stage 2.
