@@ -151,7 +151,14 @@ class NodeWorkerSession:
                 text=True,
                 preexec_fn=child_preexec(sandbox),
             )
-        self.description = self._handshake(entrypoint)
+        try:
+            self.description = self._handshake(entrypoint)
+        except BaseException:
+            # Popen succeeded, so this object owns the process even when an
+            # unexpected handshake shape raises outside a specific validation
+            # branch.  Never return control with the worker still alive.
+            self.close()
+            raise
 
     def _handshake(self, entrypoint: str) -> dict[str, Any]:
         line = self._readline()
@@ -173,7 +180,12 @@ class NodeWorkerSession:
             detail = payload.get("error") if isinstance(payload, dict) else None
             why = detail or f"unexpected first frame {line[:200]!r}"
             raise IsolationError(f"worker for {entrypoint!r} failed: {why}")
-        graph: dict[str, Any] = payload["graph"]
+        graph = payload["graph"]
+        if not isinstance(graph, dict):
+            self.close()
+            raise IsolationError(
+                f"worker for {entrypoint!r} described a non-object graph ({type(graph).__name__})"
+            )
         for required in ("id", "version", "entry_node", "nodes", "edges"):
             if required not in graph:
                 self.close()
@@ -294,6 +306,10 @@ class NodeWorkerSession:
                 # (ADR 0093).
                 kill_process_group(self._proc.pid)
             self._proc.kill()
+            # Killing is not reaping.  Repeated variant evaluation otherwise
+            # accumulates zombie children until some later Popen happens to
+            # run subprocess's global cleanup.
+            self._proc.wait()
         for stream in (self._proc.stdin, self._proc.stdout, self._proc.stderr):
             if stream is None:
                 continue

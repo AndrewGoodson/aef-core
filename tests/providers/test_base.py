@@ -47,6 +47,15 @@ def test_fallback_requires_at_least_one_provider() -> None:
         FallbackProvider([])
 
 
+def test_fallback_snapshots_caller_owned_provider_order() -> None:
+    providers: list[ModelProvider] = [_WorkingProvider("primary")]
+    provider = FallbackProvider(providers)
+
+    providers.clear()
+
+    assert provider.complete(_request()).content == "ok"
+
+
 def test_fallback_does_not_call_later_providers_once_one_succeeds() -> None:
     calls: list[str] = []
 

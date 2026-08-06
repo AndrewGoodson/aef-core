@@ -655,7 +655,19 @@ def run_adopt(target_dir: Path) -> AdoptResult:
 
     def _write_if_absent(relative_name: str, content: str) -> None:
         path = target_dir / relative_name
-        if path.exists():
+        # ``Path.exists()`` is false for a dangling symlink, and normal file
+        # writes follow symlinked parent directories.  Treat either shape as
+        # an existing repository entry: adoption promises to add files inside
+        # the target repo, never to follow its links and create files
+        # elsewhere.
+        parent = path.parent
+        blocked_parent = False
+        while parent != target_dir:
+            if parent.is_symlink() or (parent.exists() and not parent.is_dir()):
+                blocked_parent = True
+                break
+            parent = parent.parent
+        if path.exists() or path.is_symlink() or blocked_parent:
             skipped.append(path)
             return
         path.parent.mkdir(parents=True, exist_ok=True)  # for .github/, .cursor/rules/

@@ -4,6 +4,16 @@
 Accepted. Implements M1 of the self-rewiring roadmap. Realises the
 structural isolation ADR 0044 specified.
 
+**Implementation correction (2026-08-06):** the original decision text said
+every gate, corpus, suite, and workflow byte was loaded through
+`BaseRefHarness`. That is not the integrated call path. The loop imports its
+gates from the already-running AEF package; `BaseRefHarness` is an explicit
+base-ref read/materialisation utility. The supplied workflows establish the
+property at launch by checking out and installing trusted `main`, then fetching
+the candidate only as data. A local caller running AEF from a candidate-altered
+checkout is not structurally protected by `BaseRefHarness`. The decision and
+confidence below are narrowed accordingly.
+
 ## Context
 ADR 0044 established that self-coding is survivable only if the harness is
 structurally isolated from the candidate: *"if an agent can modify what
@@ -22,13 +32,17 @@ confirmed against real git rather than reasoned about from documentation.
 
 ## Decision
 
-**1. The boundary is "gates execute from the base ref", not "reject Zone B
-diffs".** Every byte of gate code, corpus, eval suite, and CI config is
-loaded through `BaseRefHarness`, which resolves it via
-`git show <base_sha>:<path>`. A branch may rewrite `aef/harness/gate.py` to
-`return True`; that file is never the one that runs, because **no code path
-reaches the branch's copy**. This fails *closed* by construction — there is
-nothing to forget to check.
+**1. The boundary is "the executing harness has trusted provenance", not
+"reject Zone B diffs".** In the supplied CI workflows, AEF is checked out and
+installed from `main`; only after that is the candidate fetched under a data
+ref. The candidate workspace is reconstructed from Git objects and is never
+used as the source of gate imports. This is the integrated boundary.
+
+`BaseRefHarness` resolves explicit Zone B reads via
+`git show <base_sha>:<path>`. It proves that a caller can pin and execute a
+base-ref gate even when the checked-out branch rewrites that file. It does
+**not** mediate all reads made by `aef loop gate`, and it cannot repair an
+untrusted launcher that imports AEF from the candidate checkout.
 
 The zone check remains, demoted to what it is good at: a **signal**. A Zone
 B diff is a security event worth halting on (`05-approval-policy.md` §6),
@@ -82,31 +96,33 @@ say where its agents live, never where its gates live. Enforced by a test
 asserting `ZonePolicy` has exactly one field.
 
 ## Consequences
-- The load-bearing property is directly tested, not argued:
+- The explicit-read primitive is directly tested:
   `test_a_candidate_that_rewrites_its_gate_still_faces_the_original_gate`
   builds a real repo, commits a subverted gate on the branch, loads the
   base-ref gate, **executes it**, and asserts it still rejects.
-- 97 tests, every git behaviour exercised against a real `git init` repo.
-  The three escapes each have a known-bad test that fails if the control is
-  removed.
+- The supplied CI workflows make trusted launch provenance inspectable: they
+  check out `main`, install it, and fetch the candidate as data. Real-Git tests
+  cover the explicit read and candidate reconstruction primitives.
 - Deny-by-default extends to malformed paths: traversal, absolute,
   backslash, null byte, and case variants are all security events, since
   none can arise from a well-formed `git diff`.
 - **Locally, the sandbox runs unisolated or not at all.** That is
   deliberate friction. CI must supply container-level isolation and attest
   it; until then, results honestly record `network_isolated=False`.
-- **Not built here:** the CI workflow that drives this. There are no gates
-  to run yet (M3), and a workflow invoking nothing would be theatre.
+- **Local limitation:** the package cannot attest its own import provenance.
+  Running `aef loop gate` from a candidate-modified checkout forfeits this
+  structural isolation even though Zone B classification still rejects the
+  candidate diff.
 
 ## Alternatives Considered
 - **Path allowlist as the primary control.** Rejected: it must *notice* an
   attack to stop one, and DGM is the existence proof that supervision plus
   sandboxing does not prevent a system from disabling its own detectors.
   Retained as a signal, not as the boundary.
-- **Checking out the base ref into a worktree and running from there.**
-  Equivalent in effect and slower; `git show` per file also lets
-  `materialize()` verify *per path* that only Zone B lands, so a
-  mis-specified filter cannot quietly widen what gets trusted.
+- **Materialising all harness code through `BaseRefHarness`.** The primitive
+  supports this, but the integrated loop does not use the materialised tree as
+  its import root. The supplied workflow instead obtains equivalent execution
+  provenance by checking out and installing trusted `main`.
 - **Resolving symlink targets and allowing intra-Zone-A links.** Rejected:
   correct resolution requires modelling the whole tree at merge time, and
   every subtlety is an escape. Refusing all symlinks costs the agent
@@ -120,12 +136,10 @@ asserting `ZonePolicy` has exactly one field.
   input somewhere closer to the candidate.
 
 ## Confidence
-High on the base-ref boundary and on the three escapes — all are tested
-against real git, and the rename hole was confirmed empirically before the
-fix was written. High that the sandbox's *declared* capabilities match
-reality, because the one overstatement it did contain was caught by a test
-that failed. Medium on completeness of the escape list: symlinks, renames,
-submodules, and modes are the ones found: **absence of further escapes is
-not claimed.** Notably unexamined: `.gitattributes` filters, and whether a
-candidate can influence git config in a way that changes diff output.
-Those belong in M3's G0 work.
+High that the supplied workflows execute the installed `main` package and
+fetch the candidate as data, and high on the explicit base-ref read primitive.
+No claim is made that arbitrary local launchers have trusted provenance.
+High that the sandbox's declared capabilities match its enforcement. Medium on
+the completeness of Git edge-case handling: real-repository tests now cover
+attributes, unusual config, symlinks, submodules, modes, ignored files, and
+workspace overlays, but absence of further edge cases is not claimed.

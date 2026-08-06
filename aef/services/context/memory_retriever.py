@@ -108,6 +108,14 @@ class MemoryRetriever(Retriever):
     # this whole milestone exists to remove (ADR 0101).
     max_token_budget: int | None = None
 
+    def __post_init__(self) -> None:
+        if self.candidates_per_kind <= 0:
+            raise ValueError(
+                f"candidates_per_kind must be positive; got {self.candidates_per_kind}"
+            )
+        if self.max_token_budget is not None and self.max_token_budget <= 0:
+            raise ValueError(f"max_token_budget must be positive; got {self.max_token_budget}")
+
     def retrieve(self, query: str, *, token_budget: int) -> list[RetrievedChunk]:
         if token_budget <= 0:
             # Not an empty list quietly: a caller asking for a non-positive

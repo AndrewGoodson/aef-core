@@ -93,6 +93,13 @@ def test_query_without_agent_id_or_run_id_raises() -> None:
         adapter.query("semantic")
 
 
+def test_query_rejects_negative_limit_before_calling_mem0() -> None:
+    adapter = Mem0Adapter(_FakeMem0Client())
+
+    with pytest.raises(ValueError, match="limit must be non-negative"):
+        adapter.query("semantic", agent_id="a1", limit=-1)
+
+
 def test_query_filters_out_other_kinds_and_missing_tags() -> None:
     client = _FakeMem0Client()
     adapter = Mem0Adapter(client)

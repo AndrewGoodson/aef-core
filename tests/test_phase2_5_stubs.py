@@ -51,8 +51,11 @@ def test_evolution_disabled_by_default() -> None:
     assert EvolutionConfig().enabled is False
 
 
-def test_evolution_cannot_be_enabled_without_the_gate_criteria() -> None:
-    with pytest.raises(NotImplementedError, match="Phase 4 gate criteria"):
+def test_evolution_rejection_names_the_missing_live_evidence() -> None:
+    with pytest.raises(
+        NotImplementedError,
+        match="implemented, but have not been validated against live traffic and real tenants",
+    ):
         EvolutionConfig(enabled=True)
 
 

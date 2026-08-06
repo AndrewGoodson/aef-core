@@ -7,6 +7,7 @@ from aef.config import (
     AgentConfig,
     AgentConfigError,
     EvolutionSettings,
+    MemoryConfig,
     PoliciesConfig,
     load_agent_config,
 )
@@ -72,8 +73,11 @@ def test_unknown_nested_key_rejected() -> None:
         AgentConfig.model_validate(raw)
 
 
-def test_evolution_enabled_true_rejected_at_validation() -> None:
-    with pytest.raises(ValueError, match="Phase 4 gate criteria"):
+def test_evolution_enabled_true_rejection_names_the_missing_live_evidence() -> None:
+    with pytest.raises(
+        ValueError,
+        match="implemented, but have not been validated against live traffic and real tenants",
+    ):
         EvolutionSettings(enabled=True)
 
 
@@ -87,9 +91,26 @@ def test_missing_required_field_rejected() -> None:
         AgentConfig.model_validate(raw)
 
 
+def test_memory_config_rejects_unwired_implementation() -> None:
+    with pytest.raises(ValidationError, match="in_memory"):
+        MemoryConfig(impl="mem0")
+
+
+def test_memory_config_rejects_ignored_backend() -> None:
+    with pytest.raises(ValidationError, match="backend"):
+        MemoryConfig(impl="in_memory", backend="sqlite")
+
+
 def test_load_agent_config_missing_file_raises_readable_error() -> None:
     with pytest.raises(AgentConfigError, match="cannot read"):
         load_agent_config(CONFIG_DIR / "does_not_exist.yaml")
+
+
+def test_load_agent_config_non_utf8_raises_readable_error(tmp_path: Path) -> None:
+    bad_file = tmp_path / "bad.yaml"
+    bad_file.write_bytes(b"\xff\xfe")
+    with pytest.raises(AgentConfigError, match="cannot decode agent config"):
+        load_agent_config(bad_file)
 
 
 def test_load_agent_config_invalid_yaml_raises_readable_error(tmp_path: Path) -> None:

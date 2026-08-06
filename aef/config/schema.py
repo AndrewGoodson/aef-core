@@ -32,6 +32,28 @@ class MemoryConfig(_StrictModel):
     impl: str
     backend: str | None = None
 
+    @field_validator("impl")
+    @classmethod
+    def _must_name_constructible_memory(cls, value: str) -> str:
+        if value != "in_memory":
+            raise ValueError(
+                f"memory.impl={value!r} names no runtime builder. Implemented: in_memory. "
+                "A config that names an unwired store would silently run against volatile "
+                "in-memory storage; see docs/adr/0014."
+            )
+        return value
+
+    @field_validator("backend")
+    @classmethod
+    def _reject_ignored_backend(cls, value: str | None) -> str | None:
+        if value is not None:
+            raise ValueError(
+                f"memory.backend={value!r} is not wired and would be ignored. Remove it "
+                "until a runtime builder supports durable memory configuration; see "
+                "docs/adr/0014."
+            )
+        return value
+
 
 class KnowledgeGraphConfig(_StrictModel):
     impl: str
@@ -149,9 +171,10 @@ class EvolutionSettings(_StrictModel):
     def _must_stay_disabled(cls, value: bool) -> bool:
         if value:
             raise ValueError(
-                "evolution.enabled=True is rejected in Phase 0/1 — none of the Phase 4 "
-                "gate criteria are implemented yet; see docs/roadmap.md Phase 4 and "
-                "aef.evolution.engine for the full list"
+                "evolution.enabled=True is rejected: all seven Phase 4 safety mechanisms "
+                "are implemented, but have not been validated against live traffic and real "
+                "tenants. Enabling evolution remains an explicit owner decision; see "
+                "docs/roadmap.md Phase 4 and docs/trust/promotion-trust-case.md"
             )
         return value
 

@@ -311,6 +311,45 @@ def test_a_deletion_is_applied_to_the_workspace(repo: GitRepo, tmp_path: Path) -
     assert not (dest / "agents" / "planner.py").exists()
 
 
+def test_workspace_refuses_a_nonempty_destination(repo: GitRepo, tmp_path: Path) -> None:
+    _candidate(repo, {"agents/planner.py": "NEW = 1\n"})
+    diff = inspect_candidate(repo, "base", "cand").diff
+    dest = tmp_path / "ws"
+    (dest / "agents").mkdir(parents=True)
+    (dest / "agents" / "stale.py").write_text("STALE = True\n")
+
+    with pytest.raises(TrustBoundaryError, match="empty"):
+        build_candidate_workspace(repo, diff, dest)
+
+
+def test_workspace_refuses_a_symlink_destination(repo: GitRepo, tmp_path: Path) -> None:
+    _candidate(repo, {"agents/planner.py": "NEW = 1\n"})
+    diff = inspect_candidate(repo, "base", "cand").diff
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    dest = tmp_path / "ws"
+    dest.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(TrustBoundaryError, match="symlink"):
+        build_candidate_workspace(repo, diff, dest)
+    assert list(outside.iterdir()) == []
+
+
+def test_workspace_preserves_executable_files_from_base(repo: GitRepo, tmp_path: Path) -> None:
+    script = repo.root / "scripts" / "check.sh"
+    script.parent.mkdir()
+    script.write_text("#!/bin/sh\nexit 0\n")
+    script.chmod(0o755)
+    _git(repo.root, "add", "-A")
+    _git(repo.root, "commit", "-qm", "add executable check")
+    _candidate(repo, {"agents/planner.py": "NEW = 1\n"})
+
+    diff = inspect_candidate(repo, "base", "cand").diff
+    dest = build_candidate_workspace(repo, diff, tmp_path / "ws")
+
+    assert (dest / "scripts" / "check.sh").stat().st_mode & 0o111 == 0o111
+
+
 # --------------------------------------------------------------------------
 # G1 — builds
 # --------------------------------------------------------------------------

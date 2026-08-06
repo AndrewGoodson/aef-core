@@ -148,11 +148,16 @@ class FileDurabilityBackend(DurabilityBackend):
         self._root = Path(root_dir)
         self._root.mkdir(parents=True, exist_ok=True)
 
-    def _run_dir(self, run_id: str) -> Path:
+    def _run_dir(self, run_id: str, *, create: bool = True) -> Path:
         # `run_id` was joined onto the root verbatim, so `../../escaped`
         # wrote outside the backend entirely. Containment cannot rest on
         # callers passing well-formed ids — this is the boundary, so the
         # check belongs here as well as in the schema (ADR 0086).
+        if not run_id or run_id in (".", "..") or "/" in run_id or "\\" in run_id:
+            raise ValueError(
+                f"run_id {run_id!r} resolves outside the checkpoint root or is not a "
+                f"single segment; a run id is a directory name, not a path"
+            )
         run_dir = (self._root / run_id).resolve()
         root = self._root.resolve()
         if run_dir != root and root not in run_dir.parents:
@@ -160,11 +165,12 @@ class FileDurabilityBackend(DurabilityBackend):
                 f"run_id {run_id!r} resolves outside the checkpoint root {root}; "
                 f"a run id is a directory name, not a path"
             )
-        run_dir.mkdir(parents=True, exist_ok=True)
+        if create:
+            run_dir.mkdir(parents=True, exist_ok=True)
         return run_dir
 
     def save_checkpoint(self, state: AEFState) -> None:
-        path = self._run_dir(state.run_id) / f"{state.checkpoint_seq}.json"
+        path = self._run_dir(state.run_id, create=True) / f"{state.checkpoint_seq}.json"
         _atomic_write_text(path, state.model_dump_json())
 
     def load_latest(self, run_id: str) -> AEFState | None:
@@ -188,7 +194,7 @@ class FileDurabilityBackend(DurabilityBackend):
         return None
 
     def load_checkpoint(self, run_id: str, checkpoint_seq: int) -> AEFState | None:
-        path = self._root / run_id / f"{checkpoint_seq}.json"
+        path = self._run_dir(run_id, create=False) / f"{checkpoint_seq}.json"
         if not path.exists():
             return None
         try:
@@ -201,7 +207,7 @@ class FileDurabilityBackend(DurabilityBackend):
         return load_state(raw)
 
     def list_checkpoints(self, run_id: str) -> list[int]:
-        run_dir = self._root / run_id
+        run_dir = self._run_dir(run_id, create=False)
         if not run_dir.exists():
             return []
         # Only `<int>.json` files are checkpoints — `cursor.json` and any
@@ -217,11 +223,11 @@ class FileDurabilityBackend(DurabilityBackend):
         # Highest-priority atomic write: cursor.json is overwritten IN PLACE
         # every super-step, so a torn write here corrupts the resume pointer
         # itself (not just one checkpoint). See _atomic_write_text / ADR 0031.
-        cursor_path = self._run_dir(run_id) / "cursor.json"
+        cursor_path = self._run_dir(run_id, create=True) / "cursor.json"
         _atomic_write_text(cursor_path, json.dumps({"next_node": next_node}))
 
     def load_cursor(self, run_id: str) -> str | None:
-        cursor_path = self._root / run_id / "cursor.json"
+        cursor_path = self._run_dir(run_id, create=False) / "cursor.json"
         if not cursor_path.exists():
             return None
         # Same read-side corruption guard as load_checkpoint (ADR 0026):
@@ -235,8 +241,20 @@ class FileDurabilityBackend(DurabilityBackend):
             raise CorruptedCheckpointError(
                 f"cursor {cursor_path} (run_id={run_id!r}) is not valid JSON: {exc}"
             ) from exc
+        if not isinstance(data, dict) or "next_node" not in data:
+            raise CorruptedCheckpointError(
+                f"cursor {cursor_path} (run_id={run_id!r}) must be a JSON object "
+                "containing next_node"
+            )
         next_node = data.get("next_node")
-        return next_node if isinstance(next_node, str) else None
+        if next_node is not None and not isinstance(next_node, str):
+            raise CorruptedCheckpointError(
+                f"cursor {cursor_path} (run_id={run_id!r}) has invalid next_node; "
+                "expected a string or null"
+            )
+        if isinstance(next_node, str):
+            return next_node
+        return None
 
 
 class PostgresDurabilityBackend(DurabilityBackend):

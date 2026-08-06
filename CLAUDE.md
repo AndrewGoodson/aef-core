@@ -78,9 +78,10 @@ weakness. Read it before changing anything about promotion.
 
 `aef/evolution/` ships real interfaces and a hard-enforced disablement:
 `EvolutionConfig(enabled=True)` and `AgentConfig`'s `evolution.enabled: true`
-both raise, naming every unmet Phase 4 gate criterion. Don't try to route
-around this — if you need self-modification, implement the seven gate
-criteria first (see `docs/roadmap.md` Phase 4 and `docs/adr/0006`).
+both raise. All seven supporting safety mechanisms are implemented, but the
+live-traffic and real-tenant evidence needed to enable evolution is not. Don't
+try to route around this — enabling remains an explicit owner decision (see
+`docs/roadmap.md` Phase 4 and `docs/trust/promotion-trust-case.md`).
 
 ## What's real vs. stubbed
 

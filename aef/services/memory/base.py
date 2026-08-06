@@ -58,7 +58,8 @@ class MemoryStore(ABC):
         limit: int = 10,
     ) -> list[MemoryRecord]:
         """Most-recent-first records matching kind and the given filters.
-        `tags` filters to records containing ALL given tags."""
+        `tags` filters to records containing ALL given tags. `limit` must be
+        non-negative; zero returns no records."""
         raise NotImplementedError
 
     @abstractmethod

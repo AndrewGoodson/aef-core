@@ -34,22 +34,27 @@ def _adapter_check(adapter: Path) -> DoctorCheck:
     not valid Python — without running anything.
     """
     try:
-        tree = ast.parse(adapter.read_text(), filename=str(adapter))
+        source = adapter.read_text()
+        tree = ast.parse(source, filename=str(adapter))
+    except UnicodeDecodeError as exc:
+        return DoctorCheck("adapter_importable", False, f"{adapter} is not UTF-8: {exc}")
     except SyntaxError as exc:
         return DoctorCheck("adapter_importable", False, f"{adapter} does not parse: {exc}")
     except OSError as exc:  # pragma: no cover - unreadable file
         return DoctorCheck("adapter_importable", False, f"{adapter} is unreadable: {exc}")
 
-    names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    names = {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
     if "build_graph" not in names:
         return DoctorCheck(
-            "adapter_importable", False, f"{adapter} defines no build_graph(); nothing can load it"
+            "adapter_importable",
+            False,
+            f"{adapter} defines no top-level build_graph(); nothing can load it",
         )
 
-    still_a_stub = "wire your existing entrypoint into this node" in adapter.read_text()
+    still_a_stub = "wire your existing entrypoint into this node" in source
     return DoctorCheck(
         "adapter_importable",
-        True,
+        not still_a_stub,
         f"{adapter} parses and defines build_graph()"
         + (" — still the generated stub, not wired yet" if still_a_stub else ""),
         level="advisory" if still_a_stub else "info",
@@ -74,7 +79,18 @@ def run_doctor(target_dir: Path) -> list[DoctorCheck]:
     # "fix any [FAIL]". Advisory when the repo looks init-shaped, an error
     # when it looks adopted (ADR 0079).
     claude_md = target_dir / "CLAUDE.md"
-    looks_adopted = (target_dir / "aef_adapter.py").exists()
+    adapter = target_dir / "aef_adapter.py"
+    adoption_markers = (
+        target_dir / "AEF_MIGRATION_CHECKLIST.md",
+        target_dir / "AGENT_INTEGRATION.md",
+        target_dir / "AUTONOMY.md",
+        target_dir / "LOOP.md",
+    )
+    looks_adopted = (
+        adapter.exists()
+        or adapter.is_symlink()
+        or any(marker.exists() for marker in adoption_markers)
+    )
     claude_md_detail = (
         str(claude_md)
         if claude_md.exists()
@@ -93,9 +109,16 @@ def run_doctor(target_dir: Path) -> list[DoctorCheck]:
     # F4: `aef adopt` promises doctor "confirms the config and IMPORTS are
     # wired correctly" and doctor never imported anything — so a syntactically
     # invalid `aef_adapter.py` passed clean.
-    adapter = target_dir / "aef_adapter.py"
     if adapter.is_file():
         checks.append(_adapter_check(adapter))
+    elif looks_adopted:
+        checks.append(
+            DoctorCheck(
+                "adapter_present",
+                False,
+                f"{adapter} is not a file — restore it or rerun `aef adopt`",
+            )
+        )
 
     config_candidates = sorted(
         {*target_dir.glob("aef.yaml"), *target_dir.glob("agents/*/aef.yaml")}

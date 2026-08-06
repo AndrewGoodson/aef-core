@@ -54,6 +54,8 @@ def load_agent_config(path: str | Path) -> AgentConfig:
     path = Path(path)
     try:
         raw_text = path.read_text()
+    except UnicodeDecodeError as exc:
+        raise AgentConfigError(f"cannot decode agent config at {path} as UTF-8: {exc}") from exc
     except OSError as exc:
         raise AgentConfigError(f"cannot read agent config at {path}: {exc}") from exc
     return load_agent_config_text(raw_text, source=str(path))

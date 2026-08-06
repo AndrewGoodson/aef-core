@@ -78,6 +78,26 @@ def test_file_backend_cursor_survives_new_instance_same_dir(tmp_path: Path) -> N
     assert reloaded.load_cursor("r1") == "node_b"
 
 
+@pytest.mark.parametrize("operation", ["load_checkpoint", "list_checkpoints", "load_cursor"])
+def test_file_backend_reads_reject_run_ids_that_escape_the_root(
+    tmp_path: Path, operation: str
+) -> None:
+    """Read paths must enforce the same containment boundary as writes."""
+    outside = FileDurabilityBackend(tmp_path / "outside")
+    outside.save_checkpoint(_state(run_id="victim", seq=0))
+    outside.save_cursor("victim", "node_b")
+    backend = FileDurabilityBackend(tmp_path / "checkpoints")
+    escaped_run_id = "../outside/victim"
+
+    with pytest.raises(ValueError, match="directory name, not a path"):
+        if operation == "load_checkpoint":
+            backend.load_checkpoint(escaped_run_id, 0)
+        elif operation == "list_checkpoints":
+            backend.list_checkpoints(escaped_run_id)
+        else:
+            backend.load_cursor(escaped_run_id)
+
+
 def test_file_backend_list_checkpoints_ignores_stray_non_numeric_json_files(
     tmp_path: Path,
 ) -> None:
@@ -162,6 +182,21 @@ def test_load_cursor_raises_named_error_on_corrupted_cursor_file(tmp_path: Path)
     backend = FileDurabilityBackend(root)
     backend.save_cursor("r1", "node_b")
     (root / "r1" / "cursor.json").write_text("{not valid json")
+
+    with pytest.raises(CorruptedCheckpointError, match="r1"):
+        backend.load_cursor("r1")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    ['{"next_node": 7}', "{}", "[]", '"node_b"'],
+)
+def test_load_cursor_rejects_valid_json_with_invalid_schema(tmp_path: Path, payload: str) -> None:
+    """A schema-invalid cursor must not be treated as a completed run."""
+    root = tmp_path / "checkpoints"
+    backend = FileDurabilityBackend(root)
+    backend.save_cursor("r1", "node_b")
+    (root / "r1" / "cursor.json").write_text(payload)
 
     with pytest.raises(CorruptedCheckpointError, match="r1"):
         backend.load_cursor("r1")

@@ -152,8 +152,13 @@ def _parse_numstat(raw: bytes) -> dict[str, tuple[int, int, bool]]:
 
 def read_candidate(repo: GitRepo, base_ref: str, head_ref: str) -> CandidateDiff:
     """`:<src_mode> <dst_mode> <src_sha> <dst_sha> <status>\\0<path>\\0`."""
-    counts = _parse_numstat(repo.numstat_diff(base_ref, head_ref))
-    fields = _split_z(repo.raw_diff(base_ref, head_ref))
+    # Resolve both movable names before any diff command. Otherwise a branch
+    # update between numstat and raw_diff can pair the small line count from
+    # one commit with the paths and blobs from another.
+    base_sha = repo.rev_parse(base_ref)
+    head_sha = repo.rev_parse(head_ref)
+    counts = _parse_numstat(repo.numstat_diff(base_sha, head_sha))
+    fields = _split_z(repo.raw_diff(base_sha, head_sha))
 
     entries: list[DiffEntry] = []
     for meta, path in zip(fields[::2], fields[1::2], strict=False):
@@ -176,8 +181,8 @@ def read_candidate(repo: GitRepo, base_ref: str, head_ref: str) -> CandidateDiff
     return CandidateDiff(
         base_ref=base_ref,
         head_ref=head_ref,
-        base_sha=repo.rev_parse(base_ref),
-        head_sha=repo.rev_parse(head_ref),
+        base_sha=base_sha,
+        head_sha=head_sha,
         entries=tuple(entries),
     )
 

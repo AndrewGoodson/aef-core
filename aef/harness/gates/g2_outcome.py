@@ -13,9 +13,9 @@ only no-ops. Only previously-passing scenarios are held, and routing
 divergence is reported rather than rejected.
 
 The candidate's graph is loaded and run **inside the sandbox, in the
-post-merge workspace** — whose `aef/` comes from the base ref (ADR 0047), so
-the runner executing agent code is the base ref's runner. The candidate is
-input to it, never part of it.
+post-merge workspace** — whose `aef/` comes from the base ref (ADR 0047).
+State, routing, classification, and scoring stay in the parent harness; only
+the candidate's node functions execute in the worker.
 """
 
 from __future__ import annotations

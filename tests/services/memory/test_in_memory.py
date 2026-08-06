@@ -1,4 +1,8 @@
+import threading
 from datetime import UTC, datetime
+from typing import Any, cast
+
+import pytest
 
 from aef.services.memory.base import MemoryRecord
 from aef.services.memory.in_memory import InMemoryMemoryStore
@@ -22,6 +26,26 @@ def test_write_backfills_created_at_when_missing() -> None:
     fetched = store.get(record.id)
     assert fetched is not None
     assert fetched.created_at == fixed_time
+
+
+def test_falsey_explicit_clock_is_not_replaced() -> None:
+    expected = datetime(2020, 1, 2, tzinfo=UTC)
+
+    class FalseyClock:
+        def __bool__(self) -> bool:
+            return False
+
+        def __call__(self) -> datetime:
+            return expected
+
+    store = InMemoryMemoryStore(clock=FalseyClock())
+    record = MemoryRecord(kind="semantic", content={"text": "x"})
+
+    store.write(record)
+
+    fetched = store.get(record.id)
+    assert fetched is not None
+    assert fetched.created_at == expected
 
 
 def test_write_preserves_explicit_created_at() -> None:
@@ -66,6 +90,93 @@ def test_query_respects_limit_and_recency_order() -> None:
     assert results[1].content["n"] == 1
 
 
+def test_query_rejects_negative_limit() -> None:
+    store = InMemoryMemoryStore()
+    store.write(MemoryRecord(kind="success", content={"n": 1}))
+
+    with pytest.raises(ValueError, match="limit must be non-negative"):
+        store.query("success", limit=-1)
+
+
 def test_get_missing_returns_none() -> None:
     store = InMemoryMemoryStore()
     assert store.get("does-not-exist") is None
+
+
+def test_write_snapshots_nested_record_content() -> None:
+    content = {"nested": {"value": "at-write"}}
+    record = MemoryRecord(kind="semantic", content=content)
+    store = InMemoryMemoryStore()
+
+    store.write(record)
+    content["nested"]["value"] = "rewritten-later"
+
+    fetched = store.get(record.id)
+    assert fetched is not None
+    assert fetched.content == {"nested": {"value": "at-write"}}
+
+
+def test_read_returns_snapshot_not_mutable_store_reference() -> None:
+    record = MemoryRecord(kind="semantic", content={"nested": {"value": "stored"}})
+    store = InMemoryMemoryStore()
+    store.write(record)
+
+    fetched = store.get(record.id)
+    assert fetched is not None
+    fetched.content["nested"]["value"] = "rewritten-by-reader"
+
+    fetched_again = store.get(record.id)
+    assert fetched_again is not None
+    assert fetched_again.content == {"nested": {"value": "stored"}}
+
+
+def test_query_and_write_can_run_concurrently() -> None:
+    entered_comparison = threading.Event()
+    release_comparison = threading.Event()
+    writer_started = threading.Event()
+    writer_finished = threading.Event()
+    errors: list[BaseException] = []
+
+    class _BlockingKind:
+        def __eq__(self, other: object) -> bool:
+            entered_comparison.set()
+            assert release_comparison.wait(timeout=2)
+            return other == "working"
+
+    store = InMemoryMemoryStore()
+    store.write(
+        MemoryRecord(
+            kind=cast(Any, _BlockingKind()),
+            content={"position": "first"},
+        )
+    )
+
+    def query() -> None:
+        try:
+            store.query("working")
+        except BaseException as exc:
+            errors.append(exc)
+
+    def write() -> None:
+        writer_started.set()
+        store.write(MemoryRecord(kind="working", content={"position": "second"}))
+        writer_finished.set()
+
+    query_thread = threading.Thread(target=query)
+    writer_thread = threading.Thread(target=write)
+    query_thread.start()
+    assert entered_comparison.wait(timeout=1)
+    writer_thread.start()
+    assert writer_started.wait(timeout=1)
+
+    # Without synchronization the write completes while the query's dict
+    # iterator is suspended, deterministically invalidating that iterator.
+    writer_finished.wait(timeout=0.1)
+    release_comparison.set()
+    query_thread.join(timeout=2)
+    writer_thread.join(timeout=2)
+
+    assert not query_thread.is_alive()
+    assert not writer_thread.is_alive()
+    assert errors == []
+    assert writer_finished.is_set()

@@ -116,11 +116,15 @@ class Mem0Adapter(MemoryStore):
         tags: tuple[str, ...] = (),
         limit: int = 10,
     ) -> list[MemoryRecord]:
+        if limit < 0:
+            raise ValueError(f"limit must be non-negative; got {limit}")
         if agent_id is None and run_id is None:
             raise Mem0IdentityRequiredError(
                 "query() requires at least one of agent_id or run_id; mem0 has no "
                 "unscoped search mode"
             )
+        if limit == 0:
+            return []
 
         filters: dict[str, Any] = {}
         if agent_id is not None:

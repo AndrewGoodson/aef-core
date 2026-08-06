@@ -28,8 +28,10 @@ class AnthropicProvider(ModelProvider):
     name = "anthropic"
 
     def __init__(self, api_key: str | None = None, client: _AnthropicClient | None = None) -> None:
-        self._client: _AnthropicClient = client or cast(
-            _AnthropicClient, anthropic.Anthropic(api_key=api_key)
+        self._client: _AnthropicClient = (
+            client
+            if client is not None
+            else cast(_AnthropicClient, anthropic.Anthropic(api_key=api_key))
         )
 
     def complete(self, request: CompletionRequest) -> CompletionResult:

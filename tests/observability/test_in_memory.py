@@ -9,11 +9,32 @@ def test_start_span_records_name_and_attributes() -> None:
     assert tracer.spans[0].attributes == {"k": "v"}
 
 
+def test_start_span_snapshots_nested_attributes() -> None:
+    attributes = {"request": {"attempt": 1}}
+    tracer = InMemoryTracer()
+    tracer.start_span("demo", attributes)
+
+    attributes["request"]["attempt"] = 2
+
+    assert tracer.spans[0].attributes == {"request": {"attempt": 1}}
+
+
 def test_set_attribute_after_start_updates_recorded_span() -> None:
     tracer = InMemoryTracer()
     span = tracer.start_span("demo")
     span.set_attribute("added_later", 42)
     assert tracer.spans[0].attributes == {"added_later": 42}
+
+
+def test_set_attribute_snapshots_nested_value() -> None:
+    value = {"attempt": 1}
+    tracer = InMemoryTracer()
+    span = tracer.start_span("demo")
+    span.set_attribute("request", value)
+
+    value["attempt"] = 2
+
+    assert tracer.spans[0].attributes == {"request": {"attempt": 1}}
 
 
 def test_span_not_ended_until_end_called() -> None:

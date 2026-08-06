@@ -1,9 +1,8 @@
-"""The trust boundary — gates execute from the base ref, never the branch.
+"""Acceptance tests for the explicit base-ref read primitive.
 
-This file contains M1's acceptance test. The scenario is the whole point of
-the design: a candidate branch rewrites the gate that judges it, and the
-rewritten gate never runs. It is built with a real git repo and a real
-Python execution of the loaded gate, not asserted from source.
+The scenario proves what ``BaseRefHarness`` itself guarantees: a caller that
+loads a gate through the primitive receives the pinned base copy. Production
+execution provenance is established separately by the launcher/workflow.
 """
 
 import subprocess
@@ -42,14 +41,14 @@ def repo(tmp_path: Path) -> GitRepo:
 
 
 # --------------------------------------------------------------------------
-# M1 ACCEPTANCE TEST
+# BASE-REF PRIMITIVE ACCEPTANCE TEST
 # --------------------------------------------------------------------------
 
 
 def test_a_candidate_that_rewrites_its_gate_still_faces_the_original_gate(
     repo: GitRepo, tmp_path: Path
 ) -> None:
-    """THE property. A branch subverts the gate; the base ref's gate runs."""
+    """A branch subverts a gate; an explicit base-ref read still rejects."""
     _git(repo.root, "checkout", "-qb", "cand")
     (repo.root / "aef" / "harness" / "gate.py").write_text(SUBVERTED_GATE)
     (repo.root / "agents" / "planner.py").write_text("VALUE = 2\n")
@@ -129,6 +128,19 @@ def test_a_traversal_path_is_refused(repo: GitRepo) -> None:
 def test_the_base_sha_is_pinned_to_a_commit(repo: GitRepo) -> None:
     sha = BaseRefHarness(repo=repo, base_ref="base").base_sha
     assert len(sha) == 40
+
+
+def test_the_base_sha_stays_pinned_when_the_ref_moves(repo: GitRepo) -> None:
+    harness = BaseRefHarness(repo=repo, base_ref="base")
+    original_sha = harness.base_sha
+
+    (repo.root / "aef" / "harness" / "gate.py").write_text(SUBVERTED_GATE)
+    _git(repo.root, "add", "-A")
+    _git(repo.root, "commit", "-qm", "advance base")
+
+    assert repo.rev_parse("base") != original_sha
+    assert harness.base_sha == original_sha
+    assert harness.read("aef/harness/gate.py") == REJECTING_GATE
 
 
 def test_a_branch_with_no_shared_history_is_not_a_candidate(repo: GitRepo) -> None:

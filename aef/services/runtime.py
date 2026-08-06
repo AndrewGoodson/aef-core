@@ -116,7 +116,7 @@ def agent_services(
         # capability.
         durability=durability if durability is not None else _EphemeralDurability(),
         critic=RuleBasedCritic(),
-        judge=RuleBasedJudge(rubric=dict(judge_rubric or DEFAULT_RUBRIC)),
+        judge=RuleBasedJudge(rubric=dict(DEFAULT_RUBRIC if judge_rubric is None else judge_rubric)),
         evaluator=RuleBasedEvaluator(),
         policy_engine=PolicyEngine(policy, audit_log=audit_log),  # type: ignore[arg-type]
         # `Services.clock` has its own default; only override when the caller

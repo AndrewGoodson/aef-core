@@ -70,7 +70,7 @@ class FallbackProvider(ModelProvider):
     def __init__(self, providers: list[ModelProvider]) -> None:
         if not providers:
             raise ValueError("FallbackProvider requires at least one provider")
-        self._providers = providers
+        self._providers = tuple(providers)
 
     def complete(self, request: CompletionRequest) -> CompletionResult:
         errors: list[tuple[str, Exception]] = []

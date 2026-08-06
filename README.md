@@ -189,8 +189,10 @@ a gap.**
 The self-rewiring loop improves the agents aef-core **hosts** — the code in
 `agents/**` (Zone A). It never touches the harness that gates them or the
 kernel they run on. Those are Zone B and Zone C, and the loop is structurally
-prevented from writing there: gates execute from the base ref, so a candidate
-cannot supply the code that judges it (ADR 0047).
+prevented from writing there. The supplied CI workflow executes AEF from its
+trusted `main` checkout and fetches the candidate only as data. Local callers
+must provide the same trusted-launch provenance; `BaseRefHarness` is an
+explicit-read utility, not the loop driver's loader (ADR 0047).
 
 Letting the loop improve its own harness would mean letting it rewrite its
 own judge. That is the one thing the entire safety design exists to prevent.

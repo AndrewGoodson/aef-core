@@ -55,9 +55,12 @@ class GitRepo:
         return self.run("merge-base", base, head).strip()
 
     def show(self, ref: str, path: str) -> str:
-        """Contents of `path` **as of `ref`** — the trust-boundary primitive.
-        Reading a harness file this way is what stops a candidate branch from
-        supplying the code that judges it (see `trust.py`)."""
+        """Contents of ``path`` as of ``ref``.
+
+        Explicit base-ref reads use this primitive. The provenance of the
+        executing harness is established by its launcher, not by this method;
+        see ``trust.py`` and ADR 0047.
+        """
         return self.run("show", f"{ref}:{path}")
 
     def path_exists_at(self, ref: str, path: str) -> bool:

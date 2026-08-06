@@ -64,10 +64,11 @@ class Outcome:
     # the incumbent crashed at 0.0, the candidate with the edge deleted ran
     # clean at 1.0, and G2 called it unchanged (ADR 0079, fixed in ADR 0081).
     #
-    # Written only where `HumanApprovalRequiredError` is CAUGHT, in Zone B
-    # harness code executed from the base ref. That is the difference from
+    # Written only where `HumanApprovalRequiredError` is CAUGHT by the parent
+    # harness, outside the candidate worker. That is the difference from
     # `recovered` (ADR 0076/0080), which Zone A wrote about itself and could
-    # therefore lie with.
+    # therefore lie with. The launch environment must give that parent trusted
+    # provenance; see ADR 0047.
     hitl_paused: bool = False
 
     @property

@@ -107,6 +107,15 @@ def test_state_rejects_non_positive_context_budget_tokens() -> None:
         AEFState(run_id="r1", agent_id="a1", objective="x", context_budget_tokens=-100)
 
 
+def test_state_rejects_negative_checkpoint_sequence() -> None:
+    """File checkpoint discovery only recognizes non-negative integer stems."""
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        AEFState(run_id="r1", agent_id="a1", objective="x", checkpoint_seq=-1)
+
+
 def test_round_trip_survives_very_large_token_cost() -> None:
     prov = Provenance(
         node_id="n1",
