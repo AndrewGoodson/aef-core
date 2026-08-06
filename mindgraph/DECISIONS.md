@@ -829,3 +829,40 @@ decided in one place (`_shot_args`, 3200px tall) so no future panel can push
 content out of frame, and the crop offset is generous rather than tight. Two
 call sites previously carried their own duplicate window-size arguments; they
 now share one.
+
+---
+
+## 2026-08-05 · Bands, not control charts — because there is no series
+
+**Spec asks for Shewhart charts (§4.4). The data does not support them.**
+
+A Shewhart chart's value is entirely in its run rules — points outside the
+limits, runs on one side of the centre line, trends — and every one of those is
+a statement about a *sequence*. The record carries per-window counts and
+expected ranges and no series at all. Checked rather than assumed: the fixture's
+only numeric arrays are the `expected_range` pairs, which are bands.
+
+**Chosen.** Build the half the data supports, name the half it does not, and
+say on the page which is which.
+
+**Why that is not a cop-out.** The report's own worked example is a
+single-point comparison:
+
+> 90% rejection is healthy if the band is 88-93%; a sudden 55% means the gate
+> stopped; 99.9% means the generator broke.
+
+That judgement needs one observation and one band. It reproduces exactly, and
+is asserted as three checks.
+
+**Why faking it would be worse than nothing.** A single observation drawn with
+a trend line implies a history nobody recorded, and an operator would read
+direction out of one point. The absence of a series is itself information: it
+says nobody is keeping the sequence, which is a fixable gap, and drawing over
+it would hide the fix. `no trend line is drawn anywhere` is a check.
+
+**Four categories, all stated.** Six metrics have a band; two have a reading
+with no baseline; two (`human decision latency`, `gate evaluation duration and
+timeouts`) are not recorded at all. The unbanded ones render dashed and read
+"no baseline" — never as passing — and the absent ones are listed with the
+reason. A panel that silently omitted three of its seven named metrics would
+read as a complete panel, which is the same failure as a green row over no data.

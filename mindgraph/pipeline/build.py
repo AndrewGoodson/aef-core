@@ -35,6 +35,7 @@ import contract as contract_mod  # noqa: E402
 import cohort as cohort_mod  # noqa: E402
 import exceptions as exceptions_mod  # noqa: E402
 import fleet as fleet_mod  # noqa: E402
+import stability as stability_mod  # noqa: E402
 import layout as layout_mod  # noqa: E402
 import traversal as traversal_mod  # noqa: E402
 
@@ -197,6 +198,8 @@ def build(
     cohort_built = cohort_mod.build(cohort)
     cohort_payload = None if cohort_built is None else cohort_built.to_payload()
 
+    stability_payload = stability_mod.build(cohort, fleet_payload.get("coverage"))
+
     exceptions_payload = {
         "items": [e.to_payload() for e in exceptions],
         "excluded": exceptions_mod.excluded_outcomes(cohort),
@@ -253,6 +256,7 @@ def build(
         "fleet": fleet_payload,
         "exceptions": exceptions_payload,
         "cohort": cohort_payload,
+        "stability": stability_payload,
         "nodes": sorted(node_payloads, key=lambda n: str(n["id"])),
         "edges": [
             _edge_render(e.to_payload(), data_through, dormancy_days, gates) for e in edges

@@ -33,10 +33,10 @@ from typing import Any
 # plainly. An empty canvas would be indistinguishable from a broken one, and
 # this whole project is about not letting absence look like something else.
 STAGE_NOTICE = (
-    "The cohort flow is CONSORT-style, not a funnel. A funnel's grammar says "
-    "wider top is success and everything leaking out is loss \u2014 backwards "
-    "here, where a rejected proposal is the gate doing its job. Rejection "
-    "branches are neutral; red is reserved for the abnormal."
+    "Stability is shown as BANDS, not control charts. A Shewhart chart needs "
+    "successive observations and the record carries none \u2014 so run rules "
+    "and trends are not drawn. Two metrics have a reading but no baseline, and "
+    "two are not recorded at all; all four say so rather than being omitted."
 )
 
 
@@ -243,6 +243,76 @@ def _cohort_flow(payload: dict[str, Any]) -> str:
     )
 
 
+def _stability(payload: dict[str, Any]) -> str:
+    """A band chart. Explicitly not a control chart, and it says why.
+
+    Every metric declares what backs it: an observation with a band, an
+    observation alone, or nothing. A metric that has not been compared renders
+    dashed and reads `no baseline` — never as one that passed.
+    """
+    block = payload.get("stability")
+    if not block or not block.get("metrics"):
+        return ""
+
+    rows = ""
+    for metric in block["metrics"]:
+        obs, low, high = metric["observation"], metric["band_low"], metric["band_high"]
+        status = metric["status"]
+        if low is not None and high is not None and obs is not None:
+            # Scale the strip so the band occupies the middle half, which puts
+            # an out-of-band reading visibly outside it rather than merely near
+            # an edge.
+            span = max(high - low, 1e-6)
+            lo_v, hi_v = low - span, high + span
+            pos = max(0.0, min(100.0, 100.0 * (obs - lo_v) / (hi_v - lo_v)))
+            band_left = 100.0 * (low - lo_v) / (hi_v - lo_v)
+            band_w = 100.0 * span / (hi_v - lo_v)
+            gauge = (
+                f'<div class="gg"><i class="bd" style="left:{band_left:.1f}%;'
+                f'width:{band_w:.1f}%"></i>'
+                f'<i class="pt" style="left:{pos:.1f}%"></i></div>'
+            )
+            band_text = f"band {low:.0f}\u2013{high:.0f}{metric['unit']}"
+        else:
+            gauge = '<div class="gg none"></div>'
+            band_text = "no baseline"
+
+        value = "\u2014" if obs is None else f"{obs:g}{metric['unit']}"
+        note = (
+            f'<span class="rsn">{html.escape(str(metric["note"]))}</span>'
+            if metric.get("note")
+            else ""
+        )
+        rows += (
+            f'<div class="br {html.escape(metric["treatment"])}">'
+            f'<div class="bl">{html.escape(metric["label"])}</div>'
+            f"{gauge}"
+            f'<div class="bn">{html.escape(value)}</div>'
+            f'<div class="bx">{html.escape(band_text)}'
+            f'{"" if status in ("in", "unknown") else " &mdash; <b>" + status + " band</b>"}'
+            f"{note}</div></div>"
+        )
+
+    absent = "".join(
+        f'<div class="br unknown"><div class="bl">{html.escape(a["metric"])}</div>'
+        f'<div class="gg none"></div><div class="bn">\u2014</div>'
+        f'<div class="bx">not recorded &mdash; {html.escape(a["why"])}</div></div>'
+        for a in block.get("absent", [])
+    )
+
+    notes = [
+        html.escape(block["why_not_control_chart"]).capitalize() + ".",
+        f"{block['banded_count']} metric(s) have a band; {block['unbanded_count']} have a "
+        "reading with nothing to compare it against.",
+    ]
+    return (
+        f'<div class="strip" id="stability-head"><strong>Stability</strong>'
+        f"<span>band chart &middot; no series recorded, so no trends and no run rules</span></div>"
+        f'<div class="flow" id="stability-bands">{rows}{absent}</div>'
+        f'<p class="caption" id="stability-note">{" ".join(notes)}</p>'
+    )
+
+
 def _legend_text(payload: dict[str, Any]) -> str:
     """The legend, DERIVED from the contract's constants and from edges that
     actually exist in this graph.
@@ -348,6 +418,8 @@ def emit(payload: dict[str, Any]) -> str:
     ).replace(
         "__COHORT__", _cohort_flow(payload)
     ).replace(
+        "__STABILITY__", _stability(payload)
+    ).replace(
         "__LEGEND__", _legend_text(payload)
     ).replace(
         "__NOTICE__", html.escape(STAGE_NOTICE)
@@ -373,6 +445,7 @@ _SHELL = """<!doctype html>
   __EXCEPTIONS__
   <p class="notice">__NOTICE__</p>
   __COHORT__
+  __STABILITY__
   <div class="stage"><canvas id="c" width="900" height="560"></canvas></div>
   <div class="legend">
     <span class="lg"><i class="sw normal"></i>normal — executed within the window</span>
@@ -502,7 +575,14 @@ tr.ex.out_of_band .kd{color:var(--warn)}
 .br .bx{color:var(--muted);font-size:11px}
 .br.abnormal .bl{color:var(--bad);font-weight:600}
 .br .rsn{display:block;color:var(--muted);opacity:.8}
-@media(max-width:700px){.br{grid-template-columns:1fr auto}.br .bb,.br .bx{display:none}}
+@media(max-width:700px){.br{grid-template-columns:1fr auto}.br .bb,.br .gg,.br .bx{display:none}}
+.gg{position:relative;height:9px;background:var(--line);border-radius:2px}
+.gg.none{background:transparent;border:1px dashed var(--muted)}
+.gg .bd{position:absolute;top:0;height:100%;background:var(--muted);opacity:.45;
+  border-radius:2px}
+.gg .pt{position:absolute;top:-3px;width:3px;height:15px;background:var(--fg);
+  border-radius:1px;margin-left:-1px}
+.br.abnormal .gg .pt{background:var(--bad)}
 """
 
 # `age()` is the only logic in the shell, and it is the load-bearing one: the

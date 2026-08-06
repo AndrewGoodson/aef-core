@@ -1352,6 +1352,73 @@ def check_cohort(result: Result) -> None:
     )
 
 
+def check_stability(result: Result) -> None:
+    """Stage 4.4 — a band chart, and honest about not being a control chart."""
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    import stability as stab  # type: ignore[import-not-found]
+
+    raw = json.loads((ROOT / "fixtures" / "fleet.json").read_text())
+    built = stab.build(raw["cohort"], {"total": 4, "fresh": 1})
+
+    result.add("nothing claims a time series", built["has_series"] is False)
+    result.add(
+        "no metric claims a series",
+        not any(m["has_series"] for m in built["metrics"]),
+    )
+    result.add("the payload names the chart kind", built["chart_kind"] == "band")
+    result.add(
+        "the payload explains why it is not a control chart",
+        "successive observations" in built["why_not_control_chart"],
+    )
+
+    unbanded = [m for m in built["metrics"] if m["band_low"] is None]
+    result.add("the fixture exercises an unbanded metric", len(unbanded) >= 1)
+    passing = [m["key"] for m in unbanded if m["treatment"] == "neutral"]
+    result.add(
+        "a metric with no baseline NEVER reads as passing",
+        not passing,
+        f"passing without a band: {passing}" if passing else "",
+    )
+
+    # The report's own worked example, reproduced exactly.
+    def classify(count: int) -> str:
+        return stab.build(
+            {"proposed": 100, "window_days": 30,
+             "branches": [{"outcome": "static_rejected", "count": count,
+                           "expected_range": [88, 93]}]},
+            None,
+        )["metrics"][0]["status"]
+
+    result.add("90% against an 88-93% band reads healthy", classify(90) == "in")
+    result.add("55% against an 88-93% band reads BELOW (the gate stopped)", classify(55) == "below")
+    result.add("100% against an 88-93% band reads ABOVE (the generator broke)", classify(100) == "above")
+
+    absent = stab.Metric(key="x", label="x", unit="%", observation=None, band_low=0, band_high=100)
+    result.add(
+        "a metric with no observation is not compared anyway",
+        absent.status == "unknown" and absent.treatment == "unknown",
+    )
+    result.add(
+        "metrics the record does not carry are listed, not omitted",
+        len(built["absent"]) >= 2,
+        str([a["metric"] for a in built["absent"]]),
+    )
+
+    if not DIST.is_file():
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+    result.add("the band chart is rendered", 'id="stability-bands"' in html_text)
+    result.add(
+        "the page says it is a band chart, not a control chart",
+        "no series recorded" in html_text and "no run rules" in html_text,
+    )
+    result.add(
+        "the page names the metrics it cannot show",
+        "not recorded" in html_text and "decision latency" in html_text,
+    )
+    result.add("no trend line is drawn anywhere", "polyline" not in html_text)
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -1502,6 +1569,7 @@ def main(argv: list[str]) -> int:
     check_fleet(result)
     check_exceptions(result)
     check_cohort(result)
+    check_stability(result)
     check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()
