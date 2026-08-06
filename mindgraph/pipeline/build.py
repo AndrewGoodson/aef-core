@@ -30,6 +30,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import contract as contract_mod  # noqa: E402
 import layout as layout_mod  # noqa: E402
 import traversal as traversal_mod  # noqa: E402
 
@@ -155,6 +156,33 @@ def build(
         body = node.to_payload()
         body.update(placed[node.id].to_payload())
         body["id"] = node.id
+        # The CONTRACT decides the construction, here, at build time — and the
+        # decision is baked in. The page draws what it is told; it never
+        # re-derives health from a field, so there is no code path in the
+        # browser that could produce a healthy circle over a null.
+        resolved = contract_mod.resolve_node(body)
+        body["render"] = {
+            "construction": (
+                contract_mod.Construction.UNKNOWN.value
+                if contract_mod.is_unknown_node(resolved)
+                else contract_mod.Construction.MEASURED.value
+            ),
+            "radius": (
+                resolved["node.radius"].value
+                if resolved["node.radius"].is_measured
+                else contract_mod.UNKNOWN_TREATMENT["radius"]
+            ),
+            "fill_state": (
+                resolved["node.fill"].value if resolved["node.fill"].is_measured else None
+            ),
+            "border": (
+                resolved["node.border"].value if resolved["node.border"].is_measured else "broken"
+            ),
+            "glyph": resolved["node.glyph"].value if resolved["node.glyph"].is_measured else "?",
+            "annotation": (
+                "" if resolved["node.fill"].is_measured else contract_mod.UNKNOWN_TREATMENT["annotation"]
+            ),
+        }
         node_payloads.append(body)
 
     return {

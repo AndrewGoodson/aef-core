@@ -84,6 +84,7 @@ class DerivedNode:
     first_seen_at: datetime | None
     last_seen_at: datetime | None
     token_cost: int | None
+    operational_state: str | None
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -94,6 +95,7 @@ class DerivedNode:
             "first_seen_at": _iso(self.first_seen_at),
             "last_seen_at": _iso(self.last_seen_at),
             "token_cost": self.token_cost,
+            "operational_state": self.operational_state,
         }
 
 
@@ -215,6 +217,24 @@ def derive(
     nodes: list[DerivedNode] = []
     for node_id, declared in declared_nodes.items():
         instrumented = declared.get("telemetry_coverage") != "none"
+        seen = last.get(node_id)
+        # Found by wiring the contract in: the derivation produced no health
+        # field at all, so EVERY node resolved UNKNOWN — correctly, since the
+        # contract refuses to invent health from an absent field.
+        #
+        # What the event log can honestly support is exactly two states.
+        # `degraded` and `failed` would need an error signal the log does not
+        # carry, and inventing collection to make the picture look better is
+        # forbidden. So they are absent, and their absence is a finding rather
+        # than a gap to paper over.
+        if not instrumented:
+            operational_state = None
+        elif seen is None:
+            operational_state = "never_executed"
+        elif data_through - seen > dormancy:
+            operational_state = "stale"
+        else:
+            operational_state = "normal"
         nodes.append(
             DerivedNode(
                 id=node_id,
@@ -227,6 +247,7 @@ def derive(
                 first_seen_at=first.get(node_id) if instrumented else None,
                 last_seen_at=last.get(node_id) if instrumented else None,
                 token_cost=tokens.get(node_id, 0) if instrumented else None,
+                operational_state=operational_state,
             )
         )
 

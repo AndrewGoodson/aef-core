@@ -11,7 +11,7 @@ CHECKLIST:
 - [x] 1.3 — pipeline: carry previous_x/previous_y forward; bounded relaxation within a hard displacement budget of ~1 node diameter per layout version; store layout_reason
 - [x] 1.4 — pipeline: embed graph + positions + history + generated_at + data_through + expected interval in a <script type="application/json"> block
 - [x] 2.1 — d3-force NOT vendored, and that is the resolution: the delivered file runs no simulation, so it would be 8300 bytes of dead code. Replaced by a permanent ban on runtime-layout primitives (see DECISIONS.md)
-- [ ] 2.2 — hand-written Canvas renderer: node channels per §4.1 (position/radius/fill/border/interior glyph/birth flag; ≤3 preattentive variables; no glow, ever)
+- [x] 2.2 — hand-written Canvas renderer: node channels per §4.1 (position/radius/fill/border/interior glyph/birth flag; ≤3 preattentive variables; no glow, ever)
 - [ ] 2.3 — two-layer edge model per §4.2: history rail width = log1p(lifetime_traversal_count), activity core luminance = recency
 - [ ] 2.4 — the five endpoint states, each visually distinct: never-observed / dormant / retired / unknown / stale
 - [ ] 2.5 — mid-edge gate glyph as a RECTANGLE (§3c verdict B), states [H…] [H✓] [H✗] [H!] [H↶]
@@ -31,10 +31,12 @@ CHECKLIST:
 - [ ] 6.1 — dual themes via prefers-color-scheme with identical semantic ordering (§3f verdict B)
 - [ ] 6.2 — MANUAL: on-hardware polarity A/B (light vs dark) for "find the abandoned path" and "find the missing-reporting node"
 - [ ] 6.3 — MANUAL: comparison-mode A/B (difference-map vs two-pane vs scrubber) measured on error rate and time, not FPS
-NEXT: 2.2 — hand-written Canvas renderer: node channels per §4.1 (position/radius/fill/border/interior glyph/birth flag; ≤3 preattentive variables; no glow, ever)
+NEXT: 2.3 — two-layer edge model per §4.2: history rail width = log1p(lifetime_traversal_count), activity core luminance = recency
 BLOCKERS: none
 MANUAL_CHECKS:
 - headless browser load of dist/index.html from file:// with network blocked — no headless browser confirmed available in this environment yet; the forbidden-token scan and single-file check run, the actual offline load does not
 - 6.2 and 6.3 are operator task-tests on target hardware and cannot be automated
-LAST_RUN: 2026-08-05 — increment 2.1, resolved as NOT NEEDED rather than done. d3-force was obtainable (local copy found, network reachable) so this was a real decision, not a forced one. Verified the report's own size claim instead of repeating it: 8300 bytes min, 3009 gzip — accurate. But the delivered page carries BAKED coordinates and 774 characters of JS doing staleness only; it runs no simulation, so d3-force would be 8300 bytes of dead code — the same 'declared thing with no caller' class this loop has caught four times. Section 3(a)'s adjudicated verdict (bake coordinates, no runtime layout) is more specific than Section 5(a)'s renderer advice and wins where they conflict. Replaced with something stronger than vendoring: a PERMANENT BAN on runtime-layout primitives in the delivered file (forceSimulation, forceLink, forceManyBody, velocityDecay, .tick()), each with a planted fault in the self-test.
-Verified: self-test PASS (19 planted tokens + 5 gate checks = 24 detections, no false positives); verify 94/94 PASS.
+LAST_RUN: 2026-08-05 — increment 2.2. Nodes are drawn. The architectural call: the CONTRACT resolves each node at BUILD time and the construction is baked into the payload, so the browser draws what it is told and has no code path that could derive a healthy circle from a null field. fillFor() returns null by default rather than a colour.
+Wiring the contract in EXPOSED A REAL GAP: every node resolved UNKNOWN, because the derivation produced no health field at all. The contract was right and traversal.py was incomplete. operational_state is now derived honestly as normal / stale / never_executed from last_seen against the dormancy window. `degraded` and `failed` are NOT derived: they need an error signal the event log does not carry, and inventing collection to improve the picture is forbidden. Their absence is a finding, not a gap papered over.
+Probe found nothing: uninstrumented node baked unknown with no fill state, fillFor has no colour default, every radius matches the formula the legend prints, no glow primitives.
+Verified: self-test PASS (24 detections); verify 105/105 PASS. Published to the stable URL.

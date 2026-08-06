@@ -33,8 +33,9 @@ from typing import Any
 # plainly. An empty canvas would be indistinguishable from a broken one, and
 # this whole project is about not letting absence look like something else.
 STAGE_NOTICE = (
-    "Data is embedded and complete. The renderer arrives in Stage 2 — "
-    "until then this page reports what it holds rather than drawing it."
+    "Nodes are drawn. Edges arrive in the next increment — until then the "
+    "connections between these nodes are not shown, which is why the canvas "
+    "looks sparse rather than broken."
 )
 
 
@@ -96,6 +97,17 @@ _SHELL = """<!doctype html>
     <p class="stamp" id="stamp"></p>
   </header>
   <p class="notice">__NOTICE__</p>
+  <div class="stage"><canvas id="c" width="900" height="560"></canvas></div>
+  <div class="legend">
+    <span class="lg"><i class="sw normal"></i>normal — executed within the window</span>
+    <span class="lg"><i class="sw stale"></i>stale — instrumented, nothing recent</span>
+    <span class="lg"><i class="sw unknown"></i>no telemetry — makes no claim</span>
+    <span class="lg"><i class="sw border"></i>border = evidence quality, never health</span>
+  </div>
+  <p class="caption">Radius = <code>6.0 + 3.4 &#215; sqrt(log1p(executions))</code>, capped at
+  26.0. Fill carries measured state only. Border carries how much we can see —
+  solid&nbsp;= full coverage, dashed&nbsp;= partial, broken&nbsp;+&nbsp;? = none,
+  double&nbsp;= newly instrumented.</p>
   <section>
     <h2>Embedded payload</h2>
     <div class="scroll"><table>__ROWS__</table></div>
@@ -112,18 +124,18 @@ _SHELL = """<!doctype html>
 _CSS = """
 :root{
   --ink:#0a0d12;--panel:#11151d;--line:#1e2531;--fg:#e6e9f0;--muted:#798294;
-  --accent:#7fd1c1;--warn:#e0a94a;
+  --accent:#7fd1c1;--warn:#e0a94a;--ok:#57c98b;--stale:#8d93a3;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
 }
 @media (prefers-color-scheme: light){
   :root{--ink:#f6f7f9;--panel:#fff;--line:#e2e6ec;--fg:#141922;--muted:#68717f;
-        --accent:#178c78;--warn:#b57d10;}
+        --accent:#178c78;--warn:#b57d10;--ok:#1d9a63;--stale:#6f7686;}
 }
 :root[data-theme="dark"]{--ink:#0a0d12;--panel:#11151d;--line:#1e2531;--fg:#e6e9f0;
-  --muted:#798294;--accent:#7fd1c1;--warn:#e0a94a;}
+  --muted:#798294;--accent:#7fd1c1;--warn:#e0a94a;--ok:#57c98b;--stale:#8d93a3;}
 :root[data-theme="light"]{--ink:#f6f7f9;--panel:#fff;--line:#e2e6ec;--fg:#141922;
-  --muted:#68717f;--accent:#178c78;--warn:#b57d10;}
+  --muted:#68717f;--accent:#178c78;--warn:#b57d10;--ok:#1d9a63;--stale:#6f7686;}
 *{box-sizing:border-box}
 body{margin:0;background:var(--ink);color:var(--fg);font:15px/1.55 var(--sans)}
 main{max-width:1100px;margin:0 auto;padding:2rem 1.25rem 3rem;
@@ -146,6 +158,19 @@ th{color:var(--muted);font-family:var(--mono)}
 td{font-variant-numeric:tabular-nums}
 footer{margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--line);
   color:var(--muted);font-size:.78rem;max-width:62ch}
+.stage{border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  background:var(--panel)}
+canvas{display:block;width:100%;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:1rem;font:11px/1 var(--mono);
+  letter-spacing:.04em;color:var(--muted)}
+.lg{display:flex;align-items:center;gap:.4rem}
+.sw{width:11px;height:11px;border-radius:50%;flex:0 0 auto;display:inline-block}
+.sw.normal{background:var(--ok)}
+.sw.stale{background:var(--stale)}
+.sw.unknown{background:transparent;border:1.5px dashed var(--muted)}
+.sw.border{background:transparent;border:2px solid var(--fg)}
+.caption{margin:0;color:var(--muted);font-size:.78rem;max-width:70ch}
+code{font-family:var(--mono);font-size:.95em}
 """
 
 # `age()` is the only logic in the shell, and it is the load-bearing one: the
@@ -154,6 +179,8 @@ footer{margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--line);
 _JS = """
 (function(){
 var D = JSON.parse(document.getElementById('mind-data').textContent);
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
 function age(iso){
   var then = Date.parse(iso);
   if (isNaN(then)) { return 'unknown'; }
@@ -164,10 +191,80 @@ function age(iso){
   return Math.round(s/86400) + 'd ago';
 }
 document.getElementById('stamp').innerHTML =
-  'generated <span class="age">' + age(D.generated_at) + '</span>' +
-  ' \\u00b7 data through <span class="age">' + age(D.data_through) + '</span>' +
-  ' \\u00b7 expected report interval ' +
+  'generated \u003cspan class="age"\u003e' + age(D.generated_at) + '\u003c/span\u003e' +
+  ' \u00b7 data through \u003cspan class="age"\u003e' + age(D.data_through) + '\u003c/span\u003e' +
+  ' \u00b7 expected report interval ' +
   Math.round(D.expected_report_interval_seconds / 60) + 'm' +
-  ' \\u00b7 schema v' + D.schema_version;
+  ' \u00b7 schema v' + D.schema_version;
+
+// The construction is decided by the contract at BUILD time and baked in.
+// There are exactly two branches and neither has a default, so there is no
+// path in this file that draws a healthy circle over an absent field.
+function fillFor(state){
+  if (state === 'normal') { return css('--ok'); }
+  if (state === 'stale') { return css('--stale'); }
+  if (state === 'never_executed') { return css('--stale'); }
+  return null;   // never a colour; the caller must take the unknown branch
+}
+
+var GLYPH = {agent:'\u25cf', gate:'\u25a0', terminal:'\u25b6'};
+
+function hatch(cx, x, y, r){
+  // Hatching, not a fill and not a glow: it reads as "no measurement" at any
+  // size and survives a greyscale screenshot.
+  cx.save();
+  cx.beginPath(); cx.arc(x, y, r, 0, 6.283185); cx.clip();
+  cx.strokeStyle = css('--muted'); cx.lineWidth = 1;
+  for (var i = -r*2; i < r*2; i += 5) {
+    cx.beginPath(); cx.moveTo(x+i, y-r); cx.lineTo(x+i+r*2, y+r); cx.stroke();
+  }
+  cx.restore();
+}
+
+function draw(){
+  var cv = document.getElementById('c');
+  var cx = cv.getContext('2d');
+  cx.clearRect(0, 0, cv.width, cv.height);
+
+  for (var i = 0; i < D.nodes.length; i++) {
+    var n = D.nodes[i], R = n.render, x = n.x, y = n.y, r = R.radius;
+    var unknown = (R.construction === 'unknown');
+
+    // 1. FILL — measured operational state only.
+    if (unknown) {
+      hatch(cx, x, y, r);
+    } else {
+      var col = fillFor(R.fill_state);
+      if (col === null) { hatch(cx, x, y, r); unknown = true; }
+      else { cx.fillStyle = col; cx.beginPath(); cx.arc(x,y,r,0,6.283185); cx.fill(); }
+    }
+
+    // 2. BORDER — evidence quality, never health.
+    cx.strokeStyle = unknown ? css('--muted') : css('--line');
+    cx.lineWidth = 1.6;
+    if (R.border === 'full') { cx.setLineDash([]); }
+    else if (R.border === 'partial') { cx.setLineDash([5,3]); }
+    else if (R.border === 'new') { cx.setLineDash([]); }
+    else { cx.setLineDash([2,4]); }
+    cx.beginPath(); cx.arc(x, y, r, 0, 6.283185); cx.stroke();
+    if (R.border === 'new') {
+      cx.beginPath(); cx.arc(x, y, r + 3.5, 0, 6.283185); cx.stroke();
+    }
+    cx.setLineDash([]);
+
+    // 3. INTERIOR GLYPH — role lives inside, so outlines stay uniform.
+    cx.fillStyle = unknown ? css('--muted') : css('--ink');
+    cx.font = '600 ' + Math.max(8, Math.round(r*0.8)) + 'px ui-monospace,monospace';
+    cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    cx.fillText(unknown ? '?' : (GLYPH[R.glyph] || '\u25cf'), x, y);
+
+    // Label.
+    cx.fillStyle = css('--fg');
+    cx.font = '500 11px ui-monospace,monospace';
+    cx.textBaseline = 'top';
+    cx.fillText(n.id, x, y + r + 5);
+  }
+}
+draw();
 })();
 """

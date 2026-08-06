@@ -544,6 +544,79 @@ def check_emit(result: Result) -> None:
     )
 
 
+def check_render_nodes(result: Result) -> None:
+    """Stage 2.2. Asserted on the payload the renderer CONSUMES and on the
+    drawing code's branch structure — a token grep would prove only that the
+    code ran."""
+    import math
+    import re
+
+    if not DIST.is_file():
+        result.add("rendered page exists for node checks", False)
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+    payload = json.loads(html_text.split('id="mind-data">', 1)[1].split("</script>", 1)[0])
+    js = html_text.split("<script>")[1].split("</script>")[0]
+
+    ghost = next(n for n in payload["nodes"] if n["id"] == "legacy_scorer")
+    result.add(
+        "uninstrumented node is baked as UNKNOWN, not decided in the browser",
+        ghost["render"]["construction"] == "unknown",
+    )
+    result.add(
+        "uninstrumented node carries no fill state at all",
+        ghost["render"]["fill_state"] is None,
+    )
+
+    # The structural half: fillFor must have no default that yields a colour.
+    match = re.search(r"function fillFor\(state\)\{(.*?)\n\}", js, re.S)
+    result.add("fillFor exists", match is not None)
+    if match:
+        result.add(
+            "fillFor returns null by default, never a colour",
+            "return null" in match.group(1),
+        )
+
+    # Every measured node must resolve to a fill fillFor recognises; anything
+    # else falls through to hatching, which would be a silent downgrade.
+    recognised = {"normal", "stale", "never_executed"}
+    unrecognised = [
+        n["id"]
+        for n in payload["nodes"]
+        if n["render"]["construction"] == "measured"
+        and n["render"]["fill_state"] not in recognised
+    ]
+    result.add(
+        "every measured node has a fill state the renderer recognises",
+        not unrecognised,
+        f"unrecognised: {unrecognised}" if unrecognised else "",
+    )
+
+    # Radius must match the published formula exactly — the legend prints it,
+    # so a mismatch would make the legend a lie.
+    wrong = []
+    for node in payload["nodes"]:
+        count, radius = node["lifetime_execution_count"], node["render"]["radius"]
+        if count is None:
+            if radius != 6.0:
+                wrong.append(node["id"])
+        elif abs(radius - min(6.0 + 3.4 * math.sqrt(math.log1p(count)), 26.0)) > 0.01:
+            wrong.append(node["id"])
+    result.add("every radius matches the formula the legend prints", not wrong, str(wrong))
+
+    for primitive in ("shadowBlur", "shadowColor", "createRadialGradient"):
+        result.add(f"no glow primitive: {primitive}", primitive not in js)
+
+    result.add(
+        "border encodes evidence quality, not health",
+        "R.border" in js and "fill_state" not in js.split("BORDER")[1].split("GLYPH")[0],
+    )
+    result.add(
+        "coordinates are read from the payload, never computed",
+        "n.x" in js and "n.y" in js,
+    )
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -686,6 +759,7 @@ def main(argv: list[str]) -> int:
     check_layout(result)
     check_build(result)
     check_emit(result)
+    check_render_nodes(result)
     check_dist(result)
     return result.report()
 

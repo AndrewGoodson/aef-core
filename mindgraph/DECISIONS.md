@@ -401,3 +401,43 @@ destroying the persistence property.
 The physics still exists — in `pipeline/layout.py`, offline, in Python, already
 verified deterministic and independent of input ordering. It is on the correct
 side of the boundary.
+
+---
+
+## 2026-08-05 · The contract resolves at build time; the browser only draws
+
+**Spec silent on.** Section 4.1 states the rule ("no visual property renders
+unless its backing field is non-null") without saying where it is enforced.
+
+**Chosen.** `pipeline/contract.py` resolves every node during the build and the
+resulting construction is baked into the payload. The page reads
+`node.render.construction` and branches on it.
+
+**Why.** Enforcing in the browser would mean re-deriving health from fields at
+view time, which puts a second implementation of the rule in a second language,
+and the two would drift. Baking it means there is no code path in the delivered
+file that could produce a healthy circle over an absent field — `fillFor()`
+returns `null` by default rather than a colour, and the caller's only option
+for `null` is the hatched construction.
+
+---
+
+## 2026-08-05 · `degraded` and `failed` are not derived, and that is the finding
+
+**Reproduced gap.** Wiring the contract in made every node resolve UNKNOWN. The
+contract was correct: `traversal.py` produced no health field at all, so there
+was nothing to resolve.
+
+`operational_state` is now derived as `normal` / `stale` / `never_executed`
+from `last_seen_at` against the dormancy window. Those are what the event log
+can honestly support.
+
+`degraded` and `failed` — both named in Section 4.1 — are **not** derived,
+because they require an error signal the event log does not carry. Inventing
+that collection to make the picture look richer is forbidden, and would be the
+exact move the report warns about. Their absence is reported rather than filled:
+an adopter whose telemetry does carry errors can supply the field, and the
+contract will resolve it without further change.
+
+This is the second time the contract has caught the derivation rather than the
+other way round, which is the layering working as intended.
