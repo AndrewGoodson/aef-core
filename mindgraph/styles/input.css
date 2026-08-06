@@ -1,0 +1,236 @@
+@import "tailwindcss";
+
+/* Scanned for class names. They live inside Python string literals rather than
+   .html files, and Tailwind's extractor is a text scan, so pointing it at the
+   emitter works exactly as if these were templates. */
+@source "../pipeline/emit.py";
+
+/* The extractor is a text scan, and emit.py is half prose. The word
+   "transition" appears in it repeatedly — the scrubber's staged transitions,
+   the fleet's state transitions — and Tailwind duly emitted a `.transition`
+   utility for a page where motion is banned outright. Blocked explicitly
+   rather than tolerated: a motion utility in a no-motion artifact is dead
+   weight at best and an invitation at worst. */
+@source not inline("transition");
+@source not inline("animate-{spin,ping,pulse,bounce}");
+
+/* ---------------------------------------------------------------------------
+   The semantic layer stays CSS custom properties, deliberately.
+
+   Two reasons, both load-bearing:
+
+   1. The canvas reads these at DRAW time via `css('--ink')`. Tailwind utilities
+      are class-based and invisible to a 2D context, so a token the canvas can
+      resolve has to be a custom property regardless of what the DOM uses.
+   2. Increment 6.1 verified that this exact layering — media query first, then
+      both `[data-theme]` overrides — preserves semantic ordering across
+      polarities: recency stays monotone in salience, state hues keep their
+      identity. Re-expressing that as Tailwind `dark:` variants would duplicate
+      every colour at every use site, which is precisely how the inversion 6.1
+      checks for gets reintroduced. One palette, verified once.
+
+   Tailwind consumes them through @theme below, so utilities like `bg-panel`
+   and `text-muted` follow the theme switch for free.
+--------------------------------------------------------------------------- */
+:root {
+  --ink: #0a0d12; --panel: #11151d; --line: #1e2531; --fg: #e6e9f0;
+  --muted: #798294; --accent: #7fd1c1; --warn: #e0a94a; --ok: #57c98b;
+  --stale: #8d93a3; --bad: #e5665f;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --ink: #f6f7f9; --panel: #fff; --line: #e2e6ec; --fg: #141922;
+    --muted: #68717f; --accent: #178c78; --warn: #b57d10; --ok: #1d9a63;
+    --stale: #6f7686; --bad: #cf4b45;
+  }
+}
+/* The explicit override, in BOTH directions. A toggle that could only leave
+   the media query and never return to it would be a one-way door. */
+:root[data-theme="dark"] {
+  --ink: #0a0d12; --panel: #11151d; --line: #1e2531; --fg: #e6e9f0;
+  --muted: #798294; --accent: #7fd1c1; --warn: #e0a94a; --ok: #57c98b;
+  --stale: #8d93a3; --bad: #e5665f;
+}
+:root[data-theme="light"] {
+  --ink: #f6f7f9; --panel: #fff; --line: #e2e6ec; --fg: #141922;
+  --muted: #68717f; --accent: #178c78; --warn: #b57d10; --ok: #1d9a63;
+  --stale: #6f7686; --bad: #cf4b45;
+}
+
+@theme {
+  --color-ink: var(--ink);
+  --color-panel: var(--panel);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-warn: var(--warn);
+  --color-ok: var(--ok);
+  --color-stale: var(--stale);
+  --color-bad: var(--bad);
+
+  /* One family for the whole page. Numeric columns keep their alignment
+     through `tabular-nums`, which is what monospace was actually being used
+     for here — the figures line up without conscripting a second typeface. */
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Removed outright, not merely unused. Tailwind's preflight points code,
+     kbd, samp and pre at --font-mono; clearing the namespace means there is no
+     monospace stack on the page for anything to fall back to. */
+  --font-mono: initial;
+}
+
+@layer base {
+  body {
+    background-color: var(--ink);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  /* Preflight sets code/kbd/samp/pre to a mono stack. There is no monospace on
+     this page, so they inherit like everything else. */
+  code, kbd, samp, pre {
+    font-family: inherit;
+    font-size: 0.95em;
+  }
+  h1 { @apply text-[1.55rem] m-0 tracking-[-0.02em]; text-wrap: balance; }
+  h2 { @apply text-[0.8rem] uppercase tracking-[0.1em] text-muted mt-6 mb-2 font-semibold; }
+  table { @apply border-collapse text-[0.85rem] min-w-[320px]; }
+  th, td { @apply text-left pt-[0.35rem] pr-5 pb-[0.35rem] pl-0 border-b border-line font-normal; }
+  th { @apply text-muted; }
+  td { font-variant-numeric: tabular-nums; }
+  /* The measure. Dropped in the first pass of the Tailwind port and caught by
+     looking at the rendered page rather than the check list — every structural
+     assertion still passed while the content ran off the right edge, because
+     nothing was asserting the page had a width. */
+  main {
+    @apply max-w-[1100px] mx-auto flex flex-col gap-4;
+    padding: 2rem 1.25rem 3rem;
+  }
+  canvas { @apply block w-full h-auto; }
+  footer { @apply mt-6 pt-4 border-t border-line text-muted text-[0.78rem] max-w-[62ch]; }
+}
+
+@layer components {
+  .eyebrow {
+    @apply text-[11px] leading-none font-medium uppercase text-accent mt-0 mx-0 mb-2;
+    letter-spacing: 0.16em;
+  }
+  .head { @apply border-b border-line pb-4; }
+  .stamp { @apply mt-2 mx-0 mb-0 text-xs leading-normal text-muted; }
+  .stamp .age { @apply text-warn; }
+  .notice {
+    @apply m-0 px-[0.9rem] py-[0.7rem] border border-dashed border-line rounded-[9px]
+           text-muted text-[0.85rem] bg-panel;
+  }
+  .scroll { @apply overflow-x-auto; }
+  .stage { @apply border border-line rounded-xl overflow-hidden bg-panel; }
+  .caption { @apply m-0 text-muted text-[0.78rem] max-w-[74ch] leading-[1.7]; }
+
+  /* The theme switch. No transition and no transform — motion is banned
+     outright in this artifact, so the control changes state instantly. */
+  .tbtn {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-line
+           bg-panel text-fg text-xs cursor-pointer;
+    font-family: inherit;
+  }
+  .tbtn:hover { border-color: var(--accent); }
+  .tbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tbtn .tdot {
+    @apply inline-block w-[10px] h-[10px] rounded-full;
+    background: var(--accent);
+  }
+
+  .legend {
+    @apply flex flex-wrap gap-4 text-[11px] leading-none text-muted;
+    letter-spacing: 0.04em;
+  }
+  .lg { @apply flex items-center gap-[0.4rem]; }
+  .sw { @apply w-[11px] h-[11px] rounded-full flex-none inline-block; }
+  .sw.normal { background: var(--ok); }
+  .sw.stale { background: var(--stale); }
+  .sw.unknown { @apply bg-transparent border-[1.5px] border-dashed border-muted; }
+  .sw.border { @apply bg-transparent border-2 border-solid; border-color: var(--fg); }
+  .ln { @apply w-[18px] h-0 flex-none inline-block; }
+  .ln.rail { border-top: 5px solid var(--line); }
+  .ln.core { border-top: 2px solid var(--accent); }
+  .ln.dashed { border-top: 2px dashed var(--muted); }
+  .ln.cap { border-top: 2px solid var(--muted); }
+  .gt {
+    @apply w-5 h-[11px] flex-none inline-block border-[1.5px] rounded-[1px];
+    border-color: var(--warn);
+  }
+  .tab { @apply w-[18px] h-[10px] flex-none inline-block rounded-[1px]; background: var(--accent); }
+
+  .strip {
+    @apply flex flex-wrap gap-x-4 gap-y-1 items-baseline px-[0.95rem] py-3
+           rounded-[10px] border border-line bg-panel text-[0.85rem];
+  }
+  .strip strong { @apply text-[11px] leading-none font-semibold uppercase; letter-spacing: 0.12em; }
+  .strip span { @apply text-muted; }
+  .strip b { @apply text-fg; font-variant-numeric: tabular-nums; }
+  .strip.ok { border-color: var(--ok); }
+  .strip.ok strong { color: var(--ok); }
+  .strip.bad { border-color: var(--bad); }
+  .strip.bad strong { color: var(--bad); }
+  .strip.unknown { @apply border-dashed; }
+  .strip.unknown strong { color: var(--warn); }
+
+  table.fleet { @apply text-xs leading-normal w-full; }
+  table.fleet td { @apply pt-[0.3rem] pr-[0.9rem] pb-[0.3rem] pl-0 border-b border-line; }
+  table.fleet .rp { @apply text-fg; }
+  table.fleet .st, table.fleet .ov, table.fleet .er { @apply text-muted; }
+  table.fleet .ov { font-variant-numeric: tabular-nums; }
+  tr.fl.normal .st { color: var(--ok); }
+  tr.fl.stale .st { color: var(--stale); }
+  tr.fl.degraded .st { color: var(--bad); }
+  tr.fl.unknown .st { color: var(--warn); }
+  tr.fl.unknown .rp, tr.fl.degraded .rp { @apply font-semibold; }
+  table.fleet .rl { @apply w-[34%] min-w-[120px]; }
+
+  .rail { @apply h-[9px] rounded-[2px] overflow-hidden; background: var(--line); }
+  .rail i { @apply block h-full; background: var(--muted); }
+  .rail.normal i { background: var(--ok); }
+  .rail.stale i { background: var(--stale); }
+  .rail.degraded i { background: var(--bad); }
+  .rail.none { @apply bg-transparent border border-dashed border-muted opacity-70; }
+
+  table.exq { @apply text-xs leading-normal w-full; }
+  table.exq td { @apply pt-[0.3rem] pr-[0.9rem] pb-[0.3rem] pl-0 border-b border-line align-top; }
+  table.exq .kd { @apply whitespace-nowrap; color: var(--bad); }
+  table.exq .sb { @apply text-fg whitespace-nowrap; }
+  table.exq .dt { @apply text-muted; }
+  table.exq .ag { @apply text-muted whitespace-nowrap; font-variant-numeric: tabular-nums; }
+  tr.ex.not_reporting .kd { color: var(--warn); }
+  tr.ex.out_of_band .kd { color: var(--warn); }
+
+  .flow { @apply flex flex-col gap-[0.3rem]; }
+  .br {
+    @apply grid gap-3 items-center text-xs leading-[1.4] py-[0.3rem] border-b border-line;
+    grid-template-columns: 11rem minmax(60px, 1fr) 6.5rem auto;
+  }
+  .br .bl { @apply text-fg; }
+  .br .bb { @apply h-[9px] rounded-[2px] overflow-hidden; background: var(--line); }
+  .br .bb i { @apply block h-full; background: var(--muted); }
+  .br.abnormal .bb i { background: var(--bad); }
+  .br.unknown .bb { @apply border border-dashed border-muted bg-transparent; }
+  .br .bn { @apply text-fg text-right; font-variant-numeric: tabular-nums; }
+  .br .bn em { @apply text-muted not-italic; }
+  .br .bx { @apply text-muted text-[11px]; }
+  .br.abnormal .bl { @apply font-semibold; color: var(--bad); }
+  .br .rsn { @apply block text-muted opacity-80; }
+  @media (max-width: 700px) {
+    .br { grid-template-columns: 1fr auto; }
+    .br .bb, .br .gg, .br .bx { display: none; }
+  }
+  .gg { @apply relative h-[9px] rounded-[2px]; background: var(--line); }
+  .gg.none { @apply bg-transparent border border-dashed border-muted; }
+  .gg .bd { @apply absolute top-0 h-full rounded-[2px] opacity-45; background: var(--muted); }
+  .gg .pt {
+    @apply absolute w-[3px] h-[15px] rounded-[1px] -ml-px;
+    top: -3px;
+    background: var(--fg);
+  }
+  .br.abnormal .gg .pt { background: var(--bad); }
+}

@@ -1072,15 +1072,46 @@ def check_staleness(result: Result) -> None:
             match = _re.search(r'<p class="stamp" id="stamp">(.*?)</p>', proc.stdout, _re.S)
             seen[days] = _re.sub(r"<[^>]+>", "", match.group(1)).strip() if match else ""
 
+        # Asserted as a DELTA, not as a literal string.
+        #
+        # The first version checked that a +3-day shift printed "3d ago". That
+        # held only while the artifact's baked generated_at was less than a day
+        # old, so the check quietly depended on being run the same day it was
+        # written — and it started failing at midnight, on an artifact nobody
+        # had touched. generated_at is FIXED (that is what makes the build
+        # deterministic and the pixel-stability check possible), so the page is
+        # already ~18h old before any shift, and +3d correctly rounds to 4d.
+        #
+        # The real invariant is that shifting the clock by N days moves the
+        # reported age by N days. That is exact — both readings carry the same
+        # fractional offset, so it cancels — and it is true whenever the test
+        # runs. It is also a stronger claim than the string match: it proves the
+        # page is deriving the age rather than printing a constant.
+        def days_in(text: str) -> int | None:
+            m = _re.search(r"generated\s+(\d+)d ago", text)
+            return int(m.group(1)) if m else None
+
+        d3, d30 = days_in(seen.get(3, "")), days_in(seen.get(30, ""))
         result.add(
-            "a file opened 3 days later reports 3 days",
-            "3d ago" in seen.get(3, ""),
-            seen.get(3, "")[:70],
+            "shifting the clock 27 days further ages the page by exactly 27 days",
+            d3 is not None and d30 is not None and d30 - d3 == 27,
+            f"+3d -> {d3}d, +30d -> {d30}d",
         )
+        # And against an independent computation of the same arithmetic, so the
+        # delta cannot be right while both absolute values are wrong.
+        from datetime import UTC, datetime
+
+        generated = json.loads(
+            html_text.split('id="mind-data">', 1)[1].split("</script>", 1)[0]
+        )["generated_at"]
+        base = (
+            datetime.now(UTC) - datetime.fromisoformat(generated.replace("Z", "+00:00"))
+        ).total_seconds() / 86400.0
+        expected3, expected30 = round(base + 3), round(base + 30)
         result.add(
-            "a file opened 30 days later reports 30 days",
-            "30d ago" in seen.get(30, ""),
-            seen.get(30, "")[:70],
+            "the reported age matches an independent computation from generated_at",
+            d3 == expected3 and d30 == expected30,
+            f"page said {d3}d/{d30}d, computed {expected3}d/{expected30}d",
         )
         result.add(
             "the reported age actually changes with time",
@@ -1883,8 +1914,42 @@ def check_themes(result: Result) -> None:
             for name, value in found
         }
 
-    dark = palette(css.split(":root{", 1)[1].split("}", 1)[0])
-    light = palette(css.split("prefers-color-scheme: light){", 1)[1].split("}", 1)[0])
+    # Located by CONTENT, not by position. The stylesheet is compiled and
+    # minified now, so whitespace is not stable ("prefers-color-scheme:light"
+    # lost its space) and several `:root{` blocks exist — Tailwind's own @theme
+    # output is one of them. The first version of this check split on literal
+    # text and crashed. Crashing was the right failure; relying on the text
+    # was the wrong method.
+    def palette_of(selector_pattern: str) -> dict[str, str]:
+        for m in re.finditer(selector_pattern + r"\s*\{([^{}]*)\}", css):
+            found = palette(m.group(1))
+            if "ink" in found and "accent" in found:
+                return found
+        return {}
+
+    media_light_block = re.search(
+        r"@media[^{]*prefers-color-scheme\s*:\s*light[^{]*\{(.*?\})\s*\}", css, re.S
+    )
+    dark = palette_of(r"(?<!\])\:root(?!\s*\[)")
+    light = palette(media_light_block.group(1)) if media_light_block else {}
+    attr_dark = palette_of(r":root\s*\[data-theme\s*=\s*[\"']?dark[\"']?\]")
+    attr_light = palette_of(r":root\s*\[data-theme\s*=\s*[\"']?light[\"']?\]")
+
+    # New risk introduced by the toggle button: there are now TWO routes into
+    # each polarity — the media query (what the operator's environment asked
+    # for) and the data-theme attribute (what the button set). If they disagree,
+    # clicking "light" gives a different light than the OS preference does, and
+    # every guarantee 6.1 established would hold for only one of the two paths.
+    result.add(
+        "the toggle's dark palette is the same dark the media query gives",
+        bool(attr_dark) and attr_dark == dark,
+        f"attr={attr_dark} base={dark}" if attr_dark != dark else "",
+    )
+    result.add(
+        "the toggle's light palette is the same light the media query gives",
+        bool(attr_light) and attr_light == light,
+        f"attr={attr_light} media={light}" if attr_light != light else "",
+    )
 
     tokens = ("accent", "ok", "warn", "bad", "stale", "muted")
     surfaces = ("ink", "panel", "line", "fg")
@@ -2035,6 +2100,228 @@ def check_themes(result: Result) -> None:
             "the light theme really is the light one and the dark really is dark",
             light_lum > 0.5 > dark_lum,
             f"light luminance {light_lum:.3f}, dark {dark_lum:.3f}",
+        )
+
+
+def check_theme_toggle(result: Result) -> None:
+    """The switch, and the seam it opens.
+
+    The DOM re-styles itself for free when `data-theme` changes, because the
+    palette is custom properties. The CANVAS does not — it resolved those
+    properties through css() at draw time and baked them into pixels. So a
+    toggle that only sets the attribute produces a light page wrapped around a
+    dark graph, and every structural check would still pass.
+
+    That is the whole point of testing this by RENDERING. The proof is that
+    clicking the button lands on the same picture the operating-system
+    preference produces: same artifact, two routes into light, one result.
+    """
+    if not DIST.is_file():
+        result.add("theme toggle present", False, "no artifact")
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+
+    result.add(
+        "the toggle is a real button with stable ids",
+        'id="theme-toggle"' in html_text
+        and 'id="theme-label"' in html_text
+        and "<button" in html_text,
+    )
+    result.add(
+        "the toggle reports its state to assistive tech",
+        "aria-pressed" in html_text,
+    )
+    js = html_text.split("<script>")[1].split("</script>")[0]
+    result.add(
+        "the toggle redraws the canvas rather than only restyling the DOM",
+        "draw();  // the canvas holds baked pixels" in js,
+    )
+    # Quote-agnostic: the sheet is minified now, so the selector is
+    # [data-theme=dark] rather than [data-theme="dark"]. Matching the quoted
+    # form only would have made this a test of the minifier.
+    result.add(
+        "both polarities are reachable by explicit override, not just one",
+        bool(re.search(r"\[data-theme\s*=\s*[\"']?dark[\"']?\]", html_text))
+        and bool(re.search(r"\[data-theme\s*=\s*[\"']?light[\"']?\]", html_text)),
+    )
+    result.add(
+        "the toggle follows the environment again while no explicit choice is set",
+        "!root.getAttribute('data-theme')" in js and "matchMedia" in js,
+    )
+    result.add(
+        "the toggle persists nothing",
+        not any(t in js for t in ("localStorage", "sessionStorage", "indexedDB", "document.cookie")),
+    )
+
+    chrome = _chrome()
+    if chrome is None:
+        result.add("the toggle actually switches the rendered theme", False, "no browser")
+        return
+
+    import subprocess
+    import tempfile
+
+    try:
+        from PIL import Image  # type: ignore[import-not-found]
+        import numpy as np  # type: ignore[import-not-found]
+    except ImportError:
+        result.add("the toggle actually switches the rendered theme", False, "PIL/numpy")
+        return
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        # A copy that clicks its own button once, after the page has drawn.
+        # Injected AFTER the page script so `draw()` has already run.
+        clicked = tmpdir / "clicked.html"
+        clicked.write_text(
+            html_text.replace(
+                "</body>",
+                "<script>document.getElementById('theme-toggle').click();</script></body>",
+            ),
+            encoding="utf-8",
+        )
+
+        def shot(page: Path, name: str, light: bool) -> Image.Image | None:
+            out = tmpdir / f"{name}.png"
+            args = _shot_args(chrome, out, page)
+            args.insert(1, f"--blink-settings=preferredColorScheme={1 if light else 0}")
+            subprocess.run(args, capture_output=True, timeout=90)
+            return Image.open(out).convert("RGB") if out.is_file() else None
+
+        dark_plain = shot(DIST, "dark_plain", light=False)
+        dark_clicked = shot(clicked, "dark_clicked", light=False)
+        light_plain = shot(DIST, "light_plain", light=True)
+        if not (dark_plain and dark_clicked and light_plain):
+            result.add("the toggle actually switches the rendered theme", False, "capture failed")
+            return
+
+        # Canvas region only: below the header, whose stamp carries a live age.
+        top = 420
+        box = (0, top, min(dark_plain.width, light_plain.width),
+               min(dark_plain.height, light_plain.height))
+
+        def differing(a: Image.Image, b: Image.Image) -> int:
+            d = np.abs(np.asarray(a.crop(box), dtype=int) - np.asarray(b.crop(box), dtype=int))
+            return int((d.sum(axis=2) > 0).sum())
+
+        changed = differing(dark_plain, dark_clicked)
+        result.add(
+            "clicking the toggle changes what is drawn",
+            changed > 0,
+            f"{changed} pixels changed",
+        )
+        # The load-bearing one: clicking into light must produce the SAME
+        # picture the OS preference produces. If the canvas had not redrawn,
+        # this is where it would show up — chrome light, graph still dark.
+        drift = differing(dark_clicked, light_plain)
+        result.add(
+            "the toggle lands on the same picture the OS preference does (canvas redrew)",
+            drift == 0,
+            f"{drift} pixels differ between toggled-light and preferred-light",
+        )
+
+
+def check_typography(result: Result) -> None:
+    """Sans throughout, and no monospace hiding in a fallback.
+
+    Tailwind's preflight points code/kbd/samp/pre at its own mono stack, and
+    that rule survives into the compiled sheet with a hardcoded fallback list.
+    An override exists; whether it WINS is a cascade question, and cascade
+    questions get answered by rendering, not by reading source order.
+
+    Measured by width: the same string set in a monospace face and a
+    proportional one occupies visibly different space. If `code` and `span`
+    render identically wide, they are the same family.
+    """
+    if not DIST.is_file():
+        result.add("typography", False, "no artifact")
+        return
+    html_text = DIST.read_text(encoding="utf-8")
+
+    result.add(
+        "the canvas draws in the sheet's sans family, not a restated one",
+        "var SANS = css('--font-sans')" in html_text and "ui-monospace,monospace" not in html_text,
+    )
+
+    chrome = _chrome()
+    if chrome is None:
+        result.add("no monospace survives in the rendered page", False, "no browser")
+        return
+
+    import subprocess
+    import tempfile
+
+    try:
+        from PIL import Image  # type: ignore[import-not-found]
+        import numpy as np  # type: ignore[import-not-found]
+    except ImportError:
+        result.add("no monospace survives in the rendered page", False, "PIL/numpy")
+        return
+
+    style = html_text.split("<style>", 1)[1].split("</style>", 1)[0]
+    sample = "MMMMWWWWiiiill11"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+
+        def width_of(markup: str, name: str) -> int | None:
+            page = tmpdir / f"{name}.html"
+            page.write_text(
+                f"<style>{style}</style>"
+                f"<body style='margin:0;background:#fff;color:#000'>"
+                f"<div style='display:inline-block' id='m'>{markup}</div>",
+                encoding="utf-8",
+            )
+            out = tmpdir / f"{name}.png"
+            subprocess.run(_shot_args(chrome, out, page), capture_output=True, timeout=90)
+            if not out.is_file():
+                return None
+            arr = np.asarray(Image.open(out).convert("RGB"), dtype=int)
+            # The inline-block is the only black thing on the page; its width is
+            # the width of the text inside it.
+            dark_cols = np.where((arr.sum(axis=2) < 120).any(axis=0))[0]
+            return int(dark_cols.max() - dark_cols.min()) if dark_cols.size else None
+
+        # font-size is neutralised deliberately. `code` is set to .95em on
+        # purpose, and the first version of this probe read that 5% as a family
+        # difference (132px vs 139px — exactly 139 x .95). The question here is
+        # which FAMILY code resolves to, so size is pinned and only family is
+        # allowed to vary.
+        # The measure itself. The Tailwind port dropped `main`'s max-width and
+        # padding, and the content ran off the right edge of the viewport while
+        # every structural check stayed green — nothing was asserting the page
+        # had a width at all. Caught by looking at it; kept honest by measuring
+        # it. main is 1100px centred in a 1200px shot, so a band of untouched
+        # page ground must survive down both edges.
+        edge = tmpdir / "edge.png"
+        subprocess.run(_shot_args(chrome, edge, DIST), capture_output=True, timeout=90)
+        if edge.is_file():
+            arr = np.asarray(Image.open(edge).convert("RGB"), dtype=int)
+            ground = arr[arr.shape[0] // 2, 2]
+            left_uniform = bool((arr[:, :20] == ground).all())
+            right_uniform = bool((arr[:, -20:] == ground).all())
+            result.add(
+                "the page keeps its measure — content does not reach either edge",
+                left_uniform and right_uniform,
+                f"left clear: {left_uniform}, right clear: {right_uniform}",
+            )
+
+        code_w = width_of(f"<code style='font-size:1em'>{sample}</code>", "code")
+        span_w = width_of(f"<span>{sample}</span>", "span")
+        result.add(
+            "code renders in the same family as body text (no monospace fallback)",
+            code_w is not None and span_w is not None and abs(code_w - span_w) <= 1,
+            f"code {code_w}px vs span {span_w}px",
+        )
+        # A control: the measurement must be able to TELL them apart, or the
+        # equality above proves nothing.
+        mono_w = width_of(
+            f"<span style='font-family:ui-monospace,monospace'>{sample}</span>", "mono"
+        )
+        result.add(
+            "the width probe can distinguish a monospace face (control)",
+            mono_w is not None and span_w is not None and abs(mono_w - span_w) > 1,
+            f"forced-mono {mono_w}px vs sans {span_w}px",
         )
 
 
@@ -2292,6 +2579,8 @@ def main(argv: list[str]) -> int:
     check_scrubber(result)
     check_reduced_motion(result)
     check_themes(result)
+    check_theme_toggle(result)
+    check_typography(result)
     check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()

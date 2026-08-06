@@ -1160,3 +1160,101 @@ dark` while passing. No token under test was affected, so nothing failed — a
 check that skips what it cannot parse reports on a subset while looking like it
 reported on everything. Fixed to accept both hex forms and normalise; the
 completeness assertion now covers surfaces as well as states.
+
+## Post-DONE — owner request: theme switch, Tailwind, sans-only
+
+Three changes asked for after the checklist closed. One had a genuine conflict
+with a hard constraint and needed resolving rather than obeying literally.
+
+### Tailwind without breaking "no external refs"
+
+Tailwind's usual delivery is `<script src="https://cdn.tailwindcss.com">` or a
+linked stylesheet. Both are external references, both are banned tokens here,
+and the artifact's CSP would block them anyway. Rather than refuse the request
+or break the constraint, Tailwind is **compiled locally and inlined**:
+
+- `styles/input.css` is the Tailwind source.
+- `tools/build-css` runs the Tailwind CLI and writes `styles/tailwind.css`.
+- That file is **committed**, and `emit.py` inlines it verbatim.
+
+`tools/build-css` is deliberately NOT wired into `pipeline/build.py`. Doing so
+would put npm — and, on a cold cache, the network — on the critical path of the
+one artifact whose entire value proposition is having no dependencies. The
+Python build stays offline and pure; regenerating CSS is an explicit, separate
+step. `_load_css()` raises rather than emitting a page without it, because an
+unstyled document would still pass every structural check.
+
+The compiled sheet is 18.7 KB, purged. `node_modules/` is git-ignored: it is
+build-time tooling, and nothing from it ships.
+
+**Two things Tailwind brought in that had to be removed, not tolerated:**
+
+- A `.transition` utility. The extractor is a text scan and `emit.py` is half
+  prose — it discusses the scrubber's *staged transitions* and the fleet's
+  *state transitions* — so Tailwind emitted a motion utility for a page where
+  motion is banned. Blocked with `@source not inline("transition")`.
+- The default mono stack. Preflight points `code`/`kbd`/`samp`/`pre` at
+  `--font-mono`. Cleared with `--font-mono: initial` plus an explicit
+  `font-family: inherit`, so there is no monospace on the page to fall back to.
+
+### The semantic layer stays custom properties
+
+Tailwind consumes the palette through `@theme`, but the palette itself remains
+CSS custom properties rather than `dark:` variants. Two reasons:
+
+1. The canvas resolves colours via `css('--ink')` at draw time. A 2D context
+   cannot see utility classes, so the tokens have to be custom properties
+   regardless of what the DOM uses.
+2. 6.1 verified that this exact layering preserves semantic ordering across
+   polarities. Re-expressing it as `dark:` variants would duplicate every colour
+   at every use site, which is precisely how the inversion 6.1 checks for gets
+   reintroduced. One palette, verified once.
+
+### The toggle, and the seam underneath it
+
+The DOM restyles itself for free when `data-theme` changes. **The canvas does
+not** — it read those properties at draw time and baked them into pixels. A
+toggle that only sets the attribute yields a light page wrapped around a dark
+graph, and every structural assertion still passes.
+
+So the toggle calls `draw()`, and the test for it is a render comparison:
+clicking into light must produce the same picture the OS preference produces.
+Probed by deleting the redraw — `clicking the toggle changes what is drawn`
+still **passed** (3.3M pixels changed, all of it chrome), while the canvas sat
+27612 pixels out of date. A source grep would not have caught that; only
+comparing the two routes into light did.
+
+The toggle also introduced a second new risk: there are now two ways into each
+polarity, the media query and the attribute. If their palettes diverged,
+clicking "light" would give a different light than the environment does, and
+6.1's guarantees would hold for only one path. Both are now asserted equal.
+
+**It persists nothing.** Browser storage of every kind is banned, so the choice
+lasts the life of the page. That is a consequence of the read-only constraint,
+not an oversight, and the button's title says so rather than letting the reader
+discover it on reload.
+
+### Two defects this work exposed in the existing checks
+
+- **A latent time bomb.** `a file opened 3 days later reports 3 days` asserted a
+  literal string, which only held while the baked `generated_at` was under a day
+  old. It began failing at midnight, on an artifact nobody had touched, because
+  `generated_at` is fixed — that is what makes the build deterministic. Replaced
+  with the real invariant: shifting the clock by N days moves the reported age
+  by exactly N days. Exact (the fractional offset cancels), true whenever it
+  runs, and a stronger claim than the string match, because it proves the page
+  *derives* the age rather than printing a constant.
+- **Nothing asserted the page had a width.** The port dropped `main`'s
+  max-width and padding; content ran off the right edge of the viewport with all
+  287 checks green. Caught by looking at a screenshot. Now measured: a band of
+  untouched page ground must survive down both edges.
+
+Also fixed: the palette parser located blocks by splitting on literal text,
+which broke the moment the sheet was minified (`prefers-color-scheme:light`
+lost its space, and Tailwind's `@theme` added more `:root{` blocks). It now
+locates blocks by content. It crashed rather than silently measuring the wrong
+palette — the right failure, the wrong method.
+
+And, for the record, my own comment explaining that browser storage is banned
+contained the word `localStorage`, which tripped the literal token scan. The
+scanner was right.

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Regenerate the committed Tailwind stylesheet.
+#
+# Deliberately NOT wired into pipeline/build.py: that build is pure Python and
+# runs offline, and adding npm to it would make the one artifact whose value is
+# having no dependencies depend on a toolchain. Run this when styles/input.css
+# changes, and commit the result.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+npx @tailwindcss/cli -i styles/input.css -o styles/tailwind.css --minify
+echo "wrote styles/tailwind.css ($(wc -c < styles/tailwind.css) bytes)"

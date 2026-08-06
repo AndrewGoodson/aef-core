@@ -551,10 +551,15 @@ _SHELL = """<!doctype html>
 </head>
 <body>
 <main>
-  <header class="head">
-    <p class="eyebrow">agent mind graph</p>
-    <h1>__GRAPH__</h1>
-    <p class="stamp" id="stamp"></p>
+  <header class="head flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <p class="eyebrow">agent mind graph</p>
+      <h1>__GRAPH__</h1>
+      <p class="stamp" id="stamp"></p>
+    </div>
+    <button type="button" class="tbtn" id="theme-toggle" aria-pressed="false">
+      <span class="tdot" id="theme-dot"></span><span id="theme-label">theme</span>
+    </button>
   </header>
   __STRIP__
   __EXCEPTIONS__
@@ -595,123 +600,30 @@ _SHELL = """<!doctype html>
 </html>
 """
 
-_CSS = """
-:root{
-  --ink:#0a0d12;--panel:#11151d;--line:#1e2531;--fg:#e6e9f0;--muted:#798294;
-  --accent:#7fd1c1;--warn:#e0a94a;--ok:#57c98b;--stale:#8d93a3;--bad:#e5665f;
-  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
-}
-@media (prefers-color-scheme: light){
-  :root{--ink:#f6f7f9;--panel:#fff;--line:#e2e6ec;--fg:#141922;--muted:#68717f;
-        --accent:#178c78;--warn:#b57d10;--ok:#1d9a63;--stale:#6f7686;--bad:#cf4b45;}
-}
-:root[data-theme="dark"]{--ink:#0a0d12;--panel:#11151d;--line:#1e2531;--fg:#e6e9f0;
-  --muted:#798294;--accent:#7fd1c1;--warn:#e0a94a;--ok:#57c98b;--stale:#8d93a3;--bad:#e5665f;}
-:root[data-theme="light"]{--ink:#f6f7f9;--panel:#fff;--line:#e2e6ec;--fg:#141922;
-  --muted:#68717f;--accent:#178c78;--warn:#b57d10;--ok:#1d9a63;--stale:#6f7686;--bad:#cf4b45;}
-*{box-sizing:border-box}
-body{margin:0;background:var(--ink);color:var(--fg);font:15px/1.55 var(--sans)}
-main{max-width:1100px;margin:0 auto;padding:2rem 1.25rem 3rem;
-  display:flex;flex-direction:column;gap:1rem}
-.eyebrow{font:500 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;
-  color:var(--accent);margin:0 0 .5rem}
-h1{font-size:1.55rem;margin:0;letter-spacing:-.02em;text-wrap:balance}
-h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);
-  margin:1.5rem 0 .5rem;font-weight:600}
-.head{border-bottom:1px solid var(--line);padding-bottom:1rem}
-.stamp{margin:.5rem 0 0;font:12px/1.5 var(--mono);color:var(--muted)}
-.stamp .age{color:var(--warn)}
-.notice{margin:0;padding:.7rem .9rem;border:1px dashed var(--line);border-radius:9px;
-  color:var(--muted);font-size:.85rem;background:var(--panel)}
-.scroll{overflow-x:auto}
-table{border-collapse:collapse;font-size:.85rem;min-width:320px}
-th,td{text-align:left;padding:.35rem 1.25rem .35rem 0;border-bottom:1px solid var(--line);
-  font-weight:400}
-th{color:var(--muted);font-family:var(--mono)}
-td{font-variant-numeric:tabular-nums}
-footer{margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--line);
-  color:var(--muted);font-size:.78rem;max-width:62ch}
-.stage{border:1px solid var(--line);border-radius:12px;overflow:hidden;
-  background:var(--panel)}
-canvas{display:block;width:100%;height:auto}
-.legend{display:flex;flex-wrap:wrap;gap:1rem;font:11px/1 var(--mono);
-  letter-spacing:.04em;color:var(--muted)}
-.lg{display:flex;align-items:center;gap:.4rem}
-.sw{width:11px;height:11px;border-radius:50%;flex:0 0 auto;display:inline-block}
-.sw.normal{background:var(--ok)}
-.sw.stale{background:var(--stale)}
-.sw.unknown{background:transparent;border:1.5px dashed var(--muted)}
-.sw.border{background:transparent;border:2px solid var(--fg)}
-.caption{margin:0;color:var(--muted);font-size:.78rem;max-width:74ch;line-height:1.7}
-.ln{width:18px;height:0;flex:0 0 auto;display:inline-block}
-.ln.rail{border-top:5px solid var(--line)}
-.ln.core{border-top:2px solid var(--accent)}
-.ln.dashed{border-top:2px dashed var(--muted)}
-.ln.cap{border-top:2px solid var(--muted)}
-.gt{width:20px;height:11px;flex:0 0 auto;display:inline-block;
-  border:1.5px solid var(--warn);border-radius:1px}
-.tab{width:18px;height:10px;flex:0 0 auto;display:inline-block;
-  background:var(--accent);border-radius:1px}
-code{font-family:var(--mono);font-size:.95em}
-.strip{display:flex;flex-wrap:wrap;gap:.25rem 1rem;align-items:baseline;
-  padding:.75rem .95rem;border-radius:10px;border:1px solid var(--line);
-  background:var(--panel);font-size:.85rem}
-.strip strong{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase}
-.strip span{color:var(--muted)}
-.strip b{color:var(--fg);font-variant-numeric:tabular-nums}
-.strip.ok{border-color:var(--ok)} .strip.ok strong{color:var(--ok)}
-.strip.bad{border-color:var(--bad)} .strip.bad strong{color:var(--bad)}
-.strip.unknown{border-style:dashed} .strip.unknown strong{color:var(--warn)}
-table.fleet{font:12px/1.5 var(--mono);width:100%}
-table.fleet td{padding:.3rem .9rem .3rem 0;border-bottom:1px solid var(--line)}
-table.fleet .rp{color:var(--fg)}
-table.fleet .st,table.fleet .ov,table.fleet .er{color:var(--muted)}
-table.fleet .ov{font-variant-numeric:tabular-nums}
-tr.fl.normal .st{color:var(--ok)}
-tr.fl.stale .st{color:var(--stale)}
-tr.fl.degraded .st{color:var(--bad)}
-tr.fl.unknown .st{color:var(--warn)}
-tr.fl.unknown .rp,tr.fl.degraded .rp{font-weight:600}
-table.fleet .rl{width:34%;min-width:120px}
-.rail{height:9px;background:var(--line);border-radius:2px;overflow:hidden}
-.rail i{display:block;height:100%;background:var(--muted)}
-.rail.normal i{background:var(--ok)}
-.rail.stale i{background:var(--stale)}
-.rail.degraded i{background:var(--bad)}
-.rail.none{background:transparent;border:1px dashed var(--muted);opacity:.7}
-table.exq{font:12px/1.5 var(--mono);width:100%}
-table.exq td{padding:.3rem .9rem .3rem 0;border-bottom:1px solid var(--line);
-  vertical-align:top}
-table.exq .kd{color:var(--bad);white-space:nowrap}
-table.exq .sb{color:var(--fg);white-space:nowrap}
-table.exq .dt{color:var(--muted)}
-table.exq .ag{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
-tr.ex.not_reporting .kd{color:var(--warn)}
-tr.ex.out_of_band .kd{color:var(--warn)}
-.flow{display:flex;flex-direction:column;gap:.3rem}
-.br{display:grid;grid-template-columns:11rem minmax(60px,1fr) 6.5rem auto;
-  gap:.75rem;align-items:center;font:12px/1.4 var(--mono);
-  padding:.3rem 0;border-bottom:1px solid var(--line)}
-.br .bl{color:var(--fg)}
-.br .bb{height:9px;background:var(--line);border-radius:2px;overflow:hidden}
-.br .bb i{display:block;height:100%;background:var(--muted)}
-.br.abnormal .bb i{background:var(--bad)}
-.br.unknown .bb{border:1px dashed var(--muted);background:transparent}
-.br .bn{color:var(--fg);font-variant-numeric:tabular-nums;text-align:right}
-.br .bn em{color:var(--muted);font-style:normal}
-.br .bx{color:var(--muted);font-size:11px}
-.br.abnormal .bl{color:var(--bad);font-weight:600}
-.br .rsn{display:block;color:var(--muted);opacity:.8}
-@media(max-width:700px){.br{grid-template-columns:1fr auto}.br .bb,.br .gg,.br .bx{display:none}}
-.gg{position:relative;height:9px;background:var(--line);border-radius:2px}
-.gg.none{background:transparent;border:1px dashed var(--muted)}
-.gg .bd{position:absolute;top:0;height:100%;background:var(--muted);opacity:.45;
-  border-radius:2px}
-.gg .pt{position:absolute;top:-3px;width:3px;height:15px;background:var(--fg);
-  border-radius:1px;margin-left:-1px}
-.br.abnormal .gg .pt{background:var(--bad)}
-"""
+# The stylesheet is COMPILED, not hand-written: `styles/input.css` is Tailwind
+# source, and `tools/build-css` renders it to `styles/tailwind.css`, which is
+# committed and inlined here verbatim.
+#
+# Compiling at build time would put npm on the critical path of
+# `python pipeline/build.py` and put the network on the path of a project whose
+# entire point is that it needs neither. So the CSS is generated in a separate,
+# explicit step and checked in; the Python build stays offline and pure.
+def _load_css() -> str:
+    from pathlib import Path as _P
+
+    sheet = _P(__file__).resolve().parent.parent / "styles" / "tailwind.css"
+    if not sheet.is_file():
+        raise FileNotFoundError(
+            f"{sheet} is missing. It is the COMPILED Tailwind stylesheet and it is "
+            f"committed, not generated on demand — run tools/build-css to rebuild it. "
+            f"Emitting the page without it would produce an unstyled document that "
+            f"still passed every structural check."
+        )
+    return sheet.read_text(encoding="utf-8")
+
+
+_CSS = _load_css()
+
 
 # `age()` is the only logic in the shell, and it is the load-bearing one: the
 # page must report its own staleness rather than the age it had when it was
@@ -720,6 +632,10 @@ _JS = """
 (function(){
 var D = JSON.parse(document.getElementById('mind-data').textContent);
 function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+// Read from the stylesheet rather than restated here, so the canvas cannot
+// drift onto a different family from the DOM. One typeface on the page.
+var SANS = css('--font-sans') || 'ui-sans-serif,system-ui,sans-serif';
 
 function age(iso){
   var then = Date.parse(iso);
@@ -802,7 +718,7 @@ function draw(){
       cx.beginPath(); cx.arc(mx, my, 7, 0, 6.283185); cx.stroke();
       cx.setLineDash([]);
       cx.fillStyle = css('--muted');
-      cx.font = '600 10px ui-monospace,monospace';
+      cx.font = '600 10px ' + SANS;
       cx.textAlign = 'center'; cx.textBaseline = 'middle';
       cx.fillText('?', mx, my);
       continue;
@@ -852,7 +768,7 @@ function draw(){
       cx.restore();
       // The glyph is drawn UNROTATED so it stays readable on any edge angle.
       cx.fillStyle = ed.gate.disposition === 'awaiting' ? css('--warn') : css('--fg');
-      cx.font = '600 10px ui-monospace,monospace';
+      cx.font = '600 10px ' + SANS;
       cx.textAlign = 'center'; cx.textBaseline = 'middle';
       cx.fillText(ed.gate.glyph, gx, gy);
     }
@@ -905,7 +821,7 @@ function draw(){
 
     // 3. INTERIOR GLYPH — role lives inside, so outlines stay uniform.
     cx.fillStyle = unknown ? css('--muted') : css('--ink');
-    cx.font = '600 ' + Math.max(8, Math.round(r*0.8)) + 'px ui-monospace,monospace';
+    cx.font = '600 ' + Math.max(8, Math.round(r*0.8)) + 'px ' + SANS;
     cx.textAlign = 'center'; cx.textBaseline = 'middle';
     cx.fillText(unknown ? '?' : (GLYPH[R.glyph] || '\u25cf'), x, y);
 
@@ -918,18 +834,62 @@ function draw(){
       cx.fillStyle = css('--accent');
       cx.fillRect(tx, ty, tw, 13);
       cx.fillStyle = css('--ink');
-      cx.font = '600 9px ui-monospace,monospace';
+      cx.font = '600 9px ' + SANS;
       cx.textAlign = 'center'; cx.textBaseline = 'middle';
       cx.fillText(R.birth_flag, tx + tw/2, ty + 7);
     }
 
     // Label.
     cx.fillStyle = css('--fg');
-    cx.font = '500 11px ui-monospace,monospace';
+    cx.font = '500 11px ' + SANS;
     cx.textBaseline = 'top';
     cx.fillText(n.id, x, y + r + 5);
   }
 }
 draw();
+
+// --- theme switch -----------------------------------------------------------
+// The palette lives in CSS custom properties, so the DOM re-styles itself the
+// moment `data-theme` changes. The CANVAS does not: it read its colours through
+// css() at draw time and baked them into pixels. That seam is the whole reason
+// this is more than a one-line toggle — without the redraw the page would show
+// a light chrome wrapped around a dark graph.
+//
+// The choice is NOT persisted. Browser storage of every kind is banned in this
+// artifact, so the theme lasts the life of the page and no longer. That is a
+// deliberate consequence of the read-only constraint rather than an oversight,
+// and the button says so in its title instead of leaving the reader to find out
+// by reloading.
+(function(){
+  var root = document.documentElement;
+  var btn = document.getElementById('theme-toggle');
+  var label = document.getElementById('theme-label');
+  if (!btn) { return; }
+
+  var media = window.matchMedia('(prefers-color-scheme: dark)');
+
+  function current(){
+    // Explicit choice wins; otherwise whatever the operator's environment asked
+    // for. Read fresh each time so the button never fights the media query.
+    return root.getAttribute('data-theme') || (media.matches ? 'dark' : 'light');
+  }
+  function paint(){
+    var now = current();
+    label.textContent = now === 'dark' ? 'dark' : 'light';
+    btn.setAttribute('aria-pressed', now === 'dark' ? 'true' : 'false');
+    btn.title = 'Switch to ' + (now === 'dark' ? 'light' : 'dark')
+              + ' theme. Not saved \\u2014 this file writes nothing.';
+  }
+  btn.addEventListener('click', function(){
+    root.setAttribute('data-theme', current() === 'dark' ? 'light' : 'dark');
+    paint();
+    draw();  // the canvas holds baked pixels, not live colours
+  });
+  // Following the environment while no explicit choice has been made.
+  media.addEventListener('change', function(){
+    if (!root.getAttribute('data-theme')) { paint(); draw(); }
+  });
+  paint();
+})();
 })();
 """
