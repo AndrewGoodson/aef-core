@@ -4,6 +4,8 @@ from typing import Any
 import pytest
 
 from aef.security.tool import (
+    AuditEntry,
+    AuditLogWriter,
     InMemoryAuditLogWriter,
     PolicyConfig,
     PolicyDecision,
@@ -20,6 +22,19 @@ class _StubTool(Tool):
 
     def invoke(self, arguments: dict[str, Any]) -> dict[str, Any]:
         return {"ok": True}
+
+
+class _FalseyAuditLogWriter(AuditLogWriter):
+    """A valid dependency whose domain-defined truthiness is false."""
+
+    def __init__(self) -> None:
+        self.entries: list[AuditEntry] = []
+
+    def __bool__(self) -> bool:
+        return False
+
+    def write(self, entry: AuditEntry) -> None:
+        self.entries.append(entry)
 
 
 def test_tool_with_no_declared_scopes_is_denied_by_default() -> None:
@@ -95,6 +110,16 @@ def test_audit_log_accumulates_across_multiple_calls() -> None:
     for _ in range(3):
         engine.evaluate(tool, ToolCall(tool_name="mystery", arguments={}))
     assert len(audit_log.entries) == 3
+
+
+def test_explicit_falsey_audit_log_dependency_is_honored() -> None:
+    audit_log = _FalseyAuditLogWriter()
+    engine = PolicyEngine(audit_log=audit_log)
+
+    engine.evaluate(_StubTool("mystery"), ToolCall(tool_name="mystery", arguments={}))
+
+    assert engine.audit_log is audit_log
+    assert len(audit_log.entries) == 1
 
 
 def test_tool_name_mismatch_denied_even_with_valid_scope() -> None:

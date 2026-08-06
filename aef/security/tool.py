@@ -206,9 +206,9 @@ class PolicyEngine:
         audit_log: AuditLogWriter | None = None,
         clock: Any = None,
     ) -> None:
-        self._config = config or PolicyConfig()
-        self._audit_log = audit_log or InMemoryAuditLogWriter()
-        self._clock = clock or (lambda: datetime.now(UTC))
+        self._config = config if config is not None else PolicyConfig()
+        self._audit_log = audit_log if audit_log is not None else InMemoryAuditLogWriter()
+        self._clock = clock if clock is not None else (lambda: datetime.now(UTC))
 
     @property
     def audit_log(self) -> AuditLogWriter:

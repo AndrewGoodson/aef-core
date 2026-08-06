@@ -63,3 +63,76 @@ missing, array, and scalar payloads. After the fix, all 18 cursor tests pass.
 Read operations in `FileDurabilityBackend` do not consistently use the same
 run-id containment helper as writes. Reserved for the boundary-values round;
 no change made in this round.
+
+## Round 2 — deny-by-default policy and HITL routing
+
+### Looked at
+
+`aef/security/tool.py`, `aef/kernel/contracts.py`, the executor's gated-edge
+resolution, audit-writer failure behaviour, scope/name/risk ordering, and the
+policy and executor regression suites.
+
+### Confirmed and fixed
+
+`PolicyEngine.__init__()` selected injected dependencies with boolean `or`.
+A valid caller-supplied `AuditLogWriter` whose domain-defined truthiness was
+false was silently replaced by an in-memory writer. The policy decision still
+returned normally, but the supplied durable audit received no entry.
+
+Expected: dependency injection distinguishes only “not supplied” (`None`) from
+an explicit implementation. It must not interpret a dependency's truthiness.
+
+Reproduction before the fix:
+
+```text
+decision= allow
+uses_supplied_writer= False
+supplied_entries= 0
+
+pytest -q tests/security/test_tool.py::test_explicit_falsey_audit_log_dependency_is_honored
+FAILED: engine.audit_log is an unexpected InMemoryAuditLogWriter
+```
+
+Fix: use explicit `is not None` selection for the config, audit writer, and
+clock dependencies. The regression supplies a falsey writer and verifies both
+object identity and the actual appended record. All 18 policy tests pass.
+
+This contradicts the DI-only service contract and the “full audit trail” claim
+in `CLAUDE.md`: prior to the fix, a valid explicit audit dependency could be
+ignored without error.
+
+### Confirmed, intentionally not changed
+
+HITL approval keys are ambiguous. `hitl_approval_key("a->b", "c")` and
+`hitl_approval_key("a", "b->c")` both serialize as `a->b->c`. A compiled graph
+with the gated edge `("a", "b->c")` accepted an approval minted for the
+different edge `("a->b", "c")` and executed the destination node:
+
+```text
+wrong_edge_approval= a->b->c
+gated_edge_key= a->b->c
+crossed= True
+```
+
+This violates ADR 0011's claim that approvals are edge-specific and explicit.
+It is a safety-relevant authorization collision. No fix or regression test was
+committed because the bug-hunt brief's hard stop says not to alter routing into
+a HITL-gated edge. The owner should choose a collision-free approval identity
+and migration policy before unattended use with caller-controlled node IDs.
+
+### Ruled out
+
+- A tool/call name mismatch is denied before forbidden-name, scope, and risk
+  checks, and the denial is audited.
+- Missing scopes and scope-less tools remain deny-by-default.
+- Non-finite and out-of-range risks and HITL thresholds are rejected at
+  construction, including the maximum-risk/maximum-valid-threshold boundary.
+- A writer exception propagates instead of returning an unaudited decision.
+- Without the delimiter collision, an approval for a different ordinary edge
+  is rejected and ungated edges remain unaffected.
+
+### Suspected, not changed in this round
+
+`InMemoryAuditLogWriter` stores `ToolCall.arguments` by reference, so caller
+mutation may rewrite audit history. Reserved for the shared-mutable-state
+round; not yet reproduced here.
