@@ -74,7 +74,7 @@ class AEFState(_StrictModel):
     reflections: list[str] = Field(default_factory=list)
     scores: dict[str, float] = Field(default_factory=dict)
     errors: list[dict[str, Any]] = Field(default_factory=list)
-    checkpoint_seq: int = 0
+    checkpoint_seq: int = Field(default=0, ge=0)
     provenance: list[Provenance] = Field(default_factory=list)
 
     @field_validator("run_id")
