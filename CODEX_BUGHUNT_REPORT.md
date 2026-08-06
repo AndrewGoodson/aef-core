@@ -315,3 +315,80 @@ unexpected boundary.
 - `ruff check .`: clean
 - `ruff format --check .`: 192 files already formatted
 - MindGraph verification: 287 checks passed; self-test detected all 29 planted failures with no false positives
+
+## Round 5 — configuration, factories, and service wiring
+
+### Looked at
+
+Pydantic configuration boundaries, YAML loading, the CLI-to-runtime handoff,
+`agent_services()`, memory-store construction, evaluator preflight wiring,
+policy/context propagation, dependency defaults, and mutable configuration
+ownership.
+
+### Confirmed and fixed
+
+Three configuration-to-runtime seams accepted one value and executed another:
+
+1. `InMemoryMemoryStore(clock=...)` used boolean `or`, so a valid falsey clock
+   dependency was discarded. A record expected to receive the injected
+   `2020-01-02` timestamp instead received the current 2026 time.
+2. Both `agent_services(judge_rubric={})` and `run_graph_module(...,
+   judge_rubric={})` silently replaced an explicit empty rubric with
+   `{"quality": 1.0}`. That bypassed `RuleBasedJudge`'s deliberate empty-rubric
+   rejection and changed invalid caller input into a different evaluation.
+3. `MemoryConfig` accepted `impl="mem0"` and accepted
+   `impl="in_memory", backend="sqlite"`, but runtime construction always
+   returned volatile `InMemoryMemoryStore`. The selected implementation and
+   backend were not merely unavailable; they were ignored.
+
+Reproduction before the fixes:
+
+```text
+falsey clock: expected 2020-01-02T00:00:00+00:00; observed current 2026 timestamp
+agent_services(judge_rubric={}): no exception; quality rubric installed
+run_graph_module(judge_rubric={}): no exception; graph ran successfully
+MemoryConfig(impl="mem0"): validated; runtime still constructed in-memory storage
+MemoryConfig(impl="in_memory", backend="sqlite"): validated; backend had no effect
+
+pytest -q <five targeted regressions>
+5 failed
+```
+
+Expected: only `None` selects a dependency default; explicit invalid rubric
+input reaches the judge's validator; and a loadable configuration never claims
+a runtime implementation or durability backend that its factory cannot build.
+
+Fixes: use explicit `None` selection for the memory clock and judge rubric;
+pass the CLI rubric unchanged to the shared factory; reject unwired memory
+implementations and backends at schema validation with actionable errors.
+This makes ADR 0014's known implementation limit fail loudly instead of
+letting deployment configuration overstate persistence.
+
+### Ruled out
+
+- Pydantic list defaults are isolated between config instances.
+- The supported `in_memory` configuration loads and builds normally.
+- Policy, context-engine settings, and evaluator gate configuration are
+  propagated or preflight-validated by the CLI path.
+- The default judge rubric is copied for each service bundle, so mutating one
+  judge does not alter subsequent defaults.
+
+### Suspected, deferred
+
+- `ModelProviderConfig.model` appears declarative while completion requests
+  supply their own model. The provider/CLI paths need a concrete end-to-end
+  disagreement before classifying this as a defect.
+- The shipped Azure security example names `local-llama` as a fallback, while
+  the runtime provider factory supports only its registered providers. This is
+  reserved for CLI hostile-input testing.
+- `Services.tools` and `RuleBasedEvaluator.domain_gates` still retain caller
+  mappings. There is no demonstrated core consumer whose result is corrupted
+  by later mutation.
+
+### Round gate
+
+- `pytest -q`: 1416 passed, 93 warnings
+- `mypy --strict aef`: 107 source files clean
+- `ruff check .`: clean
+- `ruff format --check aef tests examples`: 193 files already formatted
+- MindGraph verification: 287 checks passed; self-test detected all 29 planted failures with no false positives
