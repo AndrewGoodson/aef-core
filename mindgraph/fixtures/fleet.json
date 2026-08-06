@@ -1,0 +1,260 @@
+{
+  "_comment": "Synthetic fixture covering every edge case the spec's rules must be tested against. Built from an authoritative REGISTRY and left-joined with telemetry, per Section 4.4 — never assembled from whoever happened to emit data. Timestamps are fixed so the artifact is reproducible; generated_at is injected by the pipeline.",
+  "generated_at": "2026-08-05T18:00:00Z",
+  "data_through": "2026-08-05T17:42:00Z",
+  "expected_report_interval_seconds": 3600,
+
+  "registry": [
+    {
+      "repo": "raptor",
+      "case": "healthy — the control. Without one, every assertion below could pass on a renderer that draws everything as broken.",
+      "last_report_at": "2026-08-05T17:42:00Z",
+      "telemetry": "fresh"
+    },
+    {
+      "repo": "marlin",
+      "case": "STOPPED REPORTING — the dead-man's-switch case. Must sort to the TOP and must never keep its last green fill as dominant.",
+      "last_report_at": "2026-07-29T04:10:00Z",
+      "telemetry": "stale"
+    },
+    {
+      "repo": "databento-ingestion",
+      "case": "NEVER REPORTED — in the registry, no telemetry ever. Distinct from stale: there is no last-known state to show at all, and no score.",
+      "last_report_at": null,
+      "telemetry": "never"
+    },
+    {
+      "repo": "voltbot",
+      "case": "COLLECTION ERROR — the collector itself failed. Distinct from no-data: we know we cannot see, rather than seeing nothing.",
+      "last_report_at": "2026-08-05T17:38:00Z",
+      "telemetry": "error",
+      "telemetry_error": "exporter returned 503"
+    }
+  ],
+
+  "graph_id": "billing-agent",
+  "layout_version": 7,
+
+  "nodes": [
+    {
+      "id": "ingest",
+      "case": "ordinary healthy node, fully instrumented",
+      "first_seen_at": "2026-06-01T00:00:00Z",
+      "last_seen_at": "2026-08-05T17:41:00Z",
+      "lifetime_execution_count": 18402,
+      "operational_state": "normal",
+      "instrumentation": "full",
+      "kind": "agent",
+      "x": 180.0,
+      "y": 240.0,
+      "previous_x": 180.0,
+      "previous_y": 240.0,
+      "layout_reason": "carried"
+    },
+    {
+      "id": "classify",
+      "case": "degraded but instrumented — fill carries state, border stays solid",
+      "first_seen_at": "2026-06-01T00:00:00Z",
+      "last_seen_at": "2026-08-05T17:41:00Z",
+      "lifetime_execution_count": 18402,
+      "operational_state": "degraded",
+      "instrumentation": "full",
+      "kind": "agent",
+      "x": 320.0,
+      "y": 300.0,
+      "previous_x": 318.0,
+      "previous_y": 297.0,
+      "layout_reason": "relaxed"
+    },
+    {
+      "id": "legacy_scorer",
+      "case": "UNINSTRUMENTED — operational_state is null. Must force the UNKNOWN construction: hatched interior, broken border, '?'. Must never render in the healthy style.",
+      "first_seen_at": "2026-06-01T00:00:00Z",
+      "last_seen_at": null,
+      "lifetime_execution_count": null,
+      "operational_state": null,
+      "instrumentation": "none",
+      "kind": "agent",
+      "x": 470.0,
+      "y": 210.0,
+      "previous_x": 470.0,
+      "previous_y": 210.0,
+      "layout_reason": "carried"
+    },
+    {
+      "id": "fetch_invoice",
+      "case": "STALE NODE — instrumented and previously healthy, but no data within the expected window. Stale treatment dominates; last-known state only in a small inset.",
+      "first_seen_at": "2026-06-01T00:00:00Z",
+      "last_seen_at": "2026-07-16T09:00:00Z",
+      "lifetime_execution_count": 2210,
+      "operational_state": "stale",
+      "last_known_state": "normal",
+      "instrumentation": "partial",
+      "kind": "agent",
+      "x": 400.0,
+      "y": 400.0,
+      "previous_x": 400.0,
+      "previous_y": 400.0,
+      "layout_reason": "carried"
+    },
+    {
+      "id": "human_gate",
+      "case": "the accountable checkpoint itself",
+      "first_seen_at": "2026-06-01T00:00:00Z",
+      "last_seen_at": "2026-08-05T17:40:00Z",
+      "lifetime_execution_count": 311,
+      "operational_state": "pending",
+      "instrumentation": "full",
+      "kind": "gate",
+      "x": 610.0,
+      "y": 300.0,
+      "previous_x": 610.0,
+      "previous_y": 300.0,
+      "layout_reason": "carried"
+    },
+    {
+      "id": "retry_guard",
+      "case": "NEW NODE — first_seen_at is within one generation. Gets the static birth-flag tab (Section 3d verdict B), NOT a pulsing halo. Placed by deterministic seeding, never Math.random.",
+      "first_seen_at": "2026-08-05T09:00:00Z",
+      "last_seen_at": "2026-08-05T17:41:00Z",
+      "lifetime_execution_count": 148,
+      "operational_state": "normal",
+      "instrumentation": "new",
+      "kind": "agent",
+      "x": 330.0,
+      "y": 175.0,
+      "previous_x": null,
+      "previous_y": null,
+      "layout_reason": "seeded_centroid"
+    },
+    {
+      "id": "emit",
+      "case": "terminal",
+      "first_seen_at": "2026-06-01T00:00:00Z",
+      "last_seen_at": "2026-08-05T17:41:00Z",
+      "lifetime_execution_count": 18190,
+      "operational_state": "normal",
+      "instrumentation": "full",
+      "kind": "terminal",
+      "x": 750.0,
+      "y": 300.0,
+      "previous_x": 750.0,
+      "previous_y": 300.0,
+      "layout_reason": "carried"
+    }
+  ],
+
+  "edges": [
+    {
+      "source": "ingest",
+      "target": "classify",
+      "case": "hot and live — thick history rail, bright activity core",
+      "edge_state": "active",
+      "lifetime_traversal_count": 18402,
+      "last_traversal_at": "2026-08-05T17:41:00Z",
+      "telemetry_coverage": "full"
+    },
+    {
+      "source": "classify",
+      "target": "fetch_invoice",
+      "case": "DORMANT — state 2. Used heavily, then stopped. Solid THICK rail, dim/absent core. Must be visually distinct from never-observed.",
+      "edge_state": "dormant",
+      "lifetime_traversal_count": 2210,
+      "last_traversal_at": "2026-07-16T09:00:00Z",
+      "telemetry_coverage": "full"
+    },
+    {
+      "source": "classify",
+      "target": "retry_guard",
+      "case": "live path through the new node",
+      "edge_state": "active",
+      "lifetime_traversal_count": 148,
+      "last_traversal_at": "2026-08-05T17:41:00Z",
+      "telemetry_coverage": "full"
+    },
+    {
+      "source": "retry_guard",
+      "target": "human_gate",
+      "case": "live",
+      "edge_state": "active",
+      "lifetime_traversal_count": 148,
+      "last_traversal_at": "2026-08-05T17:41:00Z",
+      "telemetry_coverage": "full"
+    },
+    {
+      "source": "fetch_invoice",
+      "target": "human_gate",
+      "case": "NEVER OBSERVED — state 1. Configured, telemetry valid, zero count. Hairline DASHED with open endpoint markers. This is the pair that must not look like the dormant edge above.",
+      "edge_state": "never_observed",
+      "lifetime_traversal_count": 0,
+      "last_traversal_at": null,
+      "telemetry_coverage": "full"
+    },
+    {
+      "source": "legacy_scorer",
+      "target": "emit",
+      "case": "UNKNOWN — state 4. Coverage absent, so it makes NO zero-count claim. Alternating patterned edge, midpoint '?'.",
+      "edge_state": "unknown",
+      "lifetime_traversal_count": null,
+      "last_traversal_at": null,
+      "telemetry_coverage": "none"
+    },
+    {
+      "source": "classify",
+      "target": "legacy_scorer",
+      "case": "RETIRED — state 3. Explicit retired_at, so inactivity is not inferred. Dim rail ending in a perpendicular terminal cap.",
+      "edge_state": "retired",
+      "lifetime_traversal_count": 9044,
+      "last_traversal_at": "2026-07-02T00:00:00Z",
+      "retired_at": "2026-07-03T00:00:00Z",
+      "telemetry_coverage": "full"
+    },
+    {
+      "source": "human_gate",
+      "target": "emit",
+      "case": "live, downstream of the gate",
+      "edge_state": "active",
+      "lifetime_traversal_count": 18190,
+      "last_traversal_at": "2026-08-05T17:41:00Z",
+      "telemetry_coverage": "full"
+    }
+  ],
+
+  "gates": [
+    {
+      "edge": ["retry_guard", "human_gate"],
+      "case": "PENDING HUMAN GATE — glyph [H…]. Rectangle interrupting the edge, not a diamond (Section 3c verdict B): the gate is an accountable checkpoint, not a branch.",
+      "disposition": "awaiting",
+      "pending_since": "2026-08-05T11:20:00Z"
+    },
+    {
+      "edge": ["human_gate", "emit"],
+      "case": "approved — glyph [H✓]",
+      "disposition": "approved",
+      "decided_at": "2026-08-05T12:00:00Z"
+    }
+  ],
+
+  "cohort": {
+    "_comment": "CONSORT-style branches (Section 3b verdict B). Expected rejection branches are NEUTRAL, never red — a rejected proposal is the gate working. Red is reserved for operationally abnormal events.",
+    "window_days": 30,
+    "proposed": 412,
+    "branches": [
+      { "outcome": "static_rejected", "count": 191, "expected_range": [40, 52], "tone": "neutral", "reason_top": "zone violation" },
+      { "outcome": "behavioral_rejected", "count": 96, "expected_range": [18, 28], "tone": "neutral", "reason_top": "corpus regression" },
+      { "outcome": "human_rejected", "count": 41, "expected_range": [7, 14], "tone": "neutral", "reason_top": "scope" },
+      { "outcome": "escalated_pending", "count": 12, "expected_range": [1, 6], "tone": "neutral" },
+      { "outcome": "merged_durable", "count": 68, "expected_range": [12, 22], "tone": "neutral" },
+      { "outcome": "merged_rolled_back", "count": 4, "expected_range": [0, 2], "tone": "abnormal", "case": "APPROVED-THEN-ROLLED-BACK — the one branch that is genuinely abnormal and earns red. Also above its expected band." }
+    ],
+    "unclassified": 0
+  },
+
+  "loop_vs_human": {
+    "_comment": "Section 4.5. Must be labelled OBSERVATIONAL — this is an adjusted association, not a causal claim, until proposals are randomized or matched.",
+    "label": "OBSERVATIONAL",
+    "durable_changes_per_human_review_hour": 2.7,
+    "counterfactual_stored": false,
+    "counterfactual_note": "direct-human-edit counterfactual is not stored; the comparison cannot be made from this data"
+  }
+}

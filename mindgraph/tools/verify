@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""Verifier for the delivered artifact. Extended as stages demand.
+
+Design note: this script must be able to FAIL. A verifier that cannot detect
+is not a verifier, so `--self-test` plants each fault it claims to catch and
+asserts the check fires. Run it before trusting a green result.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+DIST = ROOT / "dist" / "index.html"
+FIXTURES = ROOT / "fixtures" / "fleet.json"
+
+# Every token the spec's Hard Constraints forbid in the DELIVERED file.
+# Written as (label, pattern) so a failure names the mechanism, not the regex.
+FORBIDDEN: tuple[tuple[str, str], ...] = (
+    ("network: fetch", r"\bfetch\s*\("),
+    ("network: XMLHttpRequest", r"\bXMLHttpRequest\b"),
+    ("network: WebSocket", r"\bWebSocket\b"),
+    ("network: sendBeacon", r"\bsendBeacon\b"),
+    ("write: form element", r"<form\b"),
+    ("storage: localStorage", r"\blocalStorage\b"),
+    ("storage: sessionStorage", r"\bsessionStorage\b"),
+    ("storage: indexedDB", r"\bindexedDB\b"),
+    ("external ref: src=http", r"""\bsrc\s*=\s*["']?https?:"""),
+    ("external ref: href=http", r"""\bhref\s*=\s*["']?https?:"""),
+    ("external ref: @import", r"@import\b"),
+    ("external ref: url(http", r"url\(\s*['\"]?https?:"),
+    ("non-determinism: Math.random", r"\bMath\.random\b"),
+)
+
+# A static file must never claim to be live. The staleness it reports has to
+# come from the embedded timestamps, which is the only honest thing it can say.
+FORBIDDEN_TEXT: tuple[tuple[str, str], ...] = (("claims to be LIVE", r"\bLIVE\b"),)
+
+REQUIRED_TIMESTAMPS = ("generated_at", "data_through")
+
+
+class Result:
+    def __init__(self) -> None:
+        self.checks: list[tuple[str, bool, str]] = []
+
+    def add(self, name: str, ok: bool, detail: str = "") -> None:
+        self.checks.append((name, ok, detail))
+
+    @property
+    def failed(self) -> list[tuple[str, bool, str]]:
+        return [c for c in self.checks if not c[1]]
+
+    def report(self) -> int:
+        width = max(len(n) for n, _, _ in self.checks) if self.checks else 10
+        for name, ok, detail in self.checks:
+            mark = "PASS" if ok else "FAIL"
+            line = f"  {mark}  {name.ljust(width)}"
+            if detail:
+                line += f"  {detail}"
+            print(line)
+        print()
+        if self.failed:
+            print(f"VERIFY: FAIL ({len(self.failed)} of {len(self.checks)})")
+            return 1
+        print(f"VERIFY: PASS ({len(self.checks)} checks)")
+        return 0
+
+
+def scan_forbidden(html: str, result: Result) -> None:
+    for label, pattern in FORBIDDEN:
+        hit = re.search(pattern, html)
+        result.add(
+            f"forbidden token absent — {label}",
+            hit is None,
+            "" if hit is None else f"found at offset {hit.start()}: {hit.group(0)!r}",
+        )
+    for label, pattern in FORBIDDEN_TEXT:
+        hit = re.search(pattern, html)
+        result.add(
+            f"honest staleness — not {label}",
+            hit is None,
+            "" if hit is None else "a static file must not label itself LIVE",
+        )
+
+
+def embedded_json(html: str) -> dict | None:
+    m = re.search(
+        r'<script[^>]*type=["\']application/json["\'][^>]*>(.*?)</script>',
+        html,
+        re.DOTALL,
+    )
+    if not m:
+        return None
+    try:
+        parsed = json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else {"_": parsed}
+
+
+def check_payload(html: str, result: Result) -> None:
+    payload = embedded_json(html)
+    result.add("embedded JSON block parses", payload is not None)
+    if payload is None:
+        return
+    for key in REQUIRED_TIMESTAMPS:
+        result.add(f"payload carries {key}", key in payload, "" if key in payload else "missing")
+
+
+def check_fixtures(result: Result) -> None:
+    """The fixture must actually contain every edge case the spec's rules are
+    tested against. A fixture missing a case makes every downstream assertion
+    about it vacuously true."""
+    if not FIXTURES.is_file():
+        result.add("fixtures present", False, f"{FIXTURES} missing")
+        return
+    data = json.loads(FIXTURES.read_text())
+    node_states = {n.get("operational_state") for n in data.get("nodes", [])}
+    edge_states = {e.get("edge_state") for e in data.get("edges", [])}
+    telemetry = {r.get("telemetry") for r in data.get("registry", [])}
+    gate_dispositions = {g.get("disposition") for g in data.get("gates", [])}
+    tones = {b.get("tone") for b in data.get("cohort", {}).get("branches", [])}
+
+    required = (
+        ("fixture: repo that stopped reporting", "stale" in telemetry),
+        ("fixture: repo that never reported", "never" in telemetry),
+        ("fixture: collection error distinct from no-data", "error" in telemetry),
+        ("fixture: uninstrumented node", None in node_states),
+        ("fixture: stale node", "stale" in node_states),
+        ("fixture: never-observed edge", "never_observed" in edge_states),
+        ("fixture: dormant (used-then-abandoned) edge", "dormant" in edge_states),
+        ("fixture: explicitly retired edge", "retired" in edge_states),
+        ("fixture: unknown-coverage edge", "unknown" in edge_states),
+        ("fixture: pending human gate", "awaiting" in gate_dispositions),
+        ("fixture: approved-then-rolled-back change", "abnormal" in tones),
+    )
+    for name, ok in required:
+        result.add(name, bool(ok))
+
+    # The distinction the whole encoding exists for, asserted on the DATA
+    # before any renderer can blur it.
+    dormant = [e for e in data.get("edges", []) if e.get("edge_state") == "dormant"]
+    never = [e for e in data.get("edges", []) if e.get("edge_state") == "never_observed"]
+    ok = bool(dormant and never)
+    if ok:
+        ok = (
+            dormant[0]["lifetime_traversal_count"] > 0
+            and never[0]["lifetime_traversal_count"] == 0
+            and never[0]["last_traversal_at"] is None
+        )
+    result.add(
+        "dormant and never-observed are separable in the data",
+        ok,
+        "" if ok else "dormant must have count>0; never-observed must have count==0 and no last traversal",
+    )
+
+
+def check_dist(result: Result) -> None:
+    if not DIST.is_file():
+        result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
+        return
+    result.add("dist/index.html exists", True)
+    html = DIST.read_text(encoding="utf-8")
+    scan_forbidden(html, result)
+    check_payload(html, result)
+    siblings = [p for p in DIST.parent.iterdir() if p != DIST]
+    result.add(
+        "single file — no sibling assets in dist/",
+        not siblings,
+        "" if not siblings else f"found {[p.name for p in siblings]}",
+    )
+
+
+def self_test() -> int:
+    """Plant each fault and assert the check fires. A scanner that cannot
+    detect is not a scanner — this program has three ADRs about detectors that
+    passed their own planted-fault check and were still wrong, so the faults
+    here are the REAL tokens, never paraphrases."""
+    planted = [
+        ("fetch(", '<script>fetch("http://x")</script>'),
+        ("XMLHttpRequest", "<script>new XMLHttpRequest()</script>"),
+        ("WebSocket", "<script>new WebSocket('ws://x')</script>"),
+        ("sendBeacon", "<script>navigator.sendBeacon('/x')</script>"),
+        ("<form", '<form action="/x"></form>'),
+        ("localStorage", "<script>localStorage.setItem('a','b')</script>"),
+        ("sessionStorage", "<script>sessionStorage.getItem('a')</script>"),
+        ("indexedDB", "<script>indexedDB.open('a')</script>"),
+        ("src=http", '<script src="https://cdn.example.com/d3.js"></script>'),
+        ("href=http", '<link href="https://fonts.example.com/f.css">'),
+        ("@import", "<style>@import url(x.css);</style>"),
+        ("url(http", "<style>body{background:url(https://x/y.png)}</style>"),
+        ("Math.random", "<script>var p=Math.random()</script>"),
+        ("LIVE", "<p>LIVE</p>"),
+    ]
+    failures = []
+    for label, snippet in planted:
+        r = Result()
+        scan_forbidden(snippet, r)
+        if not r.failed:
+            failures.append(label)
+    # And the inverse: a clean document must produce no findings.
+    clean = Result()
+    scan_forbidden("<p>generated 3 days ago</p>", clean)
+    if clean.failed:
+        failures.append(f"false positive on a clean document: {clean.failed}")
+
+    for label, snippet in planted:
+        mark = "PASS" if label not in failures else "FAIL"
+        print(f"  {mark}  detects {label}")
+    print(f"  {'PASS' if not any('false positive' in f for f in failures) else 'FAIL'}  no false positive on clean input")
+    print()
+    if failures:
+        print(f"SELF-TEST: FAIL — undetected: {failures}")
+        return 1
+    print(f"SELF-TEST: PASS ({len(planted)} planted faults all detected)")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    if "--self-test" in argv:
+        return self_test()
+    result = Result()
+    check_fixtures(result)
+    check_dist(result)
+    return result.report()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
