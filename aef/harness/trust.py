@@ -1,23 +1,20 @@
-"""The trust boundary: **gates execute from the base ref, never the branch.**
+"""Explicit base-ref reads for Zone B harness content.
 
-This is the single mechanism that makes self-coding survivable (ADR 0044).
-Everything else in the harness is enforcement detail; this is the property
-being enforced.
+The system-level trust property is that the *executing AEF package* comes from
+a trusted checkout or installation while the candidate is fetched as data.
+The supplied CI workflows satisfy that property by checking out ``main`` and
+installing AEF before fetching the candidate ref. Local callers must establish
+the same provenance themselves; a library cannot attest where its own imported
+code came from.
 
-The candidate is **input** to the harness, never part of it. Concretely:
-every byte of gate code, corpus, eval suite, and CI configuration is read
-through `BaseRefHarness`, which resolves it at the base ref via
-`git show <base>:<path>`. A branch may rewrite `aef/harness/gate.py` to
-`return True` and it changes nothing — that file is never the one that runs.
+``BaseRefHarness`` is a narrower primitive. It pins a base commit and can read
+or materialise Zone B files from that commit. The loop driver does not route
+all gate, corpus, suite, or workflow reads through this class. ADR 0047 records
+the distinction and corrects its original, broader claim.
 
-Why this and not a review rule: a rule saying "don't let candidates edit
-gates" fails open the first time someone forgets to check. Reading from the
-base ref fails *closed* by construction — there is no code path that reaches
-the branch's copy, so there is nothing to forget.
-
-The zone check (`zones.py`) still rejects Zone B diffs, but as a *signal*
-(a security event worth halting on), not as the load-bearing control. If the
-zone check were the only defence, a bug in it would be a full escape.
+The zone check (``zones.py``) still rejects Zone B diffs as a fail-closed
+signal. Candidate workspaces are reconstructed from Git objects rather than
+copied from the candidate working tree.
 """
 
 from __future__ import annotations
@@ -88,9 +85,10 @@ class BaseRefHarness:
     def materialize(self, dest: Path) -> Path:
         """Write the base ref's harness tree into `dest` and return it.
 
-        Gates run against this directory. Only Zone B lands here — verified
-        per path rather than assumed from the export command, so a
-        mis-specified path filter cannot quietly widen what gets trusted.
+        Callers that explicitly need a base-ref Zone B tree can run from this
+        directory. Only Zone B lands here — verified per path rather than
+        assumed from the export command, so a mis-specified path filter cannot
+        quietly widen what gets trusted.
         """
         dest = _prepare_empty_destination(dest)
         for path in self.harness_paths():
@@ -102,11 +100,11 @@ class BaseRefHarness:
         return dest
 
     def verify_base_is_ancestor(self, head_ref: str) -> None:
-        """Assert the candidate actually descends from the base ref.
+        """Assert the candidate and base share history.
 
-        A branch with no merge-base is not a candidate against this
-        incumbent, and diffing it would report the whole tree as changed —
-        every path a violation, or worse, a coincidental pass.
+        Despite this method's historical name, the base need not be an
+        ancestor: candidate diffs intentionally start at the merge base. A ref
+        with no merge base is not a candidate against this incumbent.
         """
         try:
             merge_base = self.repo.merge_base(self.base_ref, head_ref)

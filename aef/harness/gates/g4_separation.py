@@ -2,8 +2,9 @@
 
 The bulk of this gate is **structural** now, not inspected (04 §2.4): the
 corpus, eval suite, gate code, and CI workflow are Zone B, so a diff reaching
-them is already rejected by G0 and the gates themselves run from the base ref
-regardless (ADR 0047). G4 does not re-litigate that.
+them is already rejected by G0. The supplied workflow launches the gates from
+trusted `main`; arbitrary local launchers must establish the same provenance
+(ADR 0047). G4 does not re-litigate that.
 
 What remains is the part no path check can see: **safety metadata inside
 agent-authored code**. With self-coding, an agent writes `Node(...)` and

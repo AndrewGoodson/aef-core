@@ -8,7 +8,7 @@ on the one change the autonomy contract names a HARD-STOP (ADR 0079, fixed
 here per ADR 0081).
 
 The marker is written **only** where the kernel's exception is caught, in
-Zone B harness code executed from the base ref. That is the difference from
+parent harness code outside the candidate worker. That is the difference from
 `recovered` (ADR 0076), which Zone A wrote about itself and could lie with.
 """
 

@@ -1,9 +1,8 @@
-"""The trust boundary — gates execute from the base ref, never the branch.
+"""Acceptance tests for the explicit base-ref read primitive.
 
-This file contains M1's acceptance test. The scenario is the whole point of
-the design: a candidate branch rewrites the gate that judges it, and the
-rewritten gate never runs. It is built with a real git repo and a real
-Python execution of the loaded gate, not asserted from source.
+The scenario proves what ``BaseRefHarness`` itself guarantees: a caller that
+loads a gate through the primitive receives the pinned base copy. Production
+execution provenance is established separately by the launcher/workflow.
 """
 
 import subprocess
@@ -42,14 +41,14 @@ def repo(tmp_path: Path) -> GitRepo:
 
 
 # --------------------------------------------------------------------------
-# M1 ACCEPTANCE TEST
+# BASE-REF PRIMITIVE ACCEPTANCE TEST
 # --------------------------------------------------------------------------
 
 
 def test_a_candidate_that_rewrites_its_gate_still_faces_the_original_gate(
     repo: GitRepo, tmp_path: Path
 ) -> None:
-    """THE property. A branch subverts the gate; the base ref's gate runs."""
+    """A branch subverts a gate; an explicit base-ref read still rejects."""
     _git(repo.root, "checkout", "-qb", "cand")
     (repo.root / "aef" / "harness" / "gate.py").write_text(SUBVERTED_GATE)
     (repo.root / "agents" / "planner.py").write_text("VALUE = 2\n")
