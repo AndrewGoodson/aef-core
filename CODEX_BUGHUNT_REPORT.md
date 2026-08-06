@@ -640,3 +640,90 @@ loader's stated readable-error guarantee.
 - `ruff check .`: clean
 - `ruff format --check aef tests examples`: 193 files already formatted
 - MindGraph verification: 287 checks passed; self-test detected all 29 planted failures with no false positives
+
+## Round 9 — harness isolation and immutable candidate snapshots
+
+### Looked at
+
+Base/head ref resolution, candidate size accounting, raw diff inspection,
+base-ref lifetime, workspace destination state, symlink leaves, executable Git
+modes, `.gitattributes`, `.gitignore`, submodule and symlink entries, unusual
+Git configuration, and overlay-path containment.
+
+### Confirmed and fixed
+
+Five isolation defects were reproduced:
+
+1. `read_candidate()` inspected a movable branch name more than once and only
+   resolved its SHA afterward. A ref moved between the numstat and raw-diff
+   commands could therefore combine the size of one candidate with the paths
+   and recorded SHA of another candidate. The regression advances a real Git
+   ref after numstat and observed the large replacement commit accepted under
+   the small commit's size measurement.
+2. `BaseRefHarness.base_sha` claimed to pin the trusted base at construction,
+   but resolved `base_ref` on every property access. Advancing the ref after
+   constructing the harness changed which evaluator bytes it materialized.
+3. `build_candidate_workspace()` accepted a nonempty destination. Stale files
+   absent from both the base tree and candidate diff survived in the evaluated
+   workspace, so it was not the claimed exact post-merge tree.
+4. A destination leaf symlink was followed, allowing materialization outside
+   the caller's selected scratch directory.
+5. Base files recorded by Git as executable (`100755`) were emitted with the
+   process default regular-file mode. A real executable base script therefore
+   lost all execute bits in the candidate workspace.
+
+Reproduction before the fixes:
+
+```text
+pytest -q \
+  tests/harness/test_candidate.py::test_a_moving_head_ref_cannot_mix_two_candidate_snapshots \
+  tests/harness/test_trust.py::test_the_base_sha_stays_pinned_when_the_ref_moves \
+  tests/harness/test_gates.py::test_workspace_refuses_a_nonempty_destination \
+  tests/harness/test_gates.py::test_workspace_refuses_a_symlink_destination \
+  tests/harness/test_gates.py::test_workspace_preserves_executable_files_from_base
+
+5 failed
+moving ref: recorded head SHA was the replacement 600-line commit
+base harness: base SHA changed after ref advance
+nonempty destination: no exception; stale file remained
+symlink destination: no exception; external target was populated
+executable base file: mode & 0o111 == 0
+```
+
+Expected: both diff phases use the same immutable object IDs; trusted base
+selection cannot change during a run; materialization starts from an empty,
+non-symlink directory; and ordinary Git executable modes survive reconstruction.
+
+Fixes: resolve both refs before either candidate-inspection command and use
+only their immutable SHAs; cache the base SHA in the frozen harness during
+construction; share a destination validator that rejects symlink and nonempty
+leaves; preserve `100755` versus `100644` modes; and set candidate overlay
+files to the regular non-executable mode. The focused reproduction passed all
+five tests after the fixes. Commits: `95a4c3e`, `9363e23`.
+
+These defects contradicted ADR 0047's immutable-base and clean reconstructed
+workspace claims. The ref race was the highest impact: it allowed the artifact
+that passed the size boundary to differ from the artifact whose changed paths
+and SHA proceeded through the gates.
+
+### Ruled out
+
+- Committed files ignored by `.gitignore` remain present because reconstruction
+  enumerates Git objects rather than the working tree.
+- Export-ignore and content filters do not remove committed base files from the
+  object-based workspace path; binary candidate changes remain fail-closed.
+- Candidate symlink and submodule modes are rejected before overlay; base
+  symlinks are deliberately skipped under the documented policy.
+- Rename detection is explicitly disabled, and object reads do not invoke
+  working-tree clean/smudge filters or depend on line-ending checkout config.
+- Existing path validation continues to reject traversal, null bytes,
+  backslashes, case variants, and directory/file collisions; those previously
+  documented classes were not re-reported.
+
+### Round gate
+
+- `pytest -q` (with `.venv` activated): 1440 passed, 93 warnings
+- `mypy --strict aef`: 107 source files clean
+- `ruff check .`: clean
+- `ruff format --check aef tests examples`: 193 files already formatted
+- MindGraph verification and planted-failure self-test: both exited cleanly
