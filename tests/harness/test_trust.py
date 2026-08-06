@@ -163,3 +163,32 @@ def test_a_normal_candidate_passes_the_ancestry_check(repo: GitRepo) -> None:
     _git(repo.root, "commit", "-qm", "work")
 
     BaseRefHarness(repo=repo, base_ref="base").verify_base_is_ancestor("cand")
+
+
+def test_materialize_refuses_a_nonempty_destination(repo: GitRepo, tmp_path: Path) -> None:
+    """Reviewed as UNPROVEN: the hardening shipped without a test, and the whole
+    suite passed with it reverted. `workspace.py` has the equivalent cases; this
+    is the missing pair for the `BaseRefHarness` side."""
+    dest = tmp_path / "harness"
+    dest.mkdir()
+    (dest / "leftover.txt").write_text("from an earlier run\n")
+
+    with pytest.raises(TrustBoundaryError, match="must be empty"):
+        BaseRefHarness(repo=repo, base_ref="base").materialize(dest)
+
+
+def test_materialize_refuses_a_symlinked_destination(repo: GitRepo, tmp_path: Path) -> None:
+    """A symlinked scratch dir writes the trusted tree wherever the link points."""
+    real = tmp_path / "elsewhere"
+    real.mkdir()
+    link = tmp_path / "harness"
+    link.symlink_to(real, target_is_directory=True)
+
+    with pytest.raises(TrustBoundaryError, match="may not be a symlink"):
+        BaseRefHarness(repo=repo, base_ref="base").materialize(link)
+
+
+def test_materialize_still_accepts_a_fresh_destination(repo: GitRepo, tmp_path: Path) -> None:
+    """The control: the hardening must not refuse the legitimate case."""
+    dest = BaseRefHarness(repo=repo, base_ref="base").materialize(tmp_path / "fresh")
+    assert (dest / "aef" / "harness" / "gate.py").is_file()

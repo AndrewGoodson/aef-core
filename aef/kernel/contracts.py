@@ -11,6 +11,7 @@ env vars. Everything arrives via `Services`.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -39,9 +40,28 @@ class ServiceNotConfiguredError(RuntimeError):
 
 def hitl_approval_key(from_node: str, to_node: str) -> str:
     """Canonical key for a granted human approval to cross a specific edge.
+
     `Edge.requires_human_approval` is meaningless without something that
-    actually checks it — see `Services.hitl_approvals` and docs/adr/0011."""
-    return f"{from_node}->{to_node}"
+    actually checks it — see `Services.hitl_approvals` and docs/adr/0011.
+
+    The encoding is JSON rather than `f"{from_node}->{to_node}"`, because the
+    bare delimiter was not an identity — it was a **collision**. Node ids may
+    themselves contain `->`, and with self-coding they are agent-authored, so:
+
+        hitl_approval_key("a->b", "c") == "a->b->c"
+        hitl_approval_key("a", "b->c") == "a->b->c"
+
+    An approval minted for one edge therefore satisfied the gate on a
+    *different* edge, which contradicts ADR 0011's claim that approvals are
+    edge-specific and explicit. JSON quotes and escapes both components, so
+    distinct edges cannot render alike.
+
+    Nothing persists these keys — `Services.hitl_approvals` is an in-memory
+    frozenset supplied per run — so there is no stored approval to migrate, and
+    every caller in the tree mints keys through this function rather than
+    hand-writing the string.
+    """
+    return json.dumps([from_node, to_node], separators=(",", ":"))
 
 
 @dataclass(frozen=True)

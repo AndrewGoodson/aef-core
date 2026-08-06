@@ -576,3 +576,19 @@ def test_hitl_block_resume_reexecutes_the_gated_node_at_least_once() -> None:
     ).resume("hitl-b")
     assert resumed.final_state.working_memory["c"] is True
     assert calls["b"] == 2  # re-executed on resume (at-least-once, idempotency-key mitigated)
+
+
+def test_an_approval_for_one_edge_does_not_open_a_different_edge() -> None:
+    """The delimiter collision found in review and left unfixed by the bug hunt.
+
+    `f"{from_node}->{to_node}"` made ("a->b", "c") and ("a", "b->c") the same
+    key, so an approval minted for one edge satisfied the gate on the other.
+    Node ids are agent-authored under self-coding, so this was reachable.
+    """
+    crossed = hitl_approval_key("a->b", "c")
+    gated = hitl_approval_key("a", "b->c")
+    assert crossed != gated, "distinct edges must not share an approval key"
+
+    services = Services(hitl_approvals=frozenset({crossed}))
+    assert services.has_hitl_approval("a->b", "c") is True
+    assert services.has_hitl_approval("a", "b->c") is False

@@ -51,7 +51,11 @@ class OtelTracer(Tracer):
     def __init__(
         self, otel_tracer: OtelTracerAPI | None = None, *, instrumentation_name: str = "aef"
     ) -> None:
-        self._tracer = otel_tracer or get_tracer(instrumentation_name)
+        # `is not None`, not truthiness: an injected tracer whose type defines
+        # __bool__/__len__ falsey would otherwise be silently discarded and spans
+        # would go to the global tracer instead of the caller's. Same class as the
+        # PolicyEngine/AnthropicProvider/InMemoryMemoryStore dependencies.
+        self._tracer = otel_tracer if otel_tracer is not None else get_tracer(instrumentation_name)
 
     def start_span(self, name: str, attributes: dict[str, Any] | None = None) -> Span:
         span = self._tracer.start_span(name, attributes=attributes)
