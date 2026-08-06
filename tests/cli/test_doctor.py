@@ -117,6 +117,40 @@ def test_an_adapter_that_does_not_parse_is_reported(tmp_path: Path) -> None:
     assert failed and "does not parse" in failed[0].detail
 
 
+def test_an_adopted_repo_with_a_missing_adapter_fails_doctor(tmp_path: Path) -> None:
+    from aef.cli.adopt import run_adopt
+
+    run_adopt(tmp_path)
+    (tmp_path / "aef_adapter.py").unlink()
+
+    failed = [c for c in run_doctor(tmp_path) if c.level == "error" and not c.ok]
+    assert any(c.name == "adapter_present" for c in failed)
+
+
+def test_nested_build_graph_does_not_count_as_an_exposed_adapter(tmp_path: Path) -> None:
+    _write_config(tmp_path)
+    (tmp_path / "aef_adapter.py").write_text(
+        "def wrapper():\n"
+        "    def build_graph():\n"
+        "        pass\n"
+        "    return build_graph\n"
+    )
+
+    failed = [c for c in run_doctor(tmp_path) if c.name == "adapter_importable" and not c.ok]
+    assert failed and "top-level build_graph" in failed[0].detail
+
+
+def test_generated_adapter_stub_is_a_warning_not_an_ok(tmp_path: Path) -> None:
+    from aef.cli.adopt import run_adopt
+
+    run_adopt(tmp_path)
+
+    adapter = next(c for c in run_doctor(tmp_path) if c.name == "adapter_importable")
+    assert not adapter.ok
+    assert adapter.level == "advisory"
+    assert "still the generated stub" in adapter.detail
+
+
 def test_the_generated_todo_objective_is_flagged(tmp_path: Path) -> None:
     """`aef adopt` writes `objectives: "TODO: describe..."`, which is
     non-empty — so the advisory built to catch "the agent has no stated
