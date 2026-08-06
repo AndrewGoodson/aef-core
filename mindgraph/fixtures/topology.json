@@ -1,0 +1,45 @@
+{
+  "_comment": "The DECLARED topology — what is configured to exist, independent of what has been observed. This file is why a never-observed edge can appear at all: derive it from the event log alone and an edge nobody has taken is indistinguishable from an edge that does not exist. The report's Section 4.2 is explicit that 'never observed' means configured + valid telemetry + zero count, so all three inputs are required.",
+
+  "graph_id": "billing-agent",
+  "layout_version": 7,
+  "expected_report_interval_seconds": 3600,
+  "dormancy_window_days": 14,
+
+  "nodes": [
+    { "id": "ingest",        "kind": "agent",    "instrumentation": "full",    "telemetry_coverage": "full" },
+    { "id": "classify",      "kind": "agent",    "instrumentation": "full",    "telemetry_coverage": "full" },
+    { "id": "retry_guard",   "kind": "agent",    "instrumentation": "new",     "telemetry_coverage": "full" },
+    { "id": "fetch_invoice", "kind": "agent",    "instrumentation": "partial", "telemetry_coverage": "full" },
+    { "id": "human_gate",    "kind": "gate",     "instrumentation": "full",    "telemetry_coverage": "full" },
+    { "id": "emit",          "kind": "terminal", "instrumentation": "full",    "telemetry_coverage": "full" },
+
+    { "_case": "UNINSTRUMENTED — no telemetry at all. Its operational_state must resolve UNKNOWN, never healthy.",
+      "id": "legacy_scorer", "kind": "agent",    "instrumentation": "none",    "telemetry_coverage": "none" }
+  ],
+
+  "edges": [
+    { "source": "ingest",        "target": "classify",      "telemetry_coverage": "full" },
+    { "source": "classify",      "target": "retry_guard",   "telemetry_coverage": "full" },
+    { "source": "retry_guard",   "target": "human_gate",    "telemetry_coverage": "full" },
+    { "source": "human_gate",    "target": "emit",          "telemetry_coverage": "full" },
+    { "_case": "The direct route. Declared because the log takes it — the derivation refused to draw an observed traversal with no declared edge, which is how this omission was found.",
+      "source": "classify",      "target": "human_gate",    "telemetry_coverage": "full" },
+
+    { "_case": "DORMANT once derived — the log carries old traversals and none inside the dormancy window.",
+      "source": "classify",      "target": "fetch_invoice", "telemetry_coverage": "full" },
+
+    { "_case": "The route the old runs actually took — fetch_invoice went straight to emit.",
+      "source": "fetch_invoice", "target": "emit",          "telemetry_coverage": "full" },
+
+    { "_case": "NEVER OBSERVED — configured later, telemetry valid, and the log contains zero traversals. Somebody wired a gate onto this path and nothing has ever used it. Must NOT look like the dormant edge above.",
+      "source": "fetch_invoice", "target": "human_gate",    "telemetry_coverage": "full" },
+
+    { "_case": "RETIRED — explicit retired_at. Dead is never inferred from inactivity alone, so this state can only come from config, never from the log.",
+      "source": "classify",      "target": "legacy_scorer", "telemetry_coverage": "full",
+      "retired_at": "2026-07-03T00:00:00Z" },
+
+    { "_case": "UNKNOWN COVERAGE — makes no zero-count claim. Absent telemetry is not evidence of absent traffic.",
+      "source": "legacy_scorer", "target": "emit",          "telemetry_coverage": "none" }
+  ]
+}

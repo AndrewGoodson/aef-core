@@ -161,3 +161,63 @@ than leaving it out of the catalogue.
 whole point of this stage is that absence must be explicit. `assert_complete`
 also refuses a property declared both as a channel and as a constant, so the
 two lists cannot quietly disagree.
+
+---
+
+## 2026-08-05 · pm4py considered and not used
+
+**Spec offers it.** Section 6 Stage 1 says "optionally with pm4py DFG
+discovery"; the reference table flags pm4py as **GPLv3** and advises being
+deliberate about it.
+
+**Chosen.** Hand-write the derivation in the standard library.
+
+**Why.** It is about forty lines. Taking on a copyleft obligation for forty
+lines is a poor trade, and the loop's own rule is to prefer boring. pm4py
+remains the right tool if the derivation ever needs real process-mining
+machinery — variant analysis, conformance checking — none of which this artifact
+asks for.
+
+---
+
+## 2026-08-05 · Derivation takes three inputs, not one
+
+**Spec implies it; worth stating because the obvious implementation is wrong.**
+
+Deriving the traversal graph from the event log alone is the natural reading of
+"derive the traversal graph", and it is fatal: an edge nobody has taken would
+be indistinguishable from an edge that does not exist, so the never-observed
+state — one of the four the report requires — could never be produced.
+
+Section 4.2 defines "never observed" as *configured + valid telemetry + zero
+count*. All three are therefore inputs: the event log, the declared topology,
+and the coverage declaration.
+
+Two consequences worth recording. `retired` is read only from an explicit
+`retired_at`, because the report is emphatic that dead is never inferred from
+inactivity — an edge that stopped firing is a fact about the agent, while an
+edge someone switched off is a fact about a human decision, and inferring the
+second from the first attributes an intention nobody had. And an uninstrumented
+node reports `None`, never `0`: zero is a measurement, `None` is "we were not
+looking", and only the second may become the UNKNOWN construction.
+
+---
+
+## 2026-08-05 · The derivation found two defects in the fixtures
+
+Recorded because both were caught by refusing to be lenient, and the temptation
+in each case was to loosen the classifier instead.
+
+1. **An observed traversal with no declared edge.** The generated log took
+   `classify -> human_gate`, which `topology.json` did not declare. `derive()`
+   raised rather than drawing it — presenting unconfigured activity as part of
+   the design would be exactly the false-causality trap the report warns raw
+   DFGs fall into. Fixed by declaring the edge, which is what the log says is
+   real.
+
+2. **The `never_observed` state had no instance.** `topology.json` labelled
+   `fetch_invoice -> human_gate` as the never-observed case while the event log
+   actually took that path, so the derived output contained no example of it and
+   every downstream assertion about it would have been vacuous. Fixed by
+   rerouting the log — the old runs now go `fetch_invoice -> emit` — so the
+   never-observed edge is one somebody configured and nothing has ever used.

@@ -251,6 +251,77 @@ def check_contract(result: Result) -> None:
     )
 
 
+def check_traversal(result: Result) -> None:
+    """Stage 1.1. The derivation must produce all five edge states from the
+    event log + declared topology, and must not confuse the two that matter."""
+    sys.path.insert(0, str(ROOT / "pipeline"))
+    from datetime import datetime
+
+    try:
+        import traversal  # type: ignore[import-not-found]
+    except ImportError as exc:
+        result.add("traversal module importable", False, str(exc))
+        return
+    result.add("traversal module importable", True)
+
+    events = traversal.read_events(ROOT / "fixtures" / "events.jsonl")
+    topo = json.loads((ROOT / "fixtures" / "topology.json").read_text())
+    through = datetime.fromisoformat(
+        topo.get("data_through", "2026-08-05T17:42:00+00:00").replace("Z", "+00:00")
+    )
+    nodes, edges = traversal.derive(events, topo, data_through=through)
+    by_pair = {(e.source, e.target): e for e in edges}
+    states = {e.edge_state.value for e in edges}
+
+    for want in ("active", "dormant", "never_observed", "retired", "unknown"):
+        result.add(f"derivation produces the {want} state", want in states)
+
+    # The distinction the artifact exists for, checked on DERIVED output rather
+    # than on a hand-written fixture that could simply assert it.
+    dormant = by_pair[("classify", "fetch_invoice")]
+    never = by_pair[("fetch_invoice", "human_gate")]
+    result.add(
+        "dormant carries a real history (count > 0)",
+        dormant.lifetime_traversal_count is not None and dormant.lifetime_traversal_count > 0,
+        f"count={dormant.lifetime_traversal_count}",
+    )
+    result.add(
+        "never-observed is a real zero with no last traversal",
+        never.lifetime_traversal_count == 0 and never.last_traversal_at is None,
+    )
+    result.add(
+        "dormant and never-observed derive to different states",
+        dormant.edge_state != never.edge_state,
+    )
+
+    # Absence of telemetry must never become a zero-count claim.
+    unknown = by_pair[("legacy_scorer", "emit")]
+    result.add(
+        "unknown-coverage edge makes no count claim at all",
+        unknown.lifetime_traversal_count is None,
+        f"count={unknown.lifetime_traversal_count}",
+    )
+    ghost = next(n for n in nodes if n.id == "legacy_scorer")
+    result.add(
+        "uninstrumented node reports None, not 0",
+        ghost.lifetime_execution_count is None,
+    )
+
+    # Retired must come from config, never inferred from inactivity.
+    retired = by_pair[("classify", "legacy_scorer")]
+    result.add(
+        "retired comes from config, not from inactivity",
+        retired.edge_state.value == "retired" and retired.retired_at is not None,
+    )
+
+    # Determinism: the same inputs must derive the same graph.
+    again = traversal.derive(events, topo, data_through=through)
+    result.add(
+        "derivation is deterministic",
+        [e.to_payload() for e in again[1]] == [e.to_payload() for e in edges],
+    )
+
+
 def check_dist(result: Result) -> None:
     if not DIST.is_file():
         result.add("dist/index.html exists", False, "not built yet — expected before Stage 2")
@@ -384,6 +455,7 @@ def main(argv: list[str]) -> int:
     result = Result()
     check_fixtures(result)
     check_contract(result)
+    check_traversal(result)
     check_dist(result)
     return result.report()
 
