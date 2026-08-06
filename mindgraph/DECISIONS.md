@@ -468,3 +468,49 @@ The falsy test is the specific trap: `if (core)` treats `0.0` and `null`
 identically, so a correct data model would still have collapsed at the last
 step. The check asserts on the strict comparison being present in the shipped
 JS.
+
+---
+
+## 2026-08-05 · A test overwrote the artifact it was testing
+
+**Reproduced regression, caught by reading the published page rather than the
+verifier.**
+
+`check_build`'s "add a node" test ran `pipeline/build.py` with `--state` and
+`--out` pointed at temp paths, but not `--html` — which defaults to
+`dist/index.html`. So every verifier run rebuilt the delivered artifact from a
+synthetic topology, and the published page showed a `fraud_check` node that does
+not exist in the fixture. The verifier stayed green throughout, because nothing
+compared the artifact to the topology.
+
+Two fixes, and the second matters more:
+
+1. Every test build now passes an explicit `--html` to a temp path.
+2. A new check asserts the delivered artifact contains **exactly** the declared
+   nodes and edge count. Without it, the same class of contamination from any
+   future test would again be invisible.
+
+**On proving the guard.** The first attempt to plant the fault used
+`subprocess.run(..., capture_output=True)` and the build never ran — so the
+verifier reported PASS and I nearly recorded that as evidence the guard worked.
+A planted fault that silently fails to execute is indistinguishable from a guard
+that fires correctly. Re-run visibly, the guard failed as it should
+(`extra=['fraud_check']`, 11 edges vs 10) and passed again once restored.
+
+---
+
+## 2026-08-05 · Each edge state gets a different KIND of mark, not a magnitude
+
+**Spec gives the marks; recorded for the reasoning behind following it exactly.**
+
+Section 4.2 assigns each state its own construction — dashed with open
+endpoints, a perpendicular terminal cap, an alternating pattern with a midpoint
+`?`. It would have been cheaper to lean on the rail width alone, which already
+separates the states numerically.
+
+That would be wrong for a reason worth stating: reading a width requires
+comparing it against another edge in the same view. A reader who opens the page
+and looks at one edge cannot tell whether 1.0px is thin without finding a 4.9px
+one to hold it against. A dashed line with open rings is legible on its own.
+Magnitude answers "how much"; kind answers "what is this" — and the states are
+kinds.

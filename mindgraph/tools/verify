@@ -422,7 +422,8 @@ def check_build(result: Result) -> None:
         ok = True
         for out in outs:
             proc = subprocess.run(
-                [py, str(script), "--state", str(state), "--out", str(out)],
+                [py, str(script), "--state", str(state), "--out", str(out),
+                 "--html", str(tmpdir / (out.stem + ".html"))],
                 capture_output=True,
                 text=True,
                 cwd=root,
@@ -469,7 +470,7 @@ def check_build(result: Result) -> None:
         grown = tmpdir / "p4.json"
         proc = subprocess.run(
             [py, str(script), "--state", str(state), "--topology", str(topo_path),
-             "--out", str(grown)],
+             "--out", str(grown), "--html", str(tmpdir / "grown.html")],
             capture_output=True, text=True, cwd=root,
         )
         result.add("build accepts a new node", proc.returncode == 0, proc.stderr[-160:])
@@ -671,10 +672,60 @@ def check_render_edges(result: Result) -> None:
             wrong.append(f"{edge['source']}->{edge['target']}")
     result.add("every rail width is exactly log1p(count), never decayed", not wrong, str(wrong))
 
+    # 2.4 — each state must carry a mark that is a different KIND of thing,
+    # not just a different magnitude. Width alone demands a comparison against
+    # another edge, which is a judgement the eye should not have to make.
+    marks = {
+        "never_observed": ("edge_state === 'never_observed'", "setLineDash([4, 4])", "arc(a.x + ux*14"),
+        "retired": ("edge_state === 'retired'", "px*6"),
+        "unknown": ("rail_width === null", "fillText('?'"),
+    }
+    present = {e["edge_state"] for e in payload["edges"]}
+    for state, needles in marks.items():
+        result.add(f"fixture exercises the {state} state", state in present)
+        missing = [n for n in needles if n not in js]
+        result.add(f"{state} carries its own endpoint marker", not missing, str(missing))
+
+    # The unknown branch must return before any rail is drawn, or an edge with
+    # no coverage would still assert a width.
+    result.add(
+        "unknown coverage returns before any rail is drawn",
+        js.index("rail_width === null") < js.index("HISTORY RAIL"),
+    )
+
     # Edges are drawn before nodes, so a node is never hidden by its own wire.
     result.add(
         "edges are drawn before nodes",
         js.index("EDGES FIRST") < js.index("D.nodes.length; i++"),
+    )
+
+
+def check_artifact_matches_topology(result: Result) -> None:
+    """The delivered file must describe the REAL graph.
+
+    Reproduced: `check_build`'s "add a node" test ran the pipeline without
+    `--html`, so it overwrote dist/index.html with a synthetic topology and the
+    published artifact showed a `fraud_check` node that does not exist. A test
+    contaminating the artifact it is testing is the worst kind of green.
+    """
+    if not DIST.is_file():
+        result.add("artifact matches the declared topology", False, "no artifact")
+        return
+    payload = json.loads(
+        DIST.read_text(encoding="utf-8").split('id="mind-data">', 1)[1].split("</script>", 1)[0]
+    )
+    topo = json.loads((ROOT / "fixtures" / "topology.json").read_text())
+    declared = {n["id"] for n in topo["nodes"]}
+    rendered = {n["id"] for n in payload["nodes"]}
+    result.add(
+        "artifact contains exactly the declared nodes",
+        rendered == declared,
+        f"extra={sorted(rendered - declared)} missing={sorted(declared - rendered)}",
+    )
+    result.add(
+        "artifact edge count matches the declared topology",
+        len(payload["edges"]) == len(topo["edges"]),
+        f"{len(payload['edges'])} vs {len(topo['edges'])}",
     )
 
 
@@ -822,6 +873,7 @@ def main(argv: list[str]) -> int:
     check_emit(result)
     check_render_nodes(result)
     check_render_edges(result)
+    check_artifact_matches_topology(result)
     check_dist(result)
     return result.report()
 

@@ -33,11 +33,10 @@ from typing import Any
 # plainly. An empty canvas would be indistinguishable from a broken one, and
 # this whole project is about not letting absence look like something else.
 STAGE_NOTICE = (
-    "Two-layer edges are drawn. The outer rail is cumulative traffic and never "
-    "decays; the inner core is recency and does. A path used heavily and then "
-    "abandoned stays WIDE and goes DARK — visibly different from one never "
-    "taken, which is a hairline with no core at all. Endpoint markers for the "
-    "five edge states arrive in the next increment."
+    "Each edge state now carries its own endpoint marker, so the state is "
+    "readable without comparing widths: open rings mean never taken, a "
+    "perpendicular bar means retired by someone, a midpoint ? means nothing "
+    "was watching. Dashboard panels arrive in Stage 4."
 )
 
 
@@ -107,6 +106,9 @@ _SHELL = """<!doctype html>
     <span class="lg"><i class="sw border"></i>border = evidence quality, never health</span>
     <span class="lg"><i class="ln rail"></i>rail = cumulative traffic (never decays)</span>
     <span class="lg"><i class="ln core"></i>core = recency (decays to nothing)</span>
+    <span class="lg"><i class="ln dashed"></i>&#9711; never taken (open rings)</span>
+    <span class="lg"><i class="ln cap"></i>&#9866; retired by a person</span>
+    <span class="lg">? nothing was watching</span>
   </div>
   <p class="caption">Radius = <code>6.0 + 3.4 &#215; sqrt(log1p(executions))</code>, capped at
   26.0. Fill carries measured state only. Border carries how much we can see —
@@ -182,6 +184,8 @@ canvas{display:block;width:100%;height:auto}
 .ln{width:18px;height:0;flex:0 0 auto;display:inline-block}
 .ln.rail{border-top:5px solid var(--line)}
 .ln.core{border-top:2px solid var(--accent)}
+.ln.dashed{border-top:2px dashed var(--muted)}
+.ln.cap{border-top:2px solid var(--muted)}
 code{font-family:var(--mono);font-size:.95em}
 """
 
@@ -253,21 +257,45 @@ function draw(){
     var a = pos[ed.source], b = pos[ed.target];
     if (!a || !b) { continue; }
 
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var len = Math.sqrt(dx*dx + dy*dy) || 1;
+    var ux = dx/len, uy = dy/len;          // along the edge
+    var px = -uy, py = ux;                 // perpendicular to it
+
     if (ER.rail_width === null) {
-      // No coverage: no width claim. A patterned hairline that asserts
-      // nothing about volume, because nothing was measured.
-      cx.strokeStyle = css('--muted'); cx.lineWidth = 1;
-      cx.setLineDash([3, 5]); cx.globalAlpha = 0.55;
+      // UNKNOWN COVERAGE — alternating pattern, midpoint '?', and NO width
+      // claim. Absence of telemetry is not evidence of absent traffic, so
+      // this edge asserts nothing about volume at all.
+      cx.strokeStyle = css('--muted'); cx.lineWidth = 1.4;
+      cx.setLineDash([2, 4]); cx.globalAlpha = 0.6;
       cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke();
       cx.setLineDash([]); cx.globalAlpha = 1;
+      var mx = (a.x + b.x)/2, my = (a.y + b.y)/2;
+      cx.fillStyle = css('--panel');
+      cx.beginPath(); cx.arc(mx, my, 7, 0, 6.283185); cx.fill();
+      cx.strokeStyle = css('--muted'); cx.lineWidth = 1;
+      cx.setLineDash([2, 2]);
+      cx.beginPath(); cx.arc(mx, my, 7, 0, 6.283185); cx.stroke();
+      cx.setLineDash([]);
+      cx.fillStyle = css('--muted');
+      cx.font = '600 10px ui-monospace,monospace';
+      cx.textAlign = 'center'; cx.textBaseline = 'middle';
+      cx.fillText('?', mx, my);
       continue;
     }
 
     // 1. HISTORY RAIL — cumulative, monotonic, never decays.
+    // NEVER OBSERVED is dashed: a hairline that is also a different KIND of
+    // line, so the state reads without measuring the width against another
+    // edge. Width alone would demand a comparison the eye should not have to
+    // make.
+    var neverTaken = (ed.edge_state === 'never_observed');
     cx.strokeStyle = css('--line');
     cx.lineWidth = 1 + ER.rail_width * 0.95;
     cx.lineCap = 'round';
+    if (neverTaken) { cx.setLineDash([4, 4]); }
     cx.beginPath(); cx.moveTo(a.x, a.y); cx.lineTo(b.x, b.y); cx.stroke();
+    cx.setLineDash([]);
 
     // 2. ACTIVITY CORE — recency only. null means NEVER fired, which draws no
     // core at all; 0.0 means fired long ago, which draws a dark one. Those are
@@ -280,6 +308,25 @@ function draw(){
       cx.globalAlpha = 1;
     }
     cx.lineCap = 'butt';
+
+    // 3. ENDPOINT MARKERS — the state, readable without comparison.
+    if (neverTaken) {
+      // OPEN rings: the path is configured and has carried nothing. Open
+      // rather than filled, because filled would read as a terminus.
+      cx.strokeStyle = css('--muted'); cx.lineWidth = 1.2;
+      cx.beginPath(); cx.arc(a.x + ux*14, a.y + uy*14, 3.2, 0, 6.283185); cx.stroke();
+      cx.beginPath(); cx.arc(b.x - ux*14, b.y - uy*14, 3.2, 0, 6.283185); cx.stroke();
+    } else if (ed.edge_state === 'retired') {
+      // A perpendicular bar, like a buffer stop. Retirement is a human
+      // decision recorded in config, never inferred from silence — so it gets
+      // a mark that reads as deliberate rather than as decay.
+      var rx = b.x - ux*16, ry = b.y - uy*16;
+      cx.strokeStyle = css('--muted'); cx.lineWidth = 2;
+      cx.beginPath();
+      cx.moveTo(rx + px*6, ry + py*6);
+      cx.lineTo(rx - px*6, ry - py*6);
+      cx.stroke();
+    }
   }
 
   for (var i = 0; i < D.nodes.length; i++) {
