@@ -22,7 +22,7 @@ from pathlib import Path
 
 from aef.harness.candidate import CandidateDiff
 from aef.harness.git import GitRepo
-from aef.harness.trust import TrustBoundaryError
+from aef.harness.trust import TrustBoundaryError, _prepare_empty_destination
 from aef.harness.zones import Zone, ZonePolicy, classify_path
 
 
@@ -33,8 +33,7 @@ def build_candidate_workspace(
     policy: ZonePolicy | None = None,
 ) -> Path:
     """Materialise base-ref tree + the candidate's Zone A overlay into `dest`."""
-    dest = dest.resolve()
-    dest.mkdir(parents=True, exist_ok=True)
+    dest = _prepare_empty_destination(dest)
 
     _materialise_tree(repo, diff.base_sha, dest)
 
@@ -56,6 +55,7 @@ def build_candidate_workspace(
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(repo.run_bytes("show", f"{diff.head_sha}:{entry.path}"))
+        target.chmod(0o644)
 
     return dest
 
@@ -93,3 +93,4 @@ def _materialise_tree(repo: GitRepo, sha: str, dest: Path) -> None:
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(repo.run_bytes("show", f"{sha}:{path}"))
+        target.chmod(0o755 if mode == "100755" else 0o644)

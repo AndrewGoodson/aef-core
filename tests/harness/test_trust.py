@@ -131,6 +131,19 @@ def test_the_base_sha_is_pinned_to_a_commit(repo: GitRepo) -> None:
     assert len(sha) == 40
 
 
+def test_the_base_sha_stays_pinned_when_the_ref_moves(repo: GitRepo) -> None:
+    harness = BaseRefHarness(repo=repo, base_ref="base")
+    original_sha = harness.base_sha
+
+    (repo.root / "aef" / "harness" / "gate.py").write_text(SUBVERTED_GATE)
+    _git(repo.root, "add", "-A")
+    _git(repo.root, "commit", "-qm", "advance base")
+
+    assert repo.rev_parse("base") != original_sha
+    assert harness.base_sha == original_sha
+    assert harness.read("aef/harness/gate.py") == REJECTING_GATE
+
+
 def test_a_branch_with_no_shared_history_is_not_a_candidate(repo: GitRepo) -> None:
     # An orphan branch has no merge-base, so `base...orphan` would report the
     # entire tree. Refuse rather than produce a meaningless diff.

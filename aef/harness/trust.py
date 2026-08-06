@@ -22,7 +22,7 @@ zone check were the only defence, a bug in it would be a full escape.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from aef.harness.git import GitError, GitRepo
@@ -34,18 +34,33 @@ class TrustBoundaryError(RuntimeError):
     harness API, or to materialise outside the scratch directory."""
 
 
+def _prepare_empty_destination(dest: Path) -> Path:
+    """Resolve a caller-owned scratch directory without following its leaf."""
+    if dest.is_symlink():
+        raise TrustBoundaryError(f"scratch destination {dest} may not be a symlink")
+    resolved = dest.resolve()
+    resolved.mkdir(parents=True, exist_ok=True)
+    if next(resolved.iterdir(), None) is not None:
+        raise TrustBoundaryError(f"scratch destination {resolved} must be empty")
+    return resolved
+
+
 @dataclass(frozen=True)
 class BaseRefHarness:
     """Reads harness content as of `base_ref`, and refuses anything else."""
 
     repo: GitRepo
     base_ref: str
+    _base_sha: str = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_base_sha", self.repo.rev_parse(self.base_ref))
 
     @property
     def base_sha(self) -> str:
         """Pinned once so a concurrent push to the base branch cannot swap
         the harness mid-run."""
-        return self.repo.rev_parse(self.base_ref)
+        return self._base_sha
 
     def read(self, path: str) -> str:
         """Contents of a **Zone B** file as of the base ref.
@@ -77,8 +92,7 @@ class BaseRefHarness:
         per path rather than assumed from the export command, so a
         mis-specified path filter cannot quietly widen what gets trusted.
         """
-        dest = dest.resolve()
-        dest.mkdir(parents=True, exist_ok=True)
+        dest = _prepare_empty_destination(dest)
         for path in self.harness_paths():
             target = (dest / path).resolve()
             if not target.is_relative_to(dest):  # pragma: no cover - git cannot emit this
