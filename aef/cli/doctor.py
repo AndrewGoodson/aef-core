@@ -34,7 +34,10 @@ def _adapter_check(adapter: Path) -> DoctorCheck:
     not valid Python — without running anything.
     """
     try:
-        tree = ast.parse(adapter.read_text(), filename=str(adapter))
+        source = adapter.read_text()
+        tree = ast.parse(source, filename=str(adapter))
+    except UnicodeDecodeError as exc:
+        return DoctorCheck("adapter_importable", False, f"{adapter} is not UTF-8: {exc}")
     except SyntaxError as exc:
         return DoctorCheck("adapter_importable", False, f"{adapter} does not parse: {exc}")
     except OSError as exc:  # pragma: no cover - unreadable file
@@ -48,7 +51,7 @@ def _adapter_check(adapter: Path) -> DoctorCheck:
             f"{adapter} defines no top-level build_graph(); nothing can load it",
         )
 
-    still_a_stub = "wire your existing entrypoint into this node" in adapter.read_text()
+    still_a_stub = "wire your existing entrypoint into this node" in source
     return DoctorCheck(
         "adapter_importable",
         not still_a_stub,
@@ -83,8 +86,10 @@ def run_doctor(target_dir: Path) -> list[DoctorCheck]:
         target_dir / "AUTONOMY.md",
         target_dir / "LOOP.md",
     )
-    looks_adopted = adapter.exists() or adapter.is_symlink() or any(
-        marker.exists() for marker in adoption_markers
+    looks_adopted = (
+        adapter.exists()
+        or adapter.is_symlink()
+        or any(marker.exists() for marker in adoption_markers)
     )
     claude_md_detail = (
         str(claude_md)

@@ -103,6 +103,13 @@ def test_load_agent_config_missing_file_raises_readable_error() -> None:
         load_agent_config(CONFIG_DIR / "does_not_exist.yaml")
 
 
+def test_load_agent_config_non_utf8_raises_readable_error(tmp_path: Path) -> None:
+    bad_file = tmp_path / "bad.yaml"
+    bad_file.write_bytes(b"\xff\xfe")
+    with pytest.raises(AgentConfigError, match="cannot decode agent config"):
+        load_agent_config(bad_file)
+
+
 def test_load_agent_config_invalid_yaml_raises_readable_error(tmp_path: Path) -> None:
     bad_file = tmp_path / "bad.yaml"
     bad_file.write_text("model_provider: [unclosed")

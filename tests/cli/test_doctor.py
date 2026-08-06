@@ -117,6 +117,15 @@ def test_an_adapter_that_does_not_parse_is_reported(tmp_path: Path) -> None:
     assert failed and "does not parse" in failed[0].detail
 
 
+def test_an_adapter_that_is_not_utf8_is_reported(tmp_path: Path) -> None:
+    _write_config(tmp_path, fallback="[]", objectives="summarize tickets")
+    (tmp_path / "CLAUDE.md").write_text("# x\n")
+    (tmp_path / "aef_adapter.py").write_bytes(b"\xff\xfe")
+
+    failed = [c for c in run_doctor(tmp_path) if not c.ok and c.name == "adapter_importable"]
+    assert failed and "is not UTF-8" in failed[0].detail
+
+
 def test_an_adopted_repo_with_a_missing_adapter_fails_doctor(tmp_path: Path) -> None:
     from aef.cli.adopt import run_adopt
 
@@ -130,10 +139,7 @@ def test_an_adopted_repo_with_a_missing_adapter_fails_doctor(tmp_path: Path) -> 
 def test_nested_build_graph_does_not_count_as_an_exposed_adapter(tmp_path: Path) -> None:
     _write_config(tmp_path)
     (tmp_path / "aef_adapter.py").write_text(
-        "def wrapper():\n"
-        "    def build_graph():\n"
-        "        pass\n"
-        "    return build_graph\n"
+        "def wrapper():\n    def build_graph():\n        pass\n    return build_graph\n"
     )
 
     failed = [c for c in run_doctor(tmp_path) if c.name == "adapter_importable" and not c.ok]
