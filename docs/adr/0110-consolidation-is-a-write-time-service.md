@@ -135,7 +135,43 @@ signature is worse than an honest absence.* The LLM-backed consolidator is I5,
 gated on I4 surviving; if this loop does not reach it, it is recorded here as
 future work by name and nothing else.
 
-## The measurement that can kill this
+## I4 ran. The layer survived; the knob did not.
+
+**Amends decision 4 above with the number.** `knowledge_boost` now defaults to
+**0.0**, not 1.0.
+
+Metric fixed before measuring: *distinct-lesson coverage* under a budget.
+Corpus built from real `GraphExecutor` runs, six lessons, coverage out of six
+(raw → wiki):
+
+```
+budget   R=1      R=2      R=3      R=5      R=10
+   200   1 -> 1   1 -> 3   1 -> 3   1 -> 3   1 ->  2
+   400   3 -> 3   2 -> 6   1 -> 6   1 -> 6   1 ->  5
+   800   6 -> 6   5 -> 6   4 -> 6   3 -> 6   1 ->  6
+  2000   6 -> 6   6 -> 6   6 -> 6   6 -> 6   5 ->  6
+```
+
+The wiki never covers less. The more interesting column is the raw one: at
+budget 800 it falls **6 → 5 → 4 → 3 → 1** as recurrence rises, because
+near-duplicate records about one failure crowd out every other lesson. **More
+experience makes the un-consolidated agent retrieve worse.** That is the defect
+consolidation removes, and it is why the layer earns its surface area.
+
+**The boost bought nothing.** Swept at 0.0 / 0.5 / 1.0 / 3.0 across four budgets
+and five recurrence levels, every coverage number was identical. The entire
+benefit is consolidation collapsing duplicates; none of it is ranking entries
+above records. And a raised boost measurably walks a stale, loosely-related
+entry toward displacing a precisely-relevant one — 0.200 → 0.745 against a
+0.833 record — which is exactly the failure mode decision 4 refused to
+hard-code. Buying nothing while costing something is not a tuning parameter.
+
+The knob stays expressible, because an owner with a different corpus may
+measure differently. The default is now the number the A/B produced, and a test
+pins it so raising it means re-running the measurement rather than editing a
+line.
+
+## The measurement that could have killed this
 
 I4 is an A/B through the existing eval harness: one corpus retrieved twice,
 raw-records-only versus wiki-enabled, reading the retrievals and not only the

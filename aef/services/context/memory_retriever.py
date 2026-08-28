@@ -126,14 +126,24 @@ class MemoryRetriever(Retriever):
     # budget on, and an owner may reasonably want the second stricter.
     knowledge_min_occurrences: int = 2
 
-    # THE THUMB ON THE SCALE, and named as one. An entry's lexical score is
-    # multiplied by `1 + knowledge_boost * entry.confidence`, so at 0.0 an
-    # entry competes on exactly the same terms as a raw record.
+    # An entry's lexical score is multiplied by `1 + knowledge_boost *
+    # entry.confidence`. DEFAULT 0.0 — the thumb is off, and that is a
+    # measurement rather than a preference.
     #
-    # There is no principled value for this. It is a knob whose default I4's
-    # A/B is meant to justify or remove — and the honest kill, if consolidated
-    # entries do not earn their budget, is 0.0 followed by deleting the layer.
-    knowledge_boost: float = 1.0
+    # I4's A/B swept 0.0 / 0.5 / 1.0 / 3.0 across four budgets and five
+    # recurrence levels: **distinct-lesson coverage was identical at every
+    # setting.** The entire benefit of the knowledge layer comes from
+    # consolidation collapsing near-duplicate records, and none of it from
+    # ranking entries above records. Meanwhile a raised boost measurably walks
+    # a stale, loosely-related entry toward displacing a precisely-relevant
+    # record (0.200 -> 0.745 against a 0.833 record, at boost 3).
+    #
+    # So it buys nothing and costs something. It stays expressible because an
+    # owner with a different corpus may measure differently — but the default
+    # is the number the A/B produced. See
+    # `tests/services/knowledge/test_ab_coverage.py`; raising it should mean
+    # re-running that, not editing this line.
+    knowledge_boost: float = 0.0
 
     def __post_init__(self) -> None:
         if self.candidates_per_kind <= 0:

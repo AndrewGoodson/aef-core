@@ -128,10 +128,17 @@ the persistent-knowledge layer of ADR 0110. The consolidator groups repeated
 runs** before it becomes knowledge (one occurrence is an episode).
 `make_consolidate_node` runs it after reflection, `Services.knowledge` is
 defaulted by `agent_services`, and `MemoryRetriever` admits entries alongside
-raw records under one `context_budget_tokens`. **The `knowledge_boost` default
-is unmeasured** — an A/B against raw-records-only retrieval is the next
-increment, and it may delete this layer. It does not feed `aef/evolution/`, and
-a test AST-scans both directions to keep that true.
+raw records under one `context_budget_tokens`.
+
+**Measured, not asserted** (ADR 0110's I4 A/B, corpus built from real
+`GraphExecutor` runs): consolidation buys distinct-lesson coverage under a
+tight budget, and the reason is that raw-records-only retrieval *degrades as
+experience accumulates* — near-duplicate records about one recurring failure
+crowd out every other lesson, so coverage falls 6→1 as recurrence rises while
+the wiki holds at 6. **`knowledge_boost` defaults to 0.0**: swept at 0/0.5/1/3
+it changed no coverage number anywhere, so the benefit is consolidation, not
+ranking. It does not feed `aef/evolution/`, and a test AST-scans both
+directions to keep that true.
 
 The knowledge graph, token optimizer and planner interfaces were **deleted**
 (ADR 0101), not deferred: a stub unimplemented across five phases is a

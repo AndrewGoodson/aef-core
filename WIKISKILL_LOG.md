@@ -251,3 +251,88 @@ no principled basis for it, which CLAUDE.md now says outright.
 **Next:** I4 — the A/B. Same corpus retrieved twice, raw-records-only vs
 wiki-enabled, reading the retrievals rather than only the scores. This is the
 increment that can delete the layer.
+
+---
+
+## I4 — the A/B (2026-08-28)
+
+**Expectation.** Same corpus retrieved twice, raw-records-only vs wiki-enabled.
+This increment was allowed to delete the layer. Metric fixed BEFORE measuring:
+*distinct-lesson coverage* under a budget, because consolidation's mechanism is
+collapsing R near-duplicate records into one entry, and if the freed budget does
+not buy coverage of other lessons then the layer is surface area for nothing.
+
+Falsification stated in advance: equal-or-worse coverage at every R>=2 kills it;
+an advantage only at implausibly high R is reported as weak; R=1 must show no
+change.
+
+**Deviation from the loop prompt, stated rather than quietly taken.** The prompt
+said "through the existing eval harness". I measured retrieval directly instead:
+the harness scores agent answers against rubrics, and the claim under test is
+retrieval coverage under a budget, so routing through it would have added
+indirection without validity. The corpus is still built from **real
+`GraphExecutor` runs** through reflect -> consolidate, so the measurement stays
+end-to-end rather than synthetic.
+
+**Measurement.**
+
+```
+pytest -q                                 1545 passed  (was 1538, +7)
+mypy aef                                  Success: 112 source files
+ruff check .                              All checks passed
+ruff format --check aef tests examples    205 files already formatted
+```
+
+Coverage out of 6 lessons (raw -> wiki):
+
+```
+budget   R=1      R=2      R=3      R=5      R=10
+   200   1 -> 1   1 -> 3   1 -> 3   1 -> 3   1 ->  2
+   400   3 -> 3   2 -> 6   1 -> 6   1 -> 6   1 ->  5
+   800   6 -> 6   5 -> 6   4 -> 6   3 -> 6   1 ->  6
+  2000   6 -> 6   6 -> 6   6 -> 6   6 -> 6   5 ->  6
+```
+
+**The layer survives, and the interesting column is the raw one.** At budget
+800, raw-records-only falls **6 -> 5 -> 4 -> 3 -> 1** as recurrence rises.
+Near-duplicate records about one failure crowd out every other lesson, so **more
+experience makes the un-consolidated agent retrieve worse**. The wiki holds at 6
+throughout. That degradation is the defect consolidation removes, and it is a
+better justification for the layer than "entries rank higher".
+
+**The knob did not survive.** Swept at 0.0 / 0.5 / 1.0 / 3.0 across four budgets
+and five recurrence levels: **every coverage number identical**. The entire
+benefit comes from consolidation collapsing duplicates and none from ranking
+entries above records. Separately, a raised boost measurably walks a stale,
+loosely-related entry toward displacing a precisely-relevant one — 0.200 ->
+0.745 against a 0.833 record — which is the failure mode ADR 0110's decision 4
+refused to hard-code. Buys nothing, costs something. **Default is now 0.0**,
+which the ADR named in advance as the honest kill for the knob, and a test pins
+it so raising it requires re-running the A/B rather than editing a line.
+
+**Three planted faults against the A/B itself. Two detected, one not — again a
+gap in the test, not the code.**
+
+| Fault planted | Outcome |
+|---|---|
+| retriever ignores the knowledge store | caught by 4 |
+| boost default silently raised to 1.0 | caught |
+| **consolidator threshold lowered to 1** | **NOT CAUGHT** |
+
+The control claimed "R=1 produces no entries, so both arms must be identical".
+With the threshold at 1, entries WERE produced at R=1 — and the control still
+passed, because the retriever's own independent `knowledge_min_occurrences=2`
+filtered them straight back out. The equality held for a reason that had nothing
+to do with the docstring's claim: **the control was confirming itself rather
+than the layer.** Now the precondition is asserted directly (zero entries at
+R=1), the fault re-planted, and it fires.
+
+Third increment running where a planted fault found a hole in the tests rather
+than the code.
+
+**Verdict.** I4 done. Layer kept on measured evidence; knob removed on measured
+evidence. ADR 0110 amended with the table rather than superseded.
+
+**Next:** I5 — the LLM-backed consolidator as a provider adapter, gated on I4
+having survived, which it did. If not reached, ADR 0110 records it as future
+work by name and it gets NO stub interface.
