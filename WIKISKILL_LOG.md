@@ -54,3 +54,59 @@ deleted and 0110 is superseded with the number that killed it.
 
 **Next:** I1 — `KnowledgeEntry` + `KnowledgeStore` base + in-memory
 implementation, mirroring `aef/services/memory/`.
+
+---
+
+## I1 — the store (2026-08-28)
+
+**Expectation.** `KnowledgeEntry` + `KnowledgeStore` + in-memory backend,
+mirroring `aef/services/memory/`. Expected the interesting part to be the merge
+semantics rather than the storage, and expected two specific bugs to be
+available to plant: cross-agent entry merging, and provenance that inflates on
+re-consolidation.
+
+**Measurement.**
+
+```
+pytest -q                                 1488 passed  (was 1455, +33)
+mypy aef                                  Success: 111 source files (was 108)
+ruff check .                              All checks passed
+ruff format --check aef tests examples    200 files already formatted
+```
+
+**Seven planted faults, seven detections.** Each aimed at the specific guard it
+should trip, reverted after:
+
+| Fault planted | Test that caught it |
+|---|---|
+| `key` drops `agent_id` | `test_entries_from_different_agents_never_merge` |
+| merge concatenates without dedupe | `test_reupserting_the_same_record_does_not_inflate_the_count` (+1) |
+| tie-break sorts descending | `test_query_tie_break_is_ascending_by_key_not_reversed` |
+| `deepcopy` removed from write | `test_upsert_snapshots_nested_content` |
+| duplicate-provenance validation removed | `test_duplicate_provenance_rejected_at_construction` |
+| real `aef.evolution` import into the package | `test_knowledge_does_not_import_evolution` |
+| same, deferred inside a function body | `test_knowledge_does_not_import_evolution` |
+
+**Verdict.** I1 done. Four decisions worth carrying into I2:
+
+1. **Key is `(agent_id, signature)`, not `signature`.** Same seam that was
+   found in `MemoryRetriever.agent_id`, where a default of "every agent" handed
+   one agent another's recorded failures. Here it is worse — a merged entry
+   cannot be un-merged — so `agent_id` is a required field, not a defaulted one.
+2. **`occurrence_count` is derived from `source_record_ids`, never stored.**
+   Two fields recording one quantity drift (ADR 0091). This also makes the
+   dedupe load-bearing rather than tidy: without it, a consolidator re-run over
+   an unchanged memory store manufactures confidence out of the same evidence.
+3. **Merge lives in the store, not the consolidator.** Keying by signature is
+   only an invariant if one place enforces it.
+4. **`confidence` is a property of the entry; the retrieval multiplier is not.**
+   Keeping the measurement separate from the policy is what lets I4 remove the
+   thumb on the scale without editing stored data.
+
+ADR 0110's evolution-separation claim is now enforced by an AST scan in **both**
+directions rather than asserted in prose — the coupling could arrive from either
+side, and a one-way scan would pass while the property was already broken.
+
+**Next:** I2 — the rule-based consolidator. Reads `MemoryRecord`s, groups by
+signature, emits entries only at >=2 occurrences. Planted fault to verify: a
+consolidator that emits from a single record must fail its test.

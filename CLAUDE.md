@@ -121,6 +121,13 @@ LLM-backed reflection, offline optimization, and multi-agent coordination
 remain typed interfaces with `NotImplementedError` bodies (Phase 3/5). The
 evolution engine is a typed interface, disabled (Phase 4).
 
+`aef/services/knowledge/` (`KnowledgeEntry`/`KnowledgeStore` +
+`InMemoryKnowledgeStore`) is real and tested — the store only. It is the
+persistent-knowledge layer of ADR 0110, and **nothing writes to it yet**: the
+consolidator that turns repeated `MemoryRecord`s into entries is the next
+increment, so today it is a working store with no producer. It does not feed
+`aef/evolution/`, and a test AST-scans both directions to keep that true.
+
 The knowledge graph, token optimizer and planner interfaces were **deleted**
 (ADR 0101), not deferred: a stub unimplemented across five phases is a
 promise, and an unkept promise in a typed signature is worse than an honest
