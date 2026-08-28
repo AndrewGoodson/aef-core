@@ -171,6 +171,55 @@ measure differently. The default is now the number the A/B produced, and a test
 pins it so raising it means re-running the measurement rather than editing a
 line.
 
+## I5 ran. The LLM summariser is implemented, and OFF by default.
+
+Built as `LLMSummariser` under `aef/services/knowledge/adapters/`, injected
+through one `summarise` hook so it swaps **prose and nothing else** — the
+grouping, the two-run threshold, the per-run dedupe and the agent keying stay on
+the single code path I4 measured.
+
+**This is the increment the write-time decision was reserving room for.** A
+non-deterministic summariser is only safe here because consolidation happens at
+write time, so its output is stored data by the time any retriever reads it and
+never sits inside a replayed read path.
+
+**Measured on the same ruler, and it loses** (coverage out of 6,
+rule-based → LLM-backed):
+
+```
+budget   R=2      R=5
+   200   3 -> 2   3 -> 2
+   400   6 -> 5   6 -> 4
+   800   6 -> 6   6 -> 6
+  2000   6 -> 6   6 -> 6
+```
+
+The cause is not subtle: the summary is **added** to the verbatim feedback
+rather than replacing it, so entries grow about 40% (227 → 317 chars at R=2),
+and larger entries mean fewer fit under a fixed budget.
+
+Keeping both texts is deliberate. A model's paraphrase replacing the only record
+of what was actually observed makes the lesson untraceable to its evidence, even
+with provenance ids intact. **So this is a real trade, not a bug: traceability
+costs coverage.** Substituting instead of adding might reverse the sign; that is
+a different experiment, named as future work rather than tried here, because
+tuning a design after seeing the result until it wins is how a measurement stops
+meaning anything.
+
+Disposition, matching how this repo treats evolution: **implemented, tested,
+default off, with the number that argues against enabling it recorded.** It is
+not a stub, so ADR 0101's rule is satisfied. An owner who wants cross-run prose
+synthesis can enable it knowing it costs one to two lessons of coverage at tight
+budgets and nothing at loose ones.
+
+The model is never trusted with provenance. A summariser may return one string,
+which lands in `content["summary"]`; `source_record_ids`, `occurrence_count`,
+`run_ids` and the timestamps are computed from records. A hostile-model test
+pins this — one that could write provenance could manufacture confidence for a
+lesson nothing supports. Provider failure returns `None` and leaves the
+rule-based text, so the worst case is the previous behaviour rather than a lost
+or corrupted entry.
+
 ## The measurement that could have killed this
 
 I4 is an A/B through the existing eval harness: one corpus retrieved twice,

@@ -336,3 +336,77 @@ evidence. ADR 0110 amended with the table rather than superseded.
 **Next:** I5 — the LLM-backed consolidator as a provider adapter, gated on I4
 having survived, which it did. If not reached, ADR 0110 records it as future
 work by name and it gets NO stub interface.
+
+---
+
+## I5 — the LLM summariser (2026-08-28)
+
+**Expectation, stated before measuring.** The summary is ADDED to the verbatim
+feedback rather than replacing it, so entries get bigger, so under a fixed
+budget fewer fit — coverage should be **equal or worse**. Predicted a negative
+result and got one.
+
+**Measurement.**
+
+```
+pytest -q                                 1558 passed  (was 1545, +13)
+mypy aef                                  Success: 114 source files
+ruff check .                              All checks passed
+ruff format --check aef tests examples    208 files already formatted
+```
+
+Coverage out of 6 (rule-based -> LLM-backed):
+
+```
+budget   R=2      R=5
+   200   3 -> 2   3 -> 2
+   400   6 -> 5   6 -> 4
+   800   6 -> 6   6 -> 6
+  2000   6 -> 6   6 -> 6
+```
+
+Mean entry size 227 -> 317 chars at R=2. The cost is entirely explained by size,
+which the test asserts rather than assumes.
+
+**Disposition: implemented, tested, default OFF, with the number recorded.**
+Not a stub, so ADR 0101's rule is satisfied. Same shape as how this repo treats
+evolution — built, disabled, evidence gap named.
+
+**What I deliberately did NOT do.** Substituting the summary for the verbatim
+feedback would shrink entries and might reverse the sign. I did not try it.
+Changing the design after seeing the result until it wins is how a measurement
+stops meaning anything; it is named as future work instead. The trade being
+made is explicit: **traceability costs coverage**, because a paraphrase
+replacing the only record of what was observed makes a lesson untraceable to its
+evidence even with provenance ids intact.
+
+**This increment is what I0's write-time decision was reserving room for.** A
+non-deterministic summariser is safe here only because consolidation happens at
+write time, so its output is stored data before any retriever reads it and never
+sits in a replayed read path. Five increments later, that decision paid.
+
+**Five planted faults, five detected**, each by its specific guard:
+
+| Fault planted | Test that caught it |
+|---|---|
+| summariser output merged as JSON into content | `test_a_hostile_model_cannot_fabricate_evidence` |
+| truncation removed | `test_an_oversized_summary_is_truncated` |
+| provider errors propagate | `test_a_provider_outage_still_writes_the_rule_based_entry` |
+| prompt record-bound removed | `test_the_prompt_is_bounded_by_record_count` |
+| summary overwrites verbatim feedback | `test_the_verbatim_feedback_survives_alongside_the_summary` |
+
+First increment in this program where no planted fault exposed a test gap —
+after three consecutive ones that did.
+
+**One fixture defect found and fixed**, not a code defect: the first draft wrote
+every record with an identical `created_at`, so "most recent occurrence" fell to
+the stable id tie-break rather than run order, and four tests asserted an
+arbitrary-but-stable choice. Distinct timestamps per run.
+
+**Verdict.** I5 done. The program's five increments are complete.
+
+**Remaining, and none of it is agent work:** whether to merge
+`wikiskill/knowledge-layer` to `main` is an owner decision. The layer is not
+wired into any shipped example graph — an adopter gets it by adding
+`make_consolidate_node` to their own graph and passing `knowledge=` to their
+retriever, which is documented in CLAUDE.md and nowhere else yet.

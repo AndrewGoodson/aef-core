@@ -38,11 +38,14 @@ The knob did not survive. See `test_the_boost_buys_no_coverage_at_any_setting`.
 from datetime import UTC, datetime
 
 from aef.kernel import END, Context, Edge, Graph, GraphExecutor, Node, Route, Services
+from aef.providers.base import CompletionRequest, CompletionResult, ModelProvider
 from aef.reasoning.nodes import make_consolidate_node, make_reflect_node
 from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
 from aef.services.context.base import RetrievedChunk
 from aef.services.context.memory_retriever import MemoryRetriever
+from aef.services.knowledge.adapters.llm_summariser import LLMSummariser
 from aef.services.knowledge.base import KnowledgeEntry
+from aef.services.knowledge.consolidate import RuleBasedConsolidator
 from aef.services.knowledge.in_memory import InMemoryKnowledgeStore
 from aef.services.memory.base import MemoryRecord
 from aef.services.memory.in_memory import InMemoryMemoryStore
@@ -234,3 +237,94 @@ def test_the_shipped_default_is_the_measured_one() -> None:
     """Guards the conclusion itself: raising this default again should require
     re-running the A/B, not just editing a number."""
     assert MemoryRetriever(memory=InMemoryMemoryStore(), agent_id="a1").knowledge_boost == 0.0
+
+
+# ---------------------------------------------------------------------------
+# I5 — the LLM summariser measured on the same ruler. It loses.
+# ---------------------------------------------------------------------------
+class _Summariser(ModelProvider):
+    """Deterministic stand-in producing a realistic one-sentence summary."""
+
+    name = "fake-summariser"
+
+    def complete(self, request: CompletionRequest) -> CompletionResult:
+        named = [lesson for lesson in LESSONS if lesson in request.messages[0].content]
+        node = named[0] if named else "node"
+        return CompletionResult(
+            content=(
+                f"The {node} step repeatedly timed out across runs while settling the invoice."
+            ),
+            model=request.model,
+            input_tokens=1,
+            output_tokens=1,
+        )
+
+
+def _coverage_with_summariser(r: int, budget: int, summarise: object) -> tuple[int, int]:
+    """Returns (coverage, mean entry size in chars) for one consolidator."""
+    memory, knowledge = InMemoryMemoryStore(), InMemoryKnowledgeStore()
+    services = Services(
+        memory=memory,
+        knowledge=knowledge,
+        critic=RuleBasedCritic(),
+        judge=RuleBasedJudge(rubric={"quality": 1.0}),
+        clock=lambda: T,
+    )
+    for lesson in LESSONS:
+        graph = Graph(
+            id="g",
+            version="1.0.0",
+            nodes={n.id: n for n in [_failing(lesson), make_reflect_node(route=END)]},
+            edges=[Edge(from_node=lesson, to_node="reflect")],
+            entry_node=lesson,
+        )
+        executor = GraphExecutor(graph.compile(), services)
+        for i in range(r):
+            executor.run(
+                AEFState(run_id=f"{lesson}-{i}", agent_id="a1", objective="settle the invoice")
+            )
+    RuleBasedConsolidator(summarise=summarise).consolidate(  # type: ignore[arg-type]
+        memory, knowledge, agent_id="a1"
+    )
+    chunks = MemoryRetriever(memory=memory, agent_id="a1", knowledge=knowledge).retrieve(
+        QUERY, token_budget=budget
+    )
+    entries = knowledge.query("failure", agent_id="a1", limit=99)
+    mean_size = sum(len(str(e.content)) for e in entries) // max(1, len(entries))
+    return len(_covered(chunks)), mean_size
+
+
+def test_the_llm_summariser_costs_coverage_at_tight_budgets() -> None:
+    """I5's result, and it is NEGATIVE on this ruler.
+
+    Measured (coverage out of 6, rule-based -> LLM-backed):
+
+        budget   R=2      R=5
+           200   3 -> 2   3 -> 2
+           400   6 -> 5   6 -> 4
+           800   6 -> 6   6 -> 6
+          2000   6 -> 6   6 -> 6
+
+    The cause is not subtle: the summary is ADDED to the verbatim feedback
+    rather than replacing it, so entries grow about 40% (227 -> 317 chars at
+    R=2), and larger entries mean fewer fit under a fixed budget.
+
+    Keeping both texts is deliberate — a model's paraphrase replacing the only
+    record of what was actually observed makes the lesson untraceable to its
+    evidence. So this is a real trade, not a bug: traceability costs coverage.
+
+    Substituting instead of adding might well reverse the sign. That is a
+    DIFFERENT experiment and is named as future work rather than tried here,
+    because tuning the design after seeing the result until it wins is how a
+    measurement stops meaning anything.
+    """
+    llm = LLMSummariser(provider=_Summariser(), model="m")
+
+    rule_cov, rule_size = _coverage_with_summariser(5, 400, None)
+    llm_cov, llm_size = _coverage_with_summariser(5, 400, llm)
+    assert llm_cov < rule_cov, "expected the LLM variant to cost coverage at a tight budget"
+    assert llm_size > rule_size, "the cost should be entry size, not something unexplained"
+
+    # And the cost disappears once the budget is not the binding constraint.
+    assert _coverage_with_summariser(5, 2000, None)[0] == 6
+    assert _coverage_with_summariser(5, 2000, llm)[0] == 6

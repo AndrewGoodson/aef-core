@@ -137,8 +137,19 @@ experience accumulates* — near-duplicate records about one recurring failure
 crowd out every other lesson, so coverage falls 6→1 as recurrence rises while
 the wiki holds at 6. **`knowledge_boost` defaults to 0.0**: swept at 0/0.5/1/3
 it changed no coverage number anywhere, so the benefit is consolidation, not
-ranking. It does not feed `aef/evolution/`, and a test AST-scans both
-directions to keep that true.
+ranking.
+
+An **LLM-backed summariser** (`adapters/llm_summariser.py`) is implemented and
+tested but **off by default**, and the reason is a measurement rather than
+caution: it costs coverage at tight budgets (6→4 at budget 400, R=5) because the
+summary is added to the verbatim feedback rather than replacing it, so entries
+grow ~40%. Keeping both texts is deliberate — a paraphrase replacing the only
+record of what was observed makes a lesson untraceable to its evidence — so this
+is a trade, not a bug. The model is never trusted with provenance: it may write
+one prose string, and every counted field is computed from records.
+
+None of this feeds `aef/evolution/`, and a test AST-scans both directions to
+keep that true.
 
 The knowledge graph, token optimizer and planner interfaces were **deleted**
 (ADR 0101), not deferred: a stub unimplemented across five phases is a

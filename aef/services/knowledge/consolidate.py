@@ -31,6 +31,12 @@ from aef.services.memory.base import MemoryRecord, MemoryStore
 # one entry and manufacture a lesson nobody learned.
 SignatureFn = Callable[[MemoryRecord], str | None]
 
+# Produces the human-readable lesson text for one group of records. Injected
+# rather than branched on, so the LLM-backed variant (I5) swaps ONLY the prose
+# and inherits the grouping, the two-run threshold, the per-run dedupe and the
+# agent keying — all of which I4 measured. One code path, one set of rules.
+SummariseFn = Callable[[str, list[MemoryRecord]], str | None]
+
 # Records read per kind before grouping. This BOUNDS THE ANSWER, not just the
 # work: the store returns most-recent-first, so a failure whose earlier
 # occurrences sit past this depth consolidates with a lower count than it has
@@ -93,6 +99,11 @@ class RuleBasedConsolidator:
     """
 
     signature_fn: SignatureFn = default_signature
+    # `None` keeps the entry's text as the most recent occurrence's feedback,
+    # verbatim. Anything else may only produce PROSE — see `_build_entry`,
+    # where every provenance field is computed from the records and none is
+    # taken from the summariser.
+    summarise: SummariseFn | None = None
     min_occurrences: int = DEFAULT_MIN_OCCURRENCES
     candidates_per_kind: int = DEFAULT_CANDIDATES_PER_KIND
     kinds: tuple[KnowledgeKind, ...] = ("failure", "success")
@@ -140,7 +151,9 @@ class RuleBasedConsolidator:
             if len(representatives) < self.min_occurrences:
                 continue
             written.append(
-                knowledge.upsert(_build_entry(signature, record_agent_id, representatives))
+                knowledge.upsert(
+                    _build_entry(signature, record_agent_id, representatives, self.summarise)
+                )
             )
 
         written.sort(key=lambda e: (_sort_ts(e.last_seen), e.signature), reverse=True)
@@ -175,6 +188,7 @@ def _build_entry(
     signature: str,
     agent_id: str | None,
     representatives: list[MemoryRecord],
+    summarise: SummariseFn | None = None,
 ) -> KnowledgeEntry:
     """`representatives` is already sorted oldest-first by `_rank`."""
     newest = representatives[-1]
@@ -189,6 +203,17 @@ def _build_entry(
         "objective": newest.content.get("objective"),
         "run_ids": [r.run_id for r in representatives],
     }
+
+    # The ONLY field a summariser may influence. Everything above and below is
+    # computed from the records: a summariser that could write `run_ids` or
+    # `source_record_ids` could fabricate evidence for its own lesson, and an
+    # entry's occurrence count is the sole measure of how well-established it
+    # is. A summariser returning None or empty leaves the verbatim feedback in
+    # place rather than blanking it.
+    if summarise is not None:
+        summary = summarise(signature, representatives)
+        if summary:
+            content["summary"] = summary
     failing_nodes = newest.content.get("failing_nodes")
     if isinstance(failing_nodes, (list, tuple)):
         content["failing_nodes"] = [n for n in failing_nodes if isinstance(n, str)]
