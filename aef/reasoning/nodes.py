@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from aef.kernel.contracts import END, Context, Node, Route, Services, SideEffect
 from aef.reasoning.rule_based_reflection import failure_signals
+from aef.services.knowledge.consolidate import RuleBasedConsolidator
 from aef.services.memory.base import MemoryKind, MemoryRecord
 from aef.state import AEFState, StateDelta
 
@@ -112,5 +113,57 @@ def make_reflect_node(
         # run (a graph may reflect more than once) while staying stable
         # across a retry of the same step, which is exactly the at-least-once
         # resume semantics the key exists for (docs/adr/0010).
+        idempotency_key_fn=lambda s: f"{s.run_id}:{node_id}:{s.checkpoint_seq}",
+    )
+
+
+def make_consolidate_node(
+    *,
+    node_id: str = "consolidate",
+    version: str = "0.1.0",
+    route: Route = END,
+    consolidator: RuleBasedConsolidator | None = None,
+) -> Node:
+    """A `Node` that folds this agent's repeated failure/success memory into
+    `Services.knowledge` (ADR 0110, WikiSkill's middle layer).
+
+    Its own node rather than a hook inside `make_reflect_node`, and the reason
+    is scope: reflection is WITHIN-run, consolidation reads ACROSS runs.
+    Folding the second into the first would give one node two write paths
+    under a single idempotency key, and would make the wiki impossible to omit
+    for a graph that does not want one.
+
+    Ordering note, since it is easy to get backwards: this reads what
+    reflection has already written, so it belongs AFTER a reflect node. Placed
+    before one, it simply consolidates without this run's record — no error,
+    which is precisely why it is worth stating here.
+    """
+    engine = consolidator if consolidator is not None else RuleBasedConsolidator()
+
+    def consolidate_fn(
+        state: AEFState, ctx: Context, services: Services
+    ) -> tuple[StateDelta, Route]:
+        engine.consolidate(
+            services.require_memory(),
+            services.require_knowledge(),
+            # This agent's own memory. `None` would mean "every agent", which
+            # is the widening default an adversarial round already found on
+            # `MemoryRetriever.agent_id`.
+            agent_id=state.agent_id,
+        )
+        # Deliberately empty. The node's product is in the knowledge store, and
+        # copying a summary of it onto state would create a second, staler
+        # account of what was consolidated (ADR 0091).
+        return StateDelta(), route
+
+    return Node(
+        id=node_id,
+        version=version,
+        fn=consolidate_fn,
+        # Reads and writes two stores. Declaring True would make `ReplayEngine`
+        # re-execute it, re-running consolidation during replay — harmless only
+        # because the store dedupes, which is not a property to lean on.
+        deterministic=False,
+        side_effects=SideEffect.IO,
         idempotency_key_fn=lambda s: f"{s.run_id}:{node_id}:{s.checkpoint_seq}",
     )

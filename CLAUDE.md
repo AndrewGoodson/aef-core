@@ -122,14 +122,16 @@ remain typed interfaces with `NotImplementedError` bodies (Phase 3/5). The
 evolution engine is a typed interface, disabled (Phase 4).
 
 `aef/services/knowledge/` (`KnowledgeEntry`/`KnowledgeStore` +
-`InMemoryKnowledgeStore` + `RuleBasedConsolidator`) is real and tested — the
-persistent-knowledge layer of ADR 0110. The consolidator groups repeated
+`InMemoryKnowledgeStore` + `RuleBasedConsolidator` + `make_consolidate_node`) is real, wired and tested —
+the persistent-knowledge layer of ADR 0110. The consolidator groups repeated
 `MemoryRecord`s into entries, requiring a signature to recur in **two distinct
-runs** before it becomes knowledge (one occurrence is an episode). **Nothing
-calls it from a graph yet** — the node that runs it after reflection, and the
-retriever change that lets entries compete for `context_budget_tokens`, are the
-next increment. It does not feed `aef/evolution/`, and a test AST-scans both
-directions to keep that true.
+runs** before it becomes knowledge (one occurrence is an episode).
+`make_consolidate_node` runs it after reflection, `Services.knowledge` is
+defaulted by `agent_services`, and `MemoryRetriever` admits entries alongside
+raw records under one `context_budget_tokens`. **The `knowledge_boost` default
+is unmeasured** — an A/B against raw-records-only retrieval is the next
+increment, and it may delete this layer. It does not feed `aef/evolution/`, and
+a test AST-scans both directions to keep that true.
 
 The knowledge graph, token optimizer and planner interfaces were **deleted**
 (ADR 0101), not deferred: a stub unimplemented across five phases is a

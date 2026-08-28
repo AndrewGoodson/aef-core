@@ -28,6 +28,7 @@ import re
 from dataclasses import dataclass
 
 from aef.services.context.base import RetrievedChunk, Retriever
+from aef.services.knowledge.base import KnowledgeKind, KnowledgeStore
 from aef.services.memory.base import MemoryKind, MemoryStore
 
 # The kinds a retriever draws on by default: what went wrong before, and what
@@ -35,6 +36,10 @@ from aef.services.memory.base import MemoryKind, MemoryStore
 # node already has) and not `semantic` (temporal validity is a KG concern, and
 # ADR 0101 records why no knowledge graph is wired).
 DEFAULT_KINDS: tuple[MemoryKind, ...] = ("failure", "success")
+
+# The knowledge kinds consolidated entries are drawn from — the same two, since
+# `KnowledgeKind` is deliberately a subset of `MemoryKind` (ADR 0110).
+DEFAULT_KNOWLEDGE_KINDS: tuple[KnowledgeKind, ...] = ("failure", "success")
 
 # Characters per token. A crude estimate, and crude on purpose: a real
 # tokenizer is provider-specific, and importing one here would put a vendor
@@ -108,6 +113,28 @@ class MemoryRetriever(Retriever):
     # this whole milestone exists to remove (ADR 0101).
     max_token_budget: int | None = None
 
+    # Consolidated knowledge (ADR 0110). `None` means this retriever behaves
+    # exactly as it did before the layer existed — asserted by a test, because
+    # "no regression when the feature is off" is a claim, not an obviousness.
+    knowledge: KnowledgeStore | None = None
+
+    knowledge_kinds: tuple[KnowledgeKind, ...] = DEFAULT_KNOWLEDGE_KINDS
+
+    # Entries below this many occurrences are not retrieved at all. Separate
+    # from the consolidator's own threshold on purpose: that one decides what
+    # becomes knowledge, this one decides what is confident enough to spend
+    # budget on, and an owner may reasonably want the second stricter.
+    knowledge_min_occurrences: int = 2
+
+    # THE THUMB ON THE SCALE, and named as one. An entry's lexical score is
+    # multiplied by `1 + knowledge_boost * entry.confidence`, so at 0.0 an
+    # entry competes on exactly the same terms as a raw record.
+    #
+    # There is no principled value for this. It is a knob whose default I4's
+    # A/B is meant to justify or remove — and the honest kill, if consolidated
+    # entries do not earn their budget, is 0.0 followed by deleting the layer.
+    knowledge_boost: float = 1.0
+
     def __post_init__(self) -> None:
         if self.candidates_per_kind <= 0:
             raise ValueError(
@@ -115,6 +142,17 @@ class MemoryRetriever(Retriever):
             )
         if self.max_token_budget is not None and self.max_token_budget <= 0:
             raise ValueError(f"max_token_budget must be positive; got {self.max_token_budget}")
+        if self.knowledge_boost < 0:
+            raise ValueError(
+                f"knowledge_boost must be non-negative; got {self.knowledge_boost}. A "
+                f"negative boost would rank the best-evidenced entries LAST, which is "
+                f"the opposite of what the field's name promises."
+            )
+        if self.knowledge_min_occurrences < 1:
+            raise ValueError(
+                f"knowledge_min_occurrences must be at least 1; got "
+                f"{self.knowledge_min_occurrences}"
+            )
 
     def retrieve(self, query: str, *, token_budget: int) -> list[RetrievedChunk]:
         if token_budget <= 0:
@@ -150,6 +188,45 @@ class MemoryRetriever(Retriever):
                             relevance_score=score,
                             token_estimate=estimate_tokens(text),
                             metadata={"kind": kind, "record_id": record.id},
+                        ),
+                    )
+                )
+
+        for kind in self.knowledge_kinds if self.knowledge is not None else ():
+            assert self.knowledge is not None
+            for entry in self.knowledge.query(
+                kind,
+                agent_id=self.agent_id,
+                min_occurrences=self.knowledge_min_occurrences,
+                limit=self.candidates_per_kind,
+            ):
+                text = _render(entry.content)
+                base = self._score(query_terms, text)
+                if base <= 0.0:
+                    continue
+                score = base * (1.0 + self.knowledge_boost * entry.confidence)
+                scored.append(
+                    (
+                        score,
+                        f"knowledge:{entry.signature}",
+                        RetrievedChunk(
+                            content=text,
+                            source=f"knowledge:{kind}:{entry.signature}",
+                            relevance_score=score,
+                            token_estimate=estimate_tokens(text),
+                            metadata={
+                                "kind": kind,
+                                "signature": entry.signature,
+                                # Provenance travels WITH the chunk. A reader
+                                # given a consolidated lesson can otherwise not
+                                # tell how well-evidenced it is, or which runs
+                                # produced it — and a lesson that cannot be
+                                # traced back to executions is the thing ADR
+                                # 0101 deleted GraphStore for tolerating.
+                                "occurrence_count": entry.occurrence_count,
+                                "confidence": entry.confidence,
+                                "source_record_ids": list(entry.source_record_ids),
+                            },
                         ),
                     )
                 )

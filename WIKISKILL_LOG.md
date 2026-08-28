@@ -178,3 +178,76 @@ honest thing: nothing calls the consolidator from a graph yet.
 **Next:** I3 — `make_consolidate_node` (contract-compliant, `SideEffect.IO`,
 idempotency key from run id) plus the `MemoryRetriever` change that lets entries
 compete with raw records under `context_budget_tokens`.
+
+---
+
+## I3 — the wiring (2026-08-28)
+
+**Expectation.** A consolidate node plus a retriever that admits entries.
+Expected the node to be the work. It was not — the wiring was, and two seams
+found defects that the node itself never would have.
+
+**Measurement.**
+
+```
+pytest -q                                 1538 passed  (was 1514, +24)
+mypy aef                                  Success: 112 source files
+ruff check .                              All checks passed
+ruff format --check aef tests examples    204 files already formatted
+```
+
+**An existing guard caught a real bug I introduced.** Adding
+`Services.knowledge` broke `test_suppression_nulls_no_service_the_incumbent_had`
+in the promotion-safety suite: `_suppressed_services` builds the shadow
+candidate's services field-by-field, so the new slot arrived as `None` and a
+shadow would have **diverged for a harness reason and reported it as a
+candidate defect**. Fixed by passing it through exactly as `memory` is. This is
+the ADR 0073/0075/0079/0091 drift shape catching its fifth instance — and this
+time the guard fired before the defect shipped rather than after.
+
+Recorded consequence rather than hidden: a shadow's consolidate node writes
+into the LIVE knowledge store. That is not a new exposure — every entry derives
+from records the shadow's reflect node already writes to live memory — but it
+is the kind of thing that should be written down when it is chosen, not
+discovered later.
+
+**Seven planted faults. Six detected. The seventh was mis-aimed, and the
+re-aimed version exposed a genuine test gap.**
+
+| Fault planted | Outcome |
+|---|---|
+| boost ignored | caught |
+| knowledge bypasses the shared budget | caught |
+| retriever reads every agent's knowledge | caught |
+| `min_occurrences` filter dropped | caught |
+| `agent_services` returns a SHARED store | caught |
+| `agent_services` stops supplying knowledge | caught by 2 |
+| node consolidates for every agent | **mis-aimed, then NOT CAUGHT** |
+
+The seventh is the finding. My first patch replaced the first occurrence of
+`agent_id=state.agent_id` in `nodes.py` — which belongs to `make_reflect_node`,
+not the consolidate node. It failed three tests, so it *looked* detected. It
+was not: I had broken a different node. Re-aimed at the correct line, **no test
+failed at all** — because passing `None` there is behaviourally identical when
+only one agent exists.
+
+The real difference is containment: with `None`, agent a1 merely RUNNING causes
+entries to be written about agent a2, out of a2's records, at a moment a2 did
+nothing. Knowledge would appear for an agent that never executed. Test added
+(`test_a_run_consolidates_only_its_own_agent`), fault re-planted, now caught.
+
+This is the second increment running where the planted fault found a hole in
+the tests rather than the code, and the second where a mutation aimed at the
+wrong target first read as a false positive. **Both are arguments for checking
+what the patch actually changed, not just that the count moved.**
+
+**Verdict.** I3 done. The layer is now end-to-end: a real `GraphExecutor` run
+over reflect -> consolidate produces entries a real `MemoryRetriever` admits
+under `context_budget_tokens`, with provenance attached to each chunk.
+
+`knowledge_boost` defaults to 1.0 and **that number is unjustified** — there is
+no principled basis for it, which CLAUDE.md now says outright.
+
+**Next:** I4 — the A/B. Same corpus retrieved twice, raw-records-only vs
+wiki-enabled, reading the retrievals rather than only the scores. This is the
+increment that can delete the layer.

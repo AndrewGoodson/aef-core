@@ -30,6 +30,8 @@ from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
 from aef.security.tool import PolicyConfig, PolicyEngine
 from aef.services.context.base import Retriever
 from aef.services.eval.rule_based import RuleBasedEvaluator
+from aef.services.knowledge.base import KnowledgeStore
+from aef.services.knowledge.in_memory import InMemoryKnowledgeStore
 from aef.services.memory.base import MemoryStore
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.state import AEFState
@@ -79,6 +81,7 @@ def agent_services(
     clock: Callable[[], datetime] | None = None,
     audit_log: object | None = None,
     retriever: Retriever | None = None,
+    knowledge: KnowledgeStore | None = None,
 ) -> Services:
     """Everything a Zone A node may `require_*`, with working defaults.
 
@@ -99,6 +102,15 @@ def agent_services(
         # ranking it never chose (ADR 0101).
         retriever=retriever,
         memory=memory if memory is not None else InMemoryMemoryStore(),
+        # In-memory by default, NOT absent — and the reasoning is memory's, not
+        # the retriever's. `retriever` defaults to None because ranking is a
+        # per-agent choice an unconfigured agent never made. A knowledge STORE
+        # is not a choice, it is a place to put things: a graph with a
+        # consolidate node that worked under `aef run` and raised
+        # ServiceNotConfiguredError in the gate is the ADR 0073/0075/0079/0091
+        # shape for a fifth time. Throwaway for the same reason memory is — a
+        # gate re-execution must not write into the adopter's knowledge.
+        knowledge=knowledge if knowledge is not None else InMemoryKnowledgeStore(),
         tracer=tracer if tracer is not None else InMemoryTracer(),
         # In-memory by default, not absent. A node calling
         # `require_durability()` worked under `aef run` and raised in the
