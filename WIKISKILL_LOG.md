@@ -110,3 +110,71 @@ side, and a one-way scan would pass while the property was already broken.
 **Next:** I2 — the rule-based consolidator. Reads `MemoryRecord`s, groups by
 signature, emits entries only at >=2 occurrences. Planted fault to verify: a
 consolidator that emits from a single record must fail its test.
+
+---
+
+## I2 — the rule-based consolidator (2026-08-28)
+
+**Expectation.** Group `MemoryRecord`s by signature, emit `KnowledgeEntry` only
+at >=2 occurrences. Expected the threshold to be the whole story. It was not —
+the interesting question turned out to be *two occurrences of what?*
+
+**Measurement.**
+
+```
+pytest -q                                 1514 passed  (was 1488, +26)
+mypy aef                                  Success: 112 source files (was 111)
+ruff check .                              All checks passed
+ruff format --check aef tests examples    202 files already formatted
+```
+
+**The semantic decision, forced by reading the code rather than assumed.**
+`AEFState.run_id` is required and validated, and `make_reflect_node`'s
+idempotency key is keyed on `checkpoint_seq` *because a graph may reflect more
+than once per run*. So "two records" and "two runs" are genuinely different
+counts, and only one of them means recurrence. Three reflections inside one bad
+run is one episode. The consolidator therefore takes **at most one
+representative record per run**, which keeps `occurrence_count` meaning exactly
+one thing and closes the intra-run inflation path.
+
+Records with no `run_id` are dropped for the same reason: they cannot evidence
+recurrence *across* runs, and inventing a run for them is the guess
+`_failing_nodes` already refuses to make about unattributed errors.
+
+**Six planted faults. Five detected on the first pass — and the sixth was a
+real gap in the tests, not in the code.**
+
+| Fault planted | Outcome |
+|---|---|
+| threshold ignored (emit from one occurrence) | caught by 5 tests |
+| count records instead of distinct runs | caught |
+| **unsignable records bucketed into a catch-all** | **NOT CAUGHT — gap** |
+| group key drops `agent_id` | caught by 2 |
+| feedback concatenated across runs | caught |
+| `last_seen` uses min instead of max | caught by 2 |
+
+The miss is the finding. `default_signature` returning `None` was asserted at
+the unit level, but **nothing asserted what the consolidator does with it** —
+so bucketing every unattributable failure under a shared `"unknown"` key passed
+the entire suite. That fault fabricates knowledge: two unrelated failures, each
+seen once, reach the threshold together and emerge as one entry claiming both
+as evidence. Two tests added (`test_unsignable_records_are_dropped_not_pooled`,
+`test_signable_and_unsignable_records_do_not_contaminate_each_other`); the
+fault was re-planted and both fire.
+
+This is the reproduce-first rule earning its place: the code was already
+correct, and only a planted fault could show the *test* was not.
+
+**One process note.** A green-bar run showed 2 failures that the source could
+not explain — `git diff` on the file showed nothing, because the file was still
+untracked and `git diff` never reports untracked files. `diff` against the
+backup proved the source clean; clearing `__pycache__` cleared the failures.
+Stale bytecode from a faulted revision. The lesson is narrow and worth keeping:
+**`git diff` is not a revert check for a file git has never seen.**
+
+**Verdict.** I2 done. The store now has a producer, and CLAUDE.md says the next
+honest thing: nothing calls the consolidator from a graph yet.
+
+**Next:** I3 — `make_consolidate_node` (contract-compliant, `SideEffect.IO`,
+idempotency key from run id) plus the `MemoryRetriever` change that lets entries
+compete with raw records under `context_budget_tokens`.
