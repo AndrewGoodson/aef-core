@@ -1,0 +1,156 @@
+# ADR 0110: Consolidation is a write-time service, and it does not touch evolution
+
+## Status
+Accepted. Increment I0 of the WikiSkill program (`WIKISKILL_LOOP.md`).
+**Decides a design. Ships no code.**
+
+## Context
+
+WikiSkill (arXiv:2608.27454, Tang et al.) separates three layers: raw
+execution experience, a persistent consolidated knowledge base, and executable
+skills. Its ablation is the part that matters here — **the persistent wiki
+carried the result, not the skill updater.** That is what makes it coherent to
+build the middle layer alone, which is the only layer this repo can honestly
+build today.
+
+Mapping the three layers onto what already exists:
+
+| WikiSkill layer | aef-core today | Verdict |
+|---|---|---|
+| Raw experience | `make_reflect_node` writes `MemoryRecord(kind="failure"\|"success")` per run (ADR 0046) | **exists — do not rebuild** |
+| Consolidated knowledge | nothing | **the gap** |
+| Executable skills | `aef/evolution/` | **hard-disabled, constraint #7 — out of scope** |
+
+`MemoryRetriever` (ADR 0101) ranks raw records by lexical overlap and admits
+them under `context_budget_tokens`. It is the consumer a wiki would serve.
+
+## Decision
+
+### 1. The wiki is a service under `aef/services/knowledge/`
+
+Same base / in-memory / `adapters/` split as `aef/services/memory/`, for the
+same reason: a vendor-backed implementation must be expressible without moving
+the interface, and constraint #3 puts vendor imports only under `providers/`
+or `services/*/adapters/`.
+
+A `KnowledgeEntry` is keyed by a **signature** — a deterministic value derived
+from record content by a named pure function, not by a hash of the whole
+record (two runs of the same failure differ in `run_id`, timestamps, and
+excerpt text, so a whole-record hash consolidates nothing). The default
+signature:
+
+- failures: `(kind, tuple(failing_nodes))`
+- successes: `(kind, objective)`
+
+`failing_nodes` is the right key because ADR 0096 already established it as
+the field a structural proposer cannot begin without — *"add a fallback to the
+flaky node" requires knowing which node was flaky.* It is also the field
+`make_reflect_node` was amended to record precisely because a reader could not
+otherwise tell which node failed.
+
+The signature function is **injectable**, and this is not a per-agent branch
+smuggled in: per the prime directive, Knowledge is one of the five things
+allowed to differ per agent. What must stay shared is the consolidation
+*mechanism*, and it does.
+
+### 2. Consolidation is rule-based first, and it happens at WRITE time
+
+Rule-based first is the pattern reflection itself shipped under (ADR 0046) and
+the reason it was testable against hand-built adversarial state rather than
+only against a live model.
+
+**Write time, not retrieval time, and this is load-bearing rather than a
+performance preference.** `ReplayEngine` re-executes nodes declared
+`deterministic=True` and asserts their output matches. A retriever a node
+calls during a replayed run must therefore produce the same answer twice —
+which is exactly why `MemoryRetriever` is deterministic, unranked by any
+model, and sorts to a stable total order. If consolidation ran during
+retrieval, an LLM consolidator could never be admitted behind that interface
+at all. Because an entry is *stored data* by the time anything retrieves it,
+a non-deterministic consolidator stays compatible with replay.
+
+**Occurrence threshold: an entry requires ≥2 distinct records.** A signal seen
+once is an episode; knowledge is what recurred. This is the planted-fault
+check for I2 — a consolidator that emits an entry from a single record must
+fail its test, per reproduce-first's rule that a detector is verified against
+a planted fault before "nothing found" is trusted.
+
+No clock reads. Time arrives as `ctx.now`, as it already does in
+`make_reflect_node`.
+
+### 3. Consolidation is its own node, not a hook on the reflect node
+
+The loop prompt left this open. Decided: a separate `make_consolidate_node`.
+
+- Scope differs. Reflection is **within-run**; consolidation reads **across
+  runs**. Folding the second into the first gives one node two write paths
+  under one idempotency key.
+- A graph that does not want a wiki omits the node. A hook is not omittable.
+- It stays independently testable against a store hand-loaded with records
+  from runs that never happened.
+
+Contract: `deterministic=False`, `side_effects=SideEffect.IO`,
+`idempotency_key_fn=lambda s: f"{s.run_id}:{node_id}:{s.checkpoint_seq}"` —
+the same at-least-once resume semantics ADR 0010 defines.
+
+### 4. Entries and records compete under one budget, scored by the same function
+
+Not "entries first". A stale consolidated entry outranking a fresh, precisely
+relevant record is the obvious failure mode, and a priority rule would hard-code
+it.
+
+Entries are scored by the **same** lexical function as records, then multiplied
+by a `confidence` derived from occurrence count. **This is a thumb on the
+scale and is written down as one.** The multiplier is configurable, and I4's
+A/B is what decides whether it earns its place; the honest kill is to set it to
+1.0, and the honest kill of the whole layer is to delete it.
+
+Ties break toward the entry, then by id — the total order must stay stable or
+`ReplayEngine` reports a determinism violation that is really a sort-order
+artefact.
+
+## What this explicitly does NOT do
+
+**It does not unblock evolution, and no commit in this program may claim it
+does.** `aef/evolution/` stays hard-disabled. `docs/trust/promotion-trust-case.md`
+recommends against Tier-1 auto-merge on three findings: criteria 1 and 6 have
+never run against the live traffic and real tenants their text names; a shadow
+node doing direct file I/O is not contained by the tool policy; and every
+adversarial round in the program found a defect, six for six. **A knowledge
+layer moves none of those three.** Claiming otherwise would be the exact error
+`memory_retriever.py`'s own docstring names — *a true statement about one
+property offered as an answer about a different one.*
+
+Enforced structurally: nothing under `aef/services/knowledge/` imports from
+`aef/evolution/`, and nothing in `aef/evolution/` imports the knowledge
+service.
+
+**It does not auto-update skills, graphs, or prompts.** WikiSkill's third layer
+is not built here. The shippable value is better retrieval under a budget, full
+stop.
+
+**It does not add a stub for the LLM consolidator.** Per ADR 0101 — *a stub
+unimplemented across five phases is a promise, and an unkept promise in a typed
+signature is worse than an honest absence.* The LLM-backed consolidator is I5,
+gated on I4 surviving; if this loop does not reach it, it is recorded here as
+future work by name and nothing else.
+
+## The measurement that can kill this
+
+I4 is an A/B through the existing eval harness: one corpus retrieved twice,
+raw-records-only versus wiki-enabled, reading the retrievals and not only the
+scores. **If consolidated entries do not measurably improve what fits inside
+`context_budget_tokens`, the layer is deleted and this ADR is superseded with
+the number that killed it.** A consolidation layer that loses to the top-N raw
+records is not worth its surface area, and that outcome is a result rather than
+a failure.
+
+## Consequences
+
+Five increments follow: store (I1), rule-based consolidator (I2), node +
+retriever wiring (I3), A/B eval (I4), LLM adapter only if I4 survives (I5).
+
+Every increment that adds a capability updates CLAUDE.md's "what's real vs
+stubbed" paragraph in the same commit — that paragraph is audited against the
+code, and a knowledge service absent from it is the same defect class this ADR
+exists to avoid.
