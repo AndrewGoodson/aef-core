@@ -121,6 +121,36 @@ LLM-backed reflection, offline optimization, and multi-agent coordination
 remain typed interfaces with `NotImplementedError` bodies (Phase 3/5). The
 evolution engine is a typed interface, disabled (Phase 4).
 
+`aef/services/knowledge/` (`KnowledgeEntry`/`KnowledgeStore` +
+`InMemoryKnowledgeStore` + `RuleBasedConsolidator` + `make_consolidate_node`) is real, wired and tested —
+the persistent-knowledge layer of ADR 0110. The consolidator groups repeated
+`MemoryRecord`s into entries, requiring a signature to recur in **two distinct
+runs** before it becomes knowledge (one occurrence is an episode).
+`make_consolidate_node` runs it after reflection, `Services.knowledge` is
+defaulted by `agent_services`, and `MemoryRetriever` admits entries alongside
+raw records under one `context_budget_tokens`.
+
+**Measured, not asserted** (ADR 0110's I4 A/B, corpus built from real
+`GraphExecutor` runs): consolidation buys distinct-lesson coverage under a
+tight budget, and the reason is that raw-records-only retrieval *degrades as
+experience accumulates* — near-duplicate records about one recurring failure
+crowd out every other lesson, so coverage falls 6→1 as recurrence rises while
+the wiki holds at 6. **`knowledge_boost` defaults to 0.0**: swept at 0/0.5/1/3
+it changed no coverage number anywhere, so the benefit is consolidation, not
+ranking.
+
+An **LLM-backed summariser** (`adapters/llm_summariser.py`) is implemented and
+tested but **off by default**, and the reason is a measurement rather than
+caution: it costs coverage at tight budgets (6→4 at budget 400, R=5) because the
+summary is added to the verbatim feedback rather than replacing it, so entries
+grow ~40%. Keeping both texts is deliberate — a paraphrase replacing the only
+record of what was observed makes a lesson untraceable to its evidence — so this
+is a trade, not a bug. The model is never trusted with provenance: it may write
+one prose string, and every counted field is computed from records.
+
+None of this feeds `aef/evolution/`, and a test AST-scans both directions to
+keep that true.
+
 The knowledge graph, token optimizer and planner interfaces were **deleted**
 (ADR 0101), not deferred: a stub unimplemented across five phases is a
 promise, and an unkept promise in a typed signature is worse than an honest

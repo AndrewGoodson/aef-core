@@ -193,6 +193,17 @@ def _suppressed_services(base: Services) -> Services:
     return Services(
         model_provider=base.model_provider,
         memory=base.memory,
+        # Passed through, exactly like `memory`, and for the divergence reason
+        # rather than a permissive one: a candidate reading an EMPTY wiki while
+        # the incumbent reads a full one would diverge for a harness reason and
+        # report it as a candidate defect — which is what this function exists
+        # to prevent. The consequence is stated rather than hidden: a shadow's
+        # consolidate node writes into the live knowledge store. That is not a
+        # NEW exposure, it is `memory`'s existing one one layer up, since every
+        # entry is derived from records the shadow's reflect node already wrote
+        # there. Suppression denies TOOL CALLS; it never claimed to contain
+        # direct store writes (ADR 0105).
+        knowledge=base.knowledge,
         retriever=base.retriever,
         evaluator=base.evaluator,
         critic=base.critic,

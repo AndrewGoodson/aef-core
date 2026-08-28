@@ -25,6 +25,7 @@ from aef.reasoning.reflection import Critic, Judge
 from aef.security.tool import PolicyEngine, Tool
 from aef.services.context.base import Retriever
 from aef.services.eval.base import Evaluator
+from aef.services.knowledge.base import KnowledgeStore
 from aef.services.memory.base import MemoryStore
 from aef.services.optimizers.base import Optimizer
 from aef.state import AEFState, StateDelta
@@ -76,6 +77,12 @@ class Services:
     # config already refuses `knowledge_graph` outright (ADR 0100).
     retriever: Retriever | None = None
     evaluator: Evaluator | None = None
+    # Consolidated knowledge (ADR 0110). A slot rather than a global for the
+    # same reason `critic`/`judge` needed one: constraint #2 fixes the node
+    # signature, so a node cannot reach a store that is not on `Services` at
+    # all. Unlike the `graph_store` slot deleted above, this one is filled —
+    # `make_consolidate_node` requires it, and `agent_services` defaults it.
+    knowledge: KnowledgeStore | None = None
     # Reflection backends. Constraint #2 (fixed node signature, DI-only, no
     # globals) means a Critic/Judge cannot be reached from a node at all
     # without a slot here — these two were the only pluggable backends
@@ -107,6 +114,11 @@ class Services:
         if self.memory is None:
             raise ServiceNotConfiguredError("memory")
         return self.memory
+
+    def require_knowledge(self) -> KnowledgeStore:
+        if self.knowledge is None:
+            raise ServiceNotConfiguredError("knowledge")
+        return self.knowledge
 
     def require_evaluator(self) -> Evaluator:
         if self.evaluator is None:
