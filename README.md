@@ -4,10 +4,10 @@
 
 ### Agent Engineering Foundation — a repo-agnostic Agent Operating System scaffold
 
-*Drop it into any repo and your agents inherit planning, graph execution, durable memory, evaluation, security, and observability — without rebuilding any of it per agent.*
+*Drop it into any repo and your agents inherit graph execution, durable memory, consolidated knowledge, budgeted context retrieval, evaluation, security, and observability — without rebuilding any of it per agent.*
 
 ![python](https://img.shields.io/badge/python-3.11%2B-3776AB)
-![tests](https://img.shields.io/badge/tests-321%20passing-2ea44f)
+![tests](https://img.shields.io/badge/tests-1558%20passing-2ea44f)
 ![mypy](https://img.shields.io/badge/mypy-strict-2ea44f)
 ![ruff](https://img.shields.io/badge/ruff-clean-2ea44f)
 ![license](https://img.shields.io/badge/license-MIT-blue)

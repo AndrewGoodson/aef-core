@@ -31,10 +31,18 @@ HARD-STOP gates are identical regardless of harness.
 
 ## What aef-core is
 A repo-agnostic Agent Operating System scaffold: it is the thing dropped into
-any repo so agents there inherit planning, graph execution, memory,
-evaluation, security, observability, and durability without rebuilding any of
-it per agent. **Only five things differ per agent:** Knowledge, Policies,
-Tools, Objectives, Evaluation Metrics.
+any repo so agents there inherit graph execution, memory, consolidated
+knowledge, context retrieval under a token budget, evaluation, security,
+observability, and durability without rebuilding any of it per agent.
+**Only five things differ per agent:** Knowledge, Policies, Tools, Objectives,
+Evaluation Metrics.
+
+**It does not give you planning.** `Planner`/`PlanValidator` were deleted, not
+deferred (ADR 0101), along with the knowledge-graph and token-optimizer
+interfaces. An earlier version of the paragraph above listed planning as
+something you inherit; it was never true. `docs/roadmap.md` is the
+authoritative real-vs-stubbed answer — read it rather than this summary
+whenever the two could disagree.
 
 Two always-on invariants:
 - **Two-plane determinism.** The kernel (control plane) is pure bookkeeping;
@@ -110,6 +118,11 @@ first — `docs/design/phase3-reflection-critic-judge-brainstorm.md`). It does
 - `aef/kernel/` — graph engine, Node/Edge, Services, checkpoint/replay
 - `aef/state/` — the shared AEFState schema + migrations
 - `aef/security/tool.py` — the policy engine every tool call passes through
+- `aef/services/knowledge/` — consolidated knowledge (ADR 0110): repeated
+  failure/success memory folded into entries a retriever can spend budget on.
+  Opt-in — add `make_consolidate_node` to your graph and pass `knowledge=` to
+  your `MemoryRetriever`. **Not reachable from `aef.yaml` yet** (see
+  `MERGE_READY_LOOP.md` A1)
 - `examples/hello_agent/` — a real, runnable end-to-end agent
 - `docs/autonomy/self-improving-loop.md` — the full autonomy protocol
 - `docs/autonomy/new-repo-bootstrap-loop.md` — copy-paste `/loop` prompt to bootstrap a new adopting repo

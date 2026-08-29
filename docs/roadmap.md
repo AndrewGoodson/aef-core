@@ -78,7 +78,40 @@ either an unread `Services` slot or a test asserting they still raise.
   thing in this repo that enforces `AEFState.context_budget_tokens`, which
   had shipped since Phase 0 with nothing reading it. Ranking is lexical
   (deterministic, so replay holds); retrieve/rank/prune is real, and
-  compress/assemble is deliberately absent — see below.
+  compress/assemble is deliberately absent — see below. It also admits
+  consolidated knowledge entries alongside raw records under the same single
+  budget — see `KnowledgeStore`.
+- `KnowledgeStore` (`aef/services/knowledge/`) — **REAL and tested**, added
+  after ADR 0101's triage. The persistent consolidated layer of ADR 0110,
+  which is WikiSkill's middle layer (arXiv:2608.27454): raw experience already
+  existed as failure/success `MemoryRecord`s, and this is what turns repeats
+  of it into knowledge. `RuleBasedConsolidator` groups records by a derived
+  signature and requires a signature to recur in **two distinct runs** — one
+  occurrence is an episode, and a graph may reflect twice in one run, so runs
+  are counted rather than records. `make_consolidate_node` runs it after
+  reflection; `Services.knowledge` is defaulted by `agent_services`.
+
+  **Kept on a measurement, not an argument.** Un-consolidated retrieval
+  *degrades* as experience accumulates — distinct-lesson coverage falls 6→1 at
+  a fixed budget as recurrence rises, because near-duplicate records about one
+  failure crowd out every other lesson. Consolidation holds it at 6. Both
+  optional knobs are off by default for measured reasons: `knowledge_boost` is
+  `0.0` (swept at 0/0.5/1/3, it changed no coverage number anywhere, so the
+  benefit is consolidation and not ranking), and the LLM-backed summariser
+  (`adapters/llm_summariser.py`, implemented and tested — **not a stub**)
+  costs coverage at tight budgets because its summary is added to the verbatim
+  feedback rather than replacing it, which trades coverage for traceability.
+
+  **Not reachable from an `aef.yaml`.** `build_retriever` has no `knowledge=`
+  parameter and `ContextConfig` has no field for one, so the layer is wired
+  only by hand-constructing `Services` in Python. This is the same shape as
+  the defect that deleted `GraphStore` below, is known rather than discovered,
+  and is item A1 in `MERGE_READY_LOOP.md`.
+
+  It does not feed `aef/evolution/` and cannot be made to: an AST scan
+  enforces the separation in both directions. Consolidated knowledge is not
+  evidence for promotion — the trust case's three findings are about live
+  traffic, real tenants and shadow containment, none of which a wiki moves.
 - `GraphStore` — **DELETED** (ADR 0101). A knowledge graph needs a query
   interface, a budgetable result shape, and a provenance story for retrieved
   facts; the node signature carries none of them, and the config refuses a

@@ -1,12 +1,27 @@
 # AEF scaffold contract
 
-This is `aef-core`: a repo-agnostic Agent Operating System scaffold. It is
-**not** another agent framework — it's the thing that gets dropped into any
-existing repo (via `aef adopt`, see below) so agents there inherit planning,
-graph execution, memory, evaluation, reflection, optimization, knowledge
-graph access, observability, security, telemetry, token optimization,
-context engineering, and continuous learning, without rebuilding any of it
-per agent.
+This is `aef-core`: a Python runtime for agent graphs, plus a scaffold
+generator that drops it into an existing repo (`aef adopt`).
+
+**What an adopting repo actually gets**, and this list is audited against the
+code rather than aspirational: a deterministic graph kernel, shared `AEFState`,
+checkpoint/replay durability, a deny-by-default policy engine with HITL gates
+and an audit trail, memory, a memory-backed context retriever, consolidated
+knowledge (ADR 0110), OTel tracing, an eval harness, rule-based reflection, and
+the self-rewiring loop harness.
+
+**What it does NOT do.** This paragraph replaces one that claimed agents
+inherit "planning, [...] optimization, knowledge graph access, [...] token
+optimization, [...] and continuous learning". Three of those were **deleted**,
+not deferred (ADR 0101): `aef.reasoning.planner`, `aef.services.graph`, and
+`aef/services/tokens/`. LLM-backed reflection and offline optimization are
+typed interfaces raising `NotImplementedError`. Evolution is implemented and
+**hard-disabled**. `aef adopt` does not migrate your agents — it writes docs, a
+config template and a stub, and reads none of your existing code.
+
+The correction lived in `CLAUDE.md` while this file kept the original wording,
+so the two drifted — which is the failure ADR 0091 records. `docs/roadmap.md`
+is the authoritative real-vs-stubbed answer; prefer it over any summary here.
 
 New here? Read `AGENT_INTEGRATION.md` (canonical ingest-and-start guide) and
 `docs/autonomy/self-improving-loop.md` (the autonomous-loop safety contract)
