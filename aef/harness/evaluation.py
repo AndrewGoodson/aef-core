@@ -23,8 +23,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from dataclasses import replace as _replace
 
+from aef.harness.checks import evaluate_checks
+from aef.harness.corpus import Scenario
 from aef.services.eval.base import EvaluationRecord
+from aef.services.eval.rule_based import RuleBasedEvaluator
+from aef.state import AEFState
 
 
 @dataclass(frozen=True)
@@ -81,6 +86,39 @@ class ScoreSet:
         if low == high:
             return ordered[low]
         return ordered[low] + (ordered[high] - ordered[low]) * (position - low)
+
+
+def score_scenario(
+    scenario: Scenario, final_state: AEFState, *, elapsed_ms: float
+) -> EvaluationRecord:
+    """THE task metric's record for one re-execution (ADR 0113). One function
+    for every scoring path — in-process runner and isolated suite — because
+    two constructions of a score drift and the drift is a phantom regression
+    (ADR 0091).
+
+    `task_completion` is the rule-based evaluator's, refined by the owner's
+    checks: with checks declared it becomes the fraction that hold, still
+    zeroed by an error (a right answer followed by a raise did not complete)
+    and by a blown wall-clock budget. Without checks it is unchanged — a
+    scenario that declares nothing about its answer makes no claim.
+    """
+    record = RuleBasedEvaluator().evaluate(final_state)
+    metadata = dict(record.metadata)
+    metadata["elapsed_ms"] = elapsed_ms
+    task_completion = record.task_completion
+    if scenario.checks:
+        report = evaluate_checks(scenario.checks, final_state)
+        metadata["checks"] = {
+            "passed": report.passed,
+            "total": report.total,
+            "failures": list(report.failures),
+        }
+        if not final_state.errors:
+            task_completion = report.fraction
+    if scenario.budget_ms is not None and elapsed_ms > scenario.budget_ms:
+        metadata["budget_exceeded"] = True
+        task_completion = 0.0
+    return _replace(record, task_completion=task_completion, metadata=metadata)
 
 
 def score_of(record: EvaluationRecord) -> float:

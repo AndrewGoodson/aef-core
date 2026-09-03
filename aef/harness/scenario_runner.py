@@ -20,15 +20,15 @@ agent code in the calling process and must not be used to score a candidate.
 from __future__ import annotations
 
 import importlib
+import time
 from typing import Any
 
 from aef.harness.corpus import Scenario, fixed_clock
-from aef.harness.evaluation import score_of
+from aef.harness.evaluation import score_of, score_scenario
 from aef.harness.outcome import classify
 from aef.kernel import GraphExecutor, HumanApprovalRequiredError
 from aef.kernel.graph import Graph
 from aef.security.tool import PolicyConfig
-from aef.services.eval.rule_based import RuleBasedEvaluator
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.services.runtime import agent_services
 
@@ -121,6 +121,7 @@ def run_scenario(
         # proposal is built from.
         memory=InMemoryMemoryStore(),
     )
+    started = time.monotonic()
     try:
         result = GraphExecutor(graph.compile(), services).run(
             scenario.initial_state, record_trace=True
@@ -165,9 +166,16 @@ def run_scenario(
             "failure": f"{type(exc).__name__}: {exc}",
         }
 
-    record = RuleBasedEvaluator().evaluate(result.final_state)
-    return {
+    elapsed_ms = (time.monotonic() - started) * 1000.0
+    record = score_scenario(scenario, result.final_state, elapsed_ms=elapsed_ms)
+    payload: dict[str, Any] = {
         "outcome": classify(result.final_state, result.trace, terminated=True).to_payload(),
         "score": score_of(record),
         "cost_tokens": record.cost_tokens,
+        "elapsed_ms": elapsed_ms,
     }
+    if "checks" in record.metadata:
+        payload["checks"] = record.metadata["checks"]
+    if record.metadata.get("budget_exceeded"):
+        payload["budget_exceeded"] = True
+    return payload
