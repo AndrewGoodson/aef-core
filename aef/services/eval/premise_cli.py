@@ -31,8 +31,9 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="premise-eval")
     ap.add_argument("--cases", type=Path, default=DEFAULT_CASES)
     ap.add_argument("--submissions", type=Path, required=True)
-    ap.add_argument("--repo", type=Path, default=None,
-                    help="checkout to re-derive oracled ground truths from")
+    ap.add_argument(
+        "--repo", type=Path, default=None, help="checkout to re-derive oracled ground truths from"
+    )
     ap.add_argument("--min-score", type=float, default=1.0)
     ap.add_argument("--json", action="store_true", dest="as_json")
     ap.add_argument("--label", default=None)
@@ -54,38 +55,38 @@ def main(argv: list[str] | None = None) -> int:
     label = args.label or args.submissions.stem
 
     if args.as_json:
-        print(json.dumps(
-            {
-                "label": label,
-                "suite": str(args.cases),
-                "score": round(suite.score, 4),
-                "passed": suite.passed,
-                "total": suite.total,
-                "gate_rates": {k: list(v) for k, v in suite.gate_rates().items()},
-                "oracles": [
-                    {"case_id": c, "ok": ok, "detail": d} for c, ok, d in suite.oracle_report
-                ],
-                "cases": [
-                    {
-                        "case_id": r.case_id,
-                        "passed": r.passed,
-                        "gates": r.record.domain_gates,
-                        "reasons": list(r.reasons),
-                    }
-                    for r in suite.results
-                ],
-            },
-            indent=2,
-        ))
+        print(
+            json.dumps(
+                {
+                    "label": label,
+                    "suite": str(args.cases),
+                    "score": round(suite.score, 4),
+                    "passed": suite.passed,
+                    "total": suite.total,
+                    "gate_rates": {k: list(v) for k, v in suite.gate_rates().items()},
+                    "oracles": [
+                        {"case_id": c, "ok": ok, "detail": d} for c, ok, d in suite.oracle_report
+                    ],
+                    "cases": [
+                        {
+                            "case_id": r.case_id,
+                            "passed": r.passed,
+                            "gates": r.record.domain_gates,
+                            "reasons": list(r.reasons),
+                        }
+                        for r in suite.results
+                    ],
+                },
+                indent=2,
+            )
+        )
     else:
         print(f"=== false-premise eval :: {label} ===")
         print(f"cases: {args.cases}")
         print()
         for r in suite.results:
             mark = "PASS" if r.passed else "FAIL"
-            gates = " ".join(
-                f"{n}={'Y' if ok else 'N'}" for n, ok in r.record.domain_gates.items()
-            )
+            gates = " ".join(f"{n}={'Y' if ok else 'N'}" for n, ok in r.record.domain_gates.items())
             print(f"[{mark}] {r.case_id}  ({gates})")
             for reason in r.reasons:
                 print(f"        - {reason}")
@@ -104,8 +105,10 @@ def main(argv: list[str] | None = None) -> int:
             n = sum(1 for c in cases if c.oracle)
             print(f"\noracles: not run ({n} available; pass --repo to re-derive)")
         print()
-        print(f"SCORE {suite.passed}/{suite.total} = {suite.score:.3f}"
-              f"   (threshold {args.min_score:.3f})")
+        print(
+            f"SCORE {suite.passed}/{suite.total} = {suite.score:.3f}"
+            f"   (threshold {args.min_score:.3f})"
+        )
 
     if args.repo and not suite.oracles_ok:
         return 3

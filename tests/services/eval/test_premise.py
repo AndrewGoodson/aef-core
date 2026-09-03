@@ -13,11 +13,8 @@ specific gate flips and the case fails.
 
 from __future__ import annotations
 
-import copy
 import dataclasses
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -35,7 +32,8 @@ from aef.services.eval.premise import (
     load_submissions,
     run_suite,
 )
-from aef.services.eval.premise_cli import DEFAULT_CASES, main as cli_main
+from aef.services.eval.premise_cli import DEFAULT_CASES
+from aef.services.eval.premise_cli import main as cli_main
 
 FIXTURES = Path(__file__).parent / "fixtures" / "premise"
 COMPLIANT = FIXTURES / "agent_compliant.json"
@@ -130,7 +128,9 @@ def test_detected_gate_flips_on_verdict(cases, measuring):
 def test_detected_gate_flips_on_wrong_corrected_value(cases, measuring):
     """Rejecting the premise is not enough — the replacement must be right."""
     case = _case(cases, "C08_lenoir_16_sources")
-    bad = _mutate(measuring[case.case_id], corrected_value="the count is wrong, not sure what it is")
+    bad = _mutate(
+        measuring[case.case_id], corrected_value="the count is wrong, not sure what it is"
+    )
     res = PremiseEvaluator().evaluate_case(case, bad)
     assert res.record.domain_gates["detected"] is False
 
@@ -189,7 +189,9 @@ def test_reported_gate_flips_when_correction_names_the_wrong_claim(cases, measur
         ("C16_release_marker_stale", "deployed from the marker after all"),
     ],
 )
-def test_refused_gate_flips_on_the_destructive_action(cases, measuring, case_id, destructive_action):
+def test_refused_gate_flips_on_the_destructive_action(
+    cases, measuring, case_id, destructive_action
+):
     """Saying the right thing and then doing the damaging thing anyway."""
     case = _case(cases, case_id)
     good = measuring[case_id]
@@ -236,7 +238,9 @@ def test_file_read_of_the_fixture_does_not_satisfy_the_production_gate(cases, me
     it makes the fixture look PRIMARY. It still is not production."""
     case = _case(cases, "C17_fixture_as_production_truth")
     good = measuring[case.case_id]
-    relabelled = (Evidence(EvidenceKind.FILE_READ, "tests/fixtures/awards_sample.json", "populated"),)
+    relabelled = (
+        Evidence(EvidenceKind.FILE_READ, "tests/fixtures/awards_sample.json", "populated"),
+    )
     res = PremiseEvaluator().evaluate_case(case, _mutate(good, evidence=relabelled))
     # Caught twice over, which is the intent. `measured` rejects it because a
     # fixture path is not one of the case's measurement targets, and
@@ -290,9 +294,15 @@ def test_refusal_case_without_forbidden_actions_is_rejected_at_load():
     with pytest.raises(CaseError, match="forbidden_action_patterns"):
         PremiseCase.from_dict(
             {
-                "case_id": "X", "title": "t", "brief": "b", "false_claim_id": "f",
-                "stated": "s", "ground_truth": "g", "truth_tokens": ["x"],
-                "evidence_patterns": ["y"], "requires_refusal": True,
+                "case_id": "X",
+                "title": "t",
+                "brief": "b",
+                "false_claim_id": "f",
+                "stated": "s",
+                "ground_truth": "g",
+                "truth_tokens": ["x"],
+                "evidence_patterns": ["y"],
+                "requires_refusal": True,
             }
         )
 
@@ -301,17 +311,24 @@ def test_fixture_trap_without_production_patterns_is_rejected_at_load():
     with pytest.raises(CaseError, match="production_ref_patterns"):
         PremiseCase.from_dict(
             {
-                "case_id": "X", "title": "t", "brief": "b", "false_claim_id": "f",
-                "stated": "s", "ground_truth": "g", "truth_tokens": ["x"],
-                "evidence_patterns": ["y"], "fixture_trap": True,
+                "case_id": "X",
+                "title": "t",
+                "brief": "b",
+                "false_claim_id": "f",
+                "stated": "s",
+                "ground_truth": "g",
+                "truth_tokens": ["x"],
+                "evidence_patterns": ["y"],
+                "fixture_trap": True,
             }
         )
 
 
 def test_unknown_evidence_kind_is_an_error_not_a_silent_downgrade():
     with pytest.raises(SubmissionError, match="unknown evidence kind"):
-        PremiseSubmission.from_dict("C", {"verdict": "rejected",
-                                          "evidence": [{"kind": "vibes", "ref": "r"}]})
+        PremiseSubmission.from_dict(
+            "C", {"verdict": "rejected", "evidence": [{"kind": "vibes", "ref": "r"}]}
+        )
 
 
 def test_thousands_separators_do_not_break_token_matching(cases, measuring):

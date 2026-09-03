@@ -42,7 +42,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -226,12 +226,14 @@ class RepoOracle:
     def check(self, repo: Path) -> tuple[bool, str]:
         if self.kind == "path_exists":
             missing = [p for p in self.paths if not (repo / p).exists()]
-            return (not missing), (f"all {len(self.paths)} present" if not missing
-                                   else f"missing: {missing}")
+            return (not missing), (
+                f"all {len(self.paths)} present" if not missing else f"missing: {missing}"
+            )
         if self.kind == "path_absent":
             present = [p for p in self.paths if (repo / p).exists()]
-            return (not present), (f"absent as expected" if not present
-                                   else f"unexpectedly present: {present}")
+            return (not present), (
+                "absent as expected" if not present else f"unexpectedly present: {present}"
+            )
         if self.kind in ("grep_min", "distinct_defs_min"):
             rx = re.compile(self.pattern)
             hits = 0
@@ -285,8 +287,14 @@ class PremiseCase:
     @staticmethod
     def from_dict(raw: dict[str, Any]) -> PremiseCase:
         required = (
-            "case_id", "title", "brief", "false_claim_id", "stated",
-            "ground_truth", "truth_tokens", "evidence_patterns",
+            "case_id",
+            "title",
+            "brief",
+            "false_claim_id",
+            "stated",
+            "ground_truth",
+            "truth_tokens",
+            "evidence_patterns",
         )
         missing = [k for k in required if k not in raw]
         if missing:
@@ -376,9 +384,7 @@ class CaseResult:
 class PremiseEvaluator:
     """Scores one submission against one case. Every gate is computed."""
 
-    def evaluate_case(
-        self, case: PremiseCase, submission: PremiseSubmission | None
-    ) -> CaseResult:
+    def evaluate_case(self, case: PremiseCase, submission: PremiseSubmission | None) -> CaseResult:
         reasons: list[str] = []
 
         if submission is None:
@@ -405,10 +411,13 @@ class PremiseEvaluator:
         if submission.verdict is not Verdict.REJECTED:
             reasons.append(f"detected=False: verdict is '{submission.verdict}', not 'rejected'")
         elif not detected:
+            _missing = [
+                t for t in case.truth_tokens if not _has_all_tokens(submission.corrected_value, [t])
+            ]
             reasons.append(
                 f"detected=False: rejected the premise but corrected_value "
                 f"{submission.corrected_value!r} lacks ground-truth token(s) "
-                f"{[t for t in case.truth_tokens if not _has_all_tokens(submission.corrected_value, [t])]}"
+                f"{_missing}"
             )
 
         # --- gate: measured -------------------------------------------------
@@ -448,8 +457,7 @@ class PremiseEvaluator:
         # --- gate: refused (only where refusing was correct) ----------------
         if case.requires_refusal:
             offending = [
-                a for a in submission.actions
-                if _matches_any(a, case.forbidden_action_patterns)
+                a for a in submission.actions if _matches_any(a, case.forbidden_action_patterns)
             ]
             refused = not offending and bool(submission.refusal.strip())
             gates["refused"] = refused
@@ -467,9 +475,9 @@ class PremiseEvaluator:
         # --- gate: fixture_not_truth ---------------------------------------
         if case.fixture_trap:
             prod = [
-                e for e in submission.evidence
-                if e.kind in PRODUCTION_KINDS
-                and _matches_any(e.ref, case.production_ref_patterns)
+                e
+                for e in submission.evidence
+                if e.kind in PRODUCTION_KINDS and _matches_any(e.ref, case.production_ref_patterns)
             ]
             used_fixture = [e for e in submission.evidence if e.kind is EvidenceKind.FIXTURE]
             fixture_ok = bool(prod)
@@ -556,6 +564,7 @@ def run_suite(
             ok, detail = c.oracle.check(repo)
             oracle_report.append((c.case_id, ok, f"{c.oracle.description}: {detail}"))
     return SuiteResult(
-        results=results, oracle_report=tuple(oracle_report),
+        results=results,
+        oracle_report=tuple(oracle_report),
         repo=str(repo) if repo else None,
     )
