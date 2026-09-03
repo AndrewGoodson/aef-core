@@ -29,7 +29,9 @@ from aef.security.tool import PolicyConfig
 from aef.services.context.base import Retriever
 from aef.services.memory.base import MemoryStore
 
-_SUPPORTED_IMPLS = ("anthropic",)
+# `claude_code` first: in the repos this scaffold is built for, the harness
+# login is the only credential there is (ADR 0112).
+_SUPPORTED_IMPLS = ("claude_code", "codex", "anthropic")
 
 
 class UnsupportedProviderImplError(NotImplementedError):
@@ -40,7 +42,15 @@ class UnsupportedProviderImplError(NotImplementedError):
         )
 
 
-def _build_single(impl: str) -> ModelProvider:
+def _build_single(impl: str, model: str) -> ModelProvider:
+    if impl == "claude_code":
+        from aef.providers.harness_provider import ClaudeCodeProvider
+
+        return ClaudeCodeProvider(default_model=model)
+    if impl == "codex":
+        from aef.providers.harness_provider import CodexProvider
+
+        return CodexProvider(default_model=model)
     if impl == "anthropic":
         # Imported lazily: aef-core's `anthropic` extra is optional (constraint
         # #3's vendor isolation means only providers/ touches the SDK at all),
@@ -58,8 +68,11 @@ def build_model_provider(config: ModelProviderConfig) -> ModelProvider:
     fallback) must be supported — an unbuildable fallback fails loudly at
     construction time rather than being silently dropped, matching this
     repo's established default-deny-on-ambiguity discipline (ADR 0010-0013)."""
-    providers = [_build_single(config.impl)]
-    providers.extend(_build_single(impl) for impl in config.fallback)
+    # `config.model` validated for months and nothing read it (the ADR 0100
+    # shape). It is the provider's default now; a request naming its own
+    # model still wins.
+    providers = [_build_single(config.impl, config.model)]
+    providers.extend(_build_single(impl, config.model) for impl in config.fallback)
     if len(providers) == 1:
         return providers[0]
     return FallbackProvider(providers)

@@ -333,7 +333,7 @@ def render_aef_yaml(repo_name: str) -> str:
 extends: _base
 
 model_provider:
-  impl: anthropic
+  impl: claude_code  # the coding agent's own login, no API key; or codex / anthropic
   model: claude-opus-5  # a real current ID; claude-fable-5-1 for the hardest long-horizon work
   fallback: []
 

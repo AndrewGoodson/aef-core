@@ -18,7 +18,7 @@ CONFIG_DIR = Path(__file__).parent.parent.parent / "aef" / "config"
 def test_example_config_loads_and_validates() -> None:
     config = load_agent_config(CONFIG_DIR / "agent.example.yaml")
     assert config.extends == "_base"
-    assert config.model_provider.impl == "anthropic"
+    assert config.model_provider.impl == "claude_code"  # the harness login, ADR 0112
     assert config.evolution.enabled is False
 
 
