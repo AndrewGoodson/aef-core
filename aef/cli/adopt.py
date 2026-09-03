@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from importlib import resources
 from pathlib import Path
 
 from aef.cli.adopt_loop import (
@@ -656,6 +657,21 @@ class AdoptResult:
     checklist: list[str] = field(default_factory=list)
 
 
+def render_new_model_check_skill() -> str:
+    """The `/new-model-check` skill (docs/adr/0111): a per-model-release
+    re-audit of every prompt and API surface. Shipped as package data rather
+    than a Python string so this repo's own copy under `.claude/skills/` can
+    be pinned byte-identical to what adopters receive. It carries no
+    per-model facts — those are read from the bundled `claude-api` skill at
+    run time, because a fact table here would rot the day the next model
+    ships."""
+    return (
+        resources.files("aef.cli")
+        .joinpath("templates/skills/new-model-check/SKILL.md")
+        .read_text(encoding="utf-8")
+    )
+
+
 def run_adopt(target_dir: Path) -> AdoptResult:
     target_dir = target_dir.resolve()
     framework = detect_framework(target_dir)
@@ -718,6 +734,11 @@ def run_adopt(target_dir: Path) -> AdoptResult:
     _write_if_absent("corpus/README.md", render_corpus_readme(repo_name))
     _write_if_absent(".github/workflows/loop-gate.yml", render_loop_gate_workflow(repo_name))
     _write_if_absent(".github/workflows/loop-monitor.yml", render_loop_monitor_workflow(repo_name))
+
+    # Per-model-release re-audit (docs/adr/0111). Without it an adopted
+    # repo's prompts and call sites are checked against exactly one model:
+    # whichever was current the day it adopted.
+    _write_if_absent(".claude/skills/new-model-check/SKILL.md", render_new_model_check_skill())
 
     return AdoptResult(
         framework=framework, written_files=written, skipped_files=skipped, checklist=checklist

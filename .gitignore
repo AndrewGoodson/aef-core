@@ -12,7 +12,12 @@ build/
 htmlcov/
 .DS_Store
 *.aef-checkpoint.json
-.claude/
+# Local harness state stays out; the dev pod (skills, agents) ships with the
+# repo — CLAUDE.md names them as the verification method, and a clone that
+# lacks them describes a repo that does not exist (docs/adr/0111).
+.claude/*
+!.claude/skills/
+!.claude/agents/
 
 # mindgraph build-time only (Tailwind CLI); the artifact ships no dependencies
 mindgraph/node_modules/
