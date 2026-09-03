@@ -69,3 +69,25 @@ Nothing removed.
 `pytest -q` → **1571 passed** (from 1558; +13, none removed) ·
 `mypy aef examples` → 118 files clean · `ruff check .` clean ·
 `ruff format --check aef tests examples` → 210 files.
+
+## Addendum — the credential is the harness (ADR 0112)
+
+The owner corrected the premise mid-run: this repo and the repos it adopts
+into hold **no API key by design** — their agents are Claude Code / Codex
+sessions. S1–S4 above are real but were findings against a path no adopter
+can use. The fix that matters is `aef/providers/harness_provider.py`:
+`impl: claude_code` runs a node's model call as `claude -p --tools ""
+--max-turns 1 --output-format json` under the session login.
+
+**Reproduced:** `claude -p … --model claude-fable-5-1 "Reply with the single
+word OK"` from inside this session → `result: "OK"`, `stop_reason: end_turn`,
+`usage {input 2, output 4}`, `modelUsage` keyed `claude-fable-5-1`. Under
+`--bare` the same call returns exit 0 with `is_error: true, result: "Not
+logged in · Please run /login"` — which is why the adapter never passes
+`--bare` and treats `is_error` as a provider error.
+
+**Suspected — not reproduced:** `impl: codex`. `codex exec --ephemeral
+--skip-git-repo-check -s read-only --json -o <file>` exited 1 on this box
+before reading the prompt: `failed to load models cache: unknown variant
+"max"` — the installed Codex CLI predates its server's catalog. The adapter
+is built from `codex exec --help`; its output parsing is a hypothesis.

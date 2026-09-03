@@ -53,3 +53,29 @@ def test_no_fallback_returns_bare_provider_not_wrapped() -> None:
 
     provider = build_model_provider(ModelProviderConfig(impl="anthropic", model="claude-x"))
     assert type(provider) is AnthropicProvider
+
+
+def test_build_claude_code_provider_carries_the_config_model_as_default() -> None:
+    """ADR 0112: the harness login is the credential in an agentic repo, and
+    `model_provider.model` — which validated but was never read — is the
+    provider's default."""
+    from aef.providers.harness_provider import ClaudeCodeProvider
+
+    provider = build_model_provider(
+        ModelProviderConfig(impl="claude_code", model="claude-fable-5-1")
+    )
+    assert type(provider) is ClaudeCodeProvider
+    assert provider.default_model == "claude-fable-5-1"
+
+
+def test_build_codex_provider() -> None:
+    from aef.providers.harness_provider import CodexProvider
+
+    provider = build_model_provider(ModelProviderConfig(impl="codex", model="gpt-5.5"))
+    assert type(provider) is CodexProvider
+    assert provider.default_model == "gpt-5.5"
+
+
+def test_unsupported_impl_message_names_the_harness_impls() -> None:
+    with pytest.raises(UnsupportedProviderImplError, match="claude_code"):
+        build_model_provider(ModelProviderConfig(impl="openai", model="gpt-x"))

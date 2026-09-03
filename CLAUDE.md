@@ -26,9 +26,14 @@ claimed otherwise:**
   raising `NotImplementedError` (Phase 3/5). The rule-based reflection slice
   is real (ADR 0046).
 - **If your "agents" are prompt files rather than Python** — Claude Code
-  subagents, `.md` personas — there is no call site to convert and this
-  runtime has nothing to attach to at the agent layer. It can still govern the
-  Python your prompts call into. That is a narrower and honest pitch.
+  subagents, `.md` personas — there is no call site to convert. The runtime
+  attaches at the model layer instead: `model_provider.impl: claude_code`
+  (the default) runs each node's model call as one headless `claude -p`
+  under the harness's own login — no API key anywhere — and `codex` does the
+  same through `codex exec` (ADR 0112). A persona file is a system prompt to
+  that call. The previous version of this bullet said the runtime "has
+  nothing to attach to" here; that was true until the harness provider
+  existed and is not now.
 
 Only five things are allowed to differ per agent: **Knowledge, Policies,
 Tools, Objectives, Evaluation Metrics** — see the prime directive below.
@@ -117,6 +122,13 @@ harness are real and tested (Phase 0/1), as is the rule-based
 reflection slice (`RuleBasedCritic`/`RuleBasedJudge` + `make_reflect_node`,
 ADR 0046), and the memory-backed context retriever (`MemoryRetriever`, ADR
 0101 — the first thing here that enforces `context_budget_tokens`).
+The model provider is real for three backends: `claude_code` (default —
+the coding agent's login is the credential, reproduced end-to-end),
+`codex` (built from the CLI's documented flags, **not reproduced** — the
+Codex on the authoring box predates its server's model catalog), and
+`anthropic` (SDK, needs `ANTHROPIC_API_KEY`). `model_provider.model` in
+`aef.yaml` is the provider's default model; it validated for months while
+nothing read it.
 LLM-backed reflection, offline optimization, and multi-agent coordination
 remain typed interfaces with `NotImplementedError` bodies (Phase 3/5). The
 evolution engine is a typed interface, disabled (Phase 4).
