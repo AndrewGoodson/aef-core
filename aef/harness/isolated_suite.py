@@ -14,18 +14,18 @@ at a time and never learns what a scenario is (ADR 0094).
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from aef.harness.corpus import Scenario, fixed_clock
-from aef.harness.evaluation import score_of
+from aef.harness.evaluation import score_of, score_scenario
 from aef.harness.isolated import IsolationError, NodeWorkerSession, graph_from
 from aef.harness.outcome import Outcome, classify
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
 from aef.kernel import GraphExecutor
 from aef.security.tool import PolicyConfig
-from aef.services.eval.rule_based import RuleBasedEvaluator
 from aef.services.runtime import agent_services
 
 
@@ -112,12 +112,16 @@ def _worker_is_dead(session: NodeWorkerSession) -> bool:
 
 def _run_one(compiled: Any, scenario: Scenario, policy: PolicyConfig | None) -> ScenarioResult:
     services = agent_services(clock=fixed_clock(scenario), policy=policy)
+    started = time.monotonic()
     try:
         result = GraphExecutor(compiled, services).run(scenario.initial_state, record_trace=True)
     except Exception as exc:  # noqa: BLE001 - any failure is an outcome, not a crash
         return _failed(f"{type(exc).__name__}: {exc}")
 
-    record = RuleBasedEvaluator().evaluate(result.final_state)
+    # Same function as the in-process runner (ADR 0113): two scorers drift.
+    record = score_scenario(
+        scenario, result.final_state, elapsed_ms=(time.monotonic() - started) * 1000.0
+    )
     return ScenarioResult(
         outcome=classify(result.final_state, result.trace, terminated=True),
         score=score_of(record),

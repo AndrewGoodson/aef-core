@@ -32,6 +32,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from aef.harness.checks import TaskCheck
 from aef.harness.trace_codec import (
     TRACE_FORMAT_VERSION,
     TraceCodecError,
@@ -94,6 +95,13 @@ class Scenario:
     # scenario keeps its exact meaning: "this is what happened", no claim
     # about what should have.
     expected: Expected = Expected.UNSPECIFIED
+    # Owner-declared task checks (ADR 0113): the part of the score that can
+    # fail without an error. Data, never code — see aef/harness/checks.py.
+    checks: tuple[TaskCheck, ...] = ()
+    # Wall-clock budget judged on the RUNNER's stopwatch, not the pinned
+    # clock: under `fixed_clock` the recorded latency replays verbatim and
+    # says nothing about the candidate.
+    budget_ms: float | None = None
 
     @property
     def clock_values(self) -> tuple[datetime, ...]:
@@ -112,6 +120,8 @@ class Scenario:
             "recorded_at": self.recorded_at.isoformat(),
             "notes": self.notes,
             "expected": self.expected.value,
+            "checks": [check.to_payload() for check in self.checks],
+            "budget_ms": self.budget_ms,
         }
 
     @classmethod
@@ -127,6 +137,10 @@ class Scenario:
                 recorded_at=datetime.fromisoformat(payload["recorded_at"]),
                 notes=payload.get("notes", ""),
                 expected=Expected(payload.get("expected", Expected.UNSPECIFIED.value)),
+                checks=tuple(TaskCheck.from_payload(c) for c in payload.get("checks", ())),
+                budget_ms=(
+                    None if payload.get("budget_ms") is None else float(payload["budget_ms"])
+                ),
             )
         except (KeyError, ValueError) as exc:
             raise CorpusError(f"malformed scenario payload: {exc}") from exc

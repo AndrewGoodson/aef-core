@@ -1,4 +1,18 @@
 {
+  "budget_ms": null,
+  "checks": [
+    {
+      "op": "equals",
+      "path": "scores.quality",
+      "value": 1.0
+    },
+    {
+      "op": "equals",
+      "path": "plan.status",
+      "value": "done"
+    }
+  ],
+  "expected": "unspecified",
   "format_version": "1.0.0",
   "graph_id": "demo_agent",
   "graph_version": "0.1.0",

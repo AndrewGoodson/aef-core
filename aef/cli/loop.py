@@ -203,6 +203,89 @@ def cmd_record(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_score(args: argparse.Namespace) -> int:
+    """The task metric, read directly (ADR 0113): the incumbent graph over
+    the corpus, one scalar per split with its honest statistics, and — with
+    `--repeat` — the variance of that scalar across identical runs, which is
+    the noise floor any claimed improvement has to clear.
+
+    Runs in-process: this scores a graph the OWNER trusts (the incumbent),
+    never a candidate. Candidates are scored by `loop gate`, isolated.
+    Holdout is excluded unless asked for by name — it is the owner's only
+    independent read, and reading it casually spends it.
+    """
+    from aef.harness.evaluation import ScoreSet
+    from aef.harness.scenario_runner import load_graph, run_scenario
+
+    corpus = load_corpus(Path(args.corpus))
+    graph = load_graph(args.entrypoint)
+    splits = [Split(s) for s in args.splits.split(",")]
+    if Split.HOLDOUT in splits and not args.i_am_spending_the_holdout:
+        print(
+            "refusing to score the holdout split without --i-am-spending-the-holdout",
+            file=sys.stderr,
+        )
+        return EXIT_REJECTED
+
+    runs: list[dict[str, ScoreSet]] = []
+    for _ in range(args.repeat):
+        per_split: dict[str, ScoreSet] = {}
+        for split in splits:
+            scenarios = corpus.split(split)
+            per_scenario: dict[str, float] = {}
+            cost = 0
+            for scenario in scenarios:
+                result = run_scenario(scenario, graph)
+                per_scenario[scenario.id] = float(result["score"])
+                cost += int(result["cost_tokens"])
+            per_split[split.value] = ScoreSet(
+                label=split.value, per_scenario=per_scenario, cost_tokens=cost
+            )
+        runs.append(per_split)
+
+    report: dict[str, object] = {"entrypoint": args.entrypoint, "repeat": args.repeat}
+    for split in splits:
+        sets = [run[split.value] for run in runs]
+        first = sets[0]
+        if first.n == 0:
+            report[split.value] = {"n": 0}
+            continue
+        means = [s.mean for s in sets]
+        spread = max(means) - min(means)
+        lo, hi = first.confidence_interval_95
+        with_checks = sum(1 for s in corpus.split(split) if s.checks)
+        report[split.value] = {
+            "n": first.n,
+            "with_checks": with_checks,
+            "mean": round(first.mean, 4),
+            "stdev": round(first.stdev, 4),
+            "ci95": [round(lo, 4), round(hi, 4)],
+            "cost_tokens": first.cost_tokens,
+            "per_scenario": {k: round(v, 4) for k, v in sorted(first.per_scenario.items())},
+            # Across identical runs. Anything an increment claims must exceed this.
+            "repeat_mean_spread": round(spread, 6),
+        }
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return EXIT_OK
+    print(f"task metric — {args.entrypoint} — repeat={args.repeat}")
+    for split in splits:
+        row = report[split.value]
+        assert isinstance(row, dict)
+        if row["n"] == 0:
+            print(f"  {split.value:<11} n=0")
+            continue
+        print(
+            f"  {split.value:<11} n={row['n']:<3} with_checks={row['with_checks']:<3} "
+            f"mean={row['mean']:.4f} stdev={row['stdev']:.4f} "
+            f"ci95=[{row['ci95'][0]:.4f}, {row['ci95'][1]:.4f}] "
+            f"repeat_spread={row['repeat_mean_spread']:.6f}"
+        )
+        for sid, score in row["per_scenario"].items():
+            print(f"      {score:.4f}  {sid}")
+    return EXIT_OK
+
+
 def cmd_harvest(args: argparse.Namespace) -> int:
     from aef.cli.run import load_graph_module
     from aef.harness.harvest import harvest
@@ -460,6 +543,27 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "independence silently.",
     )
     p_record.set_defaults(handler=cmd_record)
+
+    p_score = loop_subs.add_parser(
+        "score", help="the task metric: score the incumbent graph over the corpus"
+    )
+    p_score.add_argument("entrypoint", help="'module:factory' returning the incumbent Graph")
+    p_score.add_argument("--corpus", required=True)
+    p_score.add_argument(
+        "--splits",
+        default="train,validation",
+        help="comma-separated; holdout needs --i-am-spending-the-holdout",
+    )
+    p_score.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help="run the whole suite N times and report the spread of the mean — the noise "
+        "floor an improvement must clear",
+    )
+    p_score.add_argument("--json", action="store_true")
+    p_score.add_argument("--i-am-spending-the-holdout", action="store_true")
+    p_score.set_defaults(handler=cmd_score)
 
     p_harvest = loop_subs.add_parser(
         "harvest", help="promote recorded production runs into corpus scenarios"
