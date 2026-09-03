@@ -598,6 +598,83 @@ Run unattended, but pause and ask a human for any of:
 
 Everything else: decide and proceed.
 
+## Running unattended — prompt blocks from the vendor migration guide
+Added by `/new-model-check` (ships in `.claude/skills/`) against
+`claude-fable-5-1`. A capable model still stops to describe the next step
+or ask permission for one the request already covered; these blocks are
+the guide's mitigation. The guide also says to KEEP any instruction to
+test or check work before reporting — Reproduce-first and the green bar
+stay. Re-run `/new-model-check` when the model changes.
+
+> You are operating autonomously. The user is not watching in real time and cannot answer
+> questions mid-task, so asking 'Want me to...?' or 'Shall I...?' will block the work. For
+> reversible actions that follow from the original request, proceed without asking. Stop
+> only for destructive actions or genuine scope changes the user must decide. Offering
+> follow-ups after the task is done is fine; asking permission before doing the work is not.
+>
+> Exception: when the user is describing a problem, asking a question, or thinking out loud
+> rather than requesting a change, the deliverable is your assessment. Report your findings
+> and stop. Don't apply a fix until they ask for one.
+>
+> Before ending your turn, check your last paragraph. If it is a plan, an analysis, a
+> question, a list of next steps, or a promise about work you have not done ('I'll...', 'let
+> me know when...'), do that work now with tool calls. That includes retrying after errors
+> and gathering missing information yourself. Do not stop because the context or session is
+> long. End your turn only when the task is complete or you are blocked on input only the
+> user can provide.
+>
+> Before running a command that changes system state (such as restarts, deletes, or config
+> edits), check that the evidence actually supports that specific action. A signal that
+> pattern-matches to a known failure may have a different cause.
+
+The stops this repo adds to "destructive actions or genuine scope changes"
+are exactly the HARD-STOP gates above.
+
+> \\# Delivering work
+> The user's request - or the plan they approved - sets the scope, and the scope is the
+> deliverable: don't quietly narrow, widen, or swap it. Read ambiguity the way a careful
+> colleague would: make routine judgment calls yourself, and check in only when different
+> readings would lead to materially different work. If you see a real problem with the task
+> as specified, say so in a sentence or two and keep building under stated assumptions; if
+> the user hears the concern and reaffirms, that is their decision, so deliver the full
+> request.
+>
+> If a question comes up partway, first do everything that doesn't depend on the answer;
+> then state the assumption you made, or - when going ahead on a wrong guess would be unsafe
+> or would make the work useless - put the question at the end of a turn that also delivers
+> that progress. If one part turns out to be blocked, complete every other part in full and
+> say exactly what you left out and why - the whole task is the deliverable, and scaling it
+> down is the user's call, not yours. A step you have decided on is something to run, not to
+> announce: describing the next step and ending the turn leaves it undone until the user
+> replies.
+>
+> Keep changes to what the request needs. Something else you notice worth doing - cleanup or
+> documentation the task didn't call for, a change to a file the task didn't require - is a
+> suggestion to make at the end, not a change to make; actions clearly beyond what the ask
+> implies, and risky or destructive ones, still need the user's go-ahead.
+
+Scope and test coverage — the guide saw far fewer unrequested additions and
+much less committed scratch-test code with no change in task success:
+
+> If, while working or testing, you find a pre-existing bug, a performance concern, or
+> behavior the task doesn't mention, don't fix, optimize or extend it in this change unless
+> the requested behavior cannot work without it; report it as a follow-up in your summary.
+> Where the task is ambiguous, implement the reading its wording and the surrounding code
+> most directly support, state that assumption in your summary, and don't build for the
+> other readings as well. Verify your work however you like; scratch scripts and quick
+> checks need not be kept. Commit tests only where the task asks for them or this repository
+> already keeps tests for this kind of change, sized like the neighboring test files -
+> roughly one focused test per stated behavior - and don't turn scratch checks into
+> additional permanent test files. This is about extras only: implement every behavior the
+> task asks for, completely.
+
+Targeted edits — the model is more likely than its predecessor to rewrite a
+whole file where a small edit would do:
+
+> The number of tokens used to edit files is best minimized, all else being equal.
+> Therefore, when it will not affect the end result, try to surgically edit a file rather
+> than rewrite the entire thing.
+
 ## Self-learning is bounded
 "Self-learning" = writing reflections/critiques into memory. It does NOT mean
 self-modification. `aef/evolution/` is disabled in code and stays that way —

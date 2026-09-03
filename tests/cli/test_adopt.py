@@ -97,6 +97,22 @@ def test_run_adopt_emits_native_entry_file_for_each_harness(tmp_path: Path) -> N
     assert "HARD-STOP" in cursor
 
 
+def test_run_adopt_autonomy_contract_carries_unattended_run_blocks(tmp_path: Path) -> None:
+    """Model-check 2026-09-03: the vendor guide's autonomy + scope blocks for
+    unattended runs ship in AUTONOMY.md, and the verification rules the guide
+    says to keep are still there beside them."""
+    run_adopt(tmp_path)
+    autonomy = (tmp_path / "AUTONOMY.md").read_text()
+    # The blocks are wrapped at 90 columns for ruff; markdown joins `>`
+    # continuation lines, so compare the joined quote, not raw lines.
+    quoted = " ".join(line[2:] for line in autonomy.splitlines() if line.startswith("> "))
+    assert "You are operating autonomously." in quoted
+    assert "the scope is the deliverable" in quoted
+    assert "surgically edit a file rather than rewrite the entire thing." in quoted
+    assert "Reproduce-first" in autonomy  # kept, not traded for the new blocks
+    assert "\\\\#" not in autonomy  # a doubled backslash would mean the f-string escape leaked
+
+
 def test_run_adopt_never_overwrites_harness_files(tmp_path: Path) -> None:
     (tmp_path / "AGENTS.md").write_text("# my own agents file\n")
     (tmp_path / ".github").mkdir()
