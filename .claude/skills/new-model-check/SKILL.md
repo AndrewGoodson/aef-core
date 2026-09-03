@@ -103,7 +103,9 @@ not, the grep is wrong — fix the grep, not the expectation. Then
 
 ## Step 3 — classify and apply
 
-Work the **[BLOCKS]** list first, then **[TUNE]**. One commit per finding.
+Work the **[BLOCKS]** list first, then **[TUNE]**. One commit per finding;
+findings that share a file's hunks may share a commit if the body
+itemizes each one with its own motivation.
 
 ### [BLOCKS] — an API rejection
 
