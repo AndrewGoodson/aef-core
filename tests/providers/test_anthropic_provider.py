@@ -205,3 +205,83 @@ def test_complete_ignores_non_user_id_metadata_keys() -> None:
 
     call = client.messages.calls[0]
     assert call["metadata"] == {"user_id": "user-123"}
+
+
+# ---------------------------------------------------------------------------
+# Model-check 2026-09-03 (docs/model-checks/2026-09-03-claude-fable-5-1.md).
+# Each of these reproduces a request shape the current Anthropic models reject
+# or a response the adapter silently mishandled. All three are documented
+# rejections, not live-reproduced: this box holds no credential.
+# ---------------------------------------------------------------------------
+def test_complete_sends_no_sampling_parameters() -> None:
+    """`temperature`/`top_p`/`top_k` return 400 on every current Anthropic
+    model (Fable 5/5.1, Opus 5/4.8/4.7, Sonnet 5). The adapter used to send
+    `temperature` on every call, so it could not talk to any of them."""
+    client = _FakeClient(
+        response=_FakeResponse(
+            model="claude-x", content=[_FakeTextBlock(text="ok")], usage=_FakeUsage(1, 1)
+        )
+    )
+    AnthropicProvider(client=client).complete(_request(temperature=0.0))
+
+    call = client.messages.calls[0]
+    assert "temperature" not in call
+    assert "top_p" not in call
+    assert "top_k" not in call
+
+
+def test_complete_refuses_tool_role_before_calling_the_vendor() -> None:
+    """`ProviderMessage.role` admits "tool", but the Messages API has no such
+    role — tool results travel inside a `user` message as `tool_result`
+    blocks, and `ProviderMessage.content` is a plain string that cannot carry
+    one. Forwarding the role verbatim produced a vendor 400 naming a field the
+    caller never wrote. Refuse it here, by name, before any network call."""
+    client = _FakeClient(
+        response=_FakeResponse(
+            model="claude-x", content=[_FakeTextBlock(text="ok")], usage=_FakeUsage(1, 1)
+        )
+    )
+    request = _request(
+        messages=(
+            ProviderMessage(role="user", content="hello"),
+            ProviderMessage(role="tool", content="{}"),
+        )
+    )
+    with pytest.raises(ModelProviderError, match="role 'tool'"):
+        AnthropicProvider(client=client).complete(request)
+    assert client.messages.calls == []
+
+
+def test_refusal_stop_reason_raises_instead_of_returning_empty_content() -> None:
+    """Current models can return HTTP 200 with `stop_reason == "refusal"` and
+    no text. The adapter used to hand that back as `content == ""` with no
+    error, so a caller could not tell a refusal from an empty answer.
+    Raising `ModelProviderError` is the repo's own fallback mechanism: the
+    guide's advice is to fall back on refusal, and `FallbackProvider` does
+    exactly that on this exception."""
+    client = _FakeClient(
+        response=_FakeResponse(
+            model="claude-x", content=[], usage=_FakeUsage(1, 0), stop_reason="refusal"
+        )
+    )
+    with pytest.raises(ModelProviderError, match="refusal"):
+        AnthropicProvider(client=client).complete(_request())
+
+
+def test_fallbackprovider_falls_through_on_refusal() -> None:
+    from aef.providers.base import CompletionResult, FallbackProvider, ModelProvider
+
+    class _Good(ModelProvider):
+        name = "good"
+
+        def complete(self, request: CompletionRequest) -> CompletionResult:
+            return CompletionResult(content="answered", model="m", input_tokens=1, output_tokens=1)
+
+    refusing = AnthropicProvider(
+        client=_FakeClient(
+            response=_FakeResponse(
+                model="claude-x", content=[], usage=_FakeUsage(1, 0), stop_reason="refusal"
+            )
+        )
+    )
+    assert FallbackProvider([refusing, _Good()]).complete(_request()).content == "answered"

@@ -165,6 +165,15 @@ to make something pass. Load it for any audit or fix.
 `.claude/agents/seam-hunter.md` hunts joins between components that are each
 correct; three of ten defects lived there. See `docs/dev-pod.md`, including
 why the other agents were cut.
+`/new-model-check <model-id>` re-audits every model-facing surface — these
+prompts, the loop contract, the provider, the `adopt` templates — against a
+new model's documented breaking changes and behavioral guidance, applies
+the fixes, and records `docs/model-checks/<date>-<model>.md`. Run it once
+per model release (ADR 0111). It carries no per-model facts; it reads them
+from the bundled `claude-api` skill each run.
+
+All three are tracked (`.gitignore` re-includes `.claude/skills` and
+`.claude/agents`); a clone has the whole pod.
 
 Nothing under `agents/` — that is Zone A, inside the loop's blast radius.
 

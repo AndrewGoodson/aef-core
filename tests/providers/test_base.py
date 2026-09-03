@@ -107,3 +107,12 @@ def test_fallback_does_not_catch_non_model_provider_errors() -> None:
     provider = FallbackProvider([_BuggyProvider(), _WorkingProvider("never_reached")])
     with pytest.raises(TypeError, match="adapter bug"):
         provider.complete(_request())
+
+
+def test_default_max_tokens_leaves_room_for_thinking() -> None:
+    """Current models think before answering and `max_tokens` caps thinking
+    plus reply together. The old default of 1024 could be spent entirely on
+    thinking, returning `stop_reason == "max_tokens"` and empty text. The
+    vendor guide's non-streaming default is ~16000."""
+    request = CompletionRequest(messages=(), model="m")
+    assert request.max_tokens >= 16000

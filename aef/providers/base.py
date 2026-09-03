@@ -25,7 +25,12 @@ class ProviderMessage:
 class CompletionRequest:
     messages: tuple[ProviderMessage, ...]
     model: str
-    max_tokens: int = 1024
+    # Caps thinking plus reply together on current models; 1024 could be
+    # spent entirely on thinking and return no text. The vendor guide's
+    # non-streaming default is ~16000.
+    max_tokens: int = 16000
+    # Vendor-neutral. The Anthropic adapter does not forward it: current
+    # Anthropic models reject sampling parameters outright.
     temperature: float = 1.0
     metadata: dict[str, str] = field(default_factory=dict)
 

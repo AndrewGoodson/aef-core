@@ -69,6 +69,8 @@ def test_run_adopt_writes_all_artifacts(tmp_path: Path) -> None:
         "corpus/README.md",
         ".github/workflows/loop-gate.yml",
         ".github/workflows/loop-monitor.yml",
+        # per-model-release re-audit (docs/adr/0111)
+        ".claude/skills/new-model-check/SKILL.md",
     }
     for path in result.written_files:
         assert path.exists()
@@ -93,6 +95,22 @@ def test_run_adopt_emits_native_entry_file_for_each_harness(tmp_path: Path) -> N
     cursor = (tmp_path / ".cursor" / "rules" / "aef.mdc").read_text()
     assert "AGENT_INTEGRATION.md" in cursor
     assert "HARD-STOP" in cursor
+
+
+def test_run_adopt_autonomy_contract_carries_unattended_run_blocks(tmp_path: Path) -> None:
+    """Model-check 2026-09-03: the vendor guide's autonomy + scope blocks for
+    unattended runs ship in AUTONOMY.md, and the verification rules the guide
+    says to keep are still there beside them."""
+    run_adopt(tmp_path)
+    autonomy = (tmp_path / "AUTONOMY.md").read_text()
+    # The blocks are wrapped at 90 columns for ruff; markdown joins `>`
+    # continuation lines, so compare the joined quote, not raw lines.
+    quoted = " ".join(line[2:] for line in autonomy.splitlines() if line.startswith("> "))
+    assert "You are operating autonomously." in quoted
+    assert "the scope is the deliverable" in quoted
+    assert "surgically edit a file rather than rewrite the entire thing." in quoted
+    assert "Reproduce-first" in autonomy  # kept, not traded for the new blocks
+    assert "\\\\#" not in autonomy  # a doubled backslash would mean the f-string escape leaked
 
 
 def test_run_adopt_never_overwrites_harness_files(tmp_path: Path) -> None:
@@ -175,9 +193,9 @@ def test_run_adopt_never_overwrites_existing_aef_yaml(tmp_path: Path) -> None:
 def test_run_adopt_is_idempotent_on_second_run(tmp_path: Path) -> None:
     first = run_adopt(tmp_path)
     second = run_adopt(tmp_path)
-    assert len(first.written_files) == 14
+    assert len(first.written_files) == 15
     assert len(second.written_files) == 0
-    assert len(second.skipped_files) == 14
+    assert len(second.skipped_files) == 15
 
 
 def test_checklist_nonempty_for_every_framework() -> None:
@@ -361,3 +379,39 @@ def test_the_agents_readme_marks_the_zone(tmp_path: Path) -> None:
     text = (tmp_path / "agents/README.md").read_text()
     assert "Zone A" in text
     assert "Nothing here is auto-merged" in text
+
+
+def test_run_adopt_ships_new_model_check_skill(tmp_path: Path) -> None:
+    """`/new-model-check` ships with the scaffold so an adopted repo can
+    re-audit its prompt and API surfaces at each model release instead of
+    rotting silently. Never-overwrite like every other scaffold file."""
+    result = run_adopt(tmp_path)
+    skill = tmp_path / ".claude" / "skills" / "new-model-check" / "SKILL.md"
+    assert skill in result.written_files
+    text = skill.read_text()
+    assert text.startswith("---\nname: new-model-check\n")
+    # The skill must carry no per-model facts: it reads them each run.
+    assert "claude-api" in text
+    assert "migration-guide" in text
+    assert "planted" in text  # the detector is proved before "nothing found"
+
+
+def test_run_adopt_never_overwrites_existing_new_model_check_skill(tmp_path: Path) -> None:
+    skill = tmp_path / ".claude" / "skills" / "new-model-check" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("# mine\n")
+    result = run_adopt(tmp_path)
+    assert skill.read_text() == "# mine\n"
+    assert skill in result.skipped_files
+
+
+def test_new_model_check_skill_template_matches_repo_copy() -> None:
+    """The template is the source of truth; this repo's own copy under
+    `.claude/skills/` must be byte-identical, the same way AGENTS.md is
+    pinned to CLAUDE.md. Two drifting copies is how a shipped skill and the
+    one that was actually tested stop being the same document."""
+    from aef.cli.adopt import render_new_model_check_skill
+
+    repo_root = Path(__file__).resolve().parents[2]
+    repo_copy = repo_root / ".claude" / "skills" / "new-model-check" / "SKILL.md"
+    assert repo_copy.read_text() == render_new_model_check_skill()

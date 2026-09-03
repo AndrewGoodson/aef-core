@@ -35,6 +35,18 @@ class AnthropicProvider(ModelProvider):
         )
 
     def complete(self, request: CompletionRequest) -> CompletionResult:
+        # The Messages API has no "tool" role: tool results travel inside a
+        # `user` message as `tool_result` content blocks, and
+        # `ProviderMessage.content` is a plain string that cannot carry one.
+        # Forwarding the role verbatim produced a vendor 400 naming a field
+        # the caller never wrote. Refuse it here, by name, before the network.
+        unsupported = [m.role for m in request.messages if m.role == "tool"]
+        if unsupported:
+            raise ModelProviderError(
+                "anthropic adapter cannot send role 'tool': the Messages API carries tool "
+                "results as `tool_result` blocks inside a user message, which "
+                "ProviderMessage's string content cannot express"
+            )
         system = "\n".join(m.content for m in request.messages if m.role == "system") or None
         messages = [
             {"role": m.role, "content": m.content} for m in request.messages if m.role != "system"
@@ -48,11 +60,15 @@ class AnthropicProvider(ModelProvider):
         # anything about it.
         user_id = request.metadata.get("user_id")
         anthropic_metadata = {"user_id": user_id} if user_id is not None else None
+        # `CompletionRequest.temperature` is deliberately NOT forwarded. Every
+        # current Anthropic model (Fable 5/5.1, Opus 5/4.8/4.7, Sonnet 5)
+        # rejects sampling parameters with a 400, so an adapter that sent it
+        # could not talk to any of them. The field stays on the vendor-neutral
+        # request for adapters whose vendor still honours it.
         try:
             response = self._client.messages.create(
                 model=request.model,
                 max_tokens=request.max_tokens,
-                temperature=request.temperature,
                 system=system,
                 messages=messages,
                 metadata=anthropic_metadata,
@@ -69,6 +85,18 @@ class AnthropicProvider(ModelProvider):
             # of falling through to a healthy provider). See docs/adr/0037.
             raise ModelProviderError(f"anthropic error: {exc}") from exc
 
+        # A safety classifier can decline with HTTP 200, `stop_reason ==
+        # "refusal"` and no text. Returned as `content == ""` that is
+        # indistinguishable from an empty answer. Raising the adapter's own
+        # error is the vendor guide's "opt into a fallback" advice expressed
+        # in this repo's mechanism: `FallbackProvider` catches exactly this
+        # and tries the next provider; a lone provider fails loudly instead.
+        if response.stop_reason == "refusal":
+            details = getattr(response, "stop_details", None)
+            category = getattr(details, "category", None)
+            raise ModelProviderError(
+                f"anthropic refusal (category={category!r}): no content returned"
+            )
         content = "".join(
             block.text for block in response.content if getattr(block, "type", None) == "text"
         )
