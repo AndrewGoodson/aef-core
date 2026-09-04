@@ -434,3 +434,75 @@ Dimension 6: 3 → **6**. Total: **76 → 79**.
 **Deliberately left.** A proposer with a wider repertoire, which is what
 would give the archive something to sample. Fourth test-side hole in six
 increments (M38), recorded.
+
+---
+
+## I10 — A proposer with a repertoire (2026-09-03)
+
+**Branch:** `improve/i10-llm-proposer`, off `main` (`34abe7d`).
+**Rubric claim:** dimension 6, up to +3; dimension 1, up to +1. Total before: 79.
+
+**Reproduce (RUN).** `.scratch/i10_reproduce.py` on the flaky fixture: from the
+root `RuleBasedProposer` emits one candidate (the structural retry), from the
+kept state one other (a numeric step); identical across three calls; **two
+reachable trees in total**. ADR 0121's archive sampled a proposer with one idea.
+
+**Expectation.** `LLMProposer(provider, model)` with the rule-based `Proposal`
+contract; citations computed from `MemoryEvidence` through `_check_citations`
+(validation/holdout refused before any call); whole file in one fenced block,
+validated in code against G0's line budget and IMPORTED allowlist, G4's
+owner-only fields, parse, same path, non-empty diff; any failure → rule-based
+with the reason in the rationale; `LoopConfig.proposer`, `--proposer llm`; off
+by default. Expected live: LLM keeps ≥ rule-based on both fixtures and
+**distinct kept trees > 1 on at least one** — the second half was wrong.
+
+**Measurement.**
+
+```
+live, ClaudeCodeProvider(claude-fable-5-1), run_loop 4 turns, real six-gate pipeline, 2 LLM reps:
+  flaky  rule_based  kept 1  distinct 1  gates 1/3  calls 0   stopped: re-proposed a rejected tree (turn 3)
+  flaky  llm rep 0   kept 1  distinct 1  gates 1/4  calls 4   t1 PASS (28-line in-node retry) t2,t3 G3  t4 G5 drift 0.538
+  flaky  llm rep 1   kept 1  distinct 1  gates 1/4  calls 4   t1 PASS t2 G3 t3 G5 0.542 t4 G5 0.506 -> HALTED (criterion 3)
+  demo   rule_based  kept 0  distinct 0  gates 0/2  calls 0   single-constant step never beats the cohort
+  demo   llm rep 0   kept 1  distinct 1  gates 1/4  calls 4   t1 PASS (RETRY_BUDGET + QUALITY_THRESHOLD 3->9 together) t2-4 G3
+  demo   llm rep 1   kept 1  distinct 1  gates 1/4  calls 4   t1 PASS (same, 4 lines) t2-4 G3
+  replies validated 16/16, fallbacks 0, distinct candidates per LLM run 4/4, ~100 s per call
+  calls made: 26 of 40 (1 smoke, 9 under the defective driver below — discarded, 16 measured)
+
+defect found by the first live run (every arm, every turn >= 2 rejected by G1 "gate raised
+  TrustBoundaryError: scratch destination .../work/workspace must be empty"): run_loop reused one
+  workdir per run and G1 refuses a non-empty scratch dir -> no real run_loop had ever gated a
+  second candidate behaviourally; I2's and I6's "turn 2 rejected" were this. Fixed: a scratch dir
+  per turn; acceptance test now asserts every gated candidate ran G3 and no gate raised.
+
+mutations (each -> tests fail, reverted, restored byte-for-byte):
+  M39 validation citations not refused        1 failed
+  M40 unparseable reply accepted              1 failed
+  M41 path outside Zone A accepted            1 failed
+  M42 provider error not caught               1 failed
+  M43 G0 scan of the reply dropped            1 failed
+  M44 G4 owner-only check dropped             1 failed
+  M45 line budget dropped                     1 failed
+  M46 config.proposer ignored                 1 failed
+  M47 computed citations dropped from rationale 1 failed
+  M48 shared workdir reinstated               2 failed
+
+pytest -q          1759 passed (from 1720; +39, none removed)
+mypy aef examples  126 files clean
+ruff check / format   clean
+```
+
+**Verdict.** The repertoire exists and is measured: four distinct, gate-legal
+candidates per run, none a repeat, none a fallback; on the agent the
+catalogue cannot reach the loop keeps a candidate it never could. Kept
+diversity did not move (1 everywhere — after one kept change the gates
+reject the rest), the LLM arm is the only one that halted the loop, and the
+flaky result is a tie at 100 s a turn versus 0 — so the knob is **off by
+default** and `--proposer llm` is the owner's call. Dimension 6: 6 → **8**.
+Dimension 1: 17 → **18**. Total: **79 → 82**.
+
+**Deliberately left.** Whether G5's drift budget (sized for two-line diffs)
+is the right budget for a proposer that writes twenty — an owner decision,
+not a threshold to raise. A rig where kept diversity can exceed 1 (needs an
+agent with more than one independent repairable failure). The harness
+chatter that leaked once into the model's prose is capped, not filtered.

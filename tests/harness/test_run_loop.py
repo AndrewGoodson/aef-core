@@ -188,6 +188,25 @@ def test_stops_when_the_proposer_repeats_a_rejected_tree(repo: GitRepo, tmp_path
     assert "already rejected" in run.stopped_because
 
 
+def test_every_turn_gets_its_own_scratch_dir(repo: GitRepo, tmp_path: Path) -> None:
+    """G1 refuses a non-empty `workdir/workspace`, so a workdir shared across
+    turns rejected every turn after the first with a TrustBoundaryError
+    (ADR 0122). The driver hands each turn a distinct dir under the one it
+    was given."""
+    seen: list[Path] = []
+
+    class _Recording(_FakeCycle):
+        def __call__(
+            self, config: LoopConfig, *, now: datetime, workdir: Path, **kw: Any
+        ) -> CycleRun:
+            seen.append(workdir)
+            return super().__call__(config, now=now, workdir=workdir, **kw)
+
+    _run(_config(repo, tmp_path), tmp_path, _Recording([Disposition.ESCALATE] * 3))
+    assert len(seen) == 3 and len(set(seen)) == 3, seen
+    assert all(p.parent == tmp_path / "work" for p in seen), seen
+
+
 def test_a_second_run_resumes_from_the_existing_kept_branch(repo: GitRepo, tmp_path: Path) -> None:
     config = _config(repo, tmp_path)
     _run(config, tmp_path, _FakeCycle([Disposition.ESCALATE]))

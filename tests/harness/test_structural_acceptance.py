@@ -594,9 +594,20 @@ def test_run_loop_keeps_the_real_candidate_and_stacks_from_it(
     assert "already rejected" in run.stopped_because or "no candidate" in run.stopped_because, (
         run.stopped_because
     )
-    kinds = [e.kind for e in ledger.read(config.paths.ledger_dir)]
+    entries = ledger.read(config.paths.ledger_dir)
+    kinds = [e.kind for e in entries]
     assert ledger.EventKind.KEPT in kinds
     assert ledger.EventKind.MERGED not in kinds
+    # Turn 2's rejection must be a VERDICT, not a gate that could not judge.
+    # With one workdir for the whole run, G1 found its scratch workspace
+    # non-empty on every turn after the first and raised TrustBoundaryError —
+    # so "turn 2 rejected" was true and meant nothing (ADR 0122). Every gated
+    # candidate here ran the behavioural gates, and no gate raised.
+    gated = [e for e in entries if e.kind is ledger.EventKind.GATED]
+    assert len(gated) >= 2
+    for entry in gated:
+        assert "G3" in entry.summary, entry.summary
+        assert not any("gate raised" in g["reason"] for g in entry.detail["gates"]), entry.detail
 
 
 def test_archive_sampling_measured_against_greedy_on_the_real_cycle(
@@ -670,3 +681,96 @@ def test_archive_sampling_measured_against_greedy_on_the_real_cycle(
     assert greedy.distinct_kept_trees == sampled.distinct_kept_trees == 1
     assert sampled.archive[1].score is not None  # G3's mean reached the archive
     assert flaky_repo.rev_parse("main") == flaky_repo.rev_parse("main")
+
+
+def test_run_loop_with_the_llm_proposer_through_every_real_gate(
+    flaky_repo: GitRepo, tmp_path: Path
+) -> None:
+    """ADR 0122's seam: `LoopConfig.proposer="llm"` reaches `cycle`, the
+    model's file is what the gates judge, a kept candidate is the model's,
+    and when the model has nothing (turn 2: empty reply) the rule-based
+    fallback proposes and the loop continues. No process is spawned — the
+    provider is a fake whose one reply is the structural repair — so what
+    is under test is the wiring, not the model."""
+    import datetime as dt
+    from dataclasses import dataclass, field
+
+    from aef.harness import ledger
+    from aef.harness.loop import run_loop
+    from aef.kernel import Context
+    from aef.providers.base import CompletionRequest, CompletionResult, ModelProvider
+    from aef.reasoning.nodes import make_reflect_node
+    from aef.services.memory.in_memory import InMemoryMemoryStore
+
+    @dataclass
+    class _Fake(ModelProvider):
+        name = "fake"
+        replies: list[str] = field(default_factory=list)
+        requests: list[CompletionRequest] = field(default_factory=list)
+
+        def complete(self, request: CompletionRequest) -> CompletionResult:
+            self.requests.append(request)
+            reply = self.replies.pop(0) if self.replies else ""
+            return CompletionResult(content=reply, model="fake", input_tokens=1, output_tokens=1)
+
+    memory = InMemoryMemoryStore()
+    make_reflect_node().fn(
+        AEFState(
+            run_id="r1",
+            agent_id="flaky",
+            objective="fetch the thing",
+            errors=[{"node_id": "fetch", "message": "flaky upstream refused"}],
+        ),
+        Context(
+            run_id="r1",
+            graph_version="0.1.0",
+            trace_id="t",
+            node_id="reflect",
+            now=dt.datetime(2026, 3, 1, tzinfo=dt.UTC),
+            idempotency_key=None,
+        ),
+        agent_services(memory=memory),
+    )
+    provider = _Fake(
+        replies=[
+            "Retry the flaky fetch a bounded number of times.\n\n"
+            "```python agents/flaky/graph.py\n" + _proposal_from_memory() + "```\n"
+        ]
+    )
+    _bless(flaky_repo, tmp_path / "state")
+    config = LoopConfig(
+        repo=flaky_repo,
+        paths=LoopPaths(root=tmp_path / "state"),
+        base_ref="main",
+        graph_id="flaky_agent",
+        corpus=load_corpus(flaky_repo.root / "corpus"),
+        entrypoint="agents.flaky.graph:build_graph",
+        cohort_size=5,
+        cohort_seed=7,
+        proposer="llm",
+        proposer_provider=provider,
+        proposer_model="fake-model",
+    )
+    main_before = flaky_repo.rev_parse("main")
+    with _agent_repo_build_commands():
+        run = run_loop(
+            config,
+            now=NOW,
+            workdir=tmp_path / "work",
+            turns=2,
+            budget_seconds=600.0,
+            memory=memory,
+            agent_path="agents/flaky/graph.py",
+        )
+    assert run.kept_count == 1, run.lines
+    assert run.turns[0].proposed is not None and run.turns[0].proposed.endswith("-llm")
+    assert RETRY_CONSTANT in flaky_repo.show("loop/kept", "agents/flaky/graph.py")
+    assert flaky_repo.rev_parse("main") == main_before
+    # Turn 2: the model returned nothing, the rule-based fallback proposed
+    # (a numeric step from the kept state), and the line says so.
+    assert len(provider.requests) == 2
+    assert any("fell back to rule-based: the model returned nothing" in line for line in run.lines)
+    assert run.turns[1].proposed is not None and not run.turns[1].proposed.endswith("-llm")
+    gated = [e for e in ledger.read(config.paths.ledger_dir) if e.kind is ledger.EventKind.GATED]
+    assert [e.detail["proposer"] for e in gated] == ["llm", "llm"]
+    assert all(e.detail["grounded_in"] for e in gated)

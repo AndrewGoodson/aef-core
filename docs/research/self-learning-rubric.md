@@ -19,10 +19,12 @@ A self-graded number is exactly the failure the trust case warns about.
 | 7 | Real-signal ingestion | 10 | Learns from live runs and real tenants, not a synthetic corpus; telemetry closes the loop | Arize "closing the loop"; Live-SWE-agent (on-the-fly) |
 | 8 | Adoptability / harness-native | 5 | Drops into a repo whose agents are coding-agent sessions; no key; cross-tool | — |
 
-## Current — 2026-09-03 after I6 — **79 / 100**
+## Current — 2026-09-03 after I10 — **82 / 100**
 
 | # | Score | What moved and the artifact |
 |---|---|---|
+| 6 | 8/10 | I10 (ADR 0122): `LLMProposer` — model writes prose + whole file, code computes citations (train only, via `_check_citations`) and validates against G0's imported allowlist/line budget and G4's owner-only fields, falls back to rule-based with the reason; `LoopConfig.proposer`, `--proposer llm`. Live (26 calls): 4/4 distinct candidates per run, 16/16 validated, demo kept 1 vs 0, flaky 1 = 1; kept diversity still 1 everywhere; one G5 halt → off by default. Remaining: kept diversity > 1 needs an agent with more than one repairable failure |
+| 1 | 18/20 | I10 (ADR 0122): `run_loop` gave every turn one workdir and G1 refuses a non-empty one, so no real loop had ever gated a second candidate behaviourally — fixed per turn, asserted in the acceptance test (M48); on `agents/demo` the loop now keeps a coherent two-constant change the rule-based proposer could not make. Remaining: a corpus of real tasks (I11) |
 | 6 | 6/10 | I6 (ADR 0121): G3 scores reach the driver; archive of kept members with lineage; `sample_parents` by sigmoid(score)/(1+children), seeded; kept branch = best member; duplicates skipped. Measured on the real cycle: zero diversity gain (deterministic proposer) → off by default. Remaining: a proposer with a repertoire |
 | 5 | 10/10 | I8 (ADR 0120): `tests/test_prompt_surface.py` pins required blocks, forbidden text, kept verification lines; every detector proved against a planted fault; found a broken regex and a missing reproduce-first line in the shipped CLAUDE.md |
 | 7 | 5/10 | I5 (ADR 0119): harvest redacts the input, re-executes, admits only if behaviour is unchanged, scans the output; on by default; 4 mutations detected. Remaining: has never run against a real tenant — owner decision |
