@@ -19,10 +19,11 @@ A self-graded number is exactly the failure the trust case warns about.
 | 7 | Real-signal ingestion | 10 | Learns from live runs and real tenants, not a synthetic corpus; telemetry closes the loop | Arize "closing the loop"; Live-SWE-agent (on-the-fly) |
 | 8 | Adoptability / harness-native | 5 | Drops into a repo whose agents are coding-agent sessions; no key; cross-tool | — |
 
-## Current — 2026-09-03 after I5 — **75 / 100**
+## Current — 2026-09-03 after I8 — **76 / 100**
 
 | # | Score | What moved and the artifact |
 |---|---|---|
+| 5 | 10/10 | I8 (ADR 0120): `tests/test_prompt_surface.py` pins required blocks, forbidden text, kept verification lines; every detector proved against a planted fault; found a broken regex and a missing reproduce-first line in the shipped CLAUDE.md |
 | 7 | 5/10 | I5 (ADR 0119): harvest redacts the input, re-executes, admits only if behaviour is unchanged, scans the output; on by default; 4 mutations detected. Remaining: has never run against a real tenant — owner decision |
 | 2 | 17/20 | I9 (ADR 0118): `make_retrieve_node` — the retriever's first production caller, budget enforced in a real run; `retrieved_signatures` on reflection; helpful/harmful tallies per entry, agent-scoped, surfaced in metadata + drafts; A1 closed. Remaining: ranking on the tally (no rig where harmful ≠ live); text curation |
 | 2 (I7) | 15/20 | I7 (ADR 0117): `aef loop skills` drafts one SKILL.md per well-evidenced entry under a proposals dir; refuses harness dirs, never overwrites, every field computed; 11 tests, 3 mutations detected. Remaining: no measurement that an adopted skill helps; no retrieved→outcome signal |

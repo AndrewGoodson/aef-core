@@ -182,6 +182,10 @@ If a public contract changed (a provider interface, a scaffold file's
 content, a node signature), add an ADR in the repo's `docs/adr/` if it
 keeps one.
 
+If the repo has a prompt-surface regression test (this one:
+`tests/test_prompt_surface.py`), update its required and forbidden lists to
+the new guide's — that test is what keeps this run's edits from being undone.
+
 Merge the branch to `main`; `git push origin main` is inside the loop
 contract for this repo. Nothing else is pushed anywhere.
 
