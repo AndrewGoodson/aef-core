@@ -19,7 +19,14 @@ A self-graded number is exactly the failure the trust case warns about.
 | 7 | Real-signal ingestion | 10 | Learns from live runs and real tenants, not a synthetic corpus; telemetry closes the loop | Arize "closing the loop"; Live-SWE-agent (on-the-fly) |
 | 8 | Adoptability / harness-native | 5 | Drops into a repo whose agents are coding-agent sessions; no key; cross-tool | — |
 
-## Current — 2026-09-04 after I10 + I11 — **84 / 100**
+## Current — 2026-09-04 after I10 + I11 — **85 / 100**
+
+*Corrected 2026-09-04 (ADR 0127): every total in this file up to and
+including this one was carried forward by hand as `previous + delta` and
+was one point low, because the baseline's own rows summed to 51 against a
+stated 50. **No dimension's score or evidence changes** — only the
+addition. `tests/test_rubric_arithmetic.py` now recomputes the heading
+from the rows, so a total nobody checked cannot recur.*
 
 | # | Score | What moved and the artifact |
 |---|---|---|
@@ -39,7 +46,12 @@ A self-graded number is exactly the failure the trust case warns about.
 
 Other dimensions unchanged from baseline.
 
-## Baseline — 2026-09-03 — **50 / 100**
+## Baseline — 2026-09-03 — **51 / 100**
+
+*Corrected from 50 (ADR 0127): the rows below always summed to 51. Every
+increment's delta was taken from the wrong base, which is how one point
+travelled through nine increments in the document whose first rule is that
+a self-graded number is the failure the trust case warns about.*
 
 | # | Score | Evidence for the number |
 |---|---|---|
@@ -52,7 +64,8 @@ Other dimensions unchanged from baseline.
 | 7 | 2/10 | Trust case §: criteria 1 and 6 "have never run against the live traffic and real tenants their text names". Corpus built from `GraphExecutor` runs of shipped examples |
 | 8 | 4/5 | `aef adopt` scaffold, cross-tool entry files (ADR 0040), harness provider with no key (ADR 0112). One off: Codex path unconfirmed |
 
-**Reading the number.** As a governed harness this is ~90. As a *learner* it is
+**Reading the number** (written at the baseline, when the corrected total
+was 51). As a governed harness this is ~90. As a *learner* it is
 ~35: the machinery to judge a change is stronger than the machinery to
 produce one, and nothing it learns yet moves a task metric. The field's
 strongest loops (DGM, autoresearch) are the mirror image — strong learning,
