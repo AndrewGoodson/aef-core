@@ -28,6 +28,8 @@ from aef.harness.evaluation import score_of, score_scenario
 from aef.harness.outcome import classify
 from aef.kernel import GraphExecutor, HumanApprovalRequiredError
 from aef.kernel.graph import Graph
+from aef.providers.base import ModelProvider
+from aef.providers.cassette_provider import CassetteProvider
 from aef.security.tool import PolicyConfig
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.services.runtime import agent_services
@@ -91,9 +93,21 @@ def policy_config_from_payload(payload: dict[str, Any] | None) -> PolicyConfig:
 
 
 def run_scenario(
-    scenario: Scenario, graph: Graph, policy: PolicyConfig | None = None
+    scenario: Scenario,
+    graph: Graph,
+    policy: PolicyConfig | None = None,
+    *,
+    cassette_miss: str = "fail",
+    live_provider: ModelProvider | None = None,
 ) -> dict[str, Any]:
     """One scenario, answering both gates' questions from one execution.
+
+    Model calls are served from the scenario's cassette (ADR 0123).
+    `cassette_miss="fail"` — the default — makes a request the recording
+    never saw an errored node, so the score is deterministic and needs no
+    credential; `"live"` sends misses to `live_provider` and the payload's
+    `cassette` block says how many, so a live score is never mistaken for a
+    replayed one.
 
     `critic` and `judge` are wired here for the same reason `aef run` and
     `aef loop record` wire them (ADR 0073): **every reflect node requires
@@ -113,6 +127,7 @@ def run_scenario(
     # separate defects were "the gate path lacks a service the node needs"
     # (ADR 0073/0075/0079/0089); the cause each time was drift between two
     # lists nobody compared (ADR 0091).
+    cassette = CassetteProvider(live_provider, scenario.model_calls, on_miss=cassette_miss)
     services = agent_services(
         clock=fixed_clock(scenario),
         policy=policy,
@@ -121,6 +136,7 @@ def run_scenario(
         # proposal is built from.
         memory=InMemoryMemoryStore(),
         agent_id=scenario.initial_state.agent_id,
+        model_provider=cassette,
     )
     started = time.monotonic()
     try:
@@ -165,6 +181,7 @@ def run_scenario(
             "score": 0.0,
             "cost_tokens": 0,
             "failure": f"{type(exc).__name__}: {exc}",
+            "cassette": {"hits": cassette.hits, "misses": cassette.misses},
         }
 
     elapsed_ms = (time.monotonic() - started) * 1000.0
@@ -174,6 +191,9 @@ def run_scenario(
         "score": score_of(record),
         "cost_tokens": record.cost_tokens,
         "elapsed_ms": elapsed_ms,
+        # How the model was answered: hits replayed, misses went live (or
+        # failed). A score with misses > 0 under "live" is a LIVE score.
+        "cassette": {"hits": cassette.hits, "misses": cassette.misses},
     }
     if "checks" in record.metadata:
         payload["checks"] = record.metadata["checks"]

@@ -42,6 +42,7 @@ from aef.harness.trace_codec import (
     loads,
 )
 from aef.kernel.executor import NodeExecutionRecord
+from aef.providers.cassette_provider import RecordedCall
 from aef.state import AEFState
 
 MANIFEST_FILENAME = "manifest.json"
@@ -102,6 +103,12 @@ class Scenario:
     # clock: under `fixed_clock` the recorded latency replays verbatim and
     # says nothing about the candidate.
     budget_ms: float | None = None
+    # Every model completion the recording made, keyed by request (ADR 0123).
+    # Re-execution serves these from a `CassetteProvider` so a graph that
+    # calls a model replays deterministically and the gate needs no
+    # credential. Empty for a legacy scenario and for any graph that never
+    # asked a model anything — the pinned clock's rule, one layer up.
+    model_calls: tuple[RecordedCall, ...] = ()
 
     @property
     def clock_values(self) -> tuple[datetime, ...]:
@@ -122,6 +129,7 @@ class Scenario:
             "expected": self.expected.value,
             "checks": [check.to_payload() for check in self.checks],
             "budget_ms": self.budget_ms,
+            "model_calls": [call.to_payload() for call in self.model_calls],
         }
 
     @classmethod
@@ -140,6 +148,11 @@ class Scenario:
                 checks=tuple(TaskCheck.from_payload(c) for c in payload.get("checks", ())),
                 budget_ms=(
                     None if payload.get("budget_ms") is None else float(payload["budget_ms"])
+                ),
+                # Absent in every scenario recorded before ADR 0123: loads as
+                # none, which is exactly what those recordings made.
+                model_calls=tuple(
+                    RecordedCall.from_payload(c) for c in payload.get("model_calls", ())
                 ),
             )
         except (KeyError, ValueError) as exc:

@@ -133,6 +133,37 @@ def _edges_for(graph: Graph) -> list[Edge]:  # pragma: no cover - kept for symme
     return list(graph.edges)
 
 
+def _configure(services: Any, settings: Any) -> Any:
+    """Swap the model provider for the scenario's cassette (ADR 0123).
+
+    Only the provider changes. The rest of `services` — memory in
+    particular — is kept, because one worker serves the whole corpus so
+    module-level and store-level agent state behave as they do in
+    production, and rebuilding everything per scenario would quietly undo
+    that. A live provider is built ONLY when the parent says so, from the
+    impl and model it passes; nothing here reads a config file, since the
+    workspace's config is the candidate's to edit (ADR 0082).
+    """
+    from dataclasses import replace
+
+    from aef.providers.cassette_provider import CassetteProvider, RecordedCall
+
+    if not isinstance(settings, dict):
+        raise WorkerError(f"configure payload must be an object, got {type(settings).__name__}")
+    calls = tuple(RecordedCall.from_payload(c) for c in settings.get("model_calls", ()))
+    on_miss = str(settings.get("on_miss", "fail"))
+    live = settings.get("live")
+    inner = None
+    if live is not None:
+        from aef.config.factory import build_model_provider
+        from aef.config.schema import ModelProviderConfig
+
+        inner = build_model_provider(
+            ModelProviderConfig(impl=str(live["impl"]), model=str(live.get("model", "")))
+        )
+    return replace(services, model_provider=CassetteProvider(inner, calls, on_miss=on_miss))
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(f"usage: python -m {__package__}.node_worker <module:factory>", file=sys.stderr)
@@ -158,7 +189,15 @@ def main(argv: list[str]) -> int:
         except Exception as exc:  # noqa: BLE001 - a malformed frame is a failed step
             response: dict[str, Any] = {"error": f"malformed request: {exc}"}
         else:
-            response = _evaluate(graph, request, services)
+            if isinstance(request, dict) and "configure" in request:
+                try:
+                    services = _configure(services, request["configure"])
+                except Exception as exc:  # noqa: BLE001 - reported, the parent decides
+                    response = {"error": f"configure failed: {type(exc).__name__}: {exc}"}
+                else:
+                    response = {"configured": True}
+            else:
+                response = _evaluate(graph, request, services)
         sys.stdout.write(_frame(response) + "\n")
         sys.stdout.flush()
     return 0

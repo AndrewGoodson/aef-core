@@ -36,6 +36,7 @@ from typing import Any
 
 from aef.config import build_policy_config
 from aef.config.loader import AgentConfigError, load_agent_config_text
+from aef.config.schema import AgentConfig
 from aef.harness import archive, ledger
 from aef.harness.candidate import CandidateVerdict, inspect_candidate
 from aef.harness.corpus import Corpus
@@ -133,8 +134,16 @@ class LoopConfig:
     gate_limits: dict[str, Any] = field(default_factory=dict)
     gates: tuple[Gate, ...] | None = None
     sandbox_image: str | None = None
+    # How a scenario's recorded model calls are replayed under the gates
+    # (ADR 0123). "fail": a request the recording never saw is a failed
+    # node — deterministic, credential-free, the default. "live": misses go
+    # to the provider named in the base ref's `model_provider`, and the
+    # score is a live one; the opt-in for scoring a prompt change.
+    cassette_miss: str = "fail"
 
     def __post_init__(self) -> None:
+        if self.cassette_miss not in ("fail", "live"):
+            raise ValueError(f"cassette_miss must be 'fail' or 'live', got {self.cassette_miss!r}")
         if self.cohort_size < DEFAULT_MIN_COHORT_SIZE:
             raise ValueError(
                 f"cohort_size {self.cohort_size} is below G3's minimum of "
@@ -257,8 +266,8 @@ def _halt(config: LoopConfig, *, at: datetime, proposal_id: str, reasons: tuple[
     )
 
 
-def _policy_from_base_ref(config: LoopConfig) -> PolicyConfig | None:
-    """The adopter's configured policy, as of the BASE REF.
+def _agent_config_from_base_ref(config: LoopConfig) -> AgentConfig | None:
+    """The adopter's `aef.yaml`, as of the BASE REF.
 
     Not from the workspace and not from the working tree. `aef.yaml` is Zone
     C — not agent-writable — but the gate must still read it the way it reads
@@ -303,7 +312,33 @@ def _policy_from_base_ref(config: LoopConfig) -> PolicyConfig | None:
             f"agent config at {config.base_ref}:{config.config_path} did not load, so no "
             f"policy could be built: {exc}"
         ) from exc
+    return agent_config
+
+
+def _policy_from_base_ref(config: LoopConfig) -> PolicyConfig | None:
+    """The adopter's configured policy, as of the BASE REF (see above).
+    A missing config is deny-by-default, never a pass."""
+    agent_config = _agent_config_from_base_ref(config)
+    if agent_config is None:
+        return None
     return build_policy_config(agent_config.tools, agent_config.policies)
+
+
+def _live_provider_from_base_ref(config: LoopConfig) -> dict[str, str] | None:
+    """Which provider the worker may build for cassette misses (ADR 0123).
+
+    Only under `cassette_miss="live"`, and only the impl and model named by
+    the BASE REF's `model_provider` — read the way the policy is read, so a
+    candidate cannot point the gate at a provider of its choosing by
+    editing the workspace's config. `None` otherwise, and a live miss with
+    no config then fails in the worker naming the absence.
+    """
+    if config.cassette_miss != "live":
+        return None
+    agent_config = _agent_config_from_base_ref(config)
+    if agent_config is None:
+        return None
+    return {"impl": agent_config.model_provider.impl, "model": agent_config.model_provider.model}
 
 
 def _cheap_gates(config: LoopConfig, verdict: CandidateVerdict, now: datetime) -> tuple[Gate, ...]:
@@ -371,6 +406,8 @@ def _gates_with_evidence(
         cohort_size=config.cohort_size,
         seed=config.cohort_seed,
         policy_config=policy_config,
+        cassette_miss=config.cassette_miss,
+        live_provider=_live_provider_from_base_ref(config),
     )
     try:
         cohort_verdict, candidate_run, note = builder.build(

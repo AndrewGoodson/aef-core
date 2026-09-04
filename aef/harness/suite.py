@@ -72,6 +72,8 @@ def run_variant(
     entrypoint: str,
     policy: SandboxPolicy,
     policy_config: PolicyConfig | None = None,
+    cassette_miss: str = "fail",
+    live_provider: dict[str, str] | None = None,
 ) -> VariantRun:
     """Score one already-materialised workspace over the corpus.
 
@@ -91,6 +93,8 @@ def run_variant(
         # candidate code had no rlimits, no process group and an ad-hoc
         # environment. Applied now (ADR 0095).
         sandbox=policy,
+        cassette_miss=cassette_miss,
+        live_provider=live_provider,
     )
     return VariantRun(
         label=label,
@@ -145,6 +149,10 @@ class CohortBuilder:
     cohort_size: int = 5
     seed: int = 0
     policy_config: PolicyConfig | None = None
+    # ADR 0123. "fail" keeps every variant's score deterministic; "live" is
+    # the owner's opt-in, and `live_provider` is read from the base ref.
+    cassette_miss: str = "fail"
+    live_provider: dict[str, str] | None = None
 
     def plan(self, scenarios: tuple[Scenario, ...]) -> CohortPlan:
         return CohortPlan(cohort_size=self.cohort_size, scenarios=len(scenarios))
@@ -173,6 +181,8 @@ class CohortBuilder:
             entrypoint=self.entrypoint,
             policy=self.policy,
             policy_config=self.policy_config,
+            cassette_miss=self.cassette_miss,
+            live_provider=self.live_provider,
         )
 
         incumbent_ws = _materialise_base(self.repo, diff, workroot / "incumbent")
@@ -183,6 +193,8 @@ class CohortBuilder:
             entrypoint=self.entrypoint,
             policy=self.policy,
             policy_config=self.policy_config,
+            cassette_miss=self.cassette_miss,
+            live_provider=self.live_provider,
         )
 
         cohort = tuple(
@@ -193,6 +205,8 @@ class CohortBuilder:
                 entrypoint=self.entrypoint,
                 policy=self.policy,
                 policy_config=self.policy_config,
+                cassette_miss=self.cassette_miss,
+                live_provider=self.live_provider,
             ).scores
             for label, ws in self._control_workspaces(diff, workroot)
         )
