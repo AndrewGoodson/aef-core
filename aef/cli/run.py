@@ -115,6 +115,8 @@ def run_graph_module(
     model_provider = None
     policy_config = None
     context_config = None
+    reflection = "rule_based"
+    reflection_model: str | None = None
     if config_path is not None:
         config = load_agent_config(config_path)
         model_provider = build_model_provider(config.model_provider)
@@ -132,6 +134,8 @@ def run_graph_module(
         # engine's own default instead of the one they wrote (ADR 0014, 0082).
         policy_config = build_policy_config(config.tools, config.policies)
         context_config = config.context
+        reflection = config.reflection.impl
+        reflection_model = config.model_provider.model
 
     durability: DurabilityBackend = (
         FileDurabilityBackend(Path(checkpoints_dir))
@@ -165,6 +169,8 @@ def run_graph_module(
         policy=policy_config,
         judge_rubric=judge_rubric,
         audit_log=FileAuditLogWriter(Path(audit_log_path)) if audit_log_path else None,
+        reflection=reflection,
+        reflection_model=reflection_model,
     )
     # Without this an adopter cannot produce a FAILING run from the CLI, so the
     # workflow LOOP.md documents ("record scenarios that fail as well as ones
