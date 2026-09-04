@@ -25,7 +25,9 @@ tested, and every caller in this repo passes `False`.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+import time
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -1107,6 +1109,146 @@ def cycle(
         decision=run.decision,
         lines=tuple(lines),
         exit_code=run.exit_code,
+    )
+
+
+@dataclass(frozen=True)
+class LoopTurn:
+    turn: int
+    proposed: str | None
+    disposition: Disposition | None
+    kept: bool
+    kept_ref: str  # the kept branch's commit after this turn
+
+
+@dataclass(frozen=True)
+class LoopRun:
+    """What `run_loop` did: the autoresearch shape inside the gates (ADR 0114)."""
+
+    turns: tuple[LoopTurn, ...]
+    kept_branch: str
+    kept_ref: str
+    stopped_because: str
+    lines: tuple[str, ...]
+
+    @property
+    def kept_count(self) -> int:
+        return sum(1 for t in self.turns if t.kept)
+
+    @property
+    def reverted_count(self) -> int:
+        return sum(1 for t in self.turns if t.proposed is not None and not t.kept)
+
+
+def _ensure_branch(config: LoopConfig, branch: str) -> str:
+    try:
+        return config.repo.rev_parse(branch)
+    except Exception:  # noqa: BLE001 - "no such ref" is the only thing we act on
+        config.repo.run("branch", branch, config.base_ref)
+        return config.repo.rev_parse(branch)
+
+
+def _tree_of(config: LoopConfig, ref: str) -> str:
+    return config.repo.run("rev-parse", f"{ref}^{{tree}}").strip()
+
+
+def run_loop(
+    config: LoopConfig,
+    *,
+    now: datetime,
+    workdir: Path,
+    turns: int,
+    budget_seconds: float,
+    kept_branch: str = "loop/kept",
+    clock: Callable[[], float] = time.monotonic,
+    cycle_fn: Callable[..., CycleRun] | None = None,
+    **cycle_kwargs: Any,
+) -> LoopRun:
+    """Keep/revert on the metric, inside the gates (ADR 0114).
+
+    autoresearch's loop is: propose, measure, keep if better, else revert,
+    repeat until the budget is spent. This is that loop with the gates as
+    the measurement and one deliberate difference: **"keep" advances a
+    LOCAL branch, never `main`.** Every gate passing means the candidate
+    beat the null cohort on the task metric with zero per-scenario
+    regression (G3) — and `decide()` still returns ESCALATE, because
+    Tier-1 auto-merge is off and stays off. The kept branch is what a person
+    reviews and merges; what the loop gains is that the next proposal is
+    made FROM the kept state, so improvements stack instead of each cycle
+    re-proposing from the same base.
+
+    Stops on: the turn count, the wall-clock budget, a halt, a turn that
+    produced no candidate, or a candidate whose tree matches one already
+    rejected in this run — the proposer is deterministic from its evidence,
+    so re-gating the same rejected diff would spend N+2 corpus passes to
+    learn nothing.
+    """
+    _cycle = cycle if cycle_fn is None else cycle_fn
+    started = clock()
+    kept_ref = _ensure_branch(config, kept_branch)
+    main_before = config.repo.rev_parse(config.base_ref)
+    lines: list[str] = [f"kept branch {kept_branch} at {kept_ref[:12]} (from {config.base_ref})"]
+    rejected_trees: set[str] = set()
+    done: list[LoopTurn] = []
+    stopped_because = f"turn budget of {turns} exhausted"
+    for turn in range(1, turns + 1):
+        elapsed = clock() - started
+        if elapsed > budget_seconds:
+            stopped_because = (
+                f"wall-clock budget of {budget_seconds:.0f}s exceeded after {turn - 1} turn(s)"
+            )
+            break
+        turn_config = replace(config, base_ref=kept_branch)
+        run = _cycle(
+            turn_config, now=now + timedelta(seconds=turn), workdir=workdir, **cycle_kwargs
+        )
+        lines.extend(f"turn {turn}: {line}" for line in run.lines)
+        if run.proposed is None:
+            done.append(LoopTurn(turn, None, None, False, kept_ref))
+            stopped_because = f"turn {turn} produced no candidate"
+            break
+        candidate_branch = f"loop/{run.proposed}"
+        disposition = run.decision.disposition if run.decision else None
+        passed = disposition in (Disposition.ESCALATE, Disposition.AUTO_MERGE)
+        if passed and not run.exit_code == EXIT_HALTED:
+            candidate_ref = config.repo.rev_parse(candidate_branch)
+            config.repo.run("update-ref", f"refs/heads/{kept_branch}", candidate_ref, kept_ref)
+            kept_ref = candidate_ref
+            ledger.append(
+                config.paths.ledger_dir,
+                kind=ledger.EventKind.KEPT,
+                at=now + timedelta(seconds=turn),
+                proposal_id=run.proposed,
+                summary=f"every gate passed; {kept_branch} advanced to {kept_ref[:12]} (not main)",
+                detail={"turn": turn, "kept_branch": kept_branch, "kept_ref": kept_ref},
+            )
+            lines.append(f"turn {turn}: KEPT -> {kept_branch}@{kept_ref[:12]}")
+            done.append(LoopTurn(turn, run.proposed, disposition, True, kept_ref))
+        else:
+            tree = _tree_of(config, candidate_branch)
+            done.append(LoopTurn(turn, run.proposed, disposition, False, kept_ref))
+            lines.append(
+                f"turn {turn}: reverted ({disposition.value if disposition else 'halted'})"
+            )
+            if run.exit_code == EXIT_HALTED:
+                stopped_because = f"halted at turn {turn}"
+                break
+            if tree in rejected_trees:
+                stopped_because = (
+                    f"turn {turn} re-proposed a tree already rejected in this run; "
+                    "the proposer has nothing new"
+                )
+                break
+            rejected_trees.add(tree)
+    if config.repo.rev_parse(config.base_ref) != main_before:  # pragma: no cover - invariant
+        raise RuntimeError(f"{config.base_ref} moved during run_loop; this must never happen")
+    lines.append(f"stopped: {stopped_because}")
+    return LoopRun(
+        turns=tuple(done),
+        kept_branch=kept_branch,
+        kept_ref=kept_ref,
+        stopped_because=stopped_because,
+        lines=tuple(lines),
     )
 
 

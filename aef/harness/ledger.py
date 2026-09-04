@@ -55,6 +55,10 @@ class EventKind(StrEnum):
     # every merged version back to its predecessor, and a baseline has none —
     # it would try to restore version 0 and raise (ADR 0073).
     BLESSED = "blessed"
+    # `loop run` advanced its local kept branch to this candidate because
+    # every gate passed (ADR 0114). Deliberately NOT `MERGED`: nothing
+    # reached main, and the monitor must not try to roll it back.
+    KEPT = "kept"
     ROLLED_BACK = "rolled_back"
     HALTED = "halted"
 

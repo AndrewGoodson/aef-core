@@ -19,11 +19,12 @@ A self-graded number is exactly the failure the trust case warns about.
 | 7 | Real-signal ingestion | 10 | Learns from live runs and real tenants, not a synthetic corpus; telemetry closes the loop | Arize "closing the loop"; Live-SWE-agent (on-the-fly) |
 | 8 | Adoptability / harness-native | 5 | Drops into a repo whose agents are coding-agent sessions; no key; cross-tool | — |
 
-## Current — 2026-09-03 after I1 — **55 / 100**
+## Current — 2026-09-03 after I2 — **59 / 100**
 
 | # | Score | What moved and the artifact |
 |---|---|---|
-| 1 | 13/20 | I1 (ADR 0113): owner-declared `checks` + `budget_ms` on scenarios, one `score_scenario()` in both scoring paths, `aef loop score` with CI and repeat-spread. Planted clean-run-wrong-content fault moved train 0.5000→0.1667. Still missing: keep/revert on the metric (I2); corpus is 11 demo scenarios, 5 checked |
+| 1 | 17/20 | I2 (ADR 0114): `run_loop` keeps on a local branch, never main; proposes from the kept state so improvements stack; bounded by turns, budget, halt, no-candidate, repeated-rejected-tree. Real cycle: kept 1, reverted 1, stopped on its own evidence. Remaining: corpus is 11 demo scenarios; proposer knows numeric constants + one structural transform |
+| 1 (I1) | 13/20 | I1 (ADR 0113): owner-declared `checks` + `budget_ms` on scenarios, one `score_scenario()` in both scoring paths, `aef loop score` with CI and repeat-spread. Planted clean-run-wrong-content fault moved train 0.5000→0.1667. Still missing: keep/revert on the metric (I2); corpus is 11 demo scenarios, 5 checked |
 
 Other dimensions unchanged from baseline.
 
