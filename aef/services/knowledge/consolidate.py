@@ -18,6 +18,7 @@ ADR 0091's finding is that two records of one fact drift.
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -138,8 +139,16 @@ class RuleBasedConsolidator:
         reads across agents, it never merges across them.
         """
         groups: dict[tuple[str | None, str], list[MemoryRecord]] = {}
+        # Every run this agent has recorded, by its latest record time. This is
+        # what "runs since last seen" is counted against (ADR 0116): a lesson
+        # that has stopped recurring while the agent keeps running is stale,
+        # and the retriever demotes it rather than this layer deleting it.
+        runs_seen: dict[tuple[str | None, str], datetime] = {}
         for kind in self.kinds:
             for record in memory.query(kind, agent_id=agent_id, limit=self.candidates_per_kind):
+                if record.run_id and record.created_at is not None:
+                    key = (record.agent_id, record.run_id)
+                    runs_seen[key] = max(runs_seen.get(key, _EPOCH), record.created_at)
                 signature = self.signature_fn(record)
                 if signature is None:
                     continue
@@ -150,11 +159,12 @@ class RuleBasedConsolidator:
             representatives = _representatives_by_run(records)
             if len(representatives) < self.min_occurrences:
                 continue
-            written.append(
-                knowledge.upsert(
-                    _build_entry(signature, record_agent_id, representatives, self.summarise)
-                )
+            entry = _build_entry(signature, record_agent_id, representatives, self.summarise)
+            entry = dataclasses.replace(
+                entry,
+                runs_since_last_seen=_runs_since(entry.last_seen, record_agent_id, runs_seen),
             )
+            written.append(knowledge.upsert(entry))
 
         written.sort(key=lambda e: (_sort_ts(e.last_seen), e.signature), reverse=True)
         return written
@@ -228,6 +238,25 @@ def _build_entry(
         first_seen=min(timestamps) if timestamps else None,
         last_seen=max(timestamps) if timestamps else None,
         tags=newest.tags,
+    )
+
+
+def _runs_since(
+    last_seen: datetime | None,
+    agent_id: str | None,
+    runs_seen: dict[tuple[str | None, str], datetime],
+) -> int:
+    """Distinct runs of THIS agent whose latest record is newer than the
+    entry's last occurrence. Computed from the records every consolidation,
+    never stored as a counter (ADR 0091: two records of one fact drift).
+    Records without a run or a timestamp cannot be counted and are not
+    guessed at; an entry with no `last_seen` has nothing to count from."""
+    if last_seen is None:
+        return 0
+    return sum(
+        1
+        for (run_agent, _), latest in runs_seen.items()
+        if run_agent == agent_id and latest > last_seen
     )
 
 

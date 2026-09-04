@@ -28,7 +28,7 @@ import re
 from dataclasses import dataclass
 
 from aef.services.context.base import RetrievedChunk, Retriever
-from aef.services.knowledge.base import KnowledgeKind, KnowledgeStore
+from aef.services.knowledge.base import KnowledgeEntry, KnowledgeKind, KnowledgeStore
 from aef.services.memory.base import MemoryKind, MemoryStore
 
 # The kinds a retriever draws on by default: what went wrong before, and what
@@ -40,6 +40,11 @@ DEFAULT_KINDS: tuple[MemoryKind, ...] = ("failure", "success")
 # The knowledge kinds consolidated entries are drawn from — the same two, since
 # `KnowledgeKind` is deliberately a subset of `MemoryKind` (ADR 0110).
 DEFAULT_KNOWLEDGE_KINDS: tuple[KnowledgeKind, ...] = ("failure", "success")
+# See `MemoryRetriever.staleness_half_life`. Measured on (ADR 0116): the sweep in
+# tests/services/knowledge/test_ab_curation.py gave live coverage 2 -> 3 of 3 at
+# budget 400 for every positive half-life and cost nothing at budget 2000; 5 is
+# the middle of the swept range, not a tuned optimum.
+DEFAULT_STALENESS_HALF_LIFE = 5
 
 # Characters per token. A crude estimate, and crude on purpose: a real
 # tokenizer is provider-specific, and importing one here would put a vendor
@@ -144,6 +149,12 @@ class MemoryRetriever(Retriever):
     # `tests/services/knowledge/test_ab_coverage.py`; raising it should mean
     # re-running that, not editing this line.
     knowledge_boost: float = 0.0
+    # Demote — never drop — entries whose failure has stopped recurring.
+    # Multiplier is `half_life / (half_life + runs_since_last_seen)`, so an
+    # entry seen this run keeps its full score and one unseen for `half_life`
+    # runs keeps half. `0` disables it. DEFAULT SET BY MEASUREMENT (ADR 0116):
+    # tests/services/knowledge/test_ab_curation.py sweeps it and records why.
+    staleness_half_life: int = DEFAULT_STALENESS_HALF_LIFE
 
     def __post_init__(self) -> None:
         if self.candidates_per_kind <= 0:
@@ -152,6 +163,11 @@ class MemoryRetriever(Retriever):
             )
         if self.max_token_budget is not None and self.max_token_budget <= 0:
             raise ValueError(f"max_token_budget must be positive; got {self.max_token_budget}")
+        if self.staleness_half_life < 0:
+            raise ValueError(
+                f"staleness_half_life must be non-negative; got {self.staleness_half_life}. "
+                f"A negative half-life would rank the STALEST entries first."
+            )
         if self.knowledge_boost < 0:
             raise ValueError(
                 f"knowledge_boost must be non-negative; got {self.knowledge_boost}. A "
@@ -215,6 +231,7 @@ class MemoryRetriever(Retriever):
                 if base <= 0.0:
                     continue
                 score = base * (1.0 + self.knowledge_boost * entry.confidence)
+                score *= self._freshness(entry)
                 scored.append(
                     (
                         score,
@@ -235,6 +252,7 @@ class MemoryRetriever(Retriever):
                                 # 0101 deleted GraphStore for tolerating.
                                 "occurrence_count": entry.occurrence_count,
                                 "confidence": entry.confidence,
+                                "runs_since_last_seen": entry.runs_since_last_seen,
                                 "source_record_ids": list(entry.source_record_ids),
                             },
                         ),
@@ -260,6 +278,11 @@ class MemoryRetriever(Retriever):
             admitted.append(chunk)
             spent += chunk.token_estimate
         return admitted
+
+    def _freshness(self, entry: KnowledgeEntry) -> float:
+        if self.staleness_half_life <= 0:
+            return 1.0
+        return self.staleness_half_life / (self.staleness_half_life + entry.runs_since_last_seen)
 
     @staticmethod
     def _score(query_terms: set[str], text: str) -> float:
