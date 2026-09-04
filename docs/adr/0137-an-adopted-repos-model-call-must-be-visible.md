@@ -309,3 +309,76 @@ can under-report, which is the safer failure for a check that gates.
 **Not measured:** any repo but the toy. The scanner has never run against a
 codebase nobody wrote to be scanned, which is the same gap
 `READY_LOOP.md` K5 names for the whole loop.
+
+## Erratum (ADR 0140, fix wave C)
+
+Two claims in this ADR were wrong, and a seam hunt reproduced four defects in
+the routed form it shipped. The corrections, in the order they matter:
+
+**1. "There is nothing here for routing to lose" was false, and the generated
+node said it out loud.** Section 3 above defines routable as: own client, one
+recognised completion call, literal `model=`, no loop, no `try`, no stream, no
+other calls. Every one of those conditions is about **control flow**. Nothing
+in the predicate ever looked at the *keywords the call passes*, and
+`CompletionRequest` has five fields — `messages`, `model`, `max_tokens`,
+`temperature`, `metadata`. Reproduced: a call site passing
+`system="You are a claims adjuster. NEVER approve a payout above $5,000."`
+together with `tools=`, `stop_sequences=` and `temperature=0.0` was judged
+ROUTED, and the generated node carried `messages/model/max_tokens` only. The
+payout ceiling and the tool grant were dropped, and the node's docstring told
+the reader that nothing had been.
+
+**2. The falsification clause was incomplete in kind, not merely in coverage.**
+Section 4 enumerates retries, loops, `try`, streams, guessed models and
+transitive wrappers, and concludes with the decision rule *"anything at all in
+the way"*. It asked only whether the FUNCTION does more than call. It never
+asked whether the REQUEST survives translation into `CompletionRequest`. Those
+are two different questions and only one of them was answered. The clause now
+covers both (ADR 0140): the routable keyword set is derived from
+`dataclasses.fields(CompletionRequest)`, so any keyword the request type cannot
+carry — and any expressible keyword whose value is not a literal this command
+reproduces verbatim, `max_tokens=MAX` included — refuses the routed form and
+names itself.
+
+**3. Two shapes this ADR's own Confidence section predicted, and shipped
+anyway.** It reads: *"a decorator applying a retry, a client constructed with a
+custom `base_url` or timeout ... would be routed and would lose it. The
+decorator case in particular is invisible to this analysis."* Both were then
+reproduced as real routes — a bare `@retry` (an `ast.Name`, invisible even to
+the "body also calls `retry()`" rule, which caught the *called* form only by
+accident) and
+`anthropic.Anthropic(base_url="https://llm-gateway.corp/v1", timeout=120.0,
+max_retries=8)`, which routed a call to a different endpoint, credential and
+account. A third, unpredicted: `**kwargs` forwarded into the SDK call is an
+`ast.keyword` with `arg=None`, filtered out before any keyword was read, so a
+caller passing `stream=True` at runtime defeated the stream check. All three
+now refuse, each with its own reason and its own test. A predicted defect that
+ships is a defect, not a caveat.
+
+**4. `--force`, which this ADR's own fix string recommends, discarded edits.**
+The "model calls visible" obligation prints `aef migrate --dir . --force`.
+Reproduced: hand-edit the generated node, run that line, edits gone — no
+backup, no diff, no warning, exit 0, three lines below a comment calling an
+edited generated file "the expensive thing to lose". `--force` now writes a
+`.bak` and says so whenever the existing file differs from what migrate would
+generate.
+
+**5. Every generated node declared `side_effects` PURE.** `render()` emitted
+`Node(...)` with no `side_effects`, so the default applied — a live routed
+model call declared to have no effect on the world. `add_bounded_retry`'s guard
+skips its idempotency requirement entirely when the declaration is *absent*, so
+the loop could wrap that call in a 3-attempt retry with nothing asked. Both
+generated forms now declare `SideEffect.EXTERNAL_CALL` with a generated
+`idempotency_key_fn`.
+
+**6. The generated output still failed the repo's own ruff.** The "three lint
+failures in generated output" this ADR records finding were the ones a short
+node id produces. With a realistic module path the docstring's qualified-name
+lines and the `working_memory={"<node id>": ...}` line are 116, 125 and 138
+characters, in both forms. The ruff test added here only ever ran on short
+names; ADR 0140 adds a long-name case and reflows the output.
+
+Nothing else in this ADR is retracted: the four reproductions, the lifted
+scanner, the sixth preflight obligation, and the routed path's end-to-end
+evidence (provider call → `RecordedCall` → credential-free replay) all stand,
+and the thin adoptee measured here still routes.
