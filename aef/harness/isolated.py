@@ -212,6 +212,30 @@ class NodeWorkerSession:
         line = self._proc.stdout.readline()
         return line.strip() or None
 
+    def configure(self, settings: dict[str, Any]) -> None:
+        """Hand the worker per-scenario settings the parent owns.
+
+        Today that is the scenario's model cassette (ADR 0123): the recorded
+        calls, the miss policy, and — only when the owner opted into
+        `cassette_miss="live"` — which provider to build for misses. The
+        worker still never learns what a scenario is; it learns what the
+        model said last time, which its own node could have hard-coded
+        anyway. The parent keeps everything that judges.
+        """
+        assert self._proc.stdin is not None
+        try:
+            self._proc.stdin.write(_frame({"configure": settings}) + "\n")
+            self._proc.stdin.flush()
+        except (BrokenPipeError, ValueError) as exc:
+            raise IsolationError(f"worker died before it could be configured: {exc}") from exc
+        line = self._readline()
+        if line is None:
+            raise IsolationError("worker produced no reply to configure; it exited or was killed")
+        response = _unframe(line)
+        if not isinstance(response, dict) or response.get("configured") is not True:
+            detail = response.get("error") if isinstance(response, dict) else response
+            raise IsolationError(f"worker refused configuration: {detail}")
+
     def evaluate(self, node_id: str, state: AEFState, ctx: Context) -> tuple[StateDelta, Route]:
         assert self._proc.stdin is not None
         request = {

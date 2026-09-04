@@ -1,0 +1,351 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Dunmere cider press"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "oak"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "apples"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "^(?:\\s*\\S+){1,35}\\s*$"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-13-cider-press",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-13-cider-press in at most 35 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-13-cider-press",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 35,
+      "must_mention": [
+        "Dunmere cider press",
+        "oak",
+        "apples"
+      ],
+      "text": "The Dunmere cider press, a hand-turned screw press built from oak beams in the 1850s, has been rebuilt and will press apples again this autumn for the first time in forty years. Volunteers replaced the rotten base beam with seasoned oak from a fallen tree on the estate and re-cut the screw thread by hand. Anyone with surplus apples can bring them on the two pressing days and take juice home in exchange. The press sits in a barn beside the estate's walled garden."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "cdc5196f6a58217998928ab7f9d3d2d36e4e8c037b464a3c2d366e7dde710f38",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 35 words.\nThe summary must mention each of these terms, spelled exactly as given: Dunmere cider press, oak, apples.\n\nPassage:\nThe Dunmere cider press, a hand-turned screw press built from oak beams in the 1850s, has been rebuilt and will press apples again this autumn for the first time in forty years. Volunteers replaced the rotten base beam with seasoned oak from a fallen tree on the estate and re-cut the screw thread by hand. Anyone with surplus apples can bring them on the two pressing days and take juice home in exchange. The press sits in a barn beside the estate's walled garden.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "The Dunmere cider press, an 1850s hand-turned oak screw press, has been rebuilt by volunteers with seasoned estate oak and will press apples again this autumn after forty years; bring surplus apples, take juice home.",
+        "input_tokens": 2,
+        "model": "claude-fable-5-1",
+        "output_tokens": 77,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:49:40.079892+00:00",
+  "split": "validation",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-13-cider-press:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-04T01:49:40.081916+00:00",
+        "run_id": "sum-13-cider-press",
+        "trace_id": "sum-13-cider-press"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-13-cider-press in at most 35 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-13-cider-press",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Dunmere cider press",
+            "oak",
+            "apples"
+          ],
+          "text": "The Dunmere cider press, a hand-turned screw press built from oak beams in the 1850s, has been rebuilt and will press apples again this autumn for the first time in forty years. Volunteers replaced the rotten base beam with seasoned oak from a fallen tree on the estate and re-cut the screw thread by hand. Anyone with surplus apples can bring them on the two pressing days and take juice home in exchange. The press sits in a barn beside the estate's walled garden."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-13-cider-press:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-04T01:49:40.081968+00:00",
+        "run_id": "sum-13-cider-press",
+        "trace_id": "sum-13-cider-press"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-13-cider-press in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 79,
+            "trace_id": "sum-13-cider-press",
+            "ts": "2026-09-04T01:49:40.081968Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "The Dunmere cider press, an 1850s hand-turned oak screw press, has been rebuilt by volunteers with seasoned estate oak and will press apples again this autumn after forty years; bring surplus apples, take juice home."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-13-cider-press in at most 35 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-13-cider-press",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Dunmere cider press",
+            "oak",
+            "apples"
+          ],
+          "text": "The Dunmere cider press, a hand-turned screw press built from oak beams in the 1850s, has been rebuilt and will press apples again this autumn for the first time in forty years. Volunteers replaced the rotten base beam with seasoned oak from a fallen tree on the estate and re-cut the screw thread by hand. Anyone with surplus apples can bring them on the two pressing days and take juice home in exchange. The press sits in a barn beside the estate's walled garden."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-13-cider-press:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-04T01:49:49.921354+00:00",
+        "run_id": "sum-13-cider-press",
+        "trace_id": "sum-13-cider-press"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-13-cider-press in at most 35 words",
+        "plan": {
+          "goal": "summarise sum-13-cider-press in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 79,
+            "trace_id": "sum-13-cider-press",
+            "ts": "2026-09-04T01:49:40.081968Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-13-cider-press",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Dunmere cider press",
+            "oak",
+            "apples"
+          ],
+          "summary": "The Dunmere cider press, an 1850s hand-turned oak screw press, has been rebuilt by volunteers with seasoned estate oak and will press apples again this autumn after forty years; bring surplus apples, take juice home.",
+          "text": "The Dunmere cider press, a hand-turned screw press built from oak beams in the 1850s, has been rebuilt and will press apples again this autumn for the first time in forty years. Volunteers replaced the rotten base beam with seasoned oak from a fallen tree on the estate and re-cut the screw thread by hand. Anyone with surplus apples can bring them on the two pressing days and take juice home in exchange. The press sits in a barn beside the estate's walled garden."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-13-cider-press:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-04T01:49:49.921565+00:00",
+        "run_id": "sum-13-cider-press",
+        "trace_id": "sum-13-cider-press"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-13-cider-press in at most 35 words",
+        "plan": {
+          "goal": "summarise sum-13-cider-press in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 79,
+            "trace_id": "sum-13-cider-press",
+            "ts": "2026-09-04T01:49:40.081968Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-13-cider-press",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Dunmere cider press",
+            "oak",
+            "apples"
+          ],
+          "summary": "The Dunmere cider press, an 1850s hand-turned oak screw press, has been rebuilt by volunteers with seasoned estate oak and will press apples again this autumn after forty years; bring surplus apples, take juice home.",
+          "text": "The Dunmere cider press, a hand-turned screw press built from oak beams in the 1850s, has been rebuilt and will press apples again this autumn for the first time in forty years. Volunteers replaced the rotten base beam with seasoned oak from a fallen tree on the estate and re-cut the screw thread by hand. Anyone with surplus apples can bring them on the two pressing days and take juice home in exchange. The press sits in a barn beside the estate's walled garden."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

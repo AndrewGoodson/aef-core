@@ -506,3 +506,77 @@ is the right budget for a proposer that writes twenty — an owner decision,
 not a threshold to raise. A rig where kept diversity can exceed 1 (needs an
 agent with more than one independent repairable failure). The harness
 chatter that leaked once into the model's prose is capped, not filtered.
+
+---
+
+## I11 — A task a model can fail, replayed without a key (2026-09-03)
+
+**Branch:** `improve/i11-task-suite`, off `main` (`34abe7d`).
+**Rubric claim:** dimension 1, up to +3; dimension 3, up to +2. Total before: 79.
+
+**Reproduce (RUN).** `aef loop score agents.demo.graph:build_graph --corpus
+corpus`: 11 scenarios, 6 below 1.0, all 6 carrying an error — no scenario
+fails on content alone (`.scratch/reproduce.py`). A graph that calls a model
+could not be recorded and replayed: nothing pinned the model the way
+`fixed_clock` pins the clock.
+
+**Expectation.** `CassetteProvider` keyed on (messages, model, max_tokens);
+`Scenario.model_calls` with payload round-trip; miss FAILS by default,
+`cassette_miss="live"` opt-in reported as live; cassette shipped to the
+isolated worker; `agents/summary` recorded twenty times live with owner
+checks; cassette score deterministic (spread 0); a planted prompt regression
+moves the score; judge A/B on the content corpus — predicted BEFORE running
+that neither judge reads the answer.
+
+**Measurement.**
+
+```
+recording: 20 scenarios, 20 model calls (claude_code, claude-fable-5-1), 4.9-9.8 s each
+  12 train / 6 validation / 2 holdout (--i-am-spending-the-holdout, once)
+
+cassette, --repeat 3 (54 hits, 0 misses, 0 live calls):
+  train       n=12 mean 0.9792 stdev 0.0722 ci95 [0.9383, 1.0200] repeat_spread 0.000000
+  validation  n=6  mean 0.9167 stdev 0.1291 ci95 [0.8134, 1.0200] repeat_spread 0.000000
+  0.75 x3 (sum-07, sum-14, sum-16): required term capitalised at sentence start; `contains`
+    is case-sensitive -> the first content failures the metric has seen
+
+planted regression (must-mention instruction dropped), default cassette_miss=fail:
+  36 misses, 0 hits, train 0.0000 validation 0.0000, 0 live calls, spread 0
+  reverted; diff vs backup and vs HEAD both clean
+planted regression, cassette_miss=live, --repeat 3: DID NOT COMPLETE
+  attempt 1 train+val (54 calls) killed at 10-min wall; attempt 2 val x3 (18) killed with
+  background tasks; attempt 3 val x3 foreground > 10 min. Predicted ~6 min at ~6 s/call —
+  WRONG. Live noise floor: absent. Calls spent: unknown exactly, <= 90 across attempts.
+
+judge A/B, 18 states, position-swapped, 36 calls, mean 11.9 s / judgment:
+  rule_agreement_with_checks 3/18   llm_agreement_with_checks 9/18   rule-vs-llm disagree 10/18
+  llm scores 0.23-0.50, position_delta 0.05-0.2 on 9/18, fallbacks 0
+  prediction confirmed: neither judge's evidence contains the summary
+
+mutations (each performed: perturb, run, restore, diff-clean):
+  M39 miss under 'fail' falls through to live   1 failed
+  M40 a hit still calls the inner provider      1 failed
+  M41 model_calls not loaded from the payload   1 failed
+  M42 a `contains` check always holds           1 failed
+
+found on the way: worker PYTHONPATH carried only the workspace -> parent/worker protocol
+  drift on a checkout whose venv resolves `aef` elsewhere; harness root now appended (fixed)
+reported, not fixed: gates do not filter by graph_id; harvest re-executes without a cassette;
+  judge evidence omits working_memory
+
+pytest -q          1744 passed (from 1720; +24; two corpus-pinning tests rewritten deliberately)
+mypy aef examples  126 files clean
+ruff check / format   clean
+```
+
+**Verdict.** The corpus has a task a model can fail, replayed deterministically
+with no credential, and a prompt regression is caught by the default policy
+without a live call. Dimension 1: 17 → **19** (the live noise floor is
+unmeasured; no turn has been kept or reverted on this suite). Dimension 3:
+7 → **8** (the corpus where the judges disagree exists; what it shows is that
+neither sees the answer). Total: **79 → 82**.
+
+**Deliberately left.** The live noise floor (a measurement, not code — retry
+when the harness answers at recording speed again). A judge whose evidence
+includes the answer. Case-insensitive term checks, or `(?i)` regexes, for
+the next recording. Filtering gate scenarios by `graph_id`.

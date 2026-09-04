@@ -17,14 +17,16 @@ noticing — so writing there needs an explicit, separate act.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
+from aef.harness.checks import TaskCheck
 from aef.harness.corpus import Expected, Scenario, Split, load_corpus, save_scenario
 from aef.harness.outcome import classify
 from aef.kernel import GraphExecutor, Services
 from aef.kernel.graph import Graph
+from aef.providers.cassette_provider import CassetteProvider
 from aef.state import AEFState
 
 
@@ -55,12 +57,17 @@ def record_run(
     notes: str = "",
     allow_holdout: bool = False,
     expected: Expected = Expected.UNSPECIFIED,
+    checks: tuple[TaskCheck, ...] = (),
+    budget_ms: float | None = None,
 ) -> Scenario:
     """Execute `graph` and capture the run as a `Scenario`.
 
     The clock is whatever `services` supplies; the recorded `Context.now`
     values become the scenario's pinned clock (ADR 0048), so a re-execution
-    observes exactly what the recording did.
+    observes exactly what the recording did. Model calls are pinned the same
+    way (ADR 0123). `checks` and `budget_ms` are the OWNER's claims about the
+    answer (ADR 0113) and are stored, not evaluated, here — the recording
+    says what happened; the checks say what should have.
     """
     if split is Split.HOLDOUT and not allow_holdout:
         raise HoldoutWriteRefused(
@@ -69,6 +76,15 @@ def record_run(
             "as casually as it fills train destroys that independence silently. Pass "
             "allow_holdout=True to spend it deliberately."
         )
+
+    # Every model call the run makes is captured (ADR 0123): the recording
+    # cassette starts empty and lets each distinct request through to the
+    # caller's provider, keeping the answer. Re-execution then serves those
+    # answers and needs no credential. Wrapped ALWAYS, not only when a
+    # provider is configured — a graph that calls a model with none
+    # configured fails naming the miss, which is the same errored run it was.
+    recording = CassetteProvider(services.model_provider, on_miss="live")
+    services = replace(services, model_provider=recording)
 
     result = GraphExecutor(graph.compile(), services).run(initial_state, record_trace=True)
     if result.trace is None:  # pragma: no cover - record_trace=True guarantees it
@@ -103,6 +119,9 @@ def record_run(
         recorded_at=recorded_at,
         notes=notes,
         expected=expected,
+        checks=checks,
+        budget_ms=budget_ms,
+        model_calls=recording.recorded,
     )
 
 
@@ -118,6 +137,8 @@ def record_to_corpus(
     notes: str = "",
     allow_holdout: bool = False,
     expected: Expected = Expected.UNSPECIFIED,
+    checks: tuple[TaskCheck, ...] = (),
+    budget_ms: float | None = None,
 ) -> RecordedScenario:
     """Record and persist, refusing to overwrite an existing scenario.
 
@@ -143,5 +164,7 @@ def record_to_corpus(
         notes=notes,
         allow_holdout=allow_holdout,
         expected=expected,
+        checks=checks,
+        budget_ms=budget_ms,
     )
     return RecordedScenario(scenario=scenario, path=save_scenario(root, scenario))

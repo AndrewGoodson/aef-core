@@ -1,0 +1,351 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Holloway town clock"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "pendulum"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "1911"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "^(?:\\s*\\S+){1,40}\\s*$"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-17-clockmaker",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-17-clockmaker in at most 40 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-17-clockmaker",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 40,
+      "must_mention": [
+        "Holloway town clock",
+        "pendulum",
+        "1911"
+      ],
+      "text": "The Holloway town clock, which has stood over the market hall since 1911, has been stopped for the first time in decades while its pendulum is repaired. The clock lost about a minute a day after a bearing wore through, and the clockmaker found the pendulum rod had also bent slightly. Both parts will be made new to the original drawings, which the town still holds. The chimes will be silent for about six weeks. The clock's four faces are being cleaned while the mechanism is out."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "002848051e0b086a1f09a0281dd99d8fabff06910bf5cbf6e87c2fbfb4f258f1",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Holloway town clock, pendulum, 1911.\n\nPassage:\nThe Holloway town clock, which has stood over the market hall since 1911, has been stopped for the first time in decades while its pendulum is repaired. The clock lost about a minute a day after a bearing wore through, and the clockmaker found the pendulum rod had also bent slightly. Both parts will be made new to the original drawings, which the town still holds. The chimes will be silent for about six weeks. The clock's four faces are being cleaned while the mechanism is out.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Holloway town clock, above market hall since 1911, stopped for pendulum repair after worn bearing caused minute-a-day loss and bent rod. Both parts remade from original drawings; chimes silent six weeks, four faces cleaned meanwhile.",
+        "input_tokens": 2,
+        "model": "claude-fable-5-1",
+        "output_tokens": 86,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:50:05.718450+00:00",
+  "split": "validation",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-17-clockmaker:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-04T01:50:05.720688+00:00",
+        "run_id": "sum-17-clockmaker",
+        "trace_id": "sum-17-clockmaker"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-17-clockmaker in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-17-clockmaker",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Holloway town clock",
+            "pendulum",
+            "1911"
+          ],
+          "text": "The Holloway town clock, which has stood over the market hall since 1911, has been stopped for the first time in decades while its pendulum is repaired. The clock lost about a minute a day after a bearing wore through, and the clockmaker found the pendulum rod had also bent slightly. Both parts will be made new to the original drawings, which the town still holds. The chimes will be silent for about six weeks. The clock's four faces are being cleaned while the mechanism is out."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-17-clockmaker:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-04T01:50:05.720734+00:00",
+        "run_id": "sum-17-clockmaker",
+        "trace_id": "sum-17-clockmaker"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-17-clockmaker in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 88,
+            "trace_id": "sum-17-clockmaker",
+            "ts": "2026-09-04T01:50:05.720734Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Holloway town clock, above market hall since 1911, stopped for pendulum repair after worn bearing caused minute-a-day loss and bent rod. Both parts remade from original drawings; chimes silent six weeks, four faces cleaned meanwhile."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-17-clockmaker in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-17-clockmaker",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Holloway town clock",
+            "pendulum",
+            "1911"
+          ],
+          "text": "The Holloway town clock, which has stood over the market hall since 1911, has been stopped for the first time in decades while its pendulum is repaired. The clock lost about a minute a day after a bearing wore through, and the clockmaker found the pendulum rod had also bent slightly. Both parts will be made new to the original drawings, which the town still holds. The chimes will be silent for about six weeks. The clock's four faces are being cleaned while the mechanism is out."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-17-clockmaker:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-04T01:50:11.186857+00:00",
+        "run_id": "sum-17-clockmaker",
+        "trace_id": "sum-17-clockmaker"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-17-clockmaker in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-17-clockmaker in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 88,
+            "trace_id": "sum-17-clockmaker",
+            "ts": "2026-09-04T01:50:05.720734Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-17-clockmaker",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Holloway town clock",
+            "pendulum",
+            "1911"
+          ],
+          "summary": "Holloway town clock, above market hall since 1911, stopped for pendulum repair after worn bearing caused minute-a-day loss and bent rod. Both parts remade from original drawings; chimes silent six weeks, four faces cleaned meanwhile.",
+          "text": "The Holloway town clock, which has stood over the market hall since 1911, has been stopped for the first time in decades while its pendulum is repaired. The clock lost about a minute a day after a bearing wore through, and the clockmaker found the pendulum rod had also bent slightly. Both parts will be made new to the original drawings, which the town still holds. The chimes will be silent for about six weeks. The clock's four faces are being cleaned while the mechanism is out."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-17-clockmaker:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-04T01:50:11.187047+00:00",
+        "run_id": "sum-17-clockmaker",
+        "trace_id": "sum-17-clockmaker"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-17-clockmaker in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-17-clockmaker in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 88,
+            "trace_id": "sum-17-clockmaker",
+            "ts": "2026-09-04T01:50:05.720734Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-17-clockmaker",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Holloway town clock",
+            "pendulum",
+            "1911"
+          ],
+          "summary": "Holloway town clock, above market hall since 1911, stopped for pendulum repair after worn bearing caused minute-a-day loss and bent rod. Both parts remade from original drawings; chimes silent six weeks, four faces cleaned meanwhile.",
+          "text": "The Holloway town clock, which has stood over the market hall since 1911, has been stopped for the first time in decades while its pendulum is repaired. The clock lost about a minute a day after a bearing wore through, and the clockmaker found the pendulum rod had also bent slightly. Both parts will be made new to the original drawings, which the town still holds. The chimes will be silent for about six weeks. The clock's four faces are being cleaned while the mechanism is out."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

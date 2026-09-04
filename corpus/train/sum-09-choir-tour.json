@@ -1,0 +1,351 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Ravensholme choir"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Bruges"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "coach"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "^(?:\\s*\\S+){1,30}\\s*$"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-09-choir-tour",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-09-choir-tour in at most 30 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-09-choir-tour",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 30,
+      "must_mention": [
+        "Ravensholme choir",
+        "Bruges",
+        "coach"
+      ],
+      "text": "The Ravensholme choir will travel by coach to Bruges in June for three concerts, its first tour abroad since the group was founded twelve years ago. The programme mixes English folk arrangements with two pieces written for the choir by a local composer. Members are paying their own travel costs, and the choir has sold tea-towels and a recording to cover hall hire. Rehearsals have moved to twice a week until the tour. A homecoming concert is planned for the village hall."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "89760235cc0760e6ee9c1b260acbe01acbdac98b44734a192a491533272eccdb",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Ravensholme choir, Bruges, coach.\n\nPassage:\nThe Ravensholme choir will travel by coach to Bruges in June for three concerts, its first tour abroad since the group was founded twelve years ago. The programme mixes English folk arrangements with two pieces written for the choir by a local composer. Members are paying their own travel costs, and the choir has sold tea-towels and a recording to cover hall hire. Rehearsals have moved to twice a week until the tour. A homecoming concert is planned for the village hall.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Ravensholme choir travels by coach to Bruges in June for three concerts, first tour abroad in twelve years; members self-fund, rehearsals doubled, homecoming concert planned.",
+        "input_tokens": 2,
+        "model": "claude-fable-5-1",
+        "output_tokens": 64,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:49:17.387634+00:00",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-09-choir-tour:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-04T01:49:17.389321+00:00",
+        "run_id": "sum-09-choir-tour",
+        "trace_id": "sum-09-choir-tour"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-09-choir-tour in at most 30 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-09-choir-tour",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Ravensholme choir",
+            "Bruges",
+            "coach"
+          ],
+          "text": "The Ravensholme choir will travel by coach to Bruges in June for three concerts, its first tour abroad since the group was founded twelve years ago. The programme mixes English folk arrangements with two pieces written for the choir by a local composer. Members are paying their own travel costs, and the choir has sold tea-towels and a recording to cover hall hire. Rehearsals have moved to twice a week until the tour. A homecoming concert is planned for the village hall."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-09-choir-tour:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-04T01:49:17.389373+00:00",
+        "run_id": "sum-09-choir-tour",
+        "trace_id": "sum-09-choir-tour"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-09-choir-tour in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 66,
+            "trace_id": "sum-09-choir-tour",
+            "ts": "2026-09-04T01:49:17.389373Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Ravensholme choir travels by coach to Bruges in June for three concerts, first tour abroad in twelve years; members self-fund, rehearsals doubled, homecoming concert planned."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-09-choir-tour in at most 30 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-09-choir-tour",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Ravensholme choir",
+            "Bruges",
+            "coach"
+          ],
+          "text": "The Ravensholme choir will travel by coach to Bruges in June for three concerts, its first tour abroad since the group was founded twelve years ago. The programme mixes English folk arrangements with two pieces written for the choir by a local composer. Members are paying their own travel costs, and the choir has sold tea-towels and a recording to cover hall hire. Rehearsals have moved to twice a week until the tour. A homecoming concert is planned for the village hall."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-09-choir-tour:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-04T01:49:22.301266+00:00",
+        "run_id": "sum-09-choir-tour",
+        "trace_id": "sum-09-choir-tour"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-09-choir-tour in at most 30 words",
+        "plan": {
+          "goal": "summarise sum-09-choir-tour in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 66,
+            "trace_id": "sum-09-choir-tour",
+            "ts": "2026-09-04T01:49:17.389373Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-09-choir-tour",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Ravensholme choir",
+            "Bruges",
+            "coach"
+          ],
+          "summary": "Ravensholme choir travels by coach to Bruges in June for three concerts, first tour abroad in twelve years; members self-fund, rehearsals doubled, homecoming concert planned.",
+          "text": "The Ravensholme choir will travel by coach to Bruges in June for three concerts, its first tour abroad since the group was founded twelve years ago. The programme mixes English folk arrangements with two pieces written for the choir by a local composer. Members are paying their own travel costs, and the choir has sold tea-towels and a recording to cover hall hire. Rehearsals have moved to twice a week until the tour. A homecoming concert is planned for the village hall."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-09-choir-tour:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-04T01:49:22.301470+00:00",
+        "run_id": "sum-09-choir-tour",
+        "trace_id": "sum-09-choir-tour"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-09-choir-tour in at most 30 words",
+        "plan": {
+          "goal": "summarise sum-09-choir-tour in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 66,
+            "trace_id": "sum-09-choir-tour",
+            "ts": "2026-09-04T01:49:17.389373Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-09-choir-tour",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Ravensholme choir",
+            "Bruges",
+            "coach"
+          ],
+          "summary": "Ravensholme choir travels by coach to Bruges in June for three concerts, first tour abroad in twelve years; members self-fund, rehearsals doubled, homecoming concert planned.",
+          "text": "The Ravensholme choir will travel by coach to Bruges in June for three concerts, its first tour abroad since the group was founded twelve years ago. The programme mixes English folk arrangements with two pieces written for the choir by a local composer. Members are paying their own travel costs, and the choir has sold tea-towels and a recording to cover hall hire. Rehearsals have moved to twice a week until the tour. A homecoming concert is planned for the village hall."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

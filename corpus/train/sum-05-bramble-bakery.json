@@ -1,0 +1,351 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Bramble Lane bakery"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "rye"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Saturday"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "^(?:\\s*\\S+){1,35}\\s*$"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-05-bramble-bakery",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-05-bramble-bakery in at most 35 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-05-bramble-bakery",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 35,
+      "must_mention": [
+        "Bramble Lane bakery",
+        "rye",
+        "Saturday"
+      ],
+      "text": "The Bramble Lane bakery is moving its rye loaf from a Saturday-only special to a daily bake after customers kept asking for it mid-week. The recipe uses a sourdough starter the bakery has kept going for nine years, and the loaves are proved overnight in the cool room behind the shop. Because rye takes longer to bake than the wheat loaves, the morning schedule has been rearranged so the rye goes into the oven first. Saturday will still carry the largest batch."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "c8a03e8dd75ba706cf4d63e40453ecf4ddc0522d45ce5b1734bc3eb7d474d774",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 35 words.\nThe summary must mention each of these terms, spelled exactly as given: Bramble Lane bakery, rye, Saturday.\n\nPassage:\nThe Bramble Lane bakery is moving its rye loaf from a Saturday-only special to a daily bake after customers kept asking for it mid-week. The recipe uses a sourdough starter the bakery has kept going for nine years, and the loaves are proved overnight in the cool room behind the shop. Because rye takes longer to bake than the wheat loaves, the morning schedule has been rearranged so the rye goes into the oven first. Saturday will still carry the largest batch.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Bramble Lane bakery now bakes its rye loaf daily instead of Saturday-only, after mid-week demand; nine-year sourdough starter, overnight proving, rye baked first each morning, with Saturday still carrying the largest batch.",
+        "input_tokens": 2,
+        "model": "claude-fable-5-1",
+        "output_tokens": 83,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:48:53.581259+00:00",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-05-bramble-bakery:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-04T01:48:53.582783+00:00",
+        "run_id": "sum-05-bramble-bakery",
+        "trace_id": "sum-05-bramble-bakery"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-05-bramble-bakery in at most 35 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-05-bramble-bakery",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Bramble Lane bakery",
+            "rye",
+            "Saturday"
+          ],
+          "text": "The Bramble Lane bakery is moving its rye loaf from a Saturday-only special to a daily bake after customers kept asking for it mid-week. The recipe uses a sourdough starter the bakery has kept going for nine years, and the loaves are proved overnight in the cool room behind the shop. Because rye takes longer to bake than the wheat loaves, the morning schedule has been rearranged so the rye goes into the oven first. Saturday will still carry the largest batch."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-05-bramble-bakery:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-04T01:48:53.582841+00:00",
+        "run_id": "sum-05-bramble-bakery",
+        "trace_id": "sum-05-bramble-bakery"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-05-bramble-bakery in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 85,
+            "trace_id": "sum-05-bramble-bakery",
+            "ts": "2026-09-04T01:48:53.582841Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Bramble Lane bakery now bakes its rye loaf daily instead of Saturday-only, after mid-week demand; nine-year sourdough starter, overnight proving, rye baked first each morning, with Saturday still carrying the largest batch."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-05-bramble-bakery in at most 35 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-05-bramble-bakery",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Bramble Lane bakery",
+            "rye",
+            "Saturday"
+          ],
+          "text": "The Bramble Lane bakery is moving its rye loaf from a Saturday-only special to a daily bake after customers kept asking for it mid-week. The recipe uses a sourdough starter the bakery has kept going for nine years, and the loaves are proved overnight in the cool room behind the shop. Because rye takes longer to bake than the wheat loaves, the morning schedule has been rearranged so the rye goes into the oven first. Saturday will still carry the largest batch."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-05-bramble-bakery:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-04T01:49:00.093932+00:00",
+        "run_id": "sum-05-bramble-bakery",
+        "trace_id": "sum-05-bramble-bakery"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-05-bramble-bakery in at most 35 words",
+        "plan": {
+          "goal": "summarise sum-05-bramble-bakery in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 85,
+            "trace_id": "sum-05-bramble-bakery",
+            "ts": "2026-09-04T01:48:53.582841Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-05-bramble-bakery",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Bramble Lane bakery",
+            "rye",
+            "Saturday"
+          ],
+          "summary": "Bramble Lane bakery now bakes its rye loaf daily instead of Saturday-only, after mid-week demand; nine-year sourdough starter, overnight proving, rye baked first each morning, with Saturday still carrying the largest batch.",
+          "text": "The Bramble Lane bakery is moving its rye loaf from a Saturday-only special to a daily bake after customers kept asking for it mid-week. The recipe uses a sourdough starter the bakery has kept going for nine years, and the loaves are proved overnight in the cool room behind the shop. Because rye takes longer to bake than the wheat loaves, the morning schedule has been rearranged so the rye goes into the oven first. Saturday will still carry the largest batch."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-05-bramble-bakery:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-04T01:49:00.094105+00:00",
+        "run_id": "sum-05-bramble-bakery",
+        "trace_id": "sum-05-bramble-bakery"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-05-bramble-bakery in at most 35 words",
+        "plan": {
+          "goal": "summarise sum-05-bramble-bakery in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 85,
+            "trace_id": "sum-05-bramble-bakery",
+            "ts": "2026-09-04T01:48:53.582841Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-05-bramble-bakery",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Bramble Lane bakery",
+            "rye",
+            "Saturday"
+          ],
+          "summary": "Bramble Lane bakery now bakes its rye loaf daily instead of Saturday-only, after mid-week demand; nine-year sourdough starter, overnight proving, rye baked first each morning, with Saturday still carrying the largest batch.",
+          "text": "The Bramble Lane bakery is moving its rye loaf from a Saturday-only special to a daily bake after customers kept asking for it mid-week. The recipe uses a sourdough starter the bakery has kept going for nine years, and the loaves are proved overnight in the cool room behind the shop. Because rye takes longer to bake than the wheat loaves, the morning schedule has been rearranged so the rye goes into the oven first. Saturday will still carry the largest batch."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

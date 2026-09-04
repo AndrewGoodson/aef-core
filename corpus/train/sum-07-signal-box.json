@@ -1,0 +1,351 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Ashcombe"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "signal box"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "volunteers"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "^(?:\\s*\\S+){1,40}\\s*$"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-07-signal-box",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-07-signal-box in at most 40 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-07-signal-box",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 40,
+      "must_mention": [
+        "Ashcombe",
+        "signal box",
+        "volunteers"
+      ],
+      "text": "The wooden signal box at Ashcombe station, unused since the line was resignalled in 1987, has been restored by a group of volunteers and will open to visitors on summer weekends. The frame of thirty-two levers still works, though it is no longer connected to anything on the line, and visitors can pull levers under supervision. The volunteers raised the money for the roof through a raffle and a grant from the parish. The station remains in normal use, with trains every half hour."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "19986d3663792d4010db8195f0d85389c20ddc287fc9991f8b6c55d4fdd3c0e4",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Ashcombe, signal box, volunteers.\n\nPassage:\nThe wooden signal box at Ashcombe station, unused since the line was resignalled in 1987, has been restored by a group of volunteers and will open to visitors on summer weekends. The frame of thirty-two levers still works, though it is no longer connected to anything on the line, and visitors can pull levers under supervision. The volunteers raised the money for the roof through a raffle and a grant from the parish. The station remains in normal use, with trains every half hour.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Volunteers restored Ashcombe station's wooden signal box, unused since 1987 resignalling, funding its roof via raffle and parish grant; it opens summer weekends, letting visitors pull disconnected levers under supervision while trains run every half hour.",
+        "input_tokens": 2,
+        "model": "claude-fable-5-1",
+        "output_tokens": 86,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:49:05.533911+00:00",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-07-signal-box:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-04T01:49:05.536002+00:00",
+        "run_id": "sum-07-signal-box",
+        "trace_id": "sum-07-signal-box"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-07-signal-box in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-07-signal-box",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Ashcombe",
+            "signal box",
+            "volunteers"
+          ],
+          "text": "The wooden signal box at Ashcombe station, unused since the line was resignalled in 1987, has been restored by a group of volunteers and will open to visitors on summer weekends. The frame of thirty-two levers still works, though it is no longer connected to anything on the line, and visitors can pull levers under supervision. The volunteers raised the money for the roof through a raffle and a grant from the parish. The station remains in normal use, with trains every half hour."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-07-signal-box:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-04T01:49:05.536060+00:00",
+        "run_id": "sum-07-signal-box",
+        "trace_id": "sum-07-signal-box"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-07-signal-box in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 88,
+            "trace_id": "sum-07-signal-box",
+            "ts": "2026-09-04T01:49:05.536060Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Volunteers restored Ashcombe station's wooden signal box, unused since 1987 resignalling, funding its roof via raffle and parish grant; it opens summer weekends, letting visitors pull disconnected levers under supervision while trains run every half hour."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-07-signal-box in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-07-signal-box",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Ashcombe",
+            "signal box",
+            "volunteers"
+          ],
+          "text": "The wooden signal box at Ashcombe station, unused since the line was resignalled in 1987, has been restored by a group of volunteers and will open to visitors on summer weekends. The frame of thirty-two levers still works, though it is no longer connected to anything on the line, and visitors can pull levers under supervision. The volunteers raised the money for the roof through a raffle and a grant from the parish. The station remains in normal use, with trains every half hour."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-07-signal-box:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-04T01:49:12.031172+00:00",
+        "run_id": "sum-07-signal-box",
+        "trace_id": "sum-07-signal-box"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-07-signal-box in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-07-signal-box in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 88,
+            "trace_id": "sum-07-signal-box",
+            "ts": "2026-09-04T01:49:05.536060Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-07-signal-box",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Ashcombe",
+            "signal box",
+            "volunteers"
+          ],
+          "summary": "Volunteers restored Ashcombe station's wooden signal box, unused since 1987 resignalling, funding its roof via raffle and parish grant; it opens summer weekends, letting visitors pull disconnected levers under supervision while trains run every half hour.",
+          "text": "The wooden signal box at Ashcombe station, unused since the line was resignalled in 1987, has been restored by a group of volunteers and will open to visitors on summer weekends. The frame of thirty-two levers still works, though it is no longer connected to anything on the line, and visitors can pull levers under supervision. The volunteers raised the money for the roof through a raffle and a grant from the parish. The station remains in normal use, with trains every half hour."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-07-signal-box:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-04T01:49:12.031351+00:00",
+        "run_id": "sum-07-signal-box",
+        "trace_id": "sum-07-signal-box"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-07-signal-box in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-07-signal-box in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 88,
+            "trace_id": "sum-07-signal-box",
+            "ts": "2026-09-04T01:49:05.536060Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-07-signal-box",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Ashcombe",
+            "signal box",
+            "volunteers"
+          ],
+          "summary": "Volunteers restored Ashcombe station's wooden signal box, unused since 1987 resignalling, funding its roof via raffle and parish grant; it opens summer weekends, letting visitors pull disconnected levers under supervision while trains run every half hour.",
+          "text": "The wooden signal box at Ashcombe station, unused since the line was resignalled in 1987, has been restored by a group of volunteers and will open to visitors on summer weekends. The frame of thirty-two levers still works, though it is no longer connected to anything on the line, and visitors can pull levers under supervision. The volunteers raised the money for the roof through a raffle and a grant from the parish. The station remains in normal use, with trains every half hour."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

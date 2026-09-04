@@ -1,0 +1,351 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Fenwick glasshouse"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "tomatoes"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "heat pump"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "^(?:\\s*\\S+){1,35}\\s*$"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-08-glasshouse-tomatoes",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-08-glasshouse-tomatoes in at most 35 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-08-glasshouse-tomatoes",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 35,
+      "must_mention": [
+        "Fenwick glasshouse",
+        "tomatoes",
+        "heat pump"
+      ],
+      "text": "The Fenwick glasshouse has replaced its oil boiler with a ground-source heat pump, cutting the fuel bill for its winter tomatoes by more than half in the first season. The pump draws warmth from a borehole under the car park and feeds pipes along the base of each row. Yields were slightly lower than the previous year, which the growers put down to a dull February rather than the heating change. The site sells most of its tomatoes to two supermarkets and a wholesale market."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "4fbaaea21ccf86b72a85a9fe13f4acebf6041a8c20baf7e9b270f0970b87ac45",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 35 words.\nThe summary must mention each of these terms, spelled exactly as given: Fenwick glasshouse, tomatoes, heat pump.\n\nPassage:\nThe Fenwick glasshouse has replaced its oil boiler with a ground-source heat pump, cutting the fuel bill for its winter tomatoes by more than half in the first season. The pump draws warmth from a borehole under the car park and feeds pipes along the base of each row. Yields were slightly lower than the previous year, which the growers put down to a dull February rather than the heating change. The site sells most of its tomatoes to two supermarkets and a wholesale market.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Fenwick glasshouse swapped its oil boiler for a ground-source heat pump, halving winter tomatoes' fuel bill in its first season; slightly lower yields blamed on dull February, with most tomatoes sold to supermarkets.",
+        "input_tokens": 2,
+        "model": "claude-fable-5-1",
+        "output_tokens": 83,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:49:12.034214+00:00",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-08-glasshouse-tomatoes:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-04T01:49:12.035662+00:00",
+        "run_id": "sum-08-glasshouse-tomatoes",
+        "trace_id": "sum-08-glasshouse-tomatoes"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-08-glasshouse-tomatoes in at most 35 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-08-glasshouse-tomatoes",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Fenwick glasshouse",
+            "tomatoes",
+            "heat pump"
+          ],
+          "text": "The Fenwick glasshouse has replaced its oil boiler with a ground-source heat pump, cutting the fuel bill for its winter tomatoes by more than half in the first season. The pump draws warmth from a borehole under the car park and feeds pipes along the base of each row. Yields were slightly lower than the previous year, which the growers put down to a dull February rather than the heating change. The site sells most of its tomatoes to two supermarkets and a wholesale market."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-08-glasshouse-tomatoes:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-04T01:49:12.035709+00:00",
+        "run_id": "sum-08-glasshouse-tomatoes",
+        "trace_id": "sum-08-glasshouse-tomatoes"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-08-glasshouse-tomatoes in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 85,
+            "trace_id": "sum-08-glasshouse-tomatoes",
+            "ts": "2026-09-04T01:49:12.035709Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Fenwick glasshouse swapped its oil boiler for a ground-source heat pump, halving winter tomatoes' fuel bill in its first season; slightly lower yields blamed on dull February, with most tomatoes sold to supermarkets."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-08-glasshouse-tomatoes in at most 35 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-08-glasshouse-tomatoes",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Fenwick glasshouse",
+            "tomatoes",
+            "heat pump"
+          ],
+          "text": "The Fenwick glasshouse has replaced its oil boiler with a ground-source heat pump, cutting the fuel bill for its winter tomatoes by more than half in the first season. The pump draws warmth from a borehole under the car park and feeds pipes along the base of each row. Yields were slightly lower than the previous year, which the growers put down to a dull February rather than the heating change. The site sells most of its tomatoes to two supermarkets and a wholesale market."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-08-glasshouse-tomatoes:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-04T01:49:17.384427+00:00",
+        "run_id": "sum-08-glasshouse-tomatoes",
+        "trace_id": "sum-08-glasshouse-tomatoes"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-08-glasshouse-tomatoes in at most 35 words",
+        "plan": {
+          "goal": "summarise sum-08-glasshouse-tomatoes in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 85,
+            "trace_id": "sum-08-glasshouse-tomatoes",
+            "ts": "2026-09-04T01:49:12.035709Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-08-glasshouse-tomatoes",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Fenwick glasshouse",
+            "tomatoes",
+            "heat pump"
+          ],
+          "summary": "Fenwick glasshouse swapped its oil boiler for a ground-source heat pump, halving winter tomatoes' fuel bill in its first season; slightly lower yields blamed on dull February, with most tomatoes sold to supermarkets.",
+          "text": "The Fenwick glasshouse has replaced its oil boiler with a ground-source heat pump, cutting the fuel bill for its winter tomatoes by more than half in the first season. The pump draws warmth from a borehole under the car park and feeds pipes along the base of each row. Yields were slightly lower than the previous year, which the growers put down to a dull February rather than the heating change. The site sells most of its tomatoes to two supermarkets and a wholesale market."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-08-glasshouse-tomatoes:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-04T01:49:17.384603+00:00",
+        "run_id": "sum-08-glasshouse-tomatoes",
+        "trace_id": "sum-08-glasshouse-tomatoes"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-08-glasshouse-tomatoes in at most 35 words",
+        "plan": {
+          "goal": "summarise sum-08-glasshouse-tomatoes in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 85,
+            "trace_id": "sum-08-glasshouse-tomatoes",
+            "ts": "2026-09-04T01:49:12.035709Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-08-glasshouse-tomatoes",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Fenwick glasshouse",
+            "tomatoes",
+            "heat pump"
+          ],
+          "summary": "Fenwick glasshouse swapped its oil boiler for a ground-source heat pump, halving winter tomatoes' fuel bill in its first season; slightly lower yields blamed on dull February, with most tomatoes sold to supermarkets.",
+          "text": "The Fenwick glasshouse has replaced its oil boiler with a ground-source heat pump, cutting the fuel bill for its winter tomatoes by more than half in the first season. The pump draws warmth from a borehole under the car park and feeds pipes along the base of each row. Yields were slightly lower than the previous year, which the growers put down to a dull February rather than the heating change. The site sells most of its tomatoes to two supermarkets and a wholesale market."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

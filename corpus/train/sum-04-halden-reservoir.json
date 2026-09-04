@@ -1,0 +1,351 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Halden reservoir"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "spillway"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "October"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "^(?:\\s*\\S+){1,40}\\s*$"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-04-halden-reservoir",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-04-halden-reservoir in at most 40 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-04-halden-reservoir",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 40,
+      "must_mention": [
+        "Halden reservoir",
+        "spillway",
+        "October"
+      ],
+      "text": "Engineers inspecting the Halden reservoir found cracking along the crest of the spillway and have lowered the water level by two metres while repairs are planned. The reservoir supplies three villages and a paper mill, none of which are expected to lose water because autumn rainfall has been above average. The repair contract will be awarded in October and the work is expected to take one dry season. Walkers can still use the reservoir path, but the viewing platform above the spillway is closed."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "5a2b785ee38824aa6b7641802bccf2c5361557b1ad31c83d96e3571045e44aa5",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Halden reservoir, spillway, October.\n\nPassage:\nEngineers inspecting the Halden reservoir found cracking along the crest of the spillway and have lowered the water level by two metres while repairs are planned. The reservoir supplies three villages and a paper mill, none of which are expected to lose water because autumn rainfall has been above average. The repair contract will be awarded in October and the work is expected to take one dry season. Walkers can still use the reservoir path, but the viewing platform above the spillway is closed.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Engineers found spillway crest cracking at the Halden reservoir and lowered water two metres pending repairs; supply to three villages and a paper mill is unaffected, the contract is awarded in October, and the spillway viewing platform is closed.",
+        "input_tokens": 2,
+        "model": "claude-fable-5-1",
+        "output_tokens": 80,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:48:46.822240+00:00",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-04-halden-reservoir:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-04T01:48:46.823415+00:00",
+        "run_id": "sum-04-halden-reservoir",
+        "trace_id": "sum-04-halden-reservoir"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-04-halden-reservoir in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-04-halden-reservoir",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Halden reservoir",
+            "spillway",
+            "October"
+          ],
+          "text": "Engineers inspecting the Halden reservoir found cracking along the crest of the spillway and have lowered the water level by two metres while repairs are planned. The reservoir supplies three villages and a paper mill, none of which are expected to lose water because autumn rainfall has been above average. The repair contract will be awarded in October and the work is expected to take one dry season. Walkers can still use the reservoir path, but the viewing platform above the spillway is closed."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-04-halden-reservoir:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-04T01:48:46.823464+00:00",
+        "run_id": "sum-04-halden-reservoir",
+        "trace_id": "sum-04-halden-reservoir"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-04-halden-reservoir in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 82,
+            "trace_id": "sum-04-halden-reservoir",
+            "ts": "2026-09-04T01:48:46.823464Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Engineers found spillway crest cracking at the Halden reservoir and lowered water two metres pending repairs; supply to three villages and a paper mill is unaffected, the contract is awarded in October, and the spillway viewing platform is closed."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-04-halden-reservoir in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-04-halden-reservoir",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Halden reservoir",
+            "spillway",
+            "October"
+          ],
+          "text": "Engineers inspecting the Halden reservoir found cracking along the crest of the spillway and have lowered the water level by two metres while repairs are planned. The reservoir supplies three villages and a paper mill, none of which are expected to lose water because autumn rainfall has been above average. The repair contract will be awarded in October and the work is expected to take one dry season. Walkers can still use the reservoir path, but the viewing platform above the spillway is closed."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-04-halden-reservoir:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-04T01:48:53.577837+00:00",
+        "run_id": "sum-04-halden-reservoir",
+        "trace_id": "sum-04-halden-reservoir"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-04-halden-reservoir in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-04-halden-reservoir in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 82,
+            "trace_id": "sum-04-halden-reservoir",
+            "ts": "2026-09-04T01:48:46.823464Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-04-halden-reservoir",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Halden reservoir",
+            "spillway",
+            "October"
+          ],
+          "summary": "Engineers found spillway crest cracking at the Halden reservoir and lowered water two metres pending repairs; supply to three villages and a paper mill is unaffected, the contract is awarded in October, and the spillway viewing platform is closed.",
+          "text": "Engineers inspecting the Halden reservoir found cracking along the crest of the spillway and have lowered the water level by two metres while repairs are planned. The reservoir supplies three villages and a paper mill, none of which are expected to lose water because autumn rainfall has been above average. The repair contract will be awarded in October and the work is expected to take one dry season. Walkers can still use the reservoir path, but the viewing platform above the spillway is closed."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-04-halden-reservoir:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-04T01:48:53.578026+00:00",
+        "run_id": "sum-04-halden-reservoir",
+        "trace_id": "sum-04-halden-reservoir"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-04-halden-reservoir in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-04-halden-reservoir in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 82,
+            "trace_id": "sum-04-halden-reservoir",
+            "ts": "2026-09-04T01:48:46.823464Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-04-halden-reservoir",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Halden reservoir",
+            "spillway",
+            "October"
+          ],
+          "summary": "Engineers found spillway crest cracking at the Halden reservoir and lowered water two metres pending repairs; supply to three villages and a paper mill is unaffected, the contract is awarded in October, and the spillway viewing platform is closed.",
+          "text": "Engineers inspecting the Halden reservoir found cracking along the crest of the spillway and have lowered the water level by two metres while repairs are planned. The reservoir supplies three villages and a paper mill, none of which are expected to lose water because autumn rainfall has been above average. The repair contract will be awarded in October and the work is expected to take one dry season. Walkers can still use the reservoir path, but the viewing platform above the spillway is closed."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

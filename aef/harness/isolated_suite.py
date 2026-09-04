@@ -14,6 +14,7 @@ at a time and never learns what a scenario is (ADR 0094).
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,8 +48,20 @@ def _worker_env(workspace: Path) -> dict[str, str]:
     read a credential out of — did not apply to the process running candidate
     code (ADR 0095). `SandboxPolicy` supplies the environment now; this adds
     the import path and nothing else.
+
+    The workspace first, then the directory THIS `aef` was imported from.
+    The parent and the worker speak a framed protocol, and both ends have to
+    be the same version of it: with only the workspace on the path, a
+    checkout whose venv resolves `aef` to a different tree (an editable
+    install pointing at another worktree, found while adding the cassette
+    frame in ADR 0123) ran the parent's protocol against a worker that had
+    never heard of it, and every scenario failed as "previously passing, no
+    longer passes". The workspace still wins when it carries its own `aef`.
     """
-    return {"PYTHONPATH": str(workspace)}
+    import aef
+
+    harness_root = Path(aef.__file__).resolve().parent.parent
+    return {"PYTHONPATH": os.pathsep.join((str(workspace), str(harness_root)))}
 
 
 def run_corpus_isolated(
@@ -59,8 +72,17 @@ def run_corpus_isolated(
     policy: PolicyConfig | None = None,
     sandbox: SandboxPolicy | None = None,
     step_timeout_s: float | None = None,
+    cassette_miss: str = "fail",
+    live_provider: dict[str, str] | None = None,
 ) -> dict[str, ScenarioResult]:
     """Execute every scenario, concluding in this process.
+
+    Each scenario's recorded model calls are handed to the worker before its
+    nodes run (ADR 0123). `cassette_miss="fail"` — the default — makes a
+    request the recording never saw a failed node, so the gate is
+    deterministic and holds no credential. `"live"` sends misses to a
+    provider the worker builds from `live_provider` (`{"impl", "model"}`,
+    read by the caller from the BASE REF's config, never the workspace's).
 
     One worker for the whole corpus: a fresh process per scenario would make
     module-level agent state behave differently under the gate than it does
@@ -91,7 +113,14 @@ def run_corpus_isolated(
 
     try:
         for index, scenario in enumerate(scenarios):
-            results[scenario.id] = _run_one(compiled, scenario, policy)
+            results[scenario.id] = _run_one(
+                compiled,
+                scenario,
+                policy,
+                session=session,
+                cassette_miss=cassette_miss,
+                live_provider=live_provider,
+            )
             if results[scenario.id].failure and _worker_is_dead(session):
                 # The worker died. Every remaining scenario is unrun, and
                 # unrun is not passed — recorded explicitly rather than left
@@ -110,7 +139,30 @@ def _worker_is_dead(session: NodeWorkerSession) -> bool:
     return session.returncode is not None
 
 
-def _run_one(compiled: Any, scenario: Scenario, policy: PolicyConfig | None) -> ScenarioResult:
+def _run_one(
+    compiled: Any,
+    scenario: Scenario,
+    policy: PolicyConfig | None,
+    *,
+    session: NodeWorkerSession,
+    cassette_miss: str = "fail",
+    live_provider: dict[str, str] | None = None,
+) -> ScenarioResult:
+    # The node bodies run in the worker, so the cassette has to be there too:
+    # a provider on the parent's Services would answer nothing. Sent BEFORE
+    # the stopwatch starts — shipping the recording is the harness's cost,
+    # not the candidate's.
+    try:
+        session.configure(
+            {
+                "model_calls": [c.to_payload() for c in scenario.model_calls],
+                "on_miss": cassette_miss,
+                "live": live_provider if cassette_miss == "live" else None,
+            }
+        )
+    except IsolationError as exc:
+        return _failed(f"{type(exc).__name__}: {exc}")
+
     services = agent_services(
         clock=fixed_clock(scenario), policy=policy, agent_id=scenario.initial_state.agent_id
     )

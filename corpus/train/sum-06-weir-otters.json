@@ -1,0 +1,351 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "otters"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Cobb weir"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "camera"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "^(?:\\s*\\S+){1,30}\\s*$"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-06-weir-otters",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-06-weir-otters in at most 30 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-06-weir-otters",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 30,
+      "must_mention": [
+        "otters",
+        "Cobb weir",
+        "camera"
+      ],
+      "text": "A wildlife camera fixed to the old mill wall at Cobb weir has recorded a family of otters using the fish pass most nights since March. The footage shows two adults and three cubs, the first breeding confirmed on this stretch of river in living memory. The river trust that installed the camera credits cleaner water and the removal of a concrete sill two years ago. It has asked anglers to keep dogs on leads near the weir during the summer."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "33e1260a0a811c9f4ae5f21ab51c372a629fd0300d6da07edb76a3d5570edd6e",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: otters, Cobb weir, camera.\n\nPassage:\nA wildlife camera fixed to the old mill wall at Cobb weir has recorded a family of otters using the fish pass most nights since March. The footage shows two adults and three cubs, the first breeding confirmed on this stretch of river in living memory. The river trust that installed the camera credits cleaner water and the removal of a concrete sill two years ago. It has asked anglers to keep dogs on leads near the weir during the summer.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Wildlife camera at Cobb weir filmed otters, two adults and three cubs, using fish pass nightly since March; river trust credits cleaner water and asks anglers to leash dogs.",
+        "input_tokens": 2,
+        "model": "claude-fable-5-1",
+        "output_tokens": 65,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:49:00.096935+00:00",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-06-weir-otters:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-04T01:49:00.098479+00:00",
+        "run_id": "sum-06-weir-otters",
+        "trace_id": "sum-06-weir-otters"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-06-weir-otters in at most 30 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-06-weir-otters",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "otters",
+            "Cobb weir",
+            "camera"
+          ],
+          "text": "A wildlife camera fixed to the old mill wall at Cobb weir has recorded a family of otters using the fish pass most nights since March. The footage shows two adults and three cubs, the first breeding confirmed on this stretch of river in living memory. The river trust that installed the camera credits cleaner water and the removal of a concrete sill two years ago. It has asked anglers to keep dogs on leads near the weir during the summer."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-06-weir-otters:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-04T01:49:00.098544+00:00",
+        "run_id": "sum-06-weir-otters",
+        "trace_id": "sum-06-weir-otters"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-06-weir-otters in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 67,
+            "trace_id": "sum-06-weir-otters",
+            "ts": "2026-09-04T01:49:00.098544Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Wildlife camera at Cobb weir filmed otters, two adults and three cubs, using fish pass nightly since March; river trust credits cleaner water and asks anglers to leash dogs."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-06-weir-otters in at most 30 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-06-weir-otters",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "otters",
+            "Cobb weir",
+            "camera"
+          ],
+          "text": "A wildlife camera fixed to the old mill wall at Cobb weir has recorded a family of otters using the fish pass most nights since March. The footage shows two adults and three cubs, the first breeding confirmed on this stretch of river in living memory. The river trust that installed the camera credits cleaner water and the removal of a concrete sill two years ago. It has asked anglers to keep dogs on leads near the weir during the summer."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-06-weir-otters:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-04T01:49:05.529045+00:00",
+        "run_id": "sum-06-weir-otters",
+        "trace_id": "sum-06-weir-otters"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-06-weir-otters in at most 30 words",
+        "plan": {
+          "goal": "summarise sum-06-weir-otters in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 67,
+            "trace_id": "sum-06-weir-otters",
+            "ts": "2026-09-04T01:49:00.098544Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-06-weir-otters",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "otters",
+            "Cobb weir",
+            "camera"
+          ],
+          "summary": "Wildlife camera at Cobb weir filmed otters, two adults and three cubs, using fish pass nightly since March; river trust credits cleaner water and asks anglers to leash dogs.",
+          "text": "A wildlife camera fixed to the old mill wall at Cobb weir has recorded a family of otters using the fish pass most nights since March. The footage shows two adults and three cubs, the first breeding confirmed on this stretch of river in living memory. The river trust that installed the camera credits cleaner water and the removal of a concrete sill two years ago. It has asked anglers to keep dogs on leads near the weir during the summer."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-06-weir-otters:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-04T01:49:05.529332+00:00",
+        "run_id": "sum-06-weir-otters",
+        "trace_id": "sum-06-weir-otters"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-06-weir-otters in at most 30 words",
+        "plan": {
+          "goal": "summarise sum-06-weir-otters in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 67,
+            "trace_id": "sum-06-weir-otters",
+            "ts": "2026-09-04T01:49:00.098544Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-06-weir-otters",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "otters",
+            "Cobb weir",
+            "camera"
+          ],
+          "summary": "Wildlife camera at Cobb weir filmed otters, two adults and three cubs, using fish pass nightly since March; river trust credits cleaner water and asks anglers to leash dogs.",
+          "text": "A wildlife camera fixed to the old mill wall at Cobb weir has recorded a family of otters using the fish pass most nights since March. The footage shows two adults and three cubs, the first breeding confirmed on this stretch of river in living memory. The river trust that installed the camera credits cleaner water and the removal of a concrete sill two years ago. It has asked anglers to keep dogs on leads near the weir during the summer."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

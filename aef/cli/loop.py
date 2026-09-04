@@ -20,6 +20,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from aef.harness.checks import TaskCheck
 from aef.harness.corpus import Expected, Split, load_corpus
 from aef.harness.git import GitRepo
 from aef.harness.loop import (
@@ -100,6 +101,8 @@ def _config(args: argparse.Namespace) -> LoopConfig:
         # action against the source, not something a CI invocation can do by
         # passing an argument (ADR 0045).
         tier1_enabled=False,
+        # "fail" unless the owner asked for live scoring by name (ADR 0123).
+        cassette_miss=getattr(args, "cassette_miss", "fail"),
     )
 
 
@@ -196,6 +199,26 @@ def cmd_record(args: argparse.Namespace) -> int:
     from aef.services.runtime import agent_services
     from aef.state import AEFState
 
+    # The provider `aef run` would use, from the same config, so what gets
+    # recorded is what production would have said. Absent, a graph that
+    # calls a model records an errored run naming the miss (ADR 0123).
+    model_provider = None
+    reflection = "rule_based"
+    reflection_model: str | None = None
+    if getattr(args, "config", None):
+        from aef.config import build_model_provider, load_agent_config
+
+        config = load_agent_config(args.config)
+        model_provider = build_model_provider(config.model_provider)
+        reflection = config.reflection.impl
+        reflection_model = config.model_provider.model
+
+    try:
+        checks = _parse_checks(getattr(args, "check", None))
+    except (ValueError, TypeError) as exc:
+        print(f"error: --check: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
+
     recorded = record_to_corpus(
         Path(args.corpus),
         graph,
@@ -216,17 +239,44 @@ def cmd_record(args: argparse.Namespace) -> int:
         # (ADR 0073).
         # Same list the gates use, so a scenario recorded here can be
         # re-executed there (aef/services/runtime.py, ADR 0091).
-        agent_services(memory=InMemoryMemoryStore()),
+        agent_services(
+            memory=InMemoryMemoryStore(),
+            model_provider=model_provider,
+            reflection=reflection,
+            reflection_model=reflection_model,
+            agent_id=args.agent_id,
+        ),
         scenario_id=args.scenario_id,
         split=Split(args.split),
         recorded_at=datetime.now(UTC),
         notes=args.notes,
         allow_holdout=args.i_am_spending_the_holdout,
         expected=Expected(args.expected),
+        checks=checks,
+        budget_ms=getattr(args, "budget_ms", None),
     )
     print(f"recorded {recorded.scenario.id} ({recorded.scenario.split.value}) -> {recorded.path}")
     print(f"  {len(recorded.scenario.trace)} node execution(s) pinned")
+    print(
+        f"  {len(recorded.scenario.model_calls)} model call(s) pinned, "
+        f"{len(recorded.scenario.checks)} check(s)"
+    )
     return EXIT_OK
+
+
+def _parse_checks(raw: list[str] | None) -> tuple[TaskCheck, ...]:
+    """`--check` values: each a JSON object or a JSON list of objects.
+    Malformed checks fail here, before anything runs — a check that loaded
+    wrong would score the scenario 0 forever and read as a regression."""
+    checks: list[TaskCheck] = []
+    for item in raw or ():
+        parsed = json.loads(item)
+        entries = parsed if isinstance(parsed, list) else [parsed]
+        for entry in entries:
+            if not isinstance(entry, dict):
+                raise ValueError(f"a check must be a JSON object, got {type(entry).__name__}")
+            checks.append(TaskCheck.from_payload(entry))
+    return tuple(checks)
 
 
 def cmd_score(args: argparse.Namespace) -> int:
@@ -253,23 +303,51 @@ def cmd_score(args: argparse.Namespace) -> int:
         )
         return EXIT_REJECTED
 
+    # Model calls replay from each scenario's cassette (ADR 0123). Under
+    # --cassette-miss live the provider in --config answers what the
+    # recording never saw, and the report says how many times it did: a
+    # score with live misses is a different measurement from a replayed one.
+    cassette_miss = getattr(args, "cassette_miss", "fail")
+    live_provider = None
+    if cassette_miss == "live" and getattr(args, "config", None):
+        from aef.config import build_model_provider, load_agent_config
+
+        live_provider = build_model_provider(load_agent_config(args.config).model_provider)
+
+    # Only the scenarios recorded FROM this graph. A corpus may hold several
+    # graphs' recordings (the demo's and the summary agent's); scoring one
+    # graph against another's scenarios measures nothing about either.
+    other_graph = sorted(s.id for s in corpus.scenarios if s.graph_id != graph.id)
+
     runs: list[dict[str, ScoreSet]] = []
+    hits = misses = 0
     for _ in range(args.repeat):
         per_split: dict[str, ScoreSet] = {}
         for split in splits:
-            scenarios = corpus.split(split)
+            scenarios = tuple(s for s in corpus.split(split) if s.graph_id == graph.id)
             per_scenario: dict[str, float] = {}
             cost = 0
             for scenario in scenarios:
-                result = run_scenario(scenario, graph)
+                result = run_scenario(
+                    scenario, graph, cassette_miss=cassette_miss, live_provider=live_provider
+                )
                 per_scenario[scenario.id] = float(result["score"])
                 cost += int(result["cost_tokens"])
+                stats = result.get("cassette", {})
+                hits += int(stats.get("hits", 0))
+                misses += int(stats.get("misses", 0))
             per_split[split.value] = ScoreSet(
                 label=split.value, per_scenario=per_scenario, cost_tokens=cost
             )
         runs.append(per_split)
 
-    report: dict[str, object] = {"entrypoint": args.entrypoint, "repeat": args.repeat}
+    report: dict[str, object] = {
+        "entrypoint": args.entrypoint,
+        "graph_id": graph.id,
+        "repeat": args.repeat,
+        "skipped_other_graph": other_graph,
+        "cassette": {"on_miss": cassette_miss, "hits": hits, "misses": misses},
+    }
     for split in splits:
         sets = [run[split.value] for run in runs]
         first = sets[0]
@@ -279,7 +357,7 @@ def cmd_score(args: argparse.Namespace) -> int:
         means = [s.mean for s in sets]
         spread = max(means) - min(means)
         lo, hi = first.confidence_interval_95
-        with_checks = sum(1 for s in corpus.split(split) if s.checks)
+        with_checks = sum(1 for s in corpus.split(split) if s.checks and s.graph_id == graph.id)
         report[split.value] = {
             "n": first.n,
             "with_checks": with_checks,
@@ -294,7 +372,14 @@ def cmd_score(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
         return EXIT_OK
-    print(f"task metric — {args.entrypoint} — repeat={args.repeat}")
+    print(f"task metric — {args.entrypoint} ({graph.id}) — repeat={args.repeat}")
+    mode = "LIVE" if misses and cassette_miss == "live" else "replayed"
+    print(
+        f"  model calls: {hits} cassette hit(s), {misses} miss(es), "
+        f"on_miss={cassette_miss} — {mode}"
+    )
+    if other_graph:
+        print(f"  skipped {len(other_graph)} scenario(s) recorded from another graph")
     for split in splits:
         row = report[split.value]
         assert isinstance(row, dict)
@@ -556,6 +641,20 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
             "required with --proposer llm, no default so no model id is hardcoded here",
         )
 
+    def _cassette_miss(sub: argparse.ArgumentParser) -> None:
+        sub.add_argument(
+            "--cassette-miss",
+            default="fail",
+            choices=["fail", "live"],
+            help=(
+                "what a model request the recording never saw does (ADR 0123). 'fail' "
+                "(default): the node fails and the score is deterministic — no credential "
+                "needed. 'live': the request goes to the provider in --config's "
+                "model_provider and the score is a LIVE one, reported as such. Use it to "
+                "score a prompt change on purpose, not to make a gate pass."
+            ),
+        )
+
     p_gate = loop_subs.add_parser("gate", help="evaluate one candidate branch")
     _common(p_gate)
     p_gate.add_argument("--base", default="main")
@@ -581,6 +680,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
             "may not have and fail as an import error inside a gate rejection."
         ),
     )
+    _cassette_miss(p_gate)
     p_gate.add_argument(
         "--network-isolated",
         action="store_true",
@@ -663,6 +763,32 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "read of whether the loop improves anything; filling it casually destroys that "
         "independence silently.",
     )
+    p_record.add_argument(
+        "--config",
+        default=None,
+        help=(
+            "aef.yaml path; wires the real model_provider (e.g. impl: claude_code) so a "
+            "graph that calls a model can be recorded. Every call it makes is pinned in "
+            "the scenario and replayed by the gates without a credential (ADR 0123)."
+        ),
+    )
+    p_record.add_argument(
+        "--check",
+        action="append",
+        default=None,
+        help=(
+            "an OWNER check on the final state, as JSON: a single object "
+            '\'{"path": "working_memory.summary", "op": "contains", "value": "X"}\' '
+            "or a JSON list of them. Repeatable. Ops: equals, contains, regex, exists "
+            "(ADR 0113). Data, never code."
+        ),
+    )
+    p_record.add_argument(
+        "--budget-ms",
+        type=float,
+        default=None,
+        help="wall-clock budget for the re-execution, judged on the runner's stopwatch",
+    )
     p_record.set_defaults(handler=cmd_record)
 
     p_score = loop_subs.add_parser(
@@ -684,6 +810,13 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     )
     p_score.add_argument("--json", action="store_true")
     p_score.add_argument("--i-am-spending-the-holdout", action="store_true")
+    _cassette_miss(p_score)
+    p_score.add_argument(
+        "--config",
+        default=None,
+        help="aef.yaml path; its model_provider answers cassette misses under "
+        "--cassette-miss live. Ignored under 'fail'.",
+    )
     p_score.set_defaults(handler=cmd_score)
 
     p_skills = loop_subs.add_parser(
@@ -742,6 +875,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         default=None,
         help="module:factory that builds your graph; G2/G3 refuse without it",
     )
+    _cassette_miss(p_cycle)
     p_cycle.add_argument("--agent-path", default="agents/demo/graph.py")
     p_cycle.add_argument(
         "--memory",
@@ -771,6 +905,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_run.add_argument("--corpus", default=None)
     p_run.add_argument("--config", default=None, help="aef.yaml path, read from the base ref")
     p_run.add_argument("--entrypoint", default=None, help="module:factory; G2/G3 refuse without it")
+    _cassette_miss(p_run)
     p_run.add_argument("--memory", default=None, help="durable memory store the proposer reads")
     p_run.add_argument("--agent-path", default="agents/demo/graph.py")
     p_run.add_argument("--turns", type=int, default=10)
