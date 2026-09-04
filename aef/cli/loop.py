@@ -407,6 +407,43 @@ def cmd_run(args: argparse.Namespace) -> int:
     return EXIT_HALTED if "halted" in run.stopped_because else EXIT_OK
 
 
+def cmd_skills(args: argparse.Namespace) -> int:
+    """Draft skill proposals from the knowledge store (ADR 0117). Writes
+    under --out only; never under .claude/, agents/ or any harness dir, and
+    never over an existing draft."""
+    from aef.harness.memory_store import FileMemoryStore
+    from aef.harness.skills import SkillProposalError, propose_skills
+    from aef.services.knowledge.consolidate import RuleBasedConsolidator
+    from aef.services.knowledge.in_memory import InMemoryKnowledgeStore
+
+    # The knowledge store is rebuilt from the durable memory store, because
+    # the consolidator is a stateless recompute (ADR 0110) and no file-backed
+    # knowledge store exists yet — the memory file IS the evidence.
+    knowledge = InMemoryKnowledgeStore()
+    RuleBasedConsolidator().consolidate(
+        FileMemoryStore(path=Path(args.memory)), knowledge, agent_id=args.agent_id
+    )
+    try:
+        proposals = propose_skills(
+            knowledge,
+            Path(args.out),
+            agent_id=args.agent_id,
+            min_occurrences=args.min_occurrences,
+        )
+    except SkillProposalError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
+    for p in proposals:
+        state = "wrote" if p.written else "kept existing"
+        print(f"  {state} {p.path}  ({p.entry.occurrence_count} run(s))")
+    print(
+        f"{sum(p.written for p in proposals)} proposal(s) written, "
+        f"{sum(not p.written for p in proposals)} left as-is. Nothing is adopted until a "
+        f"person moves a draft under .claude/skills/."
+    )
+    return EXIT_OK
+
+
 def cmd_bless(args: argparse.Namespace) -> int:
     from aef.harness.preflight import BlessError, bless
 
@@ -603,6 +640,15 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_score.add_argument("--json", action="store_true")
     p_score.add_argument("--i-am-spending-the-holdout", action="store_true")
     p_score.set_defaults(handler=cmd_score)
+
+    p_skills = loop_subs.add_parser(
+        "skills", help="draft skill PROPOSALS from consolidated knowledge (never adopted here)"
+    )
+    p_skills.add_argument("--memory", required=True, help="durable memory store the agent wrote")
+    p_skills.add_argument("--agent-id", required=True)
+    p_skills.add_argument("--out", required=True, help="proposals dir; not a harness dir")
+    p_skills.add_argument("--min-occurrences", type=int, default=3)
+    p_skills.set_defaults(handler=cmd_skills)
 
     p_harvest = loop_subs.add_parser(
         "harvest", help="promote recorded production runs into corpus scenarios"
