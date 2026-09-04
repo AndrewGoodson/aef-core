@@ -120,6 +120,7 @@ def run_scenario(
         # durable store would let a gate run mutate the evidence a later
         # proposal is built from.
         memory=InMemoryMemoryStore(),
+        agent_id=scenario.initial_state.agent_id,
     )
     started = time.monotonic()
     try:

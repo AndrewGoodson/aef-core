@@ -44,6 +44,7 @@ from aef.kernel import (
     InMemoryDurabilityBackend,
 )
 from aef.security.tool import FileAuditLogWriter
+from aef.services.knowledge.in_memory import InMemoryKnowledgeStore
 from aef.services.memory.base import MemoryStore
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.services.runtime import agent_services
@@ -160,10 +161,16 @@ def run_graph_module(
     # were the two lists drifting apart.
     # Built from the SAME memory store the agent writes to. A retriever over
     # a different store retrieves nothing and reads as an empty memory.
-    retriever = build_retriever(context_config, memory=memory, agent_id=agent_id)
+    # One knowledge store for the retriever AND the consolidate node, or the
+    # lessons the graph writes are never the lessons it reads (A1, ADR 0118).
+    knowledge = InMemoryKnowledgeStore()
+    retriever = build_retriever(
+        context_config, memory=memory, agent_id=agent_id, knowledge=knowledge
+    )
     services = agent_services(
         model_provider=model_provider,
         memory=memory,
+        knowledge=knowledge,
         retriever=retriever,
         durability=durability,
         policy=policy_config,

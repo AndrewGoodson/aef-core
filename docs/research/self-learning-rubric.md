@@ -19,11 +19,12 @@ A self-graded number is exactly the failure the trust case warns about.
 | 7 | Real-signal ingestion | 10 | Learns from live runs and real tenants, not a synthetic corpus; telemetry closes the loop | Arize "closing the loop"; Live-SWE-agent (on-the-fly) |
 | 8 | Adoptability / harness-native | 5 | Drops into a repo whose agents are coding-agent sessions; no key; cross-tool | — |
 
-## Current — 2026-09-03 after I7 — **70 / 100**
+## Current — 2026-09-03 after I9 — **72 / 100**
 
 | # | Score | What moved and the artifact |
 |---|---|---|
-| 2 | 15/20 | I7 (ADR 0117): `aef loop skills` drafts one SKILL.md per well-evidenced entry under a proposals dir; refuses harness dirs, never overwrites, every field computed; 11 tests, 3 mutations detected. Remaining: no measurement that an adopted skill helps; no retrieved→outcome signal |
+| 2 | 17/20 | I9 (ADR 0118): `make_retrieve_node` — the retriever's first production caller, budget enforced in a real run; `retrieved_signatures` on reflection; helpful/harmful tallies per entry, agent-scoped, surfaced in metadata + drafts; A1 closed. Remaining: ranking on the tally (no rig where harmful ≠ live); text curation |
+| 2 (I7) | 15/20 | I7 (ADR 0117): `aef loop skills` drafts one SKILL.md per well-evidenced entry under a proposals dir; refuses harness dirs, never overwrites, every field computed; 11 tests, 3 mutations detected. Remaining: no measurement that an adopted skill helps; no retrieved→outcome signal |
 | 2 (I4) | 12/20 | I4 (ADR 0116): `runs_since_last_seen` recomputed per consolidation; retriever demotes stale entries by half-life, deletes nothing; live-lesson coverage 2→3 of 3 at budget 400, 6/6 at 2000; default 5 by sweep. Remaining: no retrieved→outcome signal (no retrieval node), no curation of lesson text, no skill layer |
 | 3 | 7/10 | I3 (ADR 0115): `LLMCritic`/`LLMJudge` on `impl: claude_code`; citations, arithmetic, omission=0, clamping and the position-swap control all in code; live A/B 11/11 agreement, delta 0.0, ~10 s/judgment; off by default (parity on this corpus). Remaining: no corpus where the judges disagree; no self-preference control (nothing compares model outputs yet) |
 | 1 | 17/20 | I2 (ADR 0114): `run_loop` keeps on a local branch, never main; proposes from the kept state so improvements stack; bounded by turns, budget, halt, no-candidate, repeated-rejected-tree. Real cycle: kept 1, reverted 1, stopped on its own evidence. Remaining: corpus is 11 demo scenarios; proposer knows numeric constants + one structural transform |

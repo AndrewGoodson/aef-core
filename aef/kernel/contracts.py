@@ -125,6 +125,11 @@ class Services:
             raise ServiceNotConfiguredError("evaluator")
         return self.evaluator
 
+    def require_retriever(self) -> Retriever:
+        if self.retriever is None:
+            raise ServiceNotConfiguredError("retriever")
+        return self.retriever
+
     def require_critic(self) -> Critic:
         if self.critic is None:
             raise ServiceNotConfiguredError("critic")

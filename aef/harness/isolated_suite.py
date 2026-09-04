@@ -111,7 +111,9 @@ def _worker_is_dead(session: NodeWorkerSession) -> bool:
 
 
 def _run_one(compiled: Any, scenario: Scenario, policy: PolicyConfig | None) -> ScenarioResult:
-    services = agent_services(clock=fixed_clock(scenario), policy=policy)
+    services = agent_services(
+        clock=fixed_clock(scenario), policy=policy, agent_id=scenario.initial_state.agent_id
+    )
     started = time.monotonic()
     try:
         result = GraphExecutor(compiled, services).run(scenario.initial_state, record_trace=True)

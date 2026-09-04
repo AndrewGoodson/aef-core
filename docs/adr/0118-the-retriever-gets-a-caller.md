@@ -1,0 +1,85 @@
+# ADR 0118: The retriever gets a caller, and the lessons get an outcome
+
+## Status
+Accepted. Increment I9 of `IMPROVE_LOOP.md` (added mid-run: it was the
+producer ADR 0116 said was missing); record in `IMPROVE_LOG.md`.
+
+## Context
+
+`MemoryRetriever` was described in ADR 0101 as "the first thing here that
+enforces `context_budget_tokens`". It enforced it for any caller that asked.
+No node asked. `Services.retriever` was a declared injection point with no
+production caller — the ADR 0092 shape, the one this program has found
+five times — and `context_budget_tokens` governed nothing in a real run.
+
+ADR 0116 built curation on *resolution* because ACE's own signal —
+was a lesson in context, and did the run then go well — had no producer.
+Same root cause: nothing put lessons in context.
+
+## Decision
+
+1. **`make_retrieve_node`** asks `Services.retriever` with the state's
+   objective (overridable) and the state's own `context_budget_tokens`, and
+   writes the chunks to `state.retrieved_context` as plain dicts. One
+   budget number governs what the owner configured and what a node
+   receives. Non-deterministic by declaration: the store it reads learns
+   between runs, and replay must trust the recorded chunks. Unconfigured
+   retriever → `ServiceNotConfiguredError("retriever")` by name, the same
+   refusal shape as critic/judge.
+2. **The reflect node records `retrieved_signatures`** — the consolidated
+   lessons that were in context for the run, computed from the chunks the
+   retrieve node wrote. A lesson that existed but was not shown counts
+   nothing; the signal is about what the agent had, not what the store held.
+3. **The consolidator tallies `helpful` / `harmful` per entry** from the
+   records: a run that had the lesson in context and did *not* reproduce
+   that failure is helpful; one that reproduced it anyway is harmful.
+   Agent-scoped. Recomputed every consolidation, never incremented.
+4. **`agent_services` defaults a retriever** over the same throwaway memory
+   and knowledge stores the container carries, agent-scoped where the gate
+   paths know the scenario. This supersedes ADR 0101's "no default retriever
+   whose ranking the agent never chose", on ADR 0091's grounds: the parity
+   test showed a graph with a retrieve node running under `aef run --config`
+   and raising `ServiceNotConfiguredError` in the gate — the fifth service
+   to drift between the two lists. What a `context:` block still uniquely
+   provides is the owner's budget ceiling. `agent_id=None` on the default is
+   not the widening the adversarial round found: it fronts a throwaway
+   store, and `aef run` builds a scoped retriever from config and passes it.
+5. **A1 is closed on the way.** `build_retriever` takes `knowledge=`, and
+   `aef run` shares one knowledge store between the retriever and the
+   consolidate node — the lessons the graph writes are the lessons it reads.
+   Until now the consolidated layer was unreachable from `aef.yaml`.
+6. **Surfaced, not yet ranked on.** The tally travels in chunk metadata
+   and in skill drafts (ADR 0117). It is *not* a retrieval multiplier: on
+   the rigs that exist, "harmful" and "live" coincide — a lesson whose
+   failure keeps recurring is exactly the one the agent should keep seeing
+   — so ranking on it would need a rig where the two come apart, and none
+   does yet. That is the same discipline as `knowledge_boost` (ADR 0110):
+   a knob that has not been measured stays off.
+
+## Evidence
+
+Through the real executor (retrieve → work → reflect → consolidate): context
+lands on state within the budget; a budget of 1 retrieves nothing (the
+planted fault showing the state's number governs); an unconfigured
+retriever refuses by name; `retrieved_signatures` is empty before any lesson
+exists and names the lesson after; on two failures then three runs with the
+lesson in context (two fail, one succeeds) the entry reads helpful 1,
+harmful 2, and the same numbers reach chunk metadata and the skill draft;
+another agent's run with the signature in context does not count. Four
+mutations (retrieve ignores the budget; reflect drops the signatures; the
+tally swapped; the tally not agent-scoped) each failed tests.
+
+## Consequences
+
+- Rubric dimension 2: 15 → 17. The knowledge layer now closes the loop
+  ACE describes — generate, reflect, curate — and the last step's ranking
+  input exists and is measured to be indistinguishable from staleness on
+  the current rigs.
+- `context_budget_tokens` is enforced in a real run for the first time.
+- `examples/hello_agent` does not yet include a retrieve node; adding one
+  is an example change, not a contract change.
+
+## Confidence
+
+High on the node and the tally; the tally's value as a ranking input is
+explicitly unmeasured.

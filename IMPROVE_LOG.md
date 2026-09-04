@@ -261,3 +261,51 @@ Total: **67 → 70**.
 adopt one and the task metric to move. A file-backed knowledge store (the
 drafts are recomputed from the memory file each run, which is correct but
 means `--memory` is the only input).
+
+---
+
+## I9 — The retriever gets a caller; lessons get an outcome; A1 closed (2026-09-03)
+
+**Branch:** `improve/i9-retrieve-node`, off `main` (`47754fe`).
+**Rubric claim:** dimension 2, up to +3 (added mid-run: the producer ADR 0116 said was missing). Total before: 70.
+
+**Reproduce (RUN).** No node called `Services.retriever`; `context_budget_tokens`
+governed nothing in a real run; `retrieved_context` was never written, so ACE's
+retrieved→outcome signal had no producer. Separately (A1): `build_retriever` took
+no `knowledge=`, so a configured run's retriever could never see a lesson.
+
+**Expectation.** `make_retrieve_node` writes chunks within the state's budget;
+reflect records `retrieved_signatures`; consolidator tallies helpful/harmful
+per entry, agent-scoped, recomputed; surfaced in chunk metadata and skill
+drafts; NOT a ranking input (on current rigs "harmful" and "live" coincide).
+
+**Measurement.**
+
+```
+end-to-end (retrieve -> work -> reflect -> consolidate): context on state within budget;
+  budget=1 retrieves nothing; unconfigured retriever refuses by name;
+  2 failures then (fail, fail, succeed) with the lesson in context -> helpful 1, harmful 2,
+  same numbers in chunk metadata and the skill draft; another agent's run does not count.
+
+parity test failed on the new require_retriever (gate vs run drift, the 5th ADR 0091 instance)
+  -> agent_services now defaults a retriever over its own throwaway stores; ADR 0101's
+     "no default" control test rewritten deliberately; A1 closed (build_retriever knowledge=).
+
+mutations (each -> tests fail, reverted):
+  M25 retrieve ignores the state budget    1 failed
+  M26 reflect drops the signatures         3 failed
+  M27 helpful/harmful swapped              1 failed
+  M28 tally not agent-scoped               NOT DETECTED at first — the consolidator's own
+      agent_id query filter hid it; test rewritten to consolidate across agents -> 1 failed
+
+pytest -q          1691 passed (from 1683; +8, none removed)
+mypy aef examples  124 files clean
+ruff check / format   clean
+```
+
+**Verdict.** The ACE loop closes (generate → reflect → curate) with the
+ranking input measured-but-unused. Dimension 2: 15 → **17**. Total: **70 → 72**.
+Also closes MERGE_READY_LOOP Track A1.
+
+**Deliberately left.** Ranking on helpful/harmful — needs a rig where a lesson
+is harmful and NOT live. `examples/hello_agent` has no retrieve node yet.

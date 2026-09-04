@@ -280,11 +280,18 @@ def test_a_node_reaches_the_retriever_through_a_real_run(
     assert any("timeout" in c["content"] for c in state.retrieved_context)
 
 
-def test_without_a_context_block_the_same_node_gets_no_retriever(
+def test_without_a_context_block_the_node_gets_the_default_retriever_not_a_ceiling(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The control. If the node retrieved with no config block, the test above
-    would prove nothing about the config reaching anything."""
+    """The control, rewritten deliberately for ADR 0118. It used to assert
+    that no `context:` block meant NO retriever (ADR 0101's "no default whose
+    ranking the agent never chose"). That contract made the gate diverge from
+    a configured run — a graph with a retrieve node raised
+    ServiceNotConfiguredError in the gate and scored 0.0 everywhere, the
+    fifth ADR 0091 drift. The default is now a retriever over the run's own
+    stores; what the `context:` block still uniquely provides is the owner's
+    budget CEILING, which the next test pins. So the control here is: with no
+    block, the run works and NO ceiling applies."""
     from aef.cli.run import run_graph_module
 
     (tmp_path / "recaller2.py").write_text(AGENT.replace('id="recaller"', 'id="recaller2"'))
@@ -297,13 +304,13 @@ def test_without_a_context_block_the_same_node_gets_no_retriever(
     assert "context:" not in no_context, "the control still configures a retriever"
     config.write_text(no_context)
 
-    with pytest.raises(AttributeError):
-        run_graph_module(
-            "recaller2",
-            agent_id="recaller-agent",
-            objective="fetch node timeout",
-            config_path=config,
-        )
+    final = run_graph_module(
+        "recaller2",
+        agent_id="recaller-agent",
+        objective="fetch node timeout",
+        config_path=config,
+    )
+    assert final is not None  # ran, rather than raising for a missing service
 
 
 def test_the_configured_budget_is_a_CEILING_a_node_cannot_exceed(tmp_path: Path) -> None:
@@ -415,3 +422,20 @@ def test_content_that_json_cannot_serialise_does_not_break_retrieval() -> None:
         )
     )
     assert MemoryRetriever(memory=memory, agent_id="a").retrieve("fetch", token_budget=1000)
+
+
+def test_build_retriever_hands_the_knowledge_store_to_the_retriever(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """MERGE_READY_LOOP A1, closed by ADR 0118: a retriever built from aef.yaml
+    had no knowledge store, so the consolidated layer was unreachable from
+    config. The store passed in must be the one the retriever reads."""
+    from aef.services.knowledge.in_memory import InMemoryKnowledgeStore
+
+    path = tmp_path / "aef.yaml"
+    path.write_text(CONFIG.format(budget=500))
+    config = load_agent_config(path)
+    knowledge = InMemoryKnowledgeStore()
+    retriever = build_retriever(
+        config.context, memory=InMemoryMemoryStore(), agent_id="a", knowledge=knowledge
+    )
+    assert retriever is not None
+    assert retriever.knowledge is knowledge  # type: ignore[attr-defined]
