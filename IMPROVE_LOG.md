@@ -123,3 +123,54 @@ corpus in the log: it needs a blessed baseline and a failure-memory store,
 which the fixture provides and the repo's checkout does not. The metric
 trajectory per turn is in the ledger's `GATED` evidence, not yet surfaced
 by `run_loop`'s summary.
+
+---
+
+## I3 — LLM critic and judge on the harness login (2026-09-03)
+
+**Branch:** `improve/i3-llm-reflection`, off `main` (`e403b84`).
+**Rubric claim:** dimension 3, up to +5. Total before: 59.
+
+**Reproduce (RUN).** `Critic.critique` / `Judge.judge` raised
+`NotImplementedError` (ADR 0046 deferred them for want of a reachable
+model). `agent_services()` could only construct the rule-based pair.
+
+**Expectation.** `LLMCritic`/`LLMJudge` on `ModelProvider` (no vendor SDK):
+model writes prose, code computes citations, weighted score, omission=0,
+clamping, and a position-swap control with the delta exposed. Fallback to
+rule-based on any failure. Reachable via `reflection: {impl: llm}`, refused
+at construction without a provider. Expected on the demo corpus: parity with
+the rule-based judge (the corpus is trivial), non-zero cost, off by default.
+
+**Measurement.**
+
+```
+live A/B, impl claude_code, claude-fable-5-1, 11 corpus states, judge position-swapped (22 calls):
+  id                          truth  rule  llm   position_delta  secs
+  boundary-3 / easy-1 / easy-2 / val-boundary / val-easy     1.0  1.0  1.0  0.0  9-13
+  hard-both-4/5, val-hard-4/5, tripwire-impossible-{train,val} 0.0  0.0  0.0  0.0  9-10
+  llm_agreement_with_truth 11/11   rule_agreement_with_truth 11/11
+  llm_mae 0.0   rule_mae 0.0   mean_position_delta 0.0   fallbacks 0
+  mean 10.1 s / judgment, 118.6 s total
+  critic on hard-both-5: grounded_in=["errors[0]"] (computed); prose: "... Likely cause: fixed
+    budget/threshold settings mismatched to task class 'hard-both' ..."
+
+mutations (each -> a test fails, reverted):
+  M15 omitted term counts 1.0     1 failed
+  M16 no clamping                 1 failed
+  M17 critic drops citations      1 failed
+  M18 no position swap            1 failed
+
+pytest -q          1665 passed (from 1648; +17, none removed)
+mypy aef examples  123 files clean
+ruff check / format   clean
+```
+
+**Verdict.** Implemented, bias-controlled, measured: parity with rule-based
+on this corpus at ~10 s per judgment, so **off by default**. The visible
+gain is the critic's causal prose, which nothing downstream reads yet.
+Dimension 3: 3 → **7**. Total: **59 → 63**.
+
+**Deliberately left.** Self-preference control — nothing here compares model
+outputs. A harder corpus where the judges disagree, which is what would
+justify turning this on.

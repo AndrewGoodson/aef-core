@@ -26,6 +26,7 @@ from aef.kernel import DurabilityBackend, Services
 from aef.observability.base import Tracer
 from aef.observability.in_memory import InMemoryTracer
 from aef.providers.base import ModelProvider
+from aef.reasoning.reflection import Critic, Judge
 from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
 from aef.security.tool import PolicyConfig, PolicyEngine
 from aef.services.context.base import Retriever
@@ -82,6 +83,8 @@ def agent_services(
     audit_log: object | None = None,
     retriever: Retriever | None = None,
     knowledge: KnowledgeStore | None = None,
+    reflection: str = "rule_based",
+    reflection_model: str | None = None,
 ) -> Services:
     """Everything a Zone A node may `require_*`, with working defaults.
 
@@ -95,6 +98,24 @@ def agent_services(
     `deterministic=False` and unreplayable anyway. It is the one service the
     two paths genuinely differ on, so it is the one the caller must pass.
     """
+    rubric = dict(DEFAULT_RUBRIC if judge_rubric is None else judge_rubric)
+    critic: Critic = RuleBasedCritic()
+    judge: Judge = RuleBasedJudge(rubric=rubric)
+    if reflection == "llm":
+        # Refused here, not at the first reflect: a node that raises
+        # ServiceNotConfiguredError at the end of a run is the ADR 0073 shape.
+        if model_provider is None:
+            raise ValueError(
+                "reflection.impl=llm needs a model provider; none was configured "
+                "(model_provider.impl in aef.yaml, e.g. claude_code — ADR 0112)"
+            )
+        from aef.reasoning.llm_reflection import LLMCritic, LLMJudge
+
+        model = reflection_model or ""
+        critic = LLMCritic(provider=model_provider, model=model)
+        judge = LLMJudge(provider=model_provider, model=model, rubric=rubric)
+    elif reflection != "rule_based":
+        raise ValueError(f"unknown reflection impl {reflection!r}")
     return Services(
         model_provider=model_provider,
         # `None` unless configured. A retriever is per-agent Knowledge, so an
@@ -127,8 +148,8 @@ def agent_services(
         # reads these checkpoints; encoding them bought a constraint and no
         # capability.
         durability=durability if durability is not None else _EphemeralDurability(),
-        critic=RuleBasedCritic(),
-        judge=RuleBasedJudge(rubric=dict(DEFAULT_RUBRIC if judge_rubric is None else judge_rubric)),
+        critic=critic,
+        judge=judge,
         evaluator=RuleBasedEvaluator(),
         policy_engine=PolicyEngine(policy, audit_log=audit_log),  # type: ignore[arg-type]
         # `Services.clock` has its own default; only override when the caller

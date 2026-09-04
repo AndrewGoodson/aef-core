@@ -179,6 +179,25 @@ class EvolutionSettings(_StrictModel):
         return value
 
 
+REFLECTION_IMPLS: frozenset[str] = frozenset({"rule_based", "llm"})
+
+
+class ReflectionConfig(_StrictModel):
+    """Which Critic/Judge the reflect node runs (ADR 0115). `llm` needs the
+    run's model provider; `aef run` refuses at load if there is none, for the
+    same reason `context.impl` refuses an unknown retriever: a block that
+    validates while nothing can honour it lets an owner believe it is on."""
+
+    impl: str = "rule_based"
+
+    @field_validator("impl")
+    @classmethod
+    def _must_name_a_real_reflection(cls, value: str) -> str:
+        if value not in REFLECTION_IMPLS:
+            raise ValueError(f"reflection.impl={value!r} is not one of {sorted(REFLECTION_IMPLS)}")
+        return value
+
+
 class AgentConfig(_StrictModel):
     extends: str = "_base"
 
@@ -203,6 +222,7 @@ class AgentConfig(_StrictModel):
     memory: MemoryConfig
     knowledge_graph: KnowledgeGraphConfig | None = None
     context: ContextConfig | None = None
+    reflection: ReflectionConfig = ReflectionConfig()
     evaluator: EvaluatorConfig = EvaluatorConfig()
     tools: ToolsConfig = ToolsConfig()
     policies: PoliciesConfig = PoliciesConfig()
