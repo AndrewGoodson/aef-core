@@ -27,6 +27,7 @@ from __future__ import annotations
 import importlib
 import sys
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from aef.config import (
@@ -36,6 +37,7 @@ from aef.config import (
     build_retriever,
     load_agent_config,
 )
+from aef.config.schema import ContextConfig
 from aef.harness.memory_store import FileMemoryStore
 from aef.kernel import (
     DurabilityBackend,
@@ -43,13 +45,62 @@ from aef.kernel import (
     GraphExecutor,
     InMemoryDurabilityBackend,
 )
-from aef.security.tool import FileAuditLogWriter
+from aef.providers.base import ModelProvider
+from aef.security.tool import FileAuditLogWriter, PolicyConfig
 from aef.services.knowledge.consolidate import RuleBasedConsolidator
 from aef.services.knowledge.in_memory import InMemoryKnowledgeStore
 from aef.services.memory.base import MemoryStore
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.services.runtime import agent_services
 from aef.state import AEFState
+
+
+@dataclass(frozen=True)
+class RunConfig:
+    """Everything `--config` contributes to a run's `Services`.
+
+    **One construction site, two commands.** `aef run` and `aef loop
+    bootstrap` both turn an `aef.yaml` into the pieces `agent_services`
+    needs, and they used to do it in two places: `run_graph_module` built
+    the provider, the policy config, the context config and the reflection
+    impl; `cmd_bootstrap` built the provider and the reflection impl and
+    nothing else. So a recording made by bootstrap ran under the engine's
+    DEFAULT policy while the same graph under `aef run` ran under the
+    adopter's — and the corpus would have pinned behaviour production never
+    had. That is ADR 0091's drift shape, and this dataclass is the fix:
+    both callers read the config here or not at all.
+
+    `None` config path means no `aef.yaml` was given, and every field keeps
+    the unconfigured default — a graph calling `require_model_provider()`
+    then gets a clear refusal, never a silent no-op.
+    """
+
+    model_provider: ModelProvider | None = None
+    policy_config: PolicyConfig | None = None
+    context: ContextConfig | None = None
+    reflection: str = "rule_based"
+    reflection_model: str | None = None
+
+
+def build_run_config(config_path: str | Path | None) -> RunConfig:
+    """Read an `aef.yaml` into the parts `agent_services` takes.
+
+    `build_domain_gates` is called and its result discarded ON PURPOSE: an
+    unresolvable evaluator suite should stop the run before it costs
+    anything, naming itself, rather than at the end of one (ADR 0100). The
+    evaluator that actually uses the suites is built at scoring time.
+    """
+    if config_path is None:
+        return RunConfig()
+    config = load_agent_config(config_path)
+    build_domain_gates(config.evaluator)
+    return RunConfig(
+        model_provider=build_model_provider(config.model_provider),
+        policy_config=build_policy_config(config.tools, config.policies),
+        context=config.context,
+        reflection=config.reflection.impl,
+        reflection_model=config.model_provider.model,
+    )
 
 
 def _ensure_cwd_importable() -> None:
@@ -114,30 +165,17 @@ def run_graph_module(
     if build_graph is None:
         raise ValueError(f"module {module_path!r} has no build_graph() function")
 
-    model_provider = None
-    policy_config = None
-    context_config = None
-    reflection = "rule_based"
-    reflection_model: str | None = None
-    if config_path is not None:
-        config = load_agent_config(config_path)
-        model_provider = build_model_provider(config.model_provider)
-        # `evaluator.suites` now reaches the evaluator. It validated and was
-        # read by nothing — a declared injection point with no production
-        # caller, which ADR 0092 named as indistinguishable from a missing
-        # feature. Resolved EAGERLY so an unresolvable suite fails here,
-        # naming itself, rather than at the end of a run (ADR 0100).
-        # Resolved here purely to FAIL EARLY: an unresolvable suite should
-        # stop the run before it costs anything, not after. The evaluator that
-        # actually uses them is built by `build_evaluator` at scoring time.
-        build_domain_gates(config.evaluator)
-        # `policies` and `tools.allow` now reach a run. They validated and were
-        # ignored before, so an adopter setting require_hitl_above_risk got the
-        # engine's own default instead of the one they wrote (ADR 0014, 0082).
-        policy_config = build_policy_config(config.tools, config.policies)
-        context_config = config.context
-        reflection = config.reflection.impl
-        reflection_model = config.model_provider.model
+    # `evaluator.suites` reaches the evaluator, and `policies`/`tools.allow`
+    # reach the run — both validated and were ignored before (ADR 0014, 0082,
+    # 0092, 0100). All of it is read in ONE place now, shared with
+    # `aef loop bootstrap`, so a recording cannot run under a different
+    # configuration than production does. See `build_run_config`.
+    run_config = build_run_config(config_path)
+    model_provider = run_config.model_provider
+    policy_config = run_config.policy_config
+    context_config = run_config.context
+    reflection = run_config.reflection
+    reflection_model = run_config.reflection_model
 
     durability: DurabilityBackend = (
         FileDurabilityBackend(Path(checkpoints_dir))

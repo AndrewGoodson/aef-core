@@ -15,16 +15,27 @@ from pathlib import Path
 import pytest
 
 from aef.harness.bootstrap import (
+    NO_PROVIDER_MARKER,
     BootstrapError,
     BootstrapInput,
+    RunScopedMemory,
     bootstrap,
     load_inputs,
 )
 from aef.harness.checks import TaskCheck
 from aef.harness.corpus import Expected, Split, load_corpus
+from aef.harness.memory_store import FileMemoryStore
+from aef.harness.proposer import MemoryEvidence
 from aef.harness.recorder import RecorderError
-from aef.kernel import END, Context, Graph, Node, Route, Services
-from aef.services.memory.base import MemoryRecord
+from aef.kernel import END, Context, Edge, Graph, Node, Route, Services, SideEffect
+from aef.providers.base import (
+    CompletionRequest,
+    CompletionResult,
+    ModelProvider,
+    ProviderMessage,
+)
+from aef.reasoning.nodes import make_reflect_node
+from aef.services.memory.base import MemoryRecord, MemoryStore
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.services.runtime import agent_services
 from aef.state import AEFState, Plan, StateDelta
@@ -60,8 +71,11 @@ def _graph() -> Graph:
     )
 
 
-def _services() -> Services:
-    return agent_services(memory=InMemoryMemoryStore())
+def _services(memory: MemoryStore) -> Services:
+    """The store is HANDED IN by `bootstrap`, which builds a `RunScopedMemory`
+    per input. A factory that picked its own would put the isolation rule at
+    the call site and leave the durability rule (ADR 0145) inexpressible."""
+    return agent_services(memory=memory)
 
 
 def _inputs(*specs: tuple[str, int]) -> tuple[BootstrapInput, ...]:
@@ -255,6 +269,296 @@ def test_each_input_gets_its_own_services(tmp_path: Path) -> None:
     assert seen == {"first": 0, "second": 0}, (
         "the second run saw the first run's memory — the scenarios do not reproduce alone"
     )
+
+
+def test_isolation_survives_the_durable_sink(tmp_path: Path) -> None:
+    """The seam ADR 0145 could have broken. Making the reflections durable by
+    sharing ONE store across inputs would have satisfied the cycle and
+    destroyed the property above: the second input would read the first
+    input's records back and record a scenario that cannot reproduce alone.
+    Same graph, same assertion, with a sink attached."""
+
+    def work(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
+        memory = services.require_memory()
+        seen = len(memory.query("episodic", limit=100))
+        memory.write(MemoryRecord(kind="episodic", content={"objective": state.objective}))
+        return (
+            StateDelta(
+                plan=Plan(goal=state.objective, status="done"), working_memory={"seen": seen}
+            ),
+            END,
+        )
+
+    graph = Graph(
+        id="fixture",
+        version="0.1.0",
+        nodes={"work": Node(id="work", version="0.1.0", fn=work, deterministic=True)},
+        edges=[],
+        entry_node="work",
+    )
+    root = tmp_path / "corpus"
+    sink = FileMemoryStore(path=tmp_path / "memory.jsonl")
+    outcome = bootstrap(
+        root,
+        graph,
+        _services,
+        inputs=_inputs(("first", 1), ("second", 1)),
+        now=NOW,
+        agent_id="fixture",
+        memory_sink=sink,
+    )
+
+    seen = {s.id: s.trace[0].delta.working_memory["seen"] for s in load_corpus(root).scenarios}
+    assert seen == {"first": 0, "second": 0}, (
+        "the sink leaked into the next input's reads — the scenarios do not reproduce alone"
+    )
+    # ...and the writes still landed, which is the other half of the trade.
+    assert outcome.memory_records == 2
+    assert len(sink.query("episodic", limit=100)) == 2
+
+
+# --- the durable sink: reflections that outlive the process (ADR 0145) -------
+
+
+def _reflecting_graph() -> Graph:
+    """The MINIMUM_AGENT shape: a work node that ROUTES to reflect. An Edge
+    alone does not wire it (ADR 0070), which is why the route is a literal."""
+
+    def work(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
+        if int(state.working_memory.get("difficulty", 1)) > 3:
+            return (
+                StateDelta(
+                    plan=Plan(goal=state.objective, status="failed"),
+                    errors=[{"node_id": ctx.node_id, "error": "too hard"}],
+                    scores={"quality": 0.0},
+                ),
+                "reflect",
+            )
+        return (
+            StateDelta(plan=Plan(goal=state.objective, status="done"), scores={"quality": 1.0}),
+            "reflect",
+        )
+
+    return Graph(
+        id="fixture",
+        version="0.1.0",
+        nodes={
+            "work": Node(id="work", version="0.1.0", fn=work, deterministic=True),
+            "reflect": make_reflect_node(route=END),
+        },
+        edges=[Edge(from_node="work", to_node="reflect")],
+        entry_node="work",
+    )
+
+
+def test_a_failing_input_leaves_failure_memory_the_proposer_can_read(tmp_path: Path) -> None:
+    """The measured gap ADR 0139 named as requirement 4: bootstrap gave every
+    input its own `InMemoryMemoryStore`, so the failing run's reflection died
+    with the process and `aef loop cycle --memory M` said `no admissible
+    failure memory: no candidate this cycle`."""
+    sink = FileMemoryStore(path=tmp_path / "memory.jsonl")
+    outcome = bootstrap(
+        tmp_path / "corpus",
+        _reflecting_graph(),
+        _services,
+        inputs=_inputs(("easy", 1), ("hard", 9)),
+        now=NOW,
+        agent_id="fixture",
+        memory_sink=sink,
+    )
+    assert outcome.failed == ("hard",)
+
+    # Read back the way the proposer reads it — from a NEW store over the same
+    # file, because "survives the process" is the whole claim.
+    reopened = FileMemoryStore(path=tmp_path / "memory.jsonl")
+    evidence = MemoryEvidence.from_store(reopened)
+    assert [r.run_id for r in evidence.records] == ["hard"]
+    assert evidence.failing_nodes() and evidence.failing_nodes()[0][0] == "work"
+
+    assert "memory record(s) written to the durable store" in "\n".join(outcome.lines)
+
+
+def test_bootstrap_writes_no_memory_of_its_own(tmp_path: Path) -> None:
+    """ADR 0060, from the memory side. A graph that reflects on nothing leaves
+    an EMPTY sink: bootstrap records what the run did and never authors a
+    failure to fill the gap — which would be the system writing the evidence
+    it then proposes from."""
+    sink = FileMemoryStore(path=tmp_path / "memory.jsonl")
+    outcome = bootstrap(
+        tmp_path / "corpus",
+        _graph(),  # no reflect node, and one input DOES fail
+        _services,
+        inputs=_inputs(("easy", 1), ("hard", 9)),
+        now=NOW,
+        agent_id="fixture",
+        memory_sink=sink,
+    )
+    assert outcome.failed == ("hard",)
+    assert outcome.memory_records == 0
+    assert not (tmp_path / "memory.jsonl").exists()
+    assert MemoryEvidence.from_store(sink).records == ()
+
+    text = "\n".join(outcome.lines)
+    assert "no memory records" in text
+    assert "never invents a failure" in text
+
+
+def test_no_sink_is_reported_as_a_different_fact_from_an_empty_one(tmp_path: Path) -> None:
+    """ "asked for durable memory and got none" is a finding about the graph;
+    "did not ask" is not. Printing the first for the second is the
+    green-light-for-nothing shape this repo keeps finding."""
+    outcome = _run(tmp_path / "corpus", ("easy", 1), ("hard", 9))
+    assert outcome.memory_records is None
+    assert "no memory records" not in "\n".join(outcome.lines)
+
+
+def test_run_scoped_memory_reads_scratch_and_mirrors_writes() -> None:
+    """The class, directly: both rules in one object, so neither can be
+    dropped by a caller that assembles `Services` differently."""
+    scratch, sink = InMemoryMemoryStore(), InMemoryMemoryStore()
+    sink.write(MemoryRecord(kind="failure", content={"from": "an earlier input"}))
+
+    store = RunScopedMemory(scratch=scratch, sink=sink)
+    record = MemoryRecord(kind="failure", content={"from": "this run"})
+    assert store.write(record) == record.id
+
+    # Reads see this run only — the earlier record is invisible.
+    assert [r.content["from"] for r in store.query("failure", limit=10)] == ["this run"]
+    assert store.get(record.id) is not None
+    # ...and the sink has both, with the record's own id preserved.
+    assert len(sink.query("failure", limit=10)) == 2
+    assert store.mirrored == [record.id]
+
+
+def test_run_scoped_memory_without_a_sink_is_the_pre_0145_behaviour() -> None:
+    scratch = InMemoryMemoryStore()
+    store = RunScopedMemory(scratch=scratch)
+    store.write(MemoryRecord(kind="failure", content={}))
+    assert len(scratch.query("failure", limit=10)) == 1
+    assert store.mirrored == []
+
+
+# --- the recording pass is the live one (ADR 0145) ---------------------------
+
+
+def test_the_model_calls_the_recording_spent_are_reported(tmp_path: Path) -> None:
+    """Recording is the one pass that is SUPPOSED to be live — the cassette
+    the gates replay from does not exist until something makes the call once
+    (ADR 0123) — so the price is printed rather than discovered later.
+
+    A FAKE provider: this repo's three impls are all live and the quota to
+    exercise them is not available, so what is proved here is the WIRING and
+    the count, not the live path."""
+    calls: list[str] = []
+
+    class _FakeProvider(ModelProvider):
+        name = "fake"
+
+        def complete(self, request: CompletionRequest) -> CompletionResult:
+            calls.append(request.messages[0].content)
+            return CompletionResult(
+                content="ok",
+                model=request.model or "fake",
+                input_tokens=1,
+                output_tokens=1,
+            )
+
+    def work(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
+        services.require_model_provider().complete(
+            CompletionRequest(
+                messages=(ProviderMessage(role="user", content=state.objective),),
+                model="fake-1",
+                max_tokens=16,
+            )
+        )
+        return StateDelta(plan=Plan(goal=state.objective, status="done")), END
+
+    graph = Graph(
+        id="fixture",
+        version="0.1.0",
+        nodes={
+            "work": Node(
+                id="work",
+                version="0.1.0",
+                fn=work,
+                deterministic=False,
+                side_effects=SideEffect.EXTERNAL_CALL,
+                idempotency_key_fn=lambda s: f"{s.run_id}:work",
+            )
+        },
+        edges=[],
+        entry_node="work",
+    )
+
+    root = tmp_path / "corpus"
+    outcome = bootstrap(
+        root,
+        graph,
+        lambda memory: agent_services(memory=memory, model_provider=_FakeProvider()),
+        inputs=_inputs(("one", 1), ("two", 1)),
+        now=NOW,
+        agent_id="fixture",
+    )
+    assert len(calls) == 2
+    assert outcome.model_calls == 2
+    # Counted from the cassettes the recorder pinned, not from an estimate:
+    # these are the calls the gates will replay without a credential.
+    assert sum(len(s.model_calls) for s in load_corpus(root).scenarios) == 2
+    assert "recording spent 2 live model call(s)" in "\n".join(outcome.lines)
+
+
+def test_a_model_calling_graph_with_no_provider_is_told_which_flag_fixes_it(
+    tmp_path: Path,
+) -> None:
+    """ADR 0139's other measured blocker: bootstrapping the migrated,
+    model-calling graph exits 1 with `no live provider to fall through to`.
+    `--config` was already in the parser and nothing pointed at it."""
+
+    def work(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
+        services.require_model_provider().complete(
+            CompletionRequest(
+                messages=(ProviderMessage(role="user", content=state.objective),),
+                model="fake-1",
+                max_tokens=16,
+            )
+        )
+        return StateDelta(plan=Plan(goal=state.objective, status="done")), END
+
+    graph = Graph(
+        id="fixture",
+        version="0.1.0",
+        nodes={
+            "work": Node(
+                id="work",
+                version="0.1.0",
+                fn=work,
+                deterministic=False,
+                side_effects=SideEffect.EXTERNAL_CALL,
+                idempotency_key_fn=lambda s: f"{s.run_id}:work",
+            )
+        },
+        edges=[],
+        entry_node="work",
+    )
+
+    outcome = bootstrap(
+        tmp_path / "corpus",
+        graph,
+        _services,  # no model provider at all
+        inputs=_inputs(
+            ("one", 1),
+        ),
+        now=NOW,
+        agent_id="fixture",
+    )
+    assert outcome.recorded == ()
+    text = "\n".join(outcome.lines)
+    # The provider's own message, which names aef.yaml and cannot name a flag
+    # of a command it has never heard of...
+    assert NO_PROVIDER_MARKER in text
+    # ...and the flag that gets that file to THIS command.
+    assert "--config <aef.yaml>" in text
+    assert "SUPPOSED to be live" in text
 
 
 # --- owner claims that ARE accepted per input (ADR 0113) ---------------------

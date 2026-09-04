@@ -1743,3 +1743,87 @@ generated docstring now says so out loud rather than leaving it to be found.
 And the K3 test's patched copy of the generated file carries two now-unused
 imports, because it replaces the body and not the header — harmless, since G1
 runs `pytest` rather than `ruff`, and named here rather than discovered later.
+
+---
+
+## L3 + L5 — bootstrap leaves the evidence, bless archives the agent (ADRs 0145, 0147)
+
+**Planted.** Two of the four steps `INGEST_LOOP.md` moved from the adopter's
+lap into the tools, in one worker because both are `aef/cli/loop.py`. L3:
+`aef loop bootstrap` gains `--memory` and a `--config` that reads `aef.yaml`
+through `aef run`'s own code path. L5: `aef loop bless` refuses when the agent
+is not inside the tree it would archive.
+
+**Reproduced first, all three, by running commands against a fresh repo.**
+
+| # | Before |
+|---|---|
+| L3a | bootstrap runs 4 inputs, prints `2 of 4 recorded run(s) FAILED.`, writes **no** memory file; `aef loop cycle --memory M` then prints `no admissible failure memory: no candidate this cycle`, **exit 0** |
+| L3b | bootstrap on a model-calling graph: `ModelProviderError: cassette miss ... and no live provider to fall through to` × 4, `NOTHING was recorded`, exit 1 — and `--config`, the flag that fixes it, had been in the parser since ADR 0138 with nothing pointing at it |
+| L5 | `bless --agent-path aef_migrated.py` → `blessed aef_migrated.py as baseline v1`, exit 0, archive contents: `agents/README.md`, one file |
+
+**Measured.** Same sequence, one flag added, nothing else hand-written — no
+`aef run --memory`, no hand-written scenario:
+
+```
+$ aef loop bootstrap agents.mine.graph --corpus corpus --inputs inputs.json \
+      --no-loop-state --memory state/memory.jsonl
+2 of 4 recorded run(s) FAILED.
+  4 memory record(s) written to the durable store — what the graph's own
+  reflect node observed, nothing bootstrap decided.
+$ <the tripwire line it printed, verbatim>      recorded ... (validation)
+$ aef loop bless ... --agent-path agents/mine/graph.py    baseline v1
+$ aef loop cycle ... --memory state/memory.jsonl
+  proposed cycle-20260904T154639-0 on local branch loop/cycle-...
+  gated: reject — G3 rejected it: candidate does not beat the p95 of the
+    random control cohort — this is the null hypothesis, not an improvement
+```
+
+`no admissible failure memory` → a proposed and gated candidate. The verdict
+is a **rejection** and that is the assertion: G3 measuring against a real
+control cohort is the gate working (ADR 0139's rule).
+
+And L5, after: `error: aef_migrated.py exists at HEAD but is NOT inside the
+tree this would archive: 'agents' at HEAD holds 1 file(s) (agents/README.md).
+...` — exit 1, archive empty.
+
+**Changed.** `RunScopedMemory` (reads from a fresh per-input scratch store,
+writes mirrored to a durable sink) so ADR 0138's isolation seam and ADR 0139's
+requirement 4 both hold — the shared-store implementation would have satisfied
+the cycle and made every scenario order-dependent. `bootstrap()`'s factory
+takes the store rather than choosing it. `aef/cli/run.py` gains `RunConfig` /
+`build_run_config`, which `cmd_bootstrap` now reads instead of building its
+own provider — that second construction site had been silently dropping
+`policies`, `tools.allow` and `evaluator.suites` from every recording.
+`BootstrapOutcome` reports the live calls the recording spent and, when the
+graph asked a model with no provider, names `--config`. `preflight.bless`
+refuses on containment, naming both paths. `DEFAULT_AGENT_PATH` is built from
+`DEFAULT_AGENT_ROOT`.
+
+**A second defect, found while closing the first.** `--config` was not
+missing; it was unreachable-by-documentation *and* wired to a private copy of
+`aef run`'s config reading. ADR 0139 concluded "a model-calling graph cannot
+get its first corpus" with the flag sitting in the parser — a flag nobody is
+pointed at is not a feature.
+
+**Mutation.** 10 planted, 10 caught, every one restored from a backup whose
+SHA-1 was checked before and after (`git checkout --` would have destroyed
+uncommitted work). The one worth naming is M2 — reads fall through to the
+sink, which is durable AND wrong — because it is the implementation this
+increment was most likely to have shipped; it fails
+`test_isolation_survives_the_durable_sink`.
+
+**Green bar.** `pytest -q` 1960 passed, 1 skipped (from 1945; **+15, none
+removed**). `mypy aef examples` 129 files clean. `ruff check .` clean.
+`ruff format --check aef tests examples` 239 formatted. **No rubric dimension
+moves** — adoption readiness is not a scoring claim. **Zero live model calls.**
+
+**Deliberately left.** The live recording path is **untested**: all three
+shipped provider impls make real calls and there was no quota, so `--config`
+is proved with a fake provider substituted at `aef.cli.run`'s own import —
+the wiring, the cassette and the count, not the credential. An errored input's
+model calls are not counted, because the recording cassette dies with the
+exception. The generated `LOOP.md` and ADR 0139 still say bootstrap cannot
+supply the failing run's memory; that sentence is now false and belongs to
+L6's first-day document, not to this file. And nothing here ran against a repo
+nobody wrote to be scanned.

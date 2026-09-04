@@ -38,6 +38,18 @@ isolation, with its own `InMemoryMemoryStore` (`harvest._reexecution_services`).
 A bootstrap that shared one store across inputs would record traces whose
 later runs depended on what earlier ones remembered — scenarios that cannot
 reproduce alone, which is the one thing a corpus must never contain.
+
+**And the reflections still have to outlive the process** (ADR 0145). The
+fourth thing an adopted repo needed before `aef loop cycle` could propose
+anything was *a failing run whose memory the cycle can read*, and ADR 0139
+measured bootstrap as unable to supply it: every input got its own in-memory
+store, so the `MemoryRecord` a failing run's reflect node wrote died with the
+process and the next `aef loop cycle --memory M` said `no admissible failure
+memory: no candidate this cycle`. `RunScopedMemory` below resolves the two
+requirements instead of trading one away — reads stay scoped to the run that
+made them, writes ALSO land in a durable sink — and it invents nothing: the
+sink holds exactly the records the graph's own reflect node wrote, and a
+graph that reflects on nothing leaves an empty sink (ADR 0060).
 """
 
 from __future__ import annotations
@@ -55,9 +67,17 @@ from aef.harness.outcome import classify
 from aef.harness.recorder import RecorderError, record_to_corpus, refuse_existing_ids
 from aef.kernel import Services
 from aef.kernel.graph import Graph
+from aef.services.memory.base import MemoryKind, MemoryRecord, MemoryStore
+from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.state import AEFState
 
 DEFAULT_PREFIX = "bootstrap"
+
+# `CassetteProvider`'s wording for "this run asked a model something and there
+# was nothing to ask". Matched rather than re-raised because the recorder
+# reports per-input errors as strings — see `_provider_lines`. If the provider
+# ever rephrases this, the hint stops firing and a test says so.
+NO_PROVIDER_MARKER = "no live provider to fall through to"
 
 # Everything an input may say. Anything else is a typo or a claim this
 # command does not honour, and both are worth an error rather than a shrug.
@@ -81,6 +101,61 @@ REFUSED_KEYS: dict[str, str] = {
 
 class BootstrapError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class RunScopedMemory(MemoryStore):
+    """Reads see one run; writes are also kept somewhere that outlives it.
+
+    Two rules meet here and neither may be given up.
+
+    *Isolation* (ADR 0138): a scenario that only reproduces after its
+    predecessors have run is a scenario no gate can trust, so a bootstrap
+    input must never READ what another input remembered. Every query and
+    every `get` therefore goes to `scratch` alone — an `InMemoryMemoryStore`
+    built fresh for this input and thrown away after it.
+
+    *Durability* (ADR 0145): the failing run's reflection is the evidence
+    `aef loop cycle` proposes from, and a store discarded at process exit
+    hands it nothing. So each write is mirrored into `sink`, the same
+    `FileMemoryStore` the cycle reads.
+
+    The mirror is a copy of the record the node wrote — same id, same
+    `run_id`, same content — because bootstrap is not allowed to author
+    memory. It records what the run did; it never decides that a run failed
+    (ADR 0060). A graph with no reflect node writes nothing here and the
+    sink stays empty, which is the honest report that this repo has no
+    producer of failure memory yet.
+
+    `sink=None` is the pre-0145 behaviour exactly: scratch only.
+    """
+
+    scratch: MemoryStore
+    sink: MemoryStore | None = None
+    # Ids actually mirrored, so the command can report what the graph left
+    # behind rather than what it hopes was left behind.
+    mirrored: list[str] = field(default_factory=list)
+
+    def write(self, record: MemoryRecord) -> str:
+        record_id = self.scratch.write(record)
+        if self.sink is not None:
+            self.sink.write(record)
+            self.mirrored.append(record.id)
+        return record_id
+
+    def get(self, record_id: str) -> MemoryRecord | None:
+        return self.scratch.get(record_id)
+
+    def query(
+        self,
+        kind: MemoryKind,
+        *,
+        run_id: str | None = None,
+        agent_id: str | None = None,
+        tags: tuple[str, ...] = (),
+        limit: int = 10,
+    ) -> list[MemoryRecord]:
+        return self.scratch.query(kind, run_id=run_id, agent_id=agent_id, tags=tags, limit=limit)
 
 
 @dataclass(frozen=True)
@@ -201,6 +276,18 @@ class BootstrapOutcome:
     # (id, message) for an input whose run raised before producing a trace.
     # Nothing is recorded for those: a scenario with no trace pins nothing.
     errored: tuple[tuple[str, str], ...] = ()
+    # Model calls this recording spent. Recording is the ONE pass that is
+    # supposed to be live — the cassette the gates replay from does not exist
+    # until something makes the call once (ADR 0123) — so the number is
+    # reported rather than buried. Counted from the cassettes the recorder
+    # pinned, never from an estimate.
+    model_calls: int = 0
+    # Records the graph's own reflect node left in the durable sink.
+    # `None` means no durable store was asked for, which is a different fact
+    # from "asked for and nothing was written" — the second is a finding
+    # about the graph and is reported as one. Bootstrap authors none of these
+    # records either way (ADR 0060).
+    memory_records: int | None = None
 
     @property
     def lines(self) -> tuple[str, ...]:
@@ -238,7 +325,54 @@ class BootstrapOutcome:
                 f"hold a candidate to. Add inputs whose working_memory drives the agent "
                 f"into its failing cases."
             )
+        out.extend(self._provider_lines())
+        out.extend(self._memory_lines())
         return tuple(out)
+
+    def _provider_lines(self) -> tuple[str, ...]:
+        """What the recording spent, or what it needed and did not have.
+
+        The cost is printed because recording is the one pass that is
+        *supposed* to be live, and a live pass whose price nobody states is
+        one an adopter discovers on an invoice.
+        """
+        if self.model_calls:
+            return (
+                f"  recording spent {self.model_calls} live model call(s). Recording is the "
+                f"one pass that is SUPPOSED to be live: the gates replay these from each "
+                f"scenario's cassette and need no credential (ADR 0123).",
+            )
+        if any(NO_PROVIDER_MARKER in message for _, message in self.errored):
+            # The provider error already names `model_provider.impl in
+            # aef.yaml`. What it cannot name is the flag that gets that file
+            # to THIS command — which is how ADR 0139 reached "a model-calling
+            # graph cannot get its first corpus" with the flag sitting unused
+            # in the parser.
+            return (
+                "  This graph calls a model and no provider was configured, so the recording "
+                "had nothing to record. Pass --config <aef.yaml> to bootstrap: it builds the "
+                "same model provider `aef run` builds, and recording is the one pass that is "
+                "SUPPOSED to be live — the cassette the gates replay from does not exist "
+                "until something makes the call once (ADR 0123).",
+            )
+        return ()
+
+    def _memory_lines(self) -> tuple[str, ...]:
+        """What the graph's reflect node left behind, and what its silence means."""
+        if self.memory_records is None or not self.recorded:
+            return ()
+        if self.memory_records:
+            return (
+                f"  {self.memory_records} memory record(s) written to the durable store — "
+                f"what the graph's own reflect node observed, nothing bootstrap decided. "
+                f"`aef loop cycle --memory <the same file>` proposes from these.",
+            )
+        return (
+            "  no memory records: this graph wrote none, so `aef loop cycle --memory` will "
+            "say `no admissible failure memory` and propose nothing. Route a node to a "
+            "`reflect` node (obligation 2) — bootstrap records what the run did and never "
+            "invents a failure to fill the gap (ADR 0060).",
+        )
 
     def tripwire_commands(
         self, module: str, corpus: str, inputs: Sequence[BootstrapInput]
@@ -275,15 +409,28 @@ def _final_state(scenario: Scenario) -> AEFState:
 def bootstrap(
     corpus_root: Path,
     graph: Graph,
-    services_factory: Callable[[], Services],
+    services_factory: Callable[[MemoryStore], Services],
     *,
     inputs: Sequence[BootstrapInput],
     now: datetime,
     agent_id: str,
+    memory_sink: MemoryStore | None = None,
 ) -> BootstrapOutcome:
     """Run `graph` once per input and record each run as a TRAIN scenario.
 
-    `services_factory` is called once PER INPUT — see the module docstring.
+    `services_factory` is called once PER INPUT and is HANDED the memory
+    store to build `Services` over — it does not choose one. That is the
+    point: the store is a `RunScopedMemory` this function builds, and both
+    of its rules (read isolation, durable writes) are properties of
+    bootstrap, not of whichever caller assembled the container. When the
+    caller picked the store, the isolation rule lived at the call site and
+    the durability rule could not be expressed at all.
+
+    `memory_sink` is where the graph's reflections are ALSO written — the
+    same `FileMemoryStore` `aef loop cycle --memory` reads. Bootstrap writes
+    nothing to it itself; a graph that reflects on nothing leaves it empty
+    (ADR 0060, ADR 0145).
+
     There is no `split` parameter and no `expected` parameter, deliberately:
     both are rules, and a rule with a keyword argument is a default.
     """
@@ -295,6 +442,8 @@ def bootstrap(
     recorded: list[str] = []
     failed: list[str] = []
     errored: list[tuple[str, str]] = []
+    model_calls = 0
+    mirrored = 0
 
     for item in inputs:
         state = AEFState(
@@ -303,12 +452,15 @@ def bootstrap(
             objective=item.objective,
             working_memory=dict(item.working_memory),
         )
+        # Fresh scratch per input, sink shared: isolation for what this run
+        # READS, durability for what it WROTE. See `RunScopedMemory`.
+        memory = RunScopedMemory(scratch=InMemoryMemoryStore(), sink=memory_sink)
         try:
             result = record_to_corpus(
                 corpus_root,
                 graph,
                 state,
-                services_factory(),
+                services_factory(memory),
                 scenario_id=item.id,
                 split=Split.TRAIN,
                 recorded_at=now,
@@ -331,13 +483,27 @@ def bootstrap(
             raise
         except Exception as exc:  # noqa: BLE001 - a node that raised is reported, not recorded
             errored.append((item.id, f"{type(exc).__name__}: {exc}"))
+            # Records this run wrote before it raised still exist and are
+            # still counted. Its MODEL calls are not: the recording cassette
+            # lives inside `record_run` and dies with the exception, so
+            # `model_calls` UNDER-reports an errored input that had already
+            # paid for a call. Stated rather than rounded up — see ADR 0145.
+            mirrored += len(memory.mirrored)
             continue
 
         recorded.append(result.scenario.id)
+        model_calls += len(result.scenario.model_calls)
+        mirrored += len(memory.mirrored)
         # The same `classify` the gates read and `record_run` checks
         # MUST_FAIL against, so "failed" here means what it means to G2.
         outcome = classify(_final_state(result.scenario), result.scenario.trace, terminated=True)
         if not outcome.passed:
             failed.append(result.scenario.id)
 
-    return BootstrapOutcome(recorded=tuple(recorded), failed=tuple(failed), errored=tuple(errored))
+    return BootstrapOutcome(
+        recorded=tuple(recorded),
+        failed=tuple(failed),
+        errored=tuple(errored),
+        model_calls=model_calls,
+        memory_records=None if memory_sink is None else mirrored,
+    )

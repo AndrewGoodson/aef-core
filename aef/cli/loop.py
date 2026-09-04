@@ -54,7 +54,12 @@ from aef.providers.base import ModelProvider
 
 # One string, four flags. It was repeated at each `--agent-path` and read by
 # `_warn_unmet_obligations` too, which is five places for one default.
-DEFAULT_AGENT_PATH = "agents/demo/graph.py"
+#
+# Built from `DEFAULT_AGENT_ROOT` rather than spelling `agents` a sixth time:
+# the agent root is the one thing `ZonePolicy` lets an adopting repo move, and
+# a default that hardcodes it disagrees with `bless`'s `--agent-root` the
+# moment anyone does.
+DEFAULT_AGENT_PATH = f"{DEFAULT_AGENT_ROOT}/demo/graph.py"
 
 
 def _build_commands(args: argparse.Namespace) -> tuple[tuple[str, ...], ...] | None:
@@ -333,11 +338,14 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
     This function is the boundary: it reads the file, builds the same
     services `aef loop record` builds, and prints.
     """
-    from aef.cli.run import load_graph_module
+    from aef.cli.run import build_run_config, load_graph_module
+    from aef.config import build_retriever
     from aef.harness.bootstrap import BootstrapError, bootstrap, load_inputs
+    from aef.harness.memory_store import FileMemoryStore
     from aef.harness.recorder import RecorderError
     from aef.kernel import Services
-    from aef.services.memory.in_memory import InMemoryMemoryStore
+    from aef.services.knowledge.in_memory import InMemoryKnowledgeStore
+    from aef.services.memory.base import MemoryStore
     from aef.services.runtime import agent_services
 
     # Bootstrap writes to corpus/, which IS the evidence every behavioural
@@ -375,27 +383,45 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
 
     # The provider `aef run` would use, from the same config, so what gets
     # recorded is what production would have said — identical to `record`.
-    model_provider = None
-    reflection = "rule_based"
-    reflection_model: str | None = None
-    if getattr(args, "config", None):
-        from aef.config import build_model_provider, load_agent_config
+    #
+    # Read through `build_run_config`, which is `aef run`'s OWN code path
+    # (ADR 0145). This used to be a second construction site that built the
+    # provider and the reflection impl and silently dropped `policies`,
+    # `tools.allow` and `evaluator.suites` — so a scenario recorded here
+    # pinned behaviour under the engine's default policy while production ran
+    # under the adopter's. Two constructions of one dependency drifting apart
+    # is ADR 0091's finding, four times over.
+    run_config = build_run_config(getattr(args, "config", None))
 
-        config = load_agent_config(args.config)
-        model_provider = build_model_provider(config.model_provider)
-        reflection = config.reflection.impl
-        reflection_model = config.model_provider.model
-
-    def services() -> Services:
-        # A FACTORY, not one instance: each input gets its own memory store,
-        # because the gates re-execute each scenario in isolation and a
-        # scenario that only reproduces after its predecessors ran is one
-        # nothing downstream can trust.
+    def services(memory: MemoryStore) -> Services:
+        # A FACTORY, and the STORE IS HANDED IN: `bootstrap` builds a
+        # per-input `RunScopedMemory` — reads isolated so a scenario cannot
+        # depend on what an earlier input remembered (ADR 0138), writes
+        # mirrored into `--memory` so the failing run's reflection outlives
+        # the process (ADR 0145).
+        #
+        # Knowledge is fresh per input and is NOT consolidated from the
+        # durable sink, which is where this deliberately parts company with
+        # `aef run --memory` (which does rebuild it). Consolidating would put
+        # lessons learned from input 3 into input 4's context, and the
+        # scenario recorded for input 4 would then be one that cannot
+        # reproduce alone. Isolation wins; the ADR says so out loud.
+        knowledge = InMemoryKnowledgeStore()
         return agent_services(
-            memory=InMemoryMemoryStore(),
-            model_provider=model_provider,
-            reflection=reflection,
-            reflection_model=reflection_model,
+            memory=memory,
+            knowledge=knowledge,
+            model_provider=run_config.model_provider,
+            policy=run_config.policy_config,
+            # Over the SAME stores the container carries, or the retriever
+            # reads a different memory than the agent writes (ADR 0091/0118).
+            retriever=build_retriever(
+                run_config.context,
+                memory=memory,
+                agent_id=args.agent_id,
+                knowledge=knowledge,
+            ),
+            reflection=run_config.reflection,
+            reflection_model=run_config.reflection_model,
             agent_id=args.agent_id,
         )
 
@@ -408,6 +434,13 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
             inputs=inputs,
             now=datetime.now(UTC),
             agent_id=args.agent_id,
+            # The same file `aef loop cycle --memory` reads. Durable, because
+            # the point of it is that the reflection outlives this process:
+            # ADR 0139 measured that a bootstrapped repo still could not
+            # propose anything, and this was the missing half.
+            memory_sink=(
+                FileMemoryStore(path=Path(args.memory)) if getattr(args, "memory", None) else None
+            ),
         )
     except (BootstrapError, RecorderError, CorpusError) as exc:
         # `CorpusError` too: `refuse_existing_ids` calls `load_corpus`, so ONE
@@ -1050,12 +1083,25 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "(ADR 0141). If a loop does exist, pass --state instead.",
     )
     p_bootstrap.add_argument(
+        "--memory",
+        default=None,
+        help="durable memory file — the SAME file you pass to `aef loop cycle --memory`. "
+        "Each run's reflections are written here as well as to its own isolated store, "
+        "so a failing input leaves failure memory the proposer can read; without it "
+        "the cycle says `no admissible failure memory` and proposes nothing (ADR 0145). "
+        "Bootstrap writes only what the graph's reflect node observed and never invents "
+        "a failure (ADR 0060), so a graph with no reflect node leaves this empty.",
+    )
+    p_bootstrap.add_argument(
         "--config",
         default=None,
         help=(
             "aef.yaml path; wires the real model_provider (e.g. impl: claude_code) so a "
-            "graph that calls a model can be recorded. Every call it makes is pinned in "
-            "the scenario and replayed by the gates without a credential (ADR 0123)."
+            "graph that calls a model can be recorded — RECORDING IS THE ONE PASS THAT IS "
+            "SUPPOSED TO BE LIVE, and the number of calls it spends is reported. Every "
+            "call is pinned in the scenario and replayed by the gates without a credential "
+            "(ADR 0123). Built through `aef run`'s own code path, so `policies`, "
+            "`tools.allow` and `evaluator.suites` reach the recording too (ADR 0145)."
         ),
     )
     p_bootstrap.set_defaults(handler=cmd_bootstrap)
