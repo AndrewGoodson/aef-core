@@ -38,6 +38,10 @@ scored dimension 6 at 3/10: lineage linear, no diversity pressure.
    nothing diverse to offer. The knob stays off until a proposer with a
    wider repertoire gives the archive something to sample.
 
+## Erratum (2026-09-04, ADR 0122)
+
+The evidence below reads turn 2's rejection as G3's. It was G1's: `run_loop` reused one `workdir` for every turn and `trust._prepare_empty_destination` refuses a non-empty workspace, so every turn after the first was rejected with `TrustBoundaryError` before any behavioural gate ran. Found by the I10 worker, fixed with per-turn `workdir/turn-<n>` in the driver; the acceptance test now asserts every gated candidate reached G3. The keep/stack/stop mechanics stand; the specific claim about *why* turn 2 was rejected does not.
+
 ## Evidence
 
 Thirteen driver tests plus the weight test: greedy unchanged by the

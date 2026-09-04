@@ -46,6 +46,10 @@ claims, and the loop was living under the second.
    monitor rolls merged versions back to their predecessor, and a kept
    candidate never reached the place it would roll back from.
 
+## Erratum (2026-09-04, ADR 0122)
+
+The evidence below reads turn 2's rejection as G3's. It was G1's: `run_loop` reused one `workdir` for every turn and `trust._prepare_empty_destination` refuses a non-empty workspace, so every turn after the first was rejected with `TrustBoundaryError` before any behavioural gate ran. Found by the I10 worker, fixed with per-turn `workdir/turn-<n>` in the driver; the acceptance test now asserts every gated candidate reached G3. The keep/stack/stop mechanics stand; the specific claim about *why* turn 2 was rejected does not.
+
 ## Evidence
 
 Through the real cycle and real gates on the flaky-agent fixture: turn 1
