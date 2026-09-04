@@ -353,3 +353,36 @@ been pointed at one. Dimension 7: 2 → **5**. Total: **72 → 75**.
 
 **Deliberately left.** The remaining five points of dimension 7 are the
 owner decision the trust case names (live traffic, a real tenant), not code.
+
+---
+
+## I8 — The prompt surface is under test (2026-09-03)
+
+**Branch:** `improve/i8-prompt-surface`, off `main` (`1bf4413`).
+**Rubric claim:** dimension 5, up to +1. Total before: 75.
+
+**Reproduce (RUN).** Nothing checked the prompt surface after `/new-model-check`
+edited it; a commit could reintroduce removed text or trim added blocks and
+no test would fail.
+
+**Expectation.** A regression check over this repo's instruction files and
+the adopt renderers: required blocks present (joined blockquotes), removed
+patterns absent, verification instructions kept, every detector proved
+against a planted fault first.
+
+**Measurement.**
+
+```
+planted-fault test caught a broken detector: anti-formatting regex was case-sensitive
+verification check found a real gap: adopt's shipped CLAUDE.md had no reproduce-first line
+  -> "How work is verified here" section added to render_claude_md (and a line to AGENT_INTEGRATION.md)
+mutations (each -> tests fail, reverted):
+  M33 autonomy block's first sentence trimmed   2 failed
+  M34 "Do not narrate your steps." appended     2 failed
+pytest -q          1714 passed (from 1701; +13, none removed)
+mypy aef examples  125 files clean
+ruff check / format   clean
+```
+
+**Verdict.** Prompt edits have a check that fails on regression. A lint, not
+an eval. Dimension 5: 9 → **10**. Total: **75 → 76**.

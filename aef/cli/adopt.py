@@ -185,6 +185,13 @@ before running anything against real credentials — the scaffold defaults
 to `require_hitl_above_risk: 0.0`, meaning **any** positive-risk tool call
 requires human approval until you explicitly raise that threshold.
 
+## How work is verified here
+
+**Reproduce first**: construct the failing case and RUN it before writing a
+fix. The **green bar** — tests, type-check, lint — passes before every commit.
+`AUTONOMY.md` carries the full contract; this line is here so a session that
+reads only this file still has it.
+
 ## Where to look in aef-core
 
 These paths are inside the `aef-core` package/repository, not this one — if
@@ -417,6 +424,9 @@ Two always-on invariants:
   re-executed side effect safe; the kernel does not dedupe for you.
 
 ## Running the self-improving loop (autonomously, safely)
+Verification, in one line so a session that reads only this file has it:
+**reproduce first** — construct the failing case and RUN it before writing a
+fix — and the green bar (tests, type-check, lint) passes before every commit.
 See `AUTONOMY.md` (generated alongside this file) for the safety contract,
 and aef-core's `docs/autonomy/self-improving-loop.md` for the full spec.
 The loop in one line: **audit by adversarial construction -> reproduce
