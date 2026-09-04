@@ -223,3 +223,41 @@ Dimension 2: 8 → **12**. Total: **63 → 67**.
 **Deliberately left.** The ACE signal proper (retrieved → outcome) — no node
 writes `retrieved_context`, so nothing can produce it. Curation of lesson
 *text* — entries remain the latest occurrence's verbatim feedback.
+
+---
+
+## I7 — Skills are proposed, never installed (2026-09-03)
+
+**Branch:** `improve/i7-skill-proposals`, off `main` (`78509e5`).
+**Rubric claim:** dimension 2, up to +4. Total before: 67.
+
+**Reproduce (RUN).** No path existed from a `KnowledgeEntry` to anything a
+person could adopt as a skill; WikiSkill's third layer was declared out of
+scope wholesale (ADR 0110) because its runtime updater is constraint #7.
+
+**Expectation.** `aef loop skills`: one `SKILL.md` draft per entry with ≥3
+occurrences, under a caller-named proposals dir; refuses `.claude/`,
+`.cursor/`, `.github/`, `agents/`; never overwrites; every field computed
+from the entry; no import of evolution/providers/reasoning.
+
+**Measurement.**
+
+```
+tests: 11 (provenance, slug, one-per-entry, no-overwrite, 4x harness-dir refusal, agent scope,
+        AST import check, CLI end-to-end incl. refusal as exit code)
+mutations (each -> tests fail, reverted):
+  M22 write under harness dirs      5 failed
+  M23 overwrite existing drafts     1 failed
+  M24 ignore agent scope            1 failed
+pytest -q          1683 passed (from 1672; +11, none removed)
+mypy aef examples  124 files clean
+ruff check / format   clean
+```
+
+**Verdict.** Governed output for the skill layer. Dimension 2: 12 → **15**.
+Total: **67 → 70**.
+
+**Deliberately left.** Whether an adopted skill helps — needs a person to
+adopt one and the task metric to move. A file-backed knowledge store (the
+drafts are recomputed from the memory file each run, which is correct but
+means `--memory` is the only input).
