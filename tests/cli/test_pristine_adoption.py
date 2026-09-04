@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from aef.cli.main import build_parser
+from aef.harness import preflight
 
 _PLACEHOLDER = re.compile(r"<[^>]+>")
 
@@ -100,10 +101,15 @@ def test_the_adapter_shim_is_valid_python(pristine: Path) -> None:
     compile((pristine / "aef_adapter.py").read_text(), "aef_adapter.py", "exec")
 
 
-def test_loop_doctor_reports_all_five_and_exits_nonzero(pristine: Path) -> None:
+def test_loop_doctor_reports_all_six_and_exits_nonzero(pristine: Path) -> None:
     """The adopter's first useful command. It must name every obligation at
     once — discovering them one refusal at a time, in the worst order, is the
-    problem it exists to solve (ADR 0073)."""
+    problem it exists to solve (ADR 0073).
+
+    It asserted FIVE while `preflight` declared six (ADR 0137's `model calls
+    visible`), so the one obligation an adopter cannot discover by being stuck
+    could have vanished silently. The list below is derived from `preflight`
+    itself, not typed out again, so the next obligation cannot repeat it."""
     result = _run(
         pristine,
         "aef.cli.main",
@@ -119,14 +125,12 @@ def test_loop_doctor_reports_all_five_and_exits_nonzero(pristine: Path) -> None:
         "agents/mine/graph.py",
     )
     assert result.returncode != 0, "unmet obligations must not read as ready"
-    for obligation in (
-        "corpus + tripwire",
-        "reflect node routed to",
-        "observations",
-        "halt channel",
-        "blessed baseline",
-    ):
+    declared = set(re.findall(r'name="([^"]+)"', Path(preflight.__file__).read_text()))
+    assert len(declared) == 6, f"preflight declares {sorted(declared)}; update this test"
+    for obligation in declared:
         assert obligation in result.stdout, obligation
+    # ...and that they do NOT read as a refusal the loop enforces (ADR 0141).
+    assert "ADVISORY" in result.stdout, result.stdout
 
 
 def test_pytest_exits_five_and_the_docs_say_so(pristine: Path) -> None:
@@ -159,7 +163,7 @@ def test_every_emitted_aef_command_is_one_the_cli_accepts(pristine: Path) -> Non
     against the templates that produce them."""
     parser = build_parser()
     checked = 0
-    for name in ("LOOP.md", "corpus/README.md", "AGENT_INTEGRATION.md"):
+    for name in ("FIRST_DAY.md", "LOOP.md", "corpus/README.md", "AGENT_INTEGRATION.md"):
         for argv in _commands(pristine / name):
             parser.parse_args(argv)  # raises SystemExit if the CLI would refuse
             checked += 1
@@ -167,7 +171,9 @@ def test_every_emitted_aef_command_is_one_the_cli_accepts(pristine: Path) -> Non
     # 3 commands checked out of 16, and the three that survived were the ones
     # with no arguments worth getting wrong. A coverage floor keeps that from
     # silently happening again.
-    assert checked >= 15, f"only {checked} commands checked — the extractor is skipping too much"
+    # 15 -> 30 with FIRST_DAY.md (ADR 0148), whose whole point is that every
+    # command in it was executed. A floor, not an equality: documents grow.
+    assert checked >= 30, f"only {checked} commands checked — the extractor is skipping too much"
 
 
 def test_the_command_extractor_detects_a_command_the_cli_rejects(
@@ -296,3 +302,153 @@ def test_the_doctor_help_names_the_number_of_obligations_it_reports() -> None:
         f"preflight declares {len(names)} obligations {sorted(names)}; "
         f"`loop doctor --help` names a different number"
     )
+
+
+# ---------------------------------------------------------------------------
+# FIRST_DAY.md (ADR 0148) — the sequence, written from a terminal.
+# ---------------------------------------------------------------------------
+
+
+def test_first_day_ships_with_the_scaffold(pristine: Path) -> None:
+    """It is the only document that says what to run TODAY and in what order.
+    `CLAUDE.md`, `AGENT_INTEGRATION.md`, `LOOP.md` and `AUTONOMY.md` each
+    describe a part; none of them was a sequence."""
+    text = (pristine / "FIRST_DAY.md").read_text()
+    assert text.startswith("# Your first day with AEF"), text[:80]
+    # Every command in it, in order, and the CLI accepts each — pinned by
+    # `test_every_emitted_aef_command_is_one_the_cli_accepts` above.
+    for command in (
+        "aef adopt",
+        "aef migrate",
+        "aef loop bootstrap",
+        "aef loop record",
+        "aef loop bless",
+        "aef loop doctor",
+        "aef loop cycle",
+    ):
+        assert command in text, command
+    # The kit points at it, or nobody reads it.
+    assert "FIRST_DAY.md" in (pristine / "AGENT_INTEGRATION.md").read_text()
+    assert "FIRST_DAY.md" in (pristine / "LOOP.md").read_text()
+    assert "FIRST_DAY.md" in (pristine / "AEF_MIGRATION_CHECKLIST.md").read_text()
+
+
+def test_first_day_names_the_two_bootstrap_flags_nothing_else_did(pristine: Path) -> None:
+    """`--memory` and `--config` were reachable only by reading the argument
+    parser: `--config` had been there since ADR 0138 while ADR 0139 concluded
+    a model-calling graph "cannot get its first corpus", and `--memory` landed
+    in ADR 0145 with every generated document still saying bootstrap could not
+    supply the failing run's evidence. A flag nobody is pointed at is not a
+    feature."""
+    text = (pristine / "FIRST_DAY.md").read_text()
+    assert "--memory" in text and "--config" in text
+    # The flag's PURPOSE, not just its spelling: a mutation that deleted the
+    # section explaining `--config` left the string behind elsewhere and this
+    # test passed, which is a test pinning a token rather than a claim.
+    assert "gets its first corpus" in text
+    assert "recording is the one pass that is SUPPOSED to be live" in text
+    # ...and the measured consequence of omitting --memory, which is the
+    # failure mode that reads like success.
+    assert "no admissible failure memory: no candidate this cycle" in text
+    # ...and that one of --state/--no-loop-state is not optional (ADR 0141).
+    assert "--no-loop-state" in text
+    # LOOP.md's own sequence must not print the invocation the CLI refuses.
+    loop = (pristine / "LOOP.md").read_text()
+    bootstrap_lines = [
+        line
+        for line in loop.replace("\\\n", " ").splitlines()
+        # An INVOCATION, not a mention: prose naming the flag is not a command.
+        if line.strip().startswith("aef loop bootstrap ")
+    ]
+    assert bootstrap_lines, loop
+    for line in bootstrap_lines:
+        assert "--state" in line or "--no-loop-state" in line, line
+
+
+def test_first_day_carries_the_sentence_that_bit_every_raw_sdk_adopter(pristine: Path) -> None:
+    """A node that keeps its own client runs fine, `aef doctor` is green, and
+    the recorder captures no `RecordedCall` — so the gates have nothing to
+    replay (ADR 0137). The document has to say what to do about it, including
+    the half nobody finds: deleting the import that keeps the module in the
+    reachable set (ADR 0141 R4)."""
+    text = (pristine / "FIRST_DAY.md").read_text()
+    # The heading itself, because the phrase alone survives in prose: a
+    # mutation that removed the section left the sentence fragment elsewhere.
+    assert "If your function keeps its own client, the gates cannot replay it" in text
+    assert "RecordedCall" in text
+    assert "--force" in text, "the fix that loops forever must be named as such"
+    assert "reachable set" in text
+
+
+def test_first_day_says_the_obligations_are_advisory(pristine: Path) -> None:
+    """ADR 0141 decided against making `cycle`/`gate` refuse on them, and
+    required that the surfaces stop implying otherwise. Earlier kit text said
+    "with obligations unmet the gates refuse for lack of evidence"."""
+    for name in ("FIRST_DAY.md", "LOOP.md", "AGENT_INTEGRATION.md"):
+        text = (pristine / name).read_text()
+        assert "ADVISORY, not gating" in text, name
+    first_day = (pristine / "FIRST_DAY.md").read_text()
+    assert "six" in first_day, "the count doctor prints"
+    # Nothing may claim the gates refuse because an obligation is unmet.
+    assert "the gates refuse for lack of evidence" not in first_day
+
+
+def test_first_day_states_the_remaining_adopter_requirement_and_its_limits(
+    pristine: Path,
+) -> None:
+    """One item of ADR 0139's measured minimum is still the adopter's: a
+    module-level numeric constant. It is a property of `RuleBasedProposer` and
+    of the control cohort, and whether `--proposer llm` needs one is UNMEASURED
+    and blocked on model quota (INGEST_LOOP L4). A document that quietly
+    generalised from the rule-based proposer would be the next false claim."""
+    text = (pristine / "FIRST_DAY.md").read_text()
+    assert "module-level numeric constant" in text
+    assert "RuleBasedProposer" in text
+    assert "control cohort" in text
+    # The specific claim, not the word: "unmeasured" also appears in the
+    # preamble, so asserting it alone passed a mutation that said every
+    # proposer needs a constant.
+    assert "needs one is unmeasured" in text, "the LLM proposer's need for one is not known"
+    assert "blocked on model quota" in text
+    assert "--proposer llm" in text
+
+
+def test_the_kit_agrees_with_what_bootstrap_can_actually_do(pristine: Path) -> None:
+    """Item 4 of the generated LOOP.md's measured minimum said `aef loop
+    bootstrap` **cannot** leave failure memory — "it gives every input its own
+    in-memory store, so nothing it learns survives the process". True when ADR
+    0139 measured it; false the day ADR 0145 shipped `--memory`, and it shipped
+    false because NO TEST covered that row. L1 and L2 edited rows 1 and 3 of
+    the same table this wave and left row 4 standing (ADR 0148).
+
+    The capability is asserted off the real parser, not off a list typed here:
+    if `--memory` ever goes away this fails on the first assertion rather than
+    passing while the documents describe a flag that does not exist.
+    """
+    parser = build_parser()
+    parser.parse_args(
+        shlex.split(
+            "loop bootstrap m --corpus c --inputs i --no-loop-state "
+            "--memory mem.jsonl --config aef.yaml"
+        )
+    )
+
+    for name in ("FIRST_DAY.md", "LOOP.md"):
+        text = (pristine / name).read_text()
+        assert "aef loop bootstrap" in text, name
+        for flag in ("--memory", "--config", "--no-loop-state"):
+            assert flag in text, f"{name} never names {flag}"
+        # The sentence that was false. Any restatement of it fails.
+        assert "bootstrap` cannot do this for you" not in text, name
+        assert "nothing it learns survives the process" not in text, name
+
+    # ...and the invocation the kit prints is one the command accepts at RUN
+    # time, not merely at parse time: `--state`/`--no-loop-state` is enforced
+    # in the handler, so the parser-level command check above cannot see it.
+    loop_md = (pristine / "LOOP.md").read_text().replace("\\\n", " ")
+    printed = [
+        line for line in loop_md.splitlines() if line.strip().startswith("aef loop bootstrap ")
+    ]
+    assert printed, loop_md
+    for line in printed:
+        assert "--state" in line or "--no-loop-state" in line, line

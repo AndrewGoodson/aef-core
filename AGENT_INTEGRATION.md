@@ -69,11 +69,24 @@ ruff format --check aef tests
 
 ## Start (adopting aef-core into another repo)
 Inside the target repo: `aef adopt --dir <path>`. It detects the current
-framework and writes six never-overwrite files: `CLAUDE.md`, `aef.yaml`,
-`aef_adapter.py`, `AEF_MIGRATION_CHECKLIST.md`, `AGENT_INTEGRATION.md`, and
-`AUTONOMY.md`. Then `aef doctor` to confirm the setup, fill `aef.yaml`'s five
-surfaces, wire a node in `aef_adapter.py`, and `aef run` / `aef eval` /
-`aef trace`.
+framework and writes **17** never-overwrite files — the onboarding kit
+(`CLAUDE.md`, `AGENTS.md`, `AGENT_INTEGRATION.md`, `AUTONOMY.md`,
+`FIRST_DAY.md`, `AEF_MIGRATION_CHECKLIST.md`), the config and shim
+(`aef.yaml`, `aef_adapter.py`, `.gitignore`), the loop kit (`LOOP.md`,
+`agents/README.md`, `corpus/README.md`, two `.github/workflows/`), and the
+per-harness entry files (`.github/copilot-instructions.md`,
+`.cursor/rules/aef.mdc`, `.claude/skills/new-model-check/SKILL.md`). It said
+"six" here for months, and the drift was in the direction that matters: the
+loop kit and `FIRST_DAY.md` were the files nobody was told they had.
+
+Then `aef doctor` to confirm the setup, fill `aef.yaml`'s five surfaces, wire
+a node in `aef_adapter.py`, and `aef run` / `aef eval` / `aef trace`.
+
+**`FIRST_DAY.md` is the adopter's sequence** — `aef migrate` through
+`aef loop cycle`, in order, with the real output of every command and what
+each step costs. Written from a terminal rather than from the source, because
+three documents in this scaffold have told adopters things that were false
+(aef-core ADR 0148).
 
 ## The node contract (non-negotiable)
 Every node has the fixed signature:

@@ -65,6 +65,10 @@ def test_run_adopt_writes_all_artifacts(tmp_path: Path) -> None:
         ".cursor/rules/aef.mdc",
         # self-rewiring loop kit (ADR 0057/0058)
         "LOOP.md",
+        # the adopter's sequence, in the order they meet it (ADR 0148).
+        # Separate from LOOP.md: that file says what the loop NEEDS, this one
+        # says what to run today and what each step costs.
+        "FIRST_DAY.md",
         "agents/README.md",
         "corpus/README.md",
         ".github/workflows/loop-gate.yml",
@@ -153,6 +157,18 @@ def test_run_adopt_never_overwrites_the_onboarding_kit(tmp_path: Path) -> None:
     assert {"AGENT_INTEGRATION.md", "AUTONOMY.md"} <= skipped_names
 
 
+def test_run_adopt_never_overwrites_an_existing_first_day(tmp_path: Path) -> None:
+    """FIRST_DAY.md (ADR 0148) is under the same never-overwrite rule as every
+    other scaffold file: an adopter who has written their own is not silently
+    handed ours."""
+    (tmp_path / "FIRST_DAY.md").write_text("# our own runbook\n")
+    result = run_adopt(tmp_path)
+    assert (tmp_path / "FIRST_DAY.md").read_text() == "# our own runbook\n"
+    assert tmp_path / "FIRST_DAY.md" in result.skipped_files
+    # ...and the rest of the kit still lands.
+    assert (tmp_path / "LOOP.md").exists()
+
+
 def test_run_adopt_never_overwrites_existing_claude_md(tmp_path: Path) -> None:
     (tmp_path / "CLAUDE.md").write_text("# my own notes, do not touch\n")
     result = run_adopt(tmp_path)
@@ -197,12 +213,13 @@ def test_run_adopt_never_overwrites_existing_aef_yaml(tmp_path: Path) -> None:
 def test_run_adopt_is_idempotent_on_second_run(tmp_path: Path) -> None:
     first = run_adopt(tmp_path)
     second = run_adopt(tmp_path)
-    # 15 -> 16 with the `.gitignore` of ADR 0142. Updated deliberately: this
-    # count is the pin that makes "adopt quietly started writing something"
-    # a test failure rather than a discovery.
-    assert len(first.written_files) == 16
+    # 15 -> 16 with the `.gitignore` of ADR 0142, 16 -> 17 with `FIRST_DAY.md`
+    # of ADR 0148. Updated deliberately each time: this count is the pin that
+    # makes "adopt quietly started writing something" a test failure rather
+    # than a discovery.
+    assert len(first.written_files) == 17
     assert len(second.written_files) == 0
-    assert len(second.skipped_files) == 16
+    assert len(second.skipped_files) == 17
 
 
 def test_checklist_nonempty_for_every_framework() -> None:
@@ -565,3 +582,47 @@ def test_claude_md_states_where_converted_nodes_must_live(tmp_path: Path) -> Non
         # a graph left over from an older run still has to be moved.
         assert DEFAULT_MIGRATED_OUT in text, name
         assert "outside Zone A" in text, name
+
+
+def test_the_generated_shim_runs_the_graph_aef_migrate_generates(tmp_path: Path) -> None:
+    """The shim built a bare `Services()`, and the documented next step is to
+    point it at your migrated graph — which since ADR 0143 is wired
+    `<call site> -> reflect -> consolidate -> END`. Reflect requires
+    critic/judge/memory and consolidate requires knowledge, so the documented
+    path raised `ServiceNotConfiguredError: service 'critic'`. Reproduced
+    against the shim as GENERATED before the fix (ADR 0148).
+
+    Executed rather than grepped: an assertion that the source names
+    `agent_services` would pass on a shim that imported it and never called it.
+    """
+    from aef.kernel import END, Context, Edge, Graph, Node, Route, Services
+    from aef.reasoning.nodes import make_consolidate_node, make_reflect_node
+    from aef.state import AEFState, Plan, StateDelta
+
+    run_adopt(tmp_path)
+    namespace: dict[str, object] = {}
+    exec(compile((tmp_path / "aef_adapter.py").read_text(), "aef_adapter.py", "exec"), namespace)
+
+    def work(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
+        return StateDelta(plan=Plan(goal=state.objective, status="done")), "reflect"
+
+    def build_graph() -> Graph:
+        return Graph(
+            id="mine",
+            version="0.1.0",
+            nodes={
+                "work": Node(id="work", version="0.1.0", fn=work, deterministic=True),
+                "reflect": make_reflect_node(route="consolidate"),
+                "consolidate": make_consolidate_node(route=END),
+            },
+            edges=[
+                Edge(from_node="work", to_node="reflect"),
+                Edge(from_node="reflect", to_node="consolidate"),
+            ],
+            entry_node="work",
+        )
+
+    namespace["build_graph"] = build_graph
+    run_via_aef = namespace["run_via_aef"]
+    final = run_via_aef("an ordinary task")  # type: ignore[operator]
+    assert final.plan is not None and final.plan.status == "done"
