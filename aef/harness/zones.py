@@ -38,6 +38,26 @@ _ZONE_B_ROOTS: tuple[tuple[str, ...], ...] = (
 
 DEFAULT_AGENT_ROOT = "agents"
 
+# THE default agent module, and the only place in `aef/` allowed to name a
+# file under the agent root (ADR 0149; `tests/harness/test_default_agent_path.py`
+# enforces it).
+#
+# It must be **what `aef migrate` actually writes**, because every `--agent-path`
+# default in the CLI and in `harness.loop.cycle()` is read by an adopted repo
+# that has run `adopt` then `migrate` and nothing else. It used to be
+# `agents/demo/graph.py` — aef-core's OWN fixture directory, which exists in no
+# adopted repo — so `aef loop doctor` printed a `bless` fix line that could not
+# be run and `aef loop cycle` exited **0** with `no agent source at
+# agents/demo/graph.py`: ADR 0139's signature "silently inert" failure, reached
+# from the documented defaults (reproduced, ADR 0149).
+#
+# It lives HERE, beside the root it is built from, and not in
+# `aef.cli.migrate` where `DEFAULT_MIGRATED_OUT` used to own it, because
+# `aef/harness/loop.py` needs it and the harness does not import the CLI.
+# `aef.cli.migrate.DEFAULT_MIGRATED_OUT` is now an alias for this constant, so
+# the writer and the default cannot drift apart again.
+DEFAULT_AGENT_PATH = f"{DEFAULT_AGENT_ROOT}/migrated/graph.py"
+
 
 class Zone(StrEnum):
     A = "A"  # agent-writable

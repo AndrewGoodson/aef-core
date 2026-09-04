@@ -116,20 +116,28 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from aef.harness.vendor_scan import MODEL_SDK_ROOTS, SKIP_DIRS
-from aef.harness.zones import DEFAULT_AGENT_ROOT, inspect_path
+from aef.harness.zones import DEFAULT_AGENT_PATH, DEFAULT_AGENT_ROOT, inspect_path
 from aef.providers.base import CompletionRequest
 
-# Where the generated graph lands, repo-relative, and the single place that
-# answers the question (ADR 0143). Derived from `DEFAULT_AGENT_ROOT` rather
-# than spelled out: a second literal `agents` here is the drift ADR 0091 is
-# about, and the previous default — the repo ROOT — was the drift's most
-# expensive form. The root is Zone C, the one tree the loop is structurally
-# forbidden to propose changes to, so every candidate touching the file this
-# command generated was rejected by G0 before it was read.
+# Where the generated graph lands, repo-relative (ADR 0143). Derived from
+# `DEFAULT_AGENT_ROOT` rather than spelled out: a second literal `agents` here
+# is the drift ADR 0091 is about, and the previous default — the repo ROOT —
+# was the drift's most expensive form. The root is Zone C, the one tree the
+# loop is structurally forbidden to propose changes to, so every candidate
+# touching the file this command generated was rejected by G0 before it was
+# read.
+#
+# It is now an ALIAS for `zones.DEFAULT_AGENT_PATH`, not a second derivation
+# (ADR 0149). ADR 0143 made this the single place that answered "where does
+# the generated graph land?", but the loop's `--agent-path` default answered
+# "where is the agent?" separately and still said `agents/demo/graph.py` —
+# aef-core's own fixture directory. Two constants for one fact, and the
+# adopter's repo satisfied only one of them. One name, one string, both
+# questions.
 #
 # Import this constant; do not re-derive it. `aef/cli/doctor.py` and the
 # `aef adopt` templates all read it from here.
-DEFAULT_MIGRATED_OUT = f"{DEFAULT_AGENT_ROOT}/migrated/graph.py"
+DEFAULT_MIGRATED_OUT = DEFAULT_AGENT_PATH
 
 # The pre-ADR-0143 default. NEVER written any more — it is here so that
 # `aef doctor` still discovers the graph in a repo migrated by an older
@@ -934,6 +942,19 @@ def {node_id}(
 '''
 
 
+def node_id_for(site: CallSite) -> str:
+    """The generated node's id for one call site.
+
+    One function, two readers: `render` writes the graph and `report` tells
+    the adopter which node is the entry and which are unreachable. They used
+    to be one expression inlined in `render`, so `report` could not name a
+    node at all — and a report that cannot name the entry node is how three
+    call sites became one reachable node and two dead ones, silently
+    (ADR 0149).
+    """
+    return f"{site.module.replace('.', '_')}__{site.function}"
+
+
 def render(result: MigrateResult, repo_name: str) -> str:
     """The generated module. One node per call site, in one of two forms."""
     header = _header(result, repo_name)
@@ -943,7 +964,7 @@ def render(result: MigrateResult, repo_name: str) -> str:
     body = [header, _KEY_FN]
     node_ids: list[str] = []
     for site in result.sites:
-        node_id = f"{site.module.replace('.', '_')}__{site.function}"
+        node_id = node_id_for(site)
         node_ids.append(node_id)
         body.append(
             _render_routed(site, node_id) if site.routed else _render_unrouted(site, node_id)
@@ -1198,16 +1219,45 @@ def report(result: MigrateResult) -> str:
         "function takes more than that, the node body is yours to finish.",
     ]
     if result.sites:
+        entry = node_id_for(result.sites[0])
+        unreached = [node_id_for(s) for s in result.sites[1:]]
         lines += [
             "",
-            "build_graph() wires <call site> -> reflect -> consolidate -> END. That",
-            "tail is what makes this repo LEARN: the reflect node writes the failure",
+            f"build_graph() wires {entry} -> reflect -> consolidate -> END.",
+            "That tail is what makes this repo LEARN: the reflect node writes the failure",
             "memory the self-rewiring loop's proposer reads, and nothing else does.",
             "Route a node back to END and the loop does not break — it goes silent,",
             "exiting 0 with `no admissible failure memory: no candidate this cycle`.",
             "Executing the graph now needs critic/judge/memory/knowledge on Services;",
             "`aef.services.runtime.agent_services()` supplies all four by default.",
         ]
+        # The report used to say "wires <call site> -> reflect -> consolidate",
+        # singular, for any number of call sites. With three it generated three
+        # nodes, made ONE of them the entry, and said nothing: the executor
+        # emits no warning for a declared-but-unreachable node, and
+        # `classify()` builds `node_path` from the trace, so G2 never sees them
+        # either. The adopter's first sign was a corpus that pinned a third of
+        # their agent (reproduced, ADR 0149).
+        if unreached:
+            lines += [
+                "",
+                f"ONLY {entry} RUNS. The other {len(unreached)} generated node(s) are",
+                "declared, routed to reflect, and UNREACHABLE — a graph has one entry",
+                "and nothing reaches them from it:",
+            ]
+            lines += [f"  UNREACHED  {n}" for n in unreached]
+            lines += [
+                "",
+                "This is the half of the migration that is yours. How your call sites",
+                "compose — sequence, branch, or one entry that never calls the others —",
+                "is a semantic decision, and nothing in your source says which; the",
+                "entry above is simply the first call site found. Nothing warns you",
+                "later: the executor runs an unreachable node zero times without",
+                "complaining, and the gates score only the path the trace took, so a",
+                "corpus recorded now pins the entry node alone. Edit build_graph()'s",
+                "routes — a node returns the id of the next one — until every node you",
+                "want executed is on the path.",
+            ]
     if result.unrouted:
         lines += [
             "",

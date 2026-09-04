@@ -39,8 +39,9 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 from aef.harness import archive, ledger
+from aef.harness.candidate import ESCAPE_MODES, MODE_NAMES
 from aef.harness.corpus import Expected, load_corpus
-from aef.harness.git import GitRepo
+from aef.harness.git import GitError, GitRepo
 from aef.harness.vendor_scan import MODEL_SDK_ROOTS, VendorImport, scan_file
 from aef.harness.zones import DEFAULT_AGENT_ROOT
 
@@ -460,6 +461,36 @@ def _zone_a_files(repo: GitRepo, ref: str, agent_root: str) -> dict[str, bytes]:
     return {p: repo.run_bytes("show", f"{ref}:{p}") for p in sorted(paths)}
 
 
+def _zone_a_escapes(repo: GitRepo, ref: str, agent_root: str) -> dict[str, str]:
+    """`{path: mode}` for every Zone A entry that is a symlink or a gitlink.
+
+    The same `ESCAPE_MODES` `candidate.check_modes` denies with
+    `security_event=True` — imported, never re-listed, because two lists of
+    what counts as an escape drifting apart is the ADR 0091 shape and this
+    pair had already drifted: a candidate that ADDS a Zone A symlink is a
+    security event, while `bless` accepted one as the baseline (ADR 0149).
+
+    Read with `ls-tree -r` rather than through `list_tree`, which asks only
+    for names. The mode is the whole question here: for `120000` git's blob is
+    the **link target string**, so `_zone_a_files` archives 16 bytes of
+    `../real/graph.py` and the baseline contains the agent by name and none of
+    it by content.
+    """
+    try:
+        out = repo.run("ls-tree", "-r", "-z", ref, "--", agent_root)
+    except GitError:  # pragma: no cover - `bless` has already read this tree
+        return {}
+    escapes: dict[str, str] = {}
+    for record in out.split("\0"):
+        if not record:
+            continue
+        meta, _, path = record.partition("\t")
+        mode = meta.split(" ", 1)[0]
+        if mode in ESCAPE_MODES:
+            escapes[path] = mode
+    return escapes
+
+
 def _normalise(path: str) -> str:
     """One spelling for one file, so `./agents/x.py` and `agents/x.py` are the
     same answer. Git reports the second; a person types either."""
@@ -537,6 +568,37 @@ def bless(
             f"does not contain it. Move the agent under {agent_root!r} (Zone A is the only "
             f"place the loop may propose changes), or pass --agent-root naming the tree "
             f"{agent_path} actually lives in."
+        )
+
+    # A symlink PASSES the containment check above, because both sides come
+    # from `git ls-tree` and a link is a tree entry like any other — ADR 0147
+    # named exactly this case as untested and it is now reproduced (ADR 0149):
+    # `bless --agent-path agents/graph.py` on a repo where that path is a link
+    # to `../real/graph.py` printed `blessed agents/graph.py as baseline v1`
+    # and archived a 16-byte file whose entire content is the string
+    # `../real/graph.py`. The baseline then contains the agent by NAME and
+    # none of it by CONTENT, so G5 measures every candidate's drift against a
+    # tree that never held the code, and any edit to the real file is drift of
+    # zero.
+    #
+    # `candidate.check_modes` already refuses these on the candidate side as a
+    # SECURITY EVENT rather than a rejection; the asymmetry — deny it landing,
+    # accept it as the thing everything is measured against — was the seam.
+    # Same `ESCAPE_MODES`, not a second list.
+    escapes = _zone_a_escapes(repo, ref, agent_root)
+    if escapes:
+        shown = ", ".join(
+            f"{p} ({MODE_NAMES.get(m, f'mode {m}')})" for p, m in sorted(escapes.items())[:3]
+        ) + ("..." if len(escapes) > 3 else "")
+        raise BlessError(
+            f"{agent_root!r} at {ref} holds {len(escapes)} entr(ies) git records as a symlink "
+            f"or submodule, not a regular file: {shown}. A baseline archives what `git show` "
+            f"returns, and for those that is the LINK TARGET — so blessing here would record "
+            f"the agent by name and none of it by content, and G5 would measure every "
+            f"candidate's drift against a tree that never held the code. `aef loop gate` "
+            f"already refuses a candidate that ADDS one of these, as a security event rather "
+            f"than a rejection. Replace it with the real file under {agent_root!r}, or pass "
+            f"--agent-root naming the tree the real file lives in."
         )
 
     entry = archive.record(

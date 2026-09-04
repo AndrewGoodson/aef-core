@@ -70,7 +70,7 @@ from aef.harness.proposer import Proposal
 from aef.harness.review import Decision, Disposition, decide, render_report
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
 from aef.harness.suite import CohortBuilder
-from aef.harness.zones import ZonePolicy
+from aef.harness.zones import DEFAULT_AGENT_PATH, ZonePolicy
 from aef.observability.base import Tracer
 from aef.providers.base import ModelProvider
 from aef.security.tool import PolicyConfig
@@ -1234,7 +1234,7 @@ def cycle(
     corpus_root: Path | None = None,
     graph: Any = None,
     memory: Any = None,
-    agent_path: str = "agents/demo/graph.py",
+    agent_path: str = DEFAULT_AGENT_PATH,
 ) -> CycleRun:
     """One turn of the loop: harvest -> propose -> gate -> record.
 

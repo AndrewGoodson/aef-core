@@ -329,3 +329,28 @@ is the first person who will find out.
 **Low** on anything this says about a repo nobody wrote to be scanned. The
 adoptee here is a fixture this programme authored, which is `READY_LOOP.md`
 K5's whole point and no test closes it.
+
+## Erratum (ADR 0149) — "one construction site, two commands" covered one of two callers
+
+The Decision section above says both commands "read the config here or not at
+all", and Consequences says "`aef run` and `aef loop bootstrap` cannot
+configure differently any more". Both sentences are true; both are narrower
+than they read.
+
+**Three** commands in `aef/cli/loop.py` read `--config` into services —
+`cmd_record`, `cmd_bootstrap` and `cmd_score` — and this ADR changed one of
+them. `cmd_record` kept its own `load_agent_config` + `build_model_provider`
+and passed `agent_services` **no policy at all**;
+`test_bootstrap_reads_its_config_through_aef_runs_construction_site` was
+written against `cmd_bootstrap` by name, and applying it verbatim to
+`cmd_record` FAILED.
+
+The consequence this ADR correctly states for a bootstrap-made corpus — "a
+corpus recorded before this change under a non-default
+`require_hitl_above_risk` pins behaviour the adopter's own runtime does not
+have" — remained true of every `record`-made corpus on the day this shipped,
+**including every tripwire**, which is where it costs most: `aef loop record
+--expected must_fail` is the only documented way to mint one, and its
+must-fail guard accepted labels justified by the dropped policy rather than by
+the task. Reproduced end to end, fixed, and the AST test generalised over the
+parser's own list of `--config` commands, in ADR 0149.

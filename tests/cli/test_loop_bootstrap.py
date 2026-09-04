@@ -555,7 +555,37 @@ def test_config_records_a_model_calling_graph_through_aef_runs_own_wiring(
     assert "SUPPOSED to be live" in out
 
 
-def test_bootstrap_reads_its_config_through_aef_runs_construction_site() -> None:
+def _config_reading_handlers() -> dict[str, object]:
+    """Every `aef loop` subcommand whose parser declares `--config`, read from
+    the PARSER rather than from a list kept by hand.
+
+    A hand-kept list is how this test passed for `cmd_bootstrap` while
+    `cmd_record` — two functions below it in the same file, with the same flag
+    and the same comment — had its own private `load_agent_config` +
+    `build_model_provider` and dropped the adopter's policy on the floor
+    (ADR 0149). A new `--config` command joins this test the moment its parser
+    is written, and cannot be forgotten.
+    """
+    import argparse
+
+    from aef.cli.loop import add_loop_parser
+
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+    add_loop_parser(subparsers)
+    loop = subparsers.choices["loop"]
+    loop_subs = next(
+        action for action in loop._actions if isinstance(action, argparse._SubParsersAction)
+    )
+    found: dict[str, object] = {}
+    for name, sub in loop_subs.choices.items():
+        options = {opt for action in sub._actions for opt in action.option_strings}
+        if "--config" in options:
+            found[name] = sub.get_default("handler")
+    return found
+
+
+def test_every_loop_command_reads_its_config_through_aef_runs_construction_site() -> None:
     """A source assertion, and it is the property: no behavioural test can see
     WHICH of two identical constructions crossed the boundary.
 
@@ -564,20 +594,238 @@ def test_bootstrap_reads_its_config_through_aef_runs_construction_site() -> None
     floor — so a scenario recorded here pinned behaviour under the engine's
     default policy while `aef run` used the adopter's. Two constructions of
     one dependency drifting apart is ADR 0091's finding.
+
+    ADR 0145 fixed that for `cmd_bootstrap` and wrote this test for
+    `cmd_bootstrap` alone, and its "the private construction is abolished"
+    claim covered ONE of two callers: `cmd_record` still had its own, and
+    `cmd_score` a third. Applying the old test verbatim to `cmd_record` failed.
+    So the assertion is made over EVERY `--config` command the parser
+    declares, and the enumeration is the parser's, not a list somebody has to
+    remember to extend.
+
+    Two lawful shapes, and only two. A command that builds `Services` here
+    reads the config through `aef.cli.run.build_run_config`. A command that
+    hands the path to the harness (`gate`, `cycle`, `run`) constructs nothing
+    at all — the harness reads that config from the BASE REF, deliberately,
+    so a candidate cannot widen the rules it is judged by. Parsing `aef.yaml`
+    inside `aef/cli/loop.py` is what neither may do.
     """
     import ast
     import inspect
 
-    from aef.cli.loop import cmd_bootstrap
+    forbidden = {"load_agent_config", "build_model_provider", "build_policy_config"}
+    handlers = _config_reading_handlers()
+    assert set(handlers) >= {"record", "bootstrap", "score", "gate", "cycle", "run"}, handlers
 
-    tree = ast.parse(inspect.getsource(cmd_bootstrap))
-    called = {
-        node.func.id
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    }
-    assert "build_run_config" in called, "bootstrap stopped reading aef run's code path"
-    assert "build_model_provider" not in called, (
-        "a second model-provider construction site has come back"
+    for name, handler in sorted(handlers.items()):
+        tree = ast.parse(inspect.getsource(handler))  # type: ignore[arg-type]
+        called = {
+            node.func.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        leaked = called & forbidden
+        assert not leaked, (
+            f"`aef loop {name}` parses aef.yaml itself ({sorted(leaked)}) — a second "
+            f"construction site, which is how `record` came to record under the engine's "
+            f"default policy while `aef run` used the adopter's (ADR 0149)"
+        )
+        reads_config = any(
+            isinstance(node, ast.Attribute) and node.attr == "config" for node in ast.walk(tree)
+        )
+        if not reads_config:
+            continue
+        hands_off = "_config" in called  # `gate`/`cycle`/`run`: LoopConfig.config_path
+        assert "build_run_config" in called or hands_off, (
+            f"`aef loop {name}` reads --config but neither goes through "
+            f"`build_run_config` nor hands the path to the harness"
+        )
+
+
+# --------------------------------------------------------------------------
+# The two recorders must agree — ADR 0149's F1, behaviourally
+# --------------------------------------------------------------------------
+
+POLICY_AGENT = """
+from typing import Any
+
+from aef.kernel import END, Context, Edge, Graph, Node, Route, Services, SideEffect
+from aef.reasoning.nodes import make_reflect_node
+from aef.security.tool import Tool, ToolCall
+from aef.state import AEFState, Plan, Provenance, StateDelta
+
+
+class Reader(Tool):
+    name = "reader"
+    required_scopes = ("read:docs",)
+
+    def invoke(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        return {"ok": True}
+
+
+def work_node(state, ctx, services):
+    decision = str(
+        services.require_policy_engine()
+        .evaluate(Reader(), ToolCall(tool_name="reader", arguments={}, risk=0.5))
+        .decision
     )
-    assert "load_agent_config" not in called, "bootstrap is parsing aef.yaml a second time"
+    prov = Provenance(node_id=ctx.node_id, graph_version=ctx.graph_version,
+                      ts=ctx.now, trace_id=ctx.trace_id, token_cost=1)
+    if decision == "allow":
+        return StateDelta(working_memory={"decision": decision},
+                          plan=Plan(goal=state.objective, status="done"),
+                          scores={"quality": 1.0}, provenance=[prov]), "reflect"
+    return StateDelta(working_memory={"decision": decision},
+                      plan=Plan(goal=state.objective, status="failed"),
+                      errors=[{"node_id": ctx.node_id, "error": "tool call " + decision}],
+                      scores={"quality": 0.0}, provenance=[prov]), "reflect"
+
+
+def build_graph():
+    return Graph(
+        id="pol", version="0.1.0",
+        nodes={"work": Node(id="work", version="0.1.0", fn=work_node,
+                            deterministic=False, side_effects=SideEffect.PURE),
+               "reflect": make_reflect_node(route=END)},
+        edges=[Edge(from_node="work", to_node="reflect")],
+        entry_node="work",
+    )
+"""
+
+PERMISSIVE_YAML = """extends: _base
+objectives: "read the docs"
+model_provider: {impl: claude_code, model: claude-opus-5, fallback: []}
+memory: {impl: in_memory}
+tools: {allow: ["read:docs"]}
+policies: {require_hitl_above_risk: 0.9}
+evaluator: {suites: []}
+"""
+
+
+def _policy_agent(tmp_path: Path, monkeypatch) -> tuple[str, Path]:  # type: ignore[no-untyped-def]
+    """A graph whose recorded outcome IS the adopter's policy: one tool call
+    needing `read:docs` at risk 0.5, which the config below allows and the
+    engine's deny-by-default default does not."""
+    (tmp_path / "policy_agent.py").write_text(POLICY_AGENT)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    config = tmp_path / "aef.yaml"
+    config.write_text(PERMISSIVE_YAML)
+    return "policy_agent", config
+
+
+def test_record_and_bootstrap_record_the_same_scenario_from_one_config(
+    tmp_path: Path,
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
+    """The behavioural half of ADR 0149's F1, and the test the seam hunt found
+    missing: nothing anywhere compared what the two recorders produce.
+
+    Same graph, same `aef.yaml`, same objective. `cmd_bootstrap` went through
+    `build_run_config`; `cmd_record` had its own `load_agent_config` +
+    `build_model_provider` and passed `agent_services` NO policy, so the
+    agent's `read:docs` tool call was denied deny-by-default. Reproduced:
+    bootstrap recorded `{'decision': 'allow'}` / plan `done`, record recorded
+    `{'decision': 'deny'}` / plan `failed`, from one config file.
+    """
+    module, config = _policy_agent(tmp_path, monkeypatch)
+    inputs = tmp_path / "inputs.json"
+    inputs.write_text(json.dumps([{"id": "same", "objective": "read the docs"}]))
+
+    assert (
+        main(
+            [
+                "loop",
+                "bootstrap",
+                module,
+                "--corpus",
+                str(tmp_path / "boot"),
+                "--inputs",
+                str(inputs),
+                "--no-loop-state",
+                "--config",
+                str(config),
+            ]
+        )
+        == 0
+    )
+    assert (
+        main(
+            [
+                "loop",
+                "record",
+                module,
+                "--corpus",
+                str(tmp_path / "rec"),
+                "--scenario-id",
+                "same",
+                "--objective",
+                "read the docs",
+                "--split",
+                "train",
+                "--config",
+                str(config),
+            ]
+        )
+        == 0
+    )
+
+    booted = load_corpus(tmp_path / "boot").scenarios[0]
+    recorded = load_corpus(tmp_path / "rec").scenarios[0]
+
+    def shape(scenario):  # type: ignore[no-untyped-def]
+        first = scenario.trace[0]
+        return (
+            tuple(r.node_id for r in scenario.trace),
+            first.delta.working_memory,
+            first.delta.plan.status if first.delta.plan else None,
+            len(first.delta.errors),
+        )
+
+    assert shape(booted) == shape(recorded), (
+        "the two recorders disagree about the same graph under the same config"
+    )
+    # And they agree on the ADOPTER's answer, not the engine's default.
+    assert booted.trace[0].delta.working_memory == {"decision": "allow"}
+
+
+def test_record_refuses_must_fail_when_only_the_dropped_policy_made_it_fail(
+    tmp_path: Path,
+    monkeypatch,  # type: ignore[no-untyped-def]
+    capsys,  # type: ignore[no-untyped-def]
+) -> None:
+    """The consequence that made F1 critical rather than untidy.
+
+    `aef loop record --expected must_fail` is the only documented way to mint
+    a tripwire, and its guard refuses the label when the agent COMPLETES the
+    task. Under the dropped config the task did not complete — the tool call
+    was denied — so the guard accepted a tripwire that is not impossible, only
+    misconfigured. `scenario_runner` then applies the owner's policy at gate
+    time, the scenario passes, `tripwire_hit` fires, `regressed` is true, and
+    G2 rejects every candidate forever reporting reward hacking.
+
+    Reproduced before the fix: exit 0, `recorded tripwire-1 (validation)`.
+    """
+    module, config = _policy_agent(tmp_path, monkeypatch)
+    code = main(
+        [
+            "loop",
+            "record",
+            module,
+            "--corpus",
+            str(tmp_path / "tw"),
+            "--scenario-id",
+            "tripwire-1",
+            "--objective",
+            "read the docs",
+            "--split",
+            "validation",
+            "--expected",
+            "must_fail",
+            "--config",
+            str(config),
+        ]
+    )
+    captured = capsys.readouterr()
+    assert code == 1, captured.out
+    assert "refusing to label" in captured.err
+    assert not (tmp_path / "tw" / "validation").exists()

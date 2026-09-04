@@ -540,6 +540,106 @@ def test_bless_accepts_the_same_file_spelled_with_a_leading_dot_slash(tmp_path: 
     assert entry.version == 1
 
 
+def _symlinked_repo(tmp_path: Path, source: str) -> Path:
+    """A repo where the Zone A agent is a SYMLINK to a file outside Zone A.
+
+    `git ls-tree` reports it with mode `120000`, and `git show` on it returns
+    the LINK TARGET — 16 bytes of `../real/graph.py` — not the code.
+    """
+    repo = tmp_path / "linked"
+    (repo / "agents").mkdir(parents=True)
+    (repo / "real").mkdir()
+    (repo / "real" / "graph.py").write_text(source)
+    (repo / "agents" / "graph.py").symlink_to(Path("..") / "real" / "graph.py")
+    for args in (
+        ("init", "-q", "-b", "main"),
+        ("config", "user.email", "t@example.com"),
+        ("config", "user.name", "t"),
+        ("add", "-A"),
+        ("commit", "-qm", "init"),
+    ):
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+    return repo
+
+
+def test_bless_refuses_a_zone_a_symlink(tmp_path: Path) -> None:
+    """ADR 0147 named this case untested in its own Confidence section; ADR
+    0149 reproduced it.
+
+    `bless --agent-path agents/graph.py` printed `blessed agents/graph.py as
+    baseline v1` and archived one 16-byte file whose entire content was the
+    string `../real/graph.py`. The containment check passes — both sides come
+    from `git ls-tree`, and a link is a tree entry like any other — so the
+    baseline held the agent by NAME and none of it by CONTENT, and G5 then
+    measured every candidate's drift against a tree that never contained the
+    code. `candidate.check_modes` already treats exactly this as a SECURITY
+    EVENT on the candidate side; the asymmetry was the seam.
+    """
+    repo = _symlinked_repo(tmp_path, ROUTED)
+    # The pre-condition, asserted rather than assumed: git really does record
+    # a link, and its blob really is the target string.
+    listing = subprocess.run(
+        ["git", "-C", str(repo), "ls-tree", "-r", "HEAD", "--", "agents"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert listing.startswith("120000 "), listing
+
+    with pytest.raises(BlessError) as exc:
+        bless(
+            repo_root=repo,
+            state_root=tmp_path / "state",
+            agent_path="agents/graph.py",
+            graph_id="g",
+            at=NOW,
+        )
+    assert "agents/graph.py" in str(exc.value)
+    assert "symlink" in str(exc.value)
+    assert archive.versions(tmp_path / "state" / "archive", "g") == ()
+
+
+def test_bless_reuses_the_candidate_gates_escape_mode_list() -> None:
+    """One list, not two. The defect was `bless` and `check_modes` disagreeing
+    about what an escape is; a second hand-written list here would recreate it
+    the first time a mode is added."""
+    import ast
+    import inspect
+    import textwrap
+
+    from aef.harness import preflight as preflight_module
+    from aef.harness.candidate import ESCAPE_MODES
+
+    assert preflight_module.ESCAPE_MODES is ESCAPE_MODES
+    # The CODE, not the prose: the docstring names the mode on purpose.
+    fn = ast.parse(textwrap.dedent(inspect.getsource(preflight_module._zone_a_escapes))).body[0]
+    assert isinstance(fn, ast.FunctionDef)
+    literals = {
+        node.value
+        for node in ast.walk(fn)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    assert not literals & ESCAPE_MODES, (
+        f"a second copy of the escape modes has been written here: {literals & ESCAPE_MODES}"
+    )
+
+
+def test_bless_still_accepts_a_regular_file(tmp_path: Path) -> None:
+    """The control on the fix: a refusal that is too broad would refuse every
+    correct blessing, which is the failure mode a hasty version ships."""
+    entry = bless(
+        repo_root=_committed_repo(tmp_path, ROUTED),
+        state_root=tmp_path / "state",
+        agent_path="agents/graph.py",
+        graph_id="g",
+        at=NOW,
+    )
+    assert entry.version == 1
+    assert (
+        b"reflect" in archive.read_files(tmp_path / "state" / "archive", "g", 1)["agents/graph.py"]
+    )
+
+
 def test_bless_refuses_when_there_is_no_agent_source(tmp_path: Path) -> None:
     with pytest.raises(BlessError, match="nothing to bless"):
         bless(

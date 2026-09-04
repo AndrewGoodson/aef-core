@@ -1913,3 +1913,97 @@ executed by anyone — no quota — and `FIRST_DAY.md` says that in those words
 rather than implying otherwise. Definition-of-done statement 1 is false by
 exactly one item, the module-level constant, which is a node's semantics and
 not plumbing. And nothing here ran against a repo this project did not write.
+
+---
+
+## Fix wave F — the recorder, the defaults, and the tree that is not there (ADR 0149)
+
+Five seams on the adoption path, from a hunt over `record`, `bootstrap`,
+`bless`, `migrate` and `cycle`. Every one reproduced by RUNNING a command
+before anything was changed.
+
+**F1, and it silently disabled the reward-hacking control.** `aef loop record
+--config` had its own `load_agent_config` + `build_model_provider` and passed
+`agent_services` **no policy**, while `cmd_bootstrap` — two functions below it
+in the same file, same flag, same comment — went through `build_run_config`.
+Same graph, same `aef.yaml`, same objective: bootstrap recorded
+`{'decision': 'allow'} done`, record recorded `{'decision': 'deny'} failed`.
+`aef loop record --expected must_fail` is the ONLY documented way to mint a
+tripwire, and its guard — which refuses the label when the agent completes the
+task — ACCEPTED it, because the run had failed from the dropped config rather
+than from the task being beyond the agent. `scenario_runner` applies the
+owner's policy at gate time, so the same scenario then passes:
+`tripwire_hit = True`, `regressed = True`, and G2 rejects every candidate
+forever reporting reward hacking. Carried all the way through the gates' own
+`run_scenario` and `Comparison`, not inferred. `cmd_record` and `cmd_score`
+now read config through `aef run`'s single site; the ADR 0145 AST test is
+generalised over **every** `--config` command the PARSER declares, because a
+hand-kept list is exactly how it passed for `bootstrap` while `record`
+drifted; and the behavioural test the hunt said was missing — record the same
+input through both recorders, compare the scenarios — now exists.
+
+**F2 — the default `--agent-path` was aef-core's own fixture directory.** ADR
+0147 said it had rebuilt `DEFAULT_AGENT_PATH` from `DEFAULT_AGENT_ROOT`; it
+rebuilt the root and kept the `demo`, and `harness/loop.py::cycle` hardcoded
+the whole literal separately. On a defaults-only `adopt` + `migrate` repo,
+`loop doctor` printed `fix: aef loop bless ... --agent-path
+agents/demo/graph.py` (which exits 1) and `loop cycle` exited **0** with
+`no agent source at agents/demo/graph.py in main: no candidate` — ADR 0139's
+silently-inert shape from the documented defaults. One constant now, in
+`harness/zones.py` (not `cli/migrate.py`: the harness does not import the
+CLI), derived from what `aef migrate` writes, with `DEFAULT_MIGRATED_OUT`
+aliased to it. Guarded by an AST scan that catches the **interpolated** form,
+because that is the shape the defect took.
+
+**F5 — `bless` accepted a Zone A symlink** and archived 16 bytes of
+`../real/graph.py` as the baseline, so G5 measured drift against a tree
+holding the agent by name and none of it by content. This is the case ADR
+0147's own Confidence section named untested. Refused now, reusing
+`candidate.ESCAPE_MODES` — the list that already treats the same thing as a
+security event when a candidate ADDS one — rather than writing a second one.
+
+**F6 — three call sites, one reachable node, and nothing said so.** The
+executor emits no warning for a declared-but-unreachable node, `classify()`
+builds `node_path` from the trace so G2 never sees them, and the report's
+sentence was singular for any number of sites. The REPORT is fixed, not the
+graph: it names the entry node, lists every unreached one, and says composing
+them is the semantic half migrate will not do. No edge order invented — how
+call sites compose is not in the source, and a guessed order would be silently
+wrong.
+
+**F7 — which error `build_run_config` reports first** changed when it was
+extracted (ADR 0145), evaluator before provider where `aef run` had provider
+first. Kept and PINNED — validate before constructing — with a control that
+the second fault is still reachable. A decision now rather than whichever
+statement a refactor left on top.
+
+**Mutation.** 11 planted, 10 caught, each restored from a backup whose SHA-1
+was checked before and after. Two worth naming. M2 leaves `build_run_config`
+in place and drops only `policy=`: the AST test passes and both behavioural
+tests fail, which is why the behavioural comparison had to exist. **M4a was
+MISSED and should be** — renaming the single constant makes everything point
+at the same wrong place *consistently*, and the defect was two constants for
+one fact, not the string; M4b forks the writer into a second derivation and is
+caught. Reported rather than dropped: a mutation round that lists only its
+successes is not evidence.
+
+**Green bar.** `pytest -q` 1973 passed, 17 skipped (1990 collected, from 1976;
+**+14, none removed** — baseline read by exporting HEAD with `git archive` and
+collecting there, not asserted). `mypy aef examples` 129 files clean. `ruff
+check .` clean. `ruff format --check aef tests examples` 241 formatted. **No
+rubric score moves.** **Zero live model calls.**
+
+**Errata appended** to ADR 0145 (its "one construction site, two commands"
+covered one of two callers, and the corpus consequence it states was true of
+every `record`-made tripwire the day it shipped) and ADR 0147 (its "last
+hardcoded literal" claim, and its untested symlink case, now reproduced as a
+failure).
+
+**Deliberately left.** F6 fixes the report, not the graph: an adopter who
+reads it and does nothing still has one reachable node. `aef loop cycle` on a
+defaults-only migrated repo now reaches the proposer and produces nothing —
+that is ADR 0139's requirement 2, a module-level numeric constant the
+generated graph does not have, and it is not claimed as closed. Whether any
+existing baseline anywhere already holds a link target, or any existing corpus
+holds a policy-denied recording, is **not measured** and nothing detects
+either retroactively. Every fixture here was authored by this programme.
