@@ -1,5 +1,12 @@
 # Above-90 loop — multi-agent, autonomous, pushes to main
 
+**Run of 2026-09-04: 79 → 84. Report: `docs/research/above-90-2026-09-04.md`.**
+I10 (ADR 0122) and I11 (0123) landed; two fix waves (0125, 0126) closed
+thirteen reproduced seams, four of which invalidated evidence an earlier
+ADR had already claimed. I12 did not start — it is ~42 live model calls
+and the harness quota is exhausted; its runner is written and dry-run
+verified at `scratchpad/i12_ace_arms.py`. Resume there when quota returns.
+
 Input: the rubric at 79 (`docs/research/self-learning-rubric.md`) and the
 status block in `IMPROVE_LOOP.md`. Output: the three increments below, each
 measured, merged to `main` by the orchestrator, pushed. Stop at ≥ 90 or
