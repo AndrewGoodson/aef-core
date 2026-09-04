@@ -858,3 +858,49 @@ I12 (+2), live noise floor (+1), judge A/B re-run (+1), Codex smoke (+1).
 records of what was believed, and rewriting them would erase the error
 rather than record it. ADR 0127 is the correction and the rubric points
 at it.
+
+---
+
+## I15 — The Codex path, measured (2026-09-04)
+
+**Branch:** `improve/i15-codex-verified`, off `61a43e1`.
+**Rubric claim:** dimension 8, +1. Total before: 85.
+
+**Reproduce (RUN).** `codex exec --ephemeral --skip-git-repo-check -s
+read-only --json -o cx.txt "Reply with the single word OK"` → exit 1,
+`failed to load models cache: unknown variant 'max', expected one of none,
+minimal, low, medium, high, xhigh`. Installed `@openai/codex@0.135.0`
+(2026-05-29); latest 0.153.2. The CLI predated a reasoning level its own
+server advertises, so `CodexProvider` had never run and ADR 0112's parsing
+was still the hypothesis it declared itself to be.
+
+**Expectation.** Upgrade, run the smoke, then the adapter. Expected to find
+at least one parsing detail wrong — the adapter was written from `--help`
+with no run to check it against.
+
+**Measurement.**
+
+```
+npm i -g @openai/codex@latest        0.135.0 -> 0.153.2 (owner-approved)
+smoke                                 exit 0, "OK", usage in 19,253 / out 15
+CodexProvider.complete(), UNMODIFIED, first live attempt:
+  content 'OK'  model 'gpt-5.5'  stop 'end_turn'  in=19975 out=26
+mutations against the real CLI (each -> fails, reverted):
+  M1 usage scan reports zero        1 failed
+  M2 reply not read from the file   1 failed
+tests/providers                       48 passed, 1 skipped (live test opt-in)
+pytest -q          1821 passed (from 1820; +1, none removed)
+mypy aef examples  127 files clean
+ruff check / format   clean
+```
+
+**Verdict.** The prediction was wrong: every line of the parsing matched on
+the first run. Recorded as wrong — it was a hypothesis for four days and
+only this run separated it from a wrong one. Dimension 8: 4 → **5**.
+Total: **85 → 86**.
+
+**Deliberately left.** Codex spends ~19–20k input tokens on a one-word
+reply — the same overhead class ADR 0126 cut from ~211k to ~4.7k on the
+Claude path — and no Codex equivalent of `--safe-mode` has been looked for.
+An MCP `HTTP 405` appears on stderr of every successful run. Both recorded
+in ADR 0131, neither acted on.

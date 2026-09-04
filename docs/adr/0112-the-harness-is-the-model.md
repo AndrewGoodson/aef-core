@@ -73,6 +73,18 @@ something is configured.
   documented contract for the reply, the JSONL is scanned only for a
   `usage` object — and its parsing is a hypothesis until a run confirms it.
 
+## Erratum (2026-09-04, ADR 0131)
+
+The Codex path is no longer a hypothesis. The CLI on this box was
+`@openai/codex@0.135.0` (May 29) and could not parse its own server's model
+catalogue — it rejected a `max` reasoning level its enum predated — so the
+adapter could never be run. Upgraded to 0.153.2 and it answers: exit 0,
+`OK` in the `--output-last-message` file, usage from the `turn.completed`
+event. **`CodexProvider` worked unmodified on the first live attempt** —
+argv, reply source and usage parsing all as written from `--help`. The
+"not reproduced" and "parsing is a hypothesis" statements below were true
+when written and are now superseded; see ADR 0131.
+
 ## Consequences
 
 - The knowledge layer's LLM summariser (ADR 0110) is runnable in an
