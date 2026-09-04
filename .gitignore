@@ -21,3 +21,6 @@ htmlcov/
 
 # mindgraph build-time only (Tailwind CLI); the artifact ships no dependencies
 mindgraph/node_modules/
+
+# Worker scratch (measurement scripts, never committed)
+.scratch/

@@ -26,6 +26,7 @@ from aef.harness.loop import (
     EXIT_HALTED,
     EXIT_OK,
     EXIT_REJECTED,
+    PROPOSERS,
     LoopConfig,
     LoopPaths,
     PolicyConfigError,
@@ -38,6 +39,7 @@ from aef.harness.loop import status as loop_status
 from aef.harness.monitoring import LoopHaltedError
 from aef.harness.recorder import record_to_corpus
 from aef.harness.zones import DEFAULT_AGENT_ROOT, ZonePolicy
+from aef.providers.base import ModelProvider
 
 
 def _build_commands(args: argparse.Namespace) -> tuple[tuple[str, ...], ...] | None:
@@ -52,9 +54,33 @@ def _build_commands(args: argparse.Namespace) -> tuple[tuple[str, ...], ...] | N
     return tuple(tuple(c.split()) for c in raw)
 
 
+def _proposer(args: argparse.Namespace) -> tuple[str, ModelProvider | None, str | None]:
+    """`--proposer llm` builds the harness provider (ADR 0112: the session's
+    own login, no key) for the model `--proposer-model` names. The default
+    is rule-based, by measurement (ADR 0122)."""
+    proposer = getattr(args, "proposer", "rule_based")
+    if proposer != "llm":
+        return proposer, None, None
+    model = getattr(args, "proposer_model", None)
+    if not model:
+        raise ValueError("--proposer llm needs --proposer-model <model id>")
+    from aef.config.factory import build_model_provider
+    from aef.config.schema import ModelProviderConfig
+
+    return (
+        proposer,
+        build_model_provider(ModelProviderConfig(impl="claude_code", model=model)),
+        model,
+    )
+
+
 def _config(args: argparse.Namespace) -> LoopConfig:
     corpus_dir = Path(args.corpus) if getattr(args, "corpus", None) else None
+    proposer, proposer_provider, proposer_model = _proposer(args)
     return LoopConfig(
+        proposer=proposer,
+        proposer_provider=proposer_provider,
+        proposer_model=proposer_model,
         repo=GitRepo(root=Path(args.repo)),
         paths=LoopPaths(root=Path(args.state)),
         base_ref=getattr(args, "base", "main"),
@@ -511,6 +537,25 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
             ),
         )
 
+    def _proposer_flags(sub: argparse.ArgumentParser) -> None:
+        sub.add_argument(
+            "--proposer",
+            choices=list(PROPOSERS),
+            default="rule_based",
+            help=(
+                "which proposer writes the candidate. rule_based (default): numeric steps "
+                "and the bounded structural catalogue, deterministic. llm: a model writes "
+                "the whole file, code validates it against G0/G4 and falls back to "
+                "rule_based on any failure (ADR 0122). Off by default, by measurement."
+            ),
+        )
+        sub.add_argument(
+            "--proposer-model",
+            default=None,
+            help="model id the llm proposer asks, through the claude_code harness login; "
+            "required with --proposer llm, no default so no model id is hardcoded here",
+        )
+
     p_gate = loop_subs.add_parser("gate", help="evaluate one candidate branch")
     _common(p_gate)
     p_gate.add_argument("--base", default="main")
@@ -711,6 +756,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         help="a command G1 must pass, e.g. 'python -m pytest -q'. Repeatable. "
         "Defaults to pytest only — anything more is repo-specific.",
     )
+    _proposer_flags(p_cycle)
     p_cycle.set_defaults(handler=cmd_cycle)
 
     p_run = loop_subs.add_parser(
@@ -734,6 +780,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         default="loop/kept",
         help="local branch that advances on every kept candidate; a person merges it",
     )
+    _proposer_flags(p_run)
     p_run.set_defaults(handler=cmd_run)
 
     p_bless = loop_subs.add_parser(

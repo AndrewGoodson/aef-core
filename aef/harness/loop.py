@@ -64,10 +64,16 @@ from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
 from aef.harness.suite import CohortBuilder
 from aef.harness.zones import ZonePolicy
 from aef.observability.base import Tracer
+from aef.providers.base import ModelProvider
 from aef.security.tool import PolicyConfig
 
 # The gates that judge a candidate WITHOUT executing it.
 _CHEAP: frozenset[str] = frozenset({"G0", "G1", "G4", "G5"})
+
+# The proposers `cycle` can run (ADR 0122). `rule_based` is the default and
+# `llm` is opt-in: measured on the flaky fixture and the demo agent before
+# the default was chosen, and the ADR carries the numbers.
+PROPOSERS: tuple[str, ...] = ("rule_based", "llm")
 
 OBSERVATIONS_FILENAME = "observations.jsonl"
 
@@ -133,6 +139,12 @@ class LoopConfig:
     gate_limits: dict[str, Any] = field(default_factory=dict)
     gates: tuple[Gate, ...] | None = None
     sandbox_image: str | None = None
+    # Which proposer `cycle` runs (ADR 0122). "llm" needs a provider and a
+    # model; both are refused loudly at construction rather than at the first
+    # turn, so a misconfigured run never reaches the ledger.
+    proposer: str = "rule_based"
+    proposer_provider: ModelProvider | None = None
+    proposer_model: str | None = None
 
     def __post_init__(self) -> None:
         if self.cohort_size < DEFAULT_MIN_COHORT_SIZE:
@@ -140,6 +152,15 @@ class LoopConfig:
                 f"cohort_size {self.cohort_size} is below G3's minimum of "
                 f"{DEFAULT_MIN_COHORT_SIZE}; every candidate would be rejected for an "
                 f"undersized cohort. Raise it, or change G3's floor deliberately."
+            )
+        if self.proposer not in PROPOSERS:
+            raise ValueError(f"proposer must be one of {PROPOSERS}, got {self.proposer!r}")
+        if self.proposer == "llm" and (self.proposer_provider is None or not self.proposer_model):
+            raise ValueError(
+                "proposer='llm' needs proposer_provider (a ModelProvider) and proposer_model "
+                "(the model it asks); neither has a default, because a proposer that "
+                "silently ran rule-based when asked for a model would report a measurement "
+                "it never made"
             )
 
     def sandbox_policy(self) -> SandboxPolicy:
@@ -630,6 +651,9 @@ def gate(
             # a dropped audit trail broke the command it was auditing, and the
             # test defending the wire only asserted source text (ADR 0078).
             "grounded_in": [str(c) for c in proposal.grounded_in] if proposal else [],
+            # Which proposer produced it, so a ledger read after the fact can
+            # separate the model's candidates from the rule-based ones.
+            "proposer": config.proposer if proposal else None,
         },
     )
 
@@ -1099,7 +1123,7 @@ def cycle(
         lines.append("no memory store configured: nothing to learn from, no candidate")
         return CycleRun(harvested=harvested, lines=tuple(lines))
 
-    from aef.harness.proposer import MemoryEvidence, RuleBasedProposer
+    from aef.harness.proposer import MemoryEvidence
 
     evidence = MemoryEvidence.from_store(memory, config.corpus)
     if evidence.excluded:
@@ -1124,7 +1148,7 @@ def cycle(
         lines.append(f"no agent source at {agent_path} in {config.base_ref}: no candidate")
         return CycleRun(harvested=harvested, lines=tuple(lines))
 
-    proposals = RuleBasedProposer().propose_from_memory(
+    proposals = _build_proposer(config).propose_from_memory(
         evidence,
         proposal_id=f"cycle-{now:%Y%m%dT%H%M%S}",
         path=agent_path,
@@ -1137,7 +1161,12 @@ def cycle(
     proposal = proposals[0]  # at most one candidate per cycle, deliberately
     branch = f"loop/{proposal.id}"
     _materialise_candidate_branch(config, branch, agent_path, proposal.proposed)
-    lines.append(f"proposed {proposal.id} on local branch {branch} (never pushed)")
+    lines.append(
+        f"proposed {proposal.id} on local branch {branch} (never pushed; "
+        f"proposer={config.proposer})"
+    )
+    if "[llm proposer fell back" in proposal.rationale:
+        lines.append(proposal.rationale[proposal.rationale.index("[llm proposer fell back") :])
 
     run = gate(config, branch, now=now, workdir=workdir, proposal=proposal)
     lines.append(f"gated: {run.decision.disposition.value} — {run.decision.reason}")
@@ -1150,6 +1179,29 @@ def cycle(
         exit_code=run.exit_code,
         score=run.candidate_score,
         incumbent_score=run.incumbent_score,
+    )
+
+
+def _build_proposer(config: LoopConfig) -> Any:
+    """The proposer `config.proposer` names (ADR 0122). Both share
+    `propose_from_memory(evidence, *, proposal_id, path, source)`; the LLM
+    one takes the zone policy and G0's line budget from the same config the
+    gates read, so it refuses what they would refuse."""
+    from aef.harness.proposer import RuleBasedProposer
+
+    if config.proposer != "llm":
+        return RuleBasedProposer()
+    from aef.harness.gates.g0_static_safety import DEFAULT_MAX_CHANGED_LINES
+    from aef.harness.llm_proposer import LLMProposer
+
+    assert config.proposer_provider is not None and config.proposer_model  # __post_init__
+    return LLMProposer(
+        provider=config.proposer_provider,
+        model=config.proposer_model,
+        zone_policy=config.zone_policy,
+        max_changed_lines=int(
+            config.gate_limits.get("max_changed_lines", DEFAULT_MAX_CHANGED_LINES)
+        ),
     )
 
 
@@ -1294,8 +1346,18 @@ def run_loop(
         parent = _choose_parent(archive, rng) if sample_parents else archive[-1]
         parent.children += 1
         turn_config = replace(config, base_ref=parent.ref)
+        # A scratch dir PER TURN. G1 materialises the candidate into
+        # `workdir/workspace` and `trust._prepare_empty_destination` refuses a
+        # non-empty one — so with one workdir for the whole run, every turn
+        # after the first was rejected by G1 with a TrustBoundaryError before
+        # any behavioural gate ran, whatever the proposer had done. Found by
+        # RUNNING the I10 measurement (ADR 0122): the "turn 2 rejected" in
+        # ADR 0114's and 0121's runs was this, not G3.
         run = _cycle(
-            turn_config, now=now + timedelta(seconds=turn), workdir=workdir, **cycle_kwargs
+            turn_config,
+            now=now + timedelta(seconds=turn),
+            workdir=workdir / f"turn-{turn}",
+            **cycle_kwargs,
         )
         lines.extend(f"turn {turn}: {line}" for line in run.lines)
         if run.proposed is None:
