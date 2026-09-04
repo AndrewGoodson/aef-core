@@ -89,6 +89,20 @@ def build_run_config(config_path: str | Path | None) -> RunConfig:
     unresolvable evaluator suite should stop the run before it costs
     anything, naming itself, rather than at the end of one (ADR 0100). The
     evaluator that actually uses the suites is built at scoring time.
+
+    **The order below is a decision, and it changed.** `run_graph_module`
+    used to build the model provider first and validate the evaluator suites
+    second, so a config with both an unbuildable provider and an
+    unresolvable suite reported the provider. Extracting this function
+    reversed it by accident (ADR 0145 did not notice; ADR 0149 reproduced
+    it). It is kept reversed and PINNED by
+    `test_build_run_config_reports_the_evaluator_before_the_provider`:
+    **validate before constructing.** `build_domain_gates` resolves names and
+    builds nothing; `build_model_provider` constructs a live provider object
+    and, for `impl: anthropic`, imports a vendor SDK to do it. Reporting the
+    cheap, local, purely-declarative error first is the better answer, and
+    the point of pinning it is that "which error the adopter sees" stops
+    being whichever statement a refactor happened to leave on top.
     """
     if config_path is None:
         return RunConfig()

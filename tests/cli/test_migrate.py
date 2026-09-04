@@ -1040,3 +1040,90 @@ def test_the_wired_graph_needs_the_services_agent_services_supplies(tmp_path: Pa
     with pytest.raises(ServiceNotConfiguredError) as excinfo:
         GraphExecutor(graph.compile(), bare).run(AEFState(run_id="r", agent_id="a", objective="o"))
     assert "critic" in str(excinfo.value)
+
+
+# --------------------------------------------------------------------------
+# More than one call site — ADR 0149's F6
+#
+# REPRODUCED: three call sites generated three nodes, of which ONE runs. The
+# executor emits no warning for a declared-but-unreachable node, `classify()`
+# builds `node_path` from the trace so G2 never sees them, and the report said
+# `build_graph() wires <call site> -> reflect -> consolidate`, singular. The
+# entry is `node_ids[0]` — the first call site the scan found, effectively
+# alphabetical — not a node anything chose.
+# --------------------------------------------------------------------------
+
+THREE_SITES = {
+    "zeta.py": THIN,
+    "alpha.py": THIN,
+    "middle.py": THIN,
+}
+
+
+def _three_site_result(tmp_path: Path):  # type: ignore[no-untyped-def]
+    for name, body in THREE_SITES.items():
+        _write(tmp_path, name, body)
+    return run_migrate(tmp_path, write=False)
+
+
+def test_the_report_names_the_entry_node_and_every_unreached_one(tmp_path: Path) -> None:
+    """The surface an adopter reads WHILE migrating. It is the only place the
+    fact can arrive in time: nothing downstream says it either."""
+    from aef.cli.migrate import node_id_for, report
+
+    result = _three_site_result(tmp_path)
+    assert len(result.sites) == 3, [s.module for s in result.sites]
+    entry = node_id_for(result.sites[0])
+    unreached = [node_id_for(s) for s in result.sites[1:]]
+
+    text = report(result)
+    assert f"ONLY {entry} RUNS" in text
+    for node in unreached:
+        assert f"UNREACHED  {node}" in text
+    # Not a claim about ordering: migrate has no basis to pick one, and
+    # inventing an edge order is the thing it must NOT do.
+    assert "semantic decision" in text
+    assert "the entry above is simply the first call site found" in text.replace("\n", " ")
+
+
+def test_the_report_stays_singular_for_a_single_call_site(tmp_path: Path) -> None:
+    """The control. One call site has nothing unreachable, and printing a
+    paragraph about dead nodes there would teach adopters to skip it."""
+    from aef.cli.migrate import report
+
+    _write(tmp_path, "svc.py", THIN)
+    text = report(run_migrate(tmp_path, write=False))
+    assert "UNREACHED" not in text
+    assert "RUNS." not in text
+    assert "-> reflect -> consolidate -> END" in text
+
+
+def test_the_reports_entry_node_is_the_graphs_entry_node(tmp_path: Path) -> None:
+    """A report that names a different node than `build_graph()` sets is worse
+    than the silence it replaced. One function answers for both (`node_id_for`)
+    and this asserts they still agree, through the REAL generated module."""
+    from aef.cli.migrate import node_id_for, report
+
+    for name, body in THREE_SITES.items():
+        _write(tmp_path / "multi", name, body)
+    graph = _built_graph_from(tmp_path / "multi", "multi")
+    result = run_migrate(tmp_path / "multi", write=False)
+
+    assert graph.entry_node == node_id_for(result.sites[0])
+    assert f"ONLY {graph.entry_node} RUNS" in report(result)
+    # And the unreached ones really are unreachable: declared in `nodes`, with
+    # no edge or route that arrives at them from the entry.
+    reachable = {graph.entry_node, "reflect", "consolidate"}
+    assert set(graph.nodes) - reachable, "the fixture no longer has dead nodes"
+
+
+def _built_graph_from(root: Path, name: str):  # type: ignore[no-untyped-def]
+    import importlib.util
+
+    out = root / "graph.py"
+    out.write_text(render(scan(root), name), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location(f"gen_{name}_multi", out)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.build_graph()

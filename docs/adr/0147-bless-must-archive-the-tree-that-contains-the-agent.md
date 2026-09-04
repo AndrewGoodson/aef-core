@@ -165,3 +165,46 @@ come from, but neither was run.
 carrying a mis-measured drift budget today. Nothing detects that
 retroactively; re-blessing is rate-limited and owner-only by design (G5, ADR
 0053), so an owner who suspects it has to look at the archive.
+
+## Errata (ADR 0149)
+
+### The "last hardcoded literal" claim is false
+
+The Decision section says: "`aef/cli/loop.py`'s `DEFAULT_AGENT_PATH` — the
+last place in that file that spelled `agents` — is built from
+`DEFAULT_AGENT_ROOT` too."
+
+What was built from `DEFAULT_AGENT_ROOT` was the **root**. The rest of the
+path stayed spelled out: `f"{DEFAULT_AGENT_ROOT}/demo/graph.py"`, and
+`agents/demo/` is aef-core's OWN fixture directory, which exists in no adopted
+repo. `aef/harness/loop.py::cycle` additionally hardcoded
+`"agents/demo/graph.py"` in full, and this ADR does not mention it. The
+literal that mattered was not the one removed.
+
+Reproduced on a repo that ran `adopt` then `migrate` and nothing else: `aef
+loop doctor` reported three obligations unmet against a path that does not
+exist, printed a `bless` fix line that exits 1, and `aef loop cycle` exited
+**0** with `no agent source at agents/demo/graph.py in main: no candidate`.
+Fixed in ADR 0149 by moving `DEFAULT_AGENT_PATH` into `aef/harness/zones.py`,
+deriving it once from what `aef migrate` writes, and aliasing
+`migrate.DEFAULT_MIGRATED_OUT` to it.
+
+### The symlink case is not merely untested — it fails
+
+The Confidence section says: "a symlink inside Zone A pointing outside it …
+was not tested. Neither arises from `git ls-tree` output, which is where both
+sides come from, but neither was run."
+
+The second sentence is wrong on both halves. A symlink **does** arise from
+`git ls-tree` output — mode `120000`, with the link target as its blob — and
+running it shows the containment check above passing and `bless` succeeding:
+it printed `blessed agents/graph.py as baseline v1` and archived a 16-byte
+file whose entire content is the string `../real/graph.py`. The baseline held
+the agent by name and none of it by content, and G5 then measured drift
+against a tree that never contained the code.
+
+The reasoning that made this look safe is the reason it was not: both sides
+coming from `git ls-tree` is exactly what lets a symlink pass a containment
+check that compares names. `aef/harness/candidate.py`'s `ESCAPE_MODES` already
+treated the same thing as a security event on the candidate side; ADR 0149
+makes `bless` refuse it, reusing that list rather than writing a second one.

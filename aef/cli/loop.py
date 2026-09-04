@@ -49,17 +49,22 @@ from aef.harness.loop import monitor as loop_monitor
 from aef.harness.loop import status as loop_status
 from aef.harness.monitoring import LoopHaltedError
 from aef.harness.recorder import record_to_corpus
-from aef.harness.zones import DEFAULT_AGENT_ROOT, ZonePolicy
+from aef.harness.zones import DEFAULT_AGENT_PATH, DEFAULT_AGENT_ROOT, ZonePolicy
 from aef.providers.base import ModelProvider
 
-# One string, four flags. It was repeated at each `--agent-path` and read by
-# `_warn_unmet_obligations` too, which is five places for one default.
+# `DEFAULT_AGENT_PATH` is one string behind four `--agent-path` flags and
+# `_warn_unmet_obligations`, which is five places for one default.
 #
-# Built from `DEFAULT_AGENT_ROOT` rather than spelling `agents` a sixth time:
-# the agent root is the one thing `ZonePolicy` lets an adopting repo move, and
-# a default that hardcodes it disagrees with `bless`'s `--agent-root` the
-# moment anyone does.
-DEFAULT_AGENT_PATH = f"{DEFAULT_AGENT_ROOT}/demo/graph.py"
+# It used to be DERIVED here as `f"{DEFAULT_AGENT_ROOT}/demo/graph.py"` — the
+# root came from `zones`, and `demo` was spelled out, which is aef-core's own
+# fixture directory and exists in no adopted repo. ADR 0147 claimed it had
+# rebuilt this constant from `DEFAULT_AGENT_ROOT`, and it had: it rebuilt the
+# ROOT and kept the `demo`. So a repo that ran `adopt` then `migrate` and
+# nothing else got `loop doctor` printing an unrunnable `bless` line and
+# `loop cycle` exiting 0 having done nothing (reproduced, ADR 0149).
+#
+# It is imported now, never derived, and `zones` derives it once from what
+# `aef migrate` writes.
 
 
 def _build_commands(args: argparse.Namespace) -> tuple[tuple[str, ...], ...] | None:
@@ -257,26 +262,34 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 def cmd_record(args: argparse.Namespace) -> int:
-    from aef.cli.run import load_graph_module
+    from aef.cli.run import build_run_config, load_graph_module
+    from aef.config import build_retriever
 
     graph = load_graph_module(args.module)
+    from aef.services.knowledge.in_memory import InMemoryKnowledgeStore
     from aef.services.memory.in_memory import InMemoryMemoryStore
     from aef.services.runtime import agent_services
     from aef.state import AEFState
 
-    # The provider `aef run` would use, from the same config, so what gets
-    # recorded is what production would have said. Absent, a graph that
-    # calls a model records an errored run naming the miss (ADR 0123).
-    model_provider = None
-    reflection = "rule_based"
-    reflection_model: str | None = None
-    if getattr(args, "config", None):
-        from aef.config import build_model_provider, load_agent_config
-
-        config = load_agent_config(args.config)
-        model_provider = build_model_provider(config.model_provider)
-        reflection = config.reflection.impl
-        reflection_model = config.model_provider.model
+    # Everything `--config` contributes, read through `aef run`'s OWN
+    # construction site (ADR 0145's rule, applied to the caller ADR 0145 did
+    # not touch — ADR 0149).
+    #
+    # This used to be a private `load_agent_config` + `build_model_provider`
+    # that took the provider and the reflection impl and dropped `policies`,
+    # `tools.allow`, `evaluator.suites` and `context` on the floor. It is the
+    # WORST place in the repo for that drift, because `aef loop record
+    # --expected must_fail` is the only documented way to mint a tripwire:
+    # the recording ran deny-by-default, the graph's tool call was denied,
+    # the run "failed", and the MUST_FAIL guard accepted the label on
+    # evidence that came from the dropped config rather than from the task
+    # being beyond the agent. `scenario_runner` then applies the OWNER's
+    # policy at gate time, the same scenario passes, `tripwire_hit` fires and
+    # G2 rejects every candidate forever reporting reward hacking (ADR 0149,
+    # reproduced end to end).
+    run_config = build_run_config(getattr(args, "config", None))
+    memory = InMemoryMemoryStore()
+    knowledge = InMemoryKnowledgeStore()
 
     try:
         checks = _parse_checks(getattr(args, "check", None))
@@ -305,10 +318,23 @@ def cmd_record(args: argparse.Namespace) -> int:
         # Same list the gates use, so a scenario recorded here can be
         # re-executed there (aef/services/runtime.py, ADR 0091).
         agent_services(
-            memory=InMemoryMemoryStore(),
-            model_provider=model_provider,
-            reflection=reflection,
-            reflection_model=reflection_model,
+            memory=memory,
+            knowledge=knowledge,
+            model_provider=run_config.model_provider,
+            # The adopter's policy, not the engine's default. Without this a
+            # scenario pins behaviour production never had, and a tripwire
+            # pins a denial rather than an impossibility (ADR 0149).
+            policy=run_config.policy_config,
+            # Over the SAME stores the container carries, or the retriever
+            # reads a different memory than the agent writes (ADR 0091/0118).
+            retriever=build_retriever(
+                run_config.context,
+                memory=memory,
+                agent_id=args.agent_id,
+                knowledge=knowledge,
+            ),
+            reflection=run_config.reflection,
+            reflection_model=run_config.reflection_model,
             agent_id=args.agent_id,
         ),
         scenario_id=args.scenario_id,
@@ -529,14 +555,23 @@ def cmd_score(args: argparse.Namespace) -> int:
     # 0.0 here against 1.0 there, on identical code and one config file
     # (ADR 0125). Two lists that must agree, with nothing checking that they
     # did — ADR 0091's finding, in a third place.
-    score_policy = None
-    if getattr(args, "config", None):
-        from aef.config import build_model_provider, build_policy_config, load_agent_config
+    #
+    # Read through `build_run_config` — `aef run`'s own site — for the same
+    # reason `record` and `bootstrap` do. This was the THIRD private parse of
+    # `aef.yaml` inside this one file, and while it happened to build the
+    # policy correctly it skipped `build_domain_gates`, so `loop score
+    # --config` was the one command that would score a whole corpus under a
+    # config whose evaluator suites do not resolve (ADR 0149).
+    from aef.cli.run import build_run_config
 
-        agent_config = load_agent_config(args.config)
-        score_policy = build_policy_config(agent_config.tools, agent_config.policies)
-        if cassette_miss == "live":
-            live_provider = build_model_provider(agent_config.model_provider)
+    run_config = build_run_config(getattr(args, "config", None))
+    score_policy = run_config.policy_config
+    # Only under `live`: a replayed score must not be mistaken for a live one,
+    # and the provider is built either way now (cheaply, and with no
+    # credential read — ADR 0123), so the gate stays on the USE, not the
+    # construction.
+    if cassette_miss == "live":
+        live_provider = run_config.model_provider
 
     # Only the scenarios recorded FROM this graph. A corpus may hold several
     # graphs' recordings (the demo's and the summary agent's); scoring one
