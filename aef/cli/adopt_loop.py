@@ -21,6 +21,78 @@ Agents here may propose changes to their own code. An automated gate pipeline
 judges every proposal before anything merges. This file says what works, what
 does not yet, and what only you can decide.
 
+## Read this first: what the loop needs before it can propose ANYTHING
+
+`aef adopt` and `aef migrate` do not leave you with a loop that can produce a
+candidate. Every line of this table was **measured** — removed from a working
+sequence, the cycle re-run, the output quoted (aef-core ADR 0139). It is at
+the top rather than in step five because each one makes `aef loop cycle` exit
+**0 having done nothing**, which reads like success.
+
+1. **The graph under `agents/`** — Zone A. Otherwise:
+   `G0 rejected it: candidate touches paths outside Zone A`
+2. **At least one module-level numeric constant in it.** Otherwise:
+   `the proposer produced nothing from the available evidence`
+3. **A node that actually returns `"reflect"` as its route.** Otherwise:
+   `no admissible failure memory: no candidate this cycle`
+4. **At least one FAILING `aef run --memory <file>`**, pointed at the same
+   file `aef loop cycle --memory` reads. Otherwise: the same line as 3.
+   `aef loop bootstrap` cannot do this for you — it gives every input its own
+   in-memory store, so nothing it learns survives the process.
+5. **Scenarios in `corpus/`**, train or validation. Otherwise:
+   `no corpus: G2/G3 will refuse for lack of evidence`
+6. **A blessed baseline.** Otherwise G5 has no reference point for drift.
+7. **`--entrypoint` on the cycle itself.** Otherwise:
+   `no entrypoint configured: G2/G3 will refuse`
+
+**`aef migrate` writes none of the first four.** Its generated node has no
+constants and no reflect node, and `aef_migrated.py` lands at the repo root,
+which is Zone C — a candidate touching it is rejected by G0. Treat that file
+as the plumbing for one call site, and put the graph the loop improves under
+`agents/`.
+
+**Your first corpus cannot come from a model-calling graph unless you have a
+credential.** The cassette the gates later replay from does not exist until
+something makes the call once, so `aef loop bootstrap` on a routed node exits
+1 with `no live provider to fall through to`. Either configure
+`model_provider` in `aef.yaml` and record once for real, or start the loop on
+a graph that calls no model. It is not a limitation you can document your way
+around.
+
+**Add `__pycache__/` to `.gitignore` before you bless.** `aef adopt` does not
+write one. Compiled bytecode committed under `agents/` by an ordinary
+`git add -A` is Zone A content the baseline does not have, and G5 charges it
+as drift: measured at **0.468 of a 0.500 budget** for a one-line candidate,
+against **0.024** for the same candidate with the bytecode excluded.
+
+The sequence that works, start to finish:
+
+```
+aef migrate --dir .
+aef loop bootstrap <your.graph.module> --corpus corpus --inputs inputs.json
+aef loop record <your.graph.module> --corpus corpus --scenario-id tripwire-1 \\
+    --objective "<a task beyond this agent>" --split validation \\
+    --expected must_fail --working-memory '{{"difficulty": 99}}'
+aef run <your.graph.module> --objective "a task this agent fails" \\
+    --working-memory '{{"difficulty": 99}}' \\
+    --memory ~/.aef-loop-state/memory.jsonl
+aef loop bless --repo . --state ~/.aef-loop-state \\
+    --agent-path agents/<yours>/graph.py
+aef loop doctor --repo . --state ~/.aef-loop-state --corpus corpus \\
+    --agent-path agents/<yours>/graph.py
+aef loop cycle --repo . --state ~/.aef-loop-state --workdir /tmp/loop \\
+    --module <your.graph.module> --corpus corpus \\
+    --entrypoint <your.graph.module>:build_graph \\
+    --agent-path agents/<yours>/graph.py \\
+    --memory ~/.aef-loop-state/memory.jsonl \\
+    --build-command "<your green bar>"
+```
+
+`aef loop bootstrap` prints the `aef loop record ... --expected must_fail`
+line for you, with the objective and working memory already filled in — the
+label itself stays yours, because only an owner can say a task *should* have
+failed.
+
 ## Nothing merges automatically
 
 **Tier-1 auto-merge is OFF.** A candidate that passes all six gates is
