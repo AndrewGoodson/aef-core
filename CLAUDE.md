@@ -163,6 +163,19 @@ one prose string, and every counted field is computed from records.
 None of this feeds `aef/evolution/`, and a test AST-scans both directions to
 keep that true.
 
+**Landed 2026-09-03 by the improve loop** (`IMPROVE_LOOP.md`, rubric in
+`docs/research/self-learning-rubric.md`, 50 → 79): scenarios carry owner
+`checks` and the score can fail without an error (ADR 0113, `aef loop
+score`); `aef loop run` keeps on a local branch, never main (0114), with an
+archive that is measured to buy nothing on this proposer and is off (0121);
+`reflection.impl: llm` exists, is bias-controlled, and is off by
+measurement (0115); the retriever finally has a caller —
+`make_retrieve_node` — and lessons carry helpful/harmful tallies (0118);
+stale lessons are demoted by `runs_since_last_seen`, default half-life 5
+by sweep (0116); `harvest` redacts the input and re-executes (0119);
+`aef loop skills` drafts skill proposals, never installs them (0117);
+`tests/test_prompt_surface.py` pins the prompt surface (0120).
+
 The knowledge graph, token optimizer and planner interfaces were **deleted**
 (ADR 0101), not deferred: a stub unimplemented across five phases is a
 promise, and an unkept promise in a typed signature is worse than an honest

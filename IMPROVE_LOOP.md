@@ -45,7 +45,24 @@ ADR: <number or "none: no contract change">
 Score: dim <k> <before> -> <after>, total <before> -> <after>
 ```
 
-## Current worklist (seeded 2026-09-03 from the baseline; RESEARCH_LOOP.md replaces this)
+## Status after the 2026-09-03 run — 79 / 100
+
+Done, each with an ADR and a measured entry in `IMPROVE_LOG.md`: I1 task
+metric (0113), I2 keep/revert (0114), I3 LLM critic/judge (0115), I4
+curation (0116), I5 redaction (0119), I6 archive (0121), I7 skill proposals
+(0117), I8 prompt-surface test (0120), plus I9 retrieve node + A1 (0118),
+added mid-run. Two knobs shipped off by measurement (LLM reflection,
+archive sampling), one on (staleness half-life 5).
+
+What separates 79 from 90, and none of it is code this loop can write:
+dimension 7's last five points need a real tenant (owner decision, trust
+case §4); dimension 1's last three need a corpus of real tasks the demo
+graph cannot supply; dimension 6's last four need a proposer with a
+repertoire; dimension 8's last point needs a Codex CLI that can parse its
+server's catalog. The next `RESEARCH_LOOP.md` pass should re-score with
+that in front of it rather than manufacture increments.
+
+## Original worklist (seeded 2026-09-03 from the baseline; RESEARCH_LOOP.md replaces this)
 
 1. **Task metric** (dim 1, up to +7). A fixed suite of graph tasks with a
    scalar score and a wall-clock budget, run by `aef eval`, holdout split
