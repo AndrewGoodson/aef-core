@@ -513,23 +513,31 @@ def test_gitignore_gaps_ignores_commented_out_patterns() -> None:
 
 
 def test_the_checklist_names_the_zone_a_root_the_harness_actually_uses(tmp_path: Path) -> None:
-    """E2 (ADR 0142): `aef migrate` writes `aef_migrated.py` to the repo ROOT,
+    """E2 (ADR 0142): `aef migrate` wrote `aef_migrated.py` to the repo ROOT,
     which is Zone C — the one place the loop is structurally forbidden to
     propose changes to (`G0 rejected it: candidate touches paths outside Zone
     A`, measured). Nothing `aef adopt` generated said so: neither the string
     "Zone A" nor "agents/" appeared anywhere in CLAUDE.md or the checklist.
 
+    UPDATED DELIBERATELY for ADR 0143, which fixed the command rather than
+    only the documentation: migrate's default `--out` is now
+    `DEFAULT_MIGRATED_OUT`, inside Zone A. The pin moves from the old
+    root-level filename to that path, because a checklist still naming the
+    root would now be telling an adopter to fix something the tool already
+    did.
+
     Derived from `DEFAULT_AGENT_ROOT`, not hardcoded, and cross-checked
     against the directory `adopt` really creates — a doc naming a directory
     the harness does not use is the same defect one level up.
     """
+    from aef.cli.migrate import DEFAULT_MIGRATED_OUT
     from aef.harness.zones import DEFAULT_AGENT_ROOT
 
     result = run_adopt(tmp_path)
 
     named = [item for item in result.checklist if f"{DEFAULT_AGENT_ROOT}/" in item]
     assert named, result.checklist
-    assert "aef_migrated.py" in named[0], named[0]
+    assert DEFAULT_MIGRATED_OUT in named[0], named[0]
     assert "Zone A" in named[0], named[0]
 
     # The same directory adopt actually writes its Zone A README into.
@@ -544,6 +552,7 @@ def test_the_checklist_names_the_zone_a_root_the_harness_actually_uses(tmp_path:
 def test_claude_md_states_where_converted_nodes_must_live(tmp_path: Path) -> None:
     """The checklist is step-by-step; CLAUDE.md is what a fresh session with
     no other context reads first. Both have to carry it (ADR 0142)."""
+    from aef.cli.migrate import DEFAULT_MIGRATED_OUT
     from aef.harness.zones import DEFAULT_AGENT_ROOT
 
     run_adopt(tmp_path)
@@ -551,5 +560,8 @@ def test_claude_md_states_where_converted_nodes_must_live(tmp_path: Path) -> Non
         text = (tmp_path / name).read_text()
         assert "Zone A" in text, name
         assert f"{DEFAULT_AGENT_ROOT}/" in text, name
-        assert "aef_migrated.py" in text, name
+        # ADR 0143: the path migrate writes to now, not the root-level name
+        # it used to. The old name survives one sentence back, as the reason
+        # a graph left over from an older run still has to be moved.
+        assert DEFAULT_MIGRATED_OUT in text, name
         assert "outside Zone A" in text, name

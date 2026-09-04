@@ -12,8 +12,10 @@ from aef.cli.doctor import run_doctor
 from aef.cli.eval import eval_run
 from aef.cli.init import run_init
 from aef.cli.loop import add_loop_parser
+from aef.cli.migrate import DEFAULT_MIGRATED_OUT, LEGACY_MIGRATED_OUT
 from aef.cli.run import run_graph_module
 from aef.cli.trace import trace_run
+from aef.harness.zones import DEFAULT_AGENT_ROOT
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
@@ -28,7 +30,7 @@ def _cmd_init(args: argparse.Namespace) -> int:
 def _cmd_migrate(args: argparse.Namespace) -> int:
     from aef.cli.migrate import report, run_migrate
 
-    result = run_migrate(Path(args.dir), force=bool(args.force))
+    result = run_migrate(Path(args.dir), force=bool(args.force), out=args.out)
     print(report(result))
     return 0
 
@@ -162,7 +164,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_migrate.add_argument("--dir", default=".")
     p_migrate.add_argument(
-        "--force", action="store_true", help="overwrite an existing aef_migrated.py"
+        "--out",
+        default=None,
+        help=(
+            f"where to write the generated graph, relative to --dir (default: "
+            f"{DEFAULT_MIGRATED_OUT}). The default is inside Zone A — the only tree the "
+            f"self-rewiring loop may propose changes to. Writing it anywhere else means "
+            f"a candidate touching it is rejected by G0 (ADR 0143); the report names the "
+            f"zone of whatever path you choose."
+        ),
+    )
+    p_migrate.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "overwrite an existing generated file. An edited one is preserved as a "
+            "`.bak` beside it first, and the report says so (ADR 0140)."
+        ),
     )
     p_migrate.set_defaults(handler=_cmd_migrate)
 
@@ -172,10 +190,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--agent-path",
         default=None,
         help=(
-            "the module that builds your graph, repo-relative — the same flag "
-            "`aef loop doctor` takes. Without it, doctor scans every entry the adoption "
-            "contract names that exists (aef_adapter.py, aef_migrated.py, "
-            "agents/*/graph.py) for model calls the harness cannot see."
+            f"the module that builds your graph, repo-relative — the same flag "
+            f"`aef loop doctor` takes. Without it, doctor scans every entry the adoption "
+            f"contract names that exists (aef_adapter.py, {DEFAULT_MIGRATED_OUT}, "
+            f"{DEFAULT_AGENT_ROOT}/*/graph.py, and {LEGACY_MIGRATED_OUT} for a repo "
+            f"migrated before ADR 0143) for model calls the harness cannot see."
         ),
     )
     p_doctor.set_defaults(handler=_cmd_doctor)

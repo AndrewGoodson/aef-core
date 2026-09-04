@@ -1581,3 +1581,165 @@ harvest under this version. `aef doctor`'s discovery names the three entries the
 adoption contract names and will miss a graph kept elsewhere, which is what
 `--agent-path` is for. And nothing here ran against a repo nobody wrote to be
 scanned — K5's whole point, still.
+
+---
+
+## L1 + L2 — `aef migrate` writes into Zone A, and wires the loop (ADR 0143)
+
+**Planted.** ADR 0139 (K3) measured four things that make `aef loop cycle`
+exit 0 having done nothing in a freshly adopted repo. Two of them are
+properties of what `aef migrate` itself writes, and both had been reported
+and left: L1 outside K3's file scope, then again in fix wave E (ADR 0142),
+which could only change what `aef adopt` *says* because `migrate.py` had
+another owner that night. One worker, because both live in one file.
+
+**Reproduced, by RUNNING, before anything changed.**
+
+L1 — the generated file is in the one tree the loop is forbidden to touch,
+and the report is silent about it. Fresh `git init`, one raw-SDK agent,
+`aef adopt`, `aef migrate --dir .`, then a real candidate commit through the
+harness's own `inspect_candidate`:
+
+```
+wrote .../l1repo/aef_migrated.py                                    EXIT=0
+files matching *.py at the repo ROOT: ['aef_adapter.py', 'aef_migrated.py']
+does agents/migrated/graph.py exist?  False
+
+$ inspect_candidate(repo, base, loop/candidate)
+  changed paths: ('aef_migrated.py',)
+  allowed: False
+  REJECT: aef_migrated.py: Zone C (core) — not under the agent root 'agents';
+          only Zone A is agent-writable
+```
+
+L2 — one node, routed to `END`, so nothing ever writes failure memory:
+
+```
+$ build_graph() from the generated module
+  nodes : ['src_my_agent__run_agent']   edges : []
+  return StateDelta(working_memory={key: result.content}), END
+  "reflect" appears in the generated source: False
+
+$ aef run aef_migrated --memory <state>/memory.jsonl
+  memory.jsonl exists: False
+
+$ aef loop cycle --memory <state>/memory.jsonl
+  ledger verified: 0 entr(ies)
+  no admissible failure memory: no candidate this cycle             EXIT=0
+```
+
+**Changed.** `run_migrate` takes `--out`, threaded from `aef/cli/main.py`,
+defaulting to `DEFAULT_MIGRATED_OUT = f"{DEFAULT_AGENT_ROOT}/migrated/graph.py"`
+— a module-level constant every other surface **imports** rather than
+re-derives. Parents are created; ADR 0140's never-overwrite and `--force`
+`.bak` rules follow the path rather than one filename; `report()` names the
+**zone** of what it wrote, answered by `zones.inspect_path` — the classifier
+G0 itself uses — so writing into Zone C is still possible and is still costed
+in the gate's own words at the moment of writing. `LEGACY_MIGRATED_OUT` keeps
+`aef doctor` discovering a repo migrated before this. The generated
+`build_graph()` wires `<call site> -> reflect -> consolidate -> END`, every
+node's route moving from `END` to `"reflect"`.
+
+**Measured.**
+
+| | before | after |
+|---|---|---|
+| zone of the written path | `Zone C (core) — not under the agent root 'agents'`, `allowed: False` | `Zone A (agent-writable)`, `allowed: True` |
+| the report on that | silent | `Zone A (agents/**) — agent-writable, the only tree the self-rewiring loop may propose changes to` |
+| memory after one run of the generated graph | **0 records** | **1 record** (`kinds=['success']`) |
+| the caller's answer in `working_memory` | `'a stubbed answer'` | `'a stubbed answer'` — unchanged, byte for byte |
+| a hand-built bare `Services(model_provider=...)` | runs | `ServiceNotConfiguredError: service 'critic'` |
+| `__init__.py` needed for `import agents.migrated.graph` | — | **none**, in all five layouts built and imported |
+
+**L2's falsification clause, honoured with a measurement rather than an
+argument.** The node's return to the caller does not change. What changes is
+that reflect needs `critic`/`judge`/`memory` and consolidate needs
+`knowledge`; `agent_services()` defaults all four, so `aef run`,
+`aef loop bootstrap`, `aef loop cycle` and every gate re-execution are
+unaffected, and the K3 sequence runs unchanged. A caller who hand-builds
+`Services` breaks. Trade taken — a generator whose whole output is inert in
+the system it generates for is worse — stated in the generated module
+docstring, in `build_graph`'s docstring and in the CLI report, and pinned by
+a test on both halves. No test pinned a single-node generated graph.
+
+**K3's end-to-end test now gates migrate's OWN output.** Deleted: the
+hand-placed `agents/mine/graph.py`, its `make_reflect_node`, its `Edge`, its
+`"reflect"` routes, and the two hand-written `__init__.py` files — the test
+writes no edge, no reflect node and no route anywhere. Kept: the two
+module-level numeric constants (item 2 — a generated wrapper has no number of
+its own to invent) and a body that can fail without a credential (item 4 —
+this sequence has no credential), patched into migrate's output with
+before/after assertions on every substitution; plus the failing
+`aef run --memory`, the tripwire line run verbatim, `bless`, `doctor`,
+`--entrypoint`, and the smoke test G1 builds against. Step 2 is unchanged:
+bootstrapping the migrated model-calling graph still exits 1 with `no live
+provider to fall through to`, which is *why* the body must be replaced.
+
+The gate assertions were **strengthened, not relaxed** — the rejection is
+read from `ledger.jsonl` (`rejected` present, `accepted` absent,
+`gates["G3"]["outcome"] == "fail"`) rather than from the CLI line, because a
+test demanding an acceptance could be satisfied by weakening G3. Its run:
+
+```
+GATED summary: ran G0, G1, G4, G5, G2, G3; passed=False
+  G0 pass  1 file(s), 28 line(s), all Zone A, no static-safety violations
+  G5 pass  drift 0.098/0.500 from the blessed baseline
+  G2 pass  5 scenario(s) re-executed; every previously-passing one still passes.
+  G3 fail  candidate does not beat the p95 of the random control cohort
+evidence: 1 candidate + 1 incumbent + 5 random control(s); corpus records one
+          graph ('adoptee'); gating all 5 gated scenario(s)
+```
+
+`G0 pass ... all Zone A` is L1's whole point, delivered by the gate rather
+than asserted by the test.
+
+**Mutations** — 11 planted, 11 caught, each reverted from a byte-identical
+backup verified with `shasum` (never `git checkout --`):
+
+```
+BASELINE                                                    149 passed
+M1  the default output goes back to the repo root             6 failed
+M2  --out is accepted and ignored                             4 failed
+M3  parent directories are no longer created                 11 failed, 2 errors
+M4  report() stops naming the zone                            4 failed
+M5  the routed node routes to END again                       4 failed
+M6  build_graph drops the reflect/consolidate tail            6 failed
+M7  doctor stops discovering migrate's output                 3 failed
+M8  doctor forgets the pre-0143 output path                   3 failed
+M9  the generated docstring drops the silent-failure warning  1 failed
+M10 LOOP.md claims migrate writes none of the four            1 failed
+M11 the checklist stops naming migrate's output path          1 failed
+REVERTED                                                    149 passed
+```
+
+**A defect found on the way, fixed.** The generated `LOOP.md` still said
+"Add `__pycache__/` to `.gitignore` before you bless. `aef adopt` does not
+write one" — five hours after ADR 0142 made it write one. Corrected to what
+is true and still matters: adopt writes one, **skips an existing
+`.gitignore` rather than appending**, so a repo that already had one may still
+be missing the pattern. The measured drift numbers and their test pin stay.
+
+**Wrong predictions, recorded as wrong.** (1) I expected the generated
+packages to need `__init__.py`; five layouts were built and imported and none
+did. (2) I expected K3's hand-written agent to disappear entirely; it does
+not — L1 and L2 remove *placement* and *wiring*, and items 2 and 4 of the
+measured minimum are semantics, so definition-of-done statement 1 is still
+not true. (3) I expected wiring reflect to be free; it moves four services
+from optional to required for a hand-built `Services`.
+
+**Green bar.** `pytest -q` **1960 passed, 1 skipped** (from 1945/1; **+15**,
+none removed — all 15 in `tests/cli/test_migrate.py`, 41 → 56).
+`mypy aef examples` 129 source files, no issues. `ruff check .` all checks
+passed. `ruff format --check aef tests examples` 239 files already formatted.
+**No rubric dimension moves — the score stays 86. Zero model calls.**
+
+**Deliberately left.** `aef loop bless` is still wrong in the way K3 reported
+— it checks `path_exists_at(ref, agent_path)` and then archives the Zone A
+tree, two different questions — and L1 only makes that harder to reach; that
+is L5, in another worker's file. With more than one call site, every generated
+node routes to `reflect` and gets an edge but only the entry node is reached,
+exactly as before this change when `edges=[]` left them unreachable too; the
+generated docstring now says so out loud rather than leaving it to be found.
+And the K3 test's patched copy of the generated file carries two now-unused
+imports, because it replaces the body and not the header — harmless, since G1
+runs `pytest` rather than `ruff`, and named here rather than discovered later.

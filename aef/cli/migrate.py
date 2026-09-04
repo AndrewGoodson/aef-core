@@ -86,6 +86,25 @@ generating something plausible for them would be worse than generating nothing:
 Every skip is reported. A migration tool that silently emits nodes for a third
 of the call sites and says nothing about the rest is how you end up believing a
 repo is migrated when it is not.
+
+## Where it writes, and what it wires (ADR 0143)
+
+Two things this command got wrong for its whole life, both measured by running
+the harness's own code against its own output:
+
+- **It wrote to the repo root, which is Zone C.** `inspect_candidate` on a
+  commit whose only changed path was the generated file returned
+  `allowed: False ... Zone C (core) — not under the agent root 'agents'`, so
+  the one file `aef migrate` exists to produce was the one file the loop could
+  never propose a change to. The default is now `DEFAULT_MIGRATED_OUT`, inside
+  Zone A, `--out` moves it, and `report()` names the zone of whatever path it
+  wrote — because the failure mode is otherwise discovered at the *end* of a
+  cycle rather than at the moment of writing.
+- **The graph it generated had one node routed to `END`.** Nothing wrote
+  failure memory, so the proposer had no evidence, so `aef loop cycle` exited
+  0 with `no admissible failure memory: no candidate this cycle`. The
+  generated `build_graph()` now wires `<call site> -> reflect -> consolidate
+  -> END`, the same shape `agents/summary/graph.py` uses.
 """
 
 from __future__ import annotations
@@ -97,7 +116,26 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from aef.harness.vendor_scan import MODEL_SDK_ROOTS, SKIP_DIRS
+from aef.harness.zones import DEFAULT_AGENT_ROOT, inspect_path
 from aef.providers.base import CompletionRequest
+
+# Where the generated graph lands, repo-relative, and the single place that
+# answers the question (ADR 0143). Derived from `DEFAULT_AGENT_ROOT` rather
+# than spelled out: a second literal `agents` here is the drift ADR 0091 is
+# about, and the previous default — the repo ROOT — was the drift's most
+# expensive form. The root is Zone C, the one tree the loop is structurally
+# forbidden to propose changes to, so every candidate touching the file this
+# command generated was rejected by G0 before it was read.
+#
+# Import this constant; do not re-derive it. `aef/cli/doctor.py` and the
+# `aef adopt` templates all read it from here.
+DEFAULT_MIGRATED_OUT = f"{DEFAULT_AGENT_ROOT}/migrated/graph.py"
+
+# The pre-ADR-0143 default. NEVER written any more — it is here so that
+# `aef doctor` still discovers the graph in a repo migrated by an older
+# version, which would otherwise silently drop out of the model-call
+# advisory the day this default moved.
+LEGACY_MIGRATED_OUT = "aef_migrated.py"
 
 # The keywords a routed node can actually carry, derived from the request type
 # **itself** rather than from a second hand-written list.
@@ -194,6 +232,11 @@ class MigrateResult:
     # Set when `--force` overwrote a file that differed from what migrate
     # would have generated — i.e. one somebody edited (ADR 0140).
     backup: Path | None = None
+    # The output path as the ZONE CLASSIFIER sees it: repo-relative, POSIX,
+    # or `None` when it lands outside the repo entirely. `report()` names the
+    # zone of the path it wrote from this, so the adopter is told at the
+    # moment of writing whether the loop may ever touch the file (ADR 0143).
+    out_relative: str | None = None
 
     @property
     def total_found(self) -> int:
@@ -680,6 +723,15 @@ EVERY NODE HERE DECLARES `side_effects=SideEffect.EXTERNAL_CALL`, because
 every one of them reaches a model. See `_idempotency_key` below for what the
 key that declaration requires does and does not buy you.
 
+AND EVERY NODE ROUTES TO `reflect`, WHICH IS WHAT MAKES THIS REPO LEARN.
+`build_graph()` wires `<call site> -> reflect -> consolidate -> END`. The
+reflect node is the only thing in the runtime that writes failure memory, and
+failure memory is the only evidence the self-rewiring loop's proposer will
+act on. Route a node back to `END` instead and nothing raises: `aef loop
+cycle` just exits **0** with `no admissible failure memory: no candidate this
+cycle`, every cycle, which reads like success. See `build_graph`'s own
+docstring for what the tail costs a caller who builds `Services` by hand.
+
 WHAT THIS FILE IS NOT: a finished migration. Each node below passes the
 objective through as a single prompt and stores the result. If your function
 takes other arguments, or its result needs shaping into `StateDelta`, that is
@@ -712,10 +764,16 @@ def _header(result: MigrateResult, repo_name: str) -> str:
     imports += ["from collections.abc import Callable"]
     if result.unrouted:
         imports += ["from typing import Any"]
-    imports += ["", "from aef.kernel import END, Context, Graph, Node, Route, Services, SideEffect"]
+    imports += [
+        "",
+        "from aef.kernel import END, Context, Edge, Graph, Node, Route, Services, SideEffect",
+    ]
     if result.routed:
         imports += ["from aef.providers.base import CompletionRequest, ProviderMessage"]
-    imports += ["from aef.state import AEFState, StateDelta"]
+    imports += [
+        "from aef.reasoning.nodes import make_consolidate_node, make_reflect_node",
+        "from aef.state import AEFState, StateDelta",
+    ]
 
     return docstring + "\n".join(imports) + "\n"
 
@@ -759,6 +817,26 @@ def _key_fn_kwarg(node_id: str, indent: str) -> str:
     if len(one_line) <= 100:
         return one_line
     return f'{indent}idempotency_key_fn=_idempotency_key(\n{indent}    "{node_id}"\n{indent}),'
+
+
+def _edge_line(node_id: str, indent: str) -> str:
+    """The `Edge(from_node=..., to_node="reflect")` line, wrapped when the node
+    id pushes it past 100 columns.
+
+    Same reason as `_key_fn_kwarg`, and found the same way: the generated-file
+    ruff test failed at 125 columns on `src/services/llm/
+    anthropic_backend_client.py` + `call_llm_with_backend_and_budget`, a node
+    id this repo already had a regression test for.
+    """
+    one_line = f'{indent}Edge(from_node="{node_id}", to_node="reflect"),'
+    if len(one_line) <= 100:
+        return one_line
+    return (
+        f"{indent}Edge(\n"
+        f'{indent}    from_node="{node_id}",\n'
+        f'{indent}    to_node="reflect",\n'
+        f"{indent}),"
+    )
 
 
 def _wrap(text: str, *, indent: str = "    ") -> str:
@@ -812,7 +890,7 @@ def {node_id}(
         )
     )
     key = "{node_id}"
-    return StateDelta(working_memory={{key: result.content}}), END
+    return StateDelta(working_memory={{key: result.content}}), "reflect"
 '''
 
 
@@ -852,7 +930,7 @@ def {node_id}(
 
     result: Any = {site.function}(state.objective)
     key = "{node_id}"
-    return StateDelta(working_memory={{key: result}}), END
+    return StateDelta(working_memory={{key: result}}), "reflect"
 '''
 
 
@@ -889,18 +967,50 @@ def render(result: MigrateResult, repo_name: str) -> str:
         f"            ),"
         for n in node_ids
     )
+    reflect_edges = "\n".join(_edge_line(n, "            ") for n in node_ids)
     body.append(f'''
 
 def build_graph() -> Graph:
-    """One node per call site. Edges are NOT generated — how these compose is
-    a semantic decision `aef migrate` has no basis to make."""
+    """One node per call site, wired `<call site> -> reflect -> consolidate`.
+
+    THE REFLECT/CONSOLIDATE TAIL IS WHAT MAKES THIS REPO LEARN. `make_reflect_node`
+    writes a `MemoryRecord(kind="failure"|"success")` for every run; the
+    self-rewiring loop's proposer reads exactly those records and nothing else.
+    Delete the tail, or change a node's route back to `END`, and the loop does
+    not break loudly — it goes SILENT: `aef loop cycle` exits **0** saying
+    `no admissible failure memory: no candidate this cycle`, every cycle,
+    forever, which reads as success (measured; aef-core ADR 0139 and 0143).
+    `make_consolidate_node` then folds repeated records into
+    `Services.knowledge` so a lesson seen in two runs survives as a lesson.
+
+    WHAT THIS COSTS YOUR CALLER, stated because it is a real change. The
+    node's own return value is untouched: the call site's answer is still in
+    `state.working_memory["<node id>"]` when the run ends. But the run now
+    needs four more services — `critic`, `judge` and `memory` for reflect,
+    `knowledge` for consolidate. `aef.services.runtime.agent_services()`
+    supplies all four by default, so `aef run`, `aef loop bootstrap` and the
+    gates are unaffected. Hand-building a bare `Services(model_provider=...)`
+    and executing this graph now raises `ServiceNotConfiguredError` where it
+    previously ran — use `agent_services(...)`, or drop the tail knowing what
+    the paragraph above says it costs.
+
+    Only the ENTRY node is reached automatically. With more than one call site
+    the others are declared, routed and unreachable until you add the edges
+    that order them — how your call sites compose is a semantic decision this
+    command has no basis to make.
+    """
     return Graph(
         id="{repo_name}",
         version="0.1.0",
         nodes={{
 {listed}
+            "reflect": make_reflect_node(route="consolidate"),
+            "consolidate": make_consolidate_node(route=END),
         }},
-        edges=[],
+        edges=[
+{reflect_edges}
+            Edge(from_node="reflect", to_node="consolidate"),
+        ],
         entry_node="{node_ids[0]}",
     )
 ''')
@@ -910,7 +1020,7 @@ def build_graph() -> Graph:
 def _backup_path(out: Path) -> Path:
     """A `.bak` beside the file that never destroys an earlier one.
 
-    Overwriting `aef_migrated.py.bak` on a second `--force` would lose the
+    Overwriting `<generated>.py.bak` on a second `--force` would lose the
     first round of edits to save the second, which is the same failure one
     step along.
     """
@@ -922,14 +1032,50 @@ def _backup_path(out: Path) -> Path:
     return candidate
 
 
-def run_migrate(target_dir: Path, *, force: bool = False, write: bool = True) -> MigrateResult:
+def _resolve_out(root: Path, out: str | Path | None) -> tuple[Path, str | None]:
+    """The absolute output path, plus how the zone classifier will see it.
+
+    An absolute `--out` is honoured as given; a relative one is resolved
+    against the repo root, which is what makes the default land in Zone A.
+    The second element is the repo-relative POSIX form, or `None` when the
+    path is outside the repo — a path the zone classifier has no opinion on,
+    which `report()` says rather than guessing.
+    """
+    raw = DEFAULT_MIGRATED_OUT if out is None else out
+    path = Path(raw)
+    absolute = path if path.is_absolute() else root / path
+    absolute = Path(absolute)
+    try:
+        relative: str | None = absolute.resolve().relative_to(root).as_posix()
+    except ValueError:
+        relative = None
+    return absolute, relative
+
+
+def run_migrate(
+    target_dir: Path, *, force: bool = False, write: bool = True, out: str | Path | None = None
+) -> MigrateResult:
+    """Scan `target_dir` and write the generated graph to `out`.
+
+    `out` is repo-relative unless absolute, and defaults to
+    `DEFAULT_MIGRATED_OUT` — **inside Zone A**, because the previous default
+    was the repo root and the repo root is Zone C. Reproduced before it was
+    changed: a candidate whose only changed path was the generated file came
+    back from the harness's own `inspect_candidate` as
+    `allowed: False ... Zone C (core) — not under the agent root 'agents'`,
+    so the one file this command exists to produce was the one file the loop
+    could never improve (ADR 0143).
+
+    Parent directories are created. The never-overwrite rule and `--force`'s
+    backup (ADR 0140) apply to whatever path `out` names.
+    """
     root = target_dir.resolve()
     result = scan(root)
     if not write:
         return result
 
-    out = root / "aef_migrated.py"
-    if out.exists() and not force:
+    target, result.out_relative = _resolve_out(root, out)
+    if target.exists() and not force:
         # Same rule as `aef adopt`: never overwrite. A generated file the
         # operator has since edited is the expensive thing to lose.
         return result
@@ -943,19 +1089,57 @@ def run_migrate(target_dir: Path, *, force: bool = False, write: bool = True) ->
     # "the expensive thing to lose" and then `--force` lost it. Compare
     # against what migrate WOULD generate: identical means there is nothing
     # to preserve, different means somebody changed it.
-    if out.exists():
+    if target.exists():
         try:
-            existing = out.read_text(encoding="utf-8")
+            existing = target.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             existing = None
         if existing is not None and existing != rendered:
-            backup = _backup_path(out)
+            backup = _backup_path(target)
             backup.write_text(existing, encoding="utf-8")
             result.backup = backup
 
-    out.write_text(rendered, encoding="utf-8")
-    result.written = out
+    # The default output is two directories deep now, and neither exists in a
+    # freshly adopted repo (`aef adopt` writes `agents/README.md` but nothing
+    # under it). Created here rather than required of the adopter.
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(rendered, encoding="utf-8")
+    result.written = target
     return result
+
+
+def _zone_note(relative: str | None) -> str:
+    """One line saying which zone the written path is in, and what that costs.
+
+    ADR 0143. This command wrote to Zone C for its whole life and its report
+    said nothing about it, so the fact only surfaced later — as
+    `G0 rejected it: candidate touches paths outside Zone A` at the end of a
+    cycle, or as a `bless` that archived a Zone A tree containing none of the
+    agent. The zone is a property of the path, so it is answered by the
+    classifier the gate itself uses rather than by a string comparison here.
+    """
+    if relative is None:
+        return (
+            "OUTSIDE the repo — the zone classifier only judges repo-relative paths, "
+            "so nothing here can tell you whether the loop may touch this file"
+        )
+    verdict = inspect_path(relative)
+    if verdict.zone.value == "A":
+        return (
+            f"Zone A ({DEFAULT_AGENT_ROOT}/**) — agent-writable, the only tree the "
+            f"self-rewiring loop may propose changes to"
+        )
+    if verdict.zone.value == "B":
+        return (
+            "Zone B (the harness) — a candidate touching this is a SECURITY EVENT, not a "
+            "rejected proposal. Write the graph somewhere else."
+        )
+    return (
+        f"Zone C — NOT agent-writable. A candidate touching this file is rejected with "
+        f"`G0 rejected it: candidate touches paths outside Zone A`, and `aef loop bless` "
+        f"will archive a Zone A tree that does not contain it. Pass "
+        f"`--out {DEFAULT_MIGRATED_OUT}` (the default) to put it inside Zone A."
+    )
 
 
 def report(result: MigrateResult) -> str:
@@ -992,15 +1176,19 @@ def report(result: MigrateResult) -> str:
     for skip in result.skipped:
         lines.append(f"  SKIPPED  {skip.module}.{skip.function}:{skip.lineno}  — {skip.reason}")
     if result.backup is not None:
+        existing_name = result.out_relative or (
+            result.written.name if result.written is not None else "the generated file"
+        )
         lines += [
             "",
-            "your existing aef_migrated.py DIFFERED from what migrate generates —",
+            f"your existing {existing_name} DIFFERED from what migrate generates —",
             f"it was backed up to {result.backup} before being overwritten.",
             "If you had hand-edited it (re-expressed a system prompt, finished a",
             "node body), that work is in the backup and not in the new file.",
         ]
     if result.written is not None:
         lines += ["", f"wrote {result.written}"]
+        lines += [f"  {_zone_note(result.out_relative)}"]
     elif result.sites or result.skipped:
         lines += ["", "nothing written (file exists; pass --force to overwrite)"]
     lines += [
@@ -1009,6 +1197,17 @@ def report(result: MigrateResult) -> str:
         "state.objective as a single prompt and stores the raw result; if your",
         "function takes more than that, the node body is yours to finish.",
     ]
+    if result.sites:
+        lines += [
+            "",
+            "build_graph() wires <call site> -> reflect -> consolidate -> END. That",
+            "tail is what makes this repo LEARN: the reflect node writes the failure",
+            "memory the self-rewiring loop's proposer reads, and nothing else does.",
+            "Route a node back to END and the loop does not break — it goes silent,",
+            "exiting 0 with `no admissible failure memory: no candidate this cycle`.",
+            "Executing the graph now needs critic/judge/memory/knowledge on Services;",
+            "`aef.services.runtime.agent_services()` supplies all four by default.",
+        ]
     if result.unrouted:
         lines += [
             "",

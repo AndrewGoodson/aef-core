@@ -13,6 +13,22 @@ that tells the owner what to do next.
 
 from __future__ import annotations
 
+# Interpolated, never spelled out: a generated document that names a directory
+# the harness does not enforce, or an output path nothing writes to, is the
+# next drift (ADR 0091, ADR 0143).
+from aef.cli.migrate import DEFAULT_MIGRATED_OUT
+from aef.harness.zones import DEFAULT_AGENT_ROOT
+
+
+def _module_path(repo_relative: str) -> str:
+    """`agents/migrated/graph.py` -> `agents.migrated.graph`.
+
+    Computed rather than written beside the path, because the two drifting
+    apart is how a document ends up telling an adopter to import a module
+    nothing writes (ADR 0091).
+    """
+    return repo_relative.removesuffix(".py").replace("/", ".")
+
 
 def render_loop_md(repo_name: str) -> str:
     return f"""# The self-rewiring loop in {repo_name}
@@ -29,12 +45,19 @@ sequence, the cycle re-run, the output quoted (aef-core ADR 0139). It is at
 the top rather than in step five because each one makes `aef loop cycle` exit
 **0 having done nothing**, which reads like success.
 
-1. **The graph under `agents/`** — Zone A. Otherwise:
+1. **The graph under `{DEFAULT_AGENT_ROOT}/`** — Zone A. Otherwise:
    `G0 rejected it: candidate touches paths outside Zone A`
+   *`aef migrate` now does this for you: its default `--out` is
+   `{DEFAULT_MIGRATED_OUT}` and its report names the zone of the path it
+   wrote (aef-core ADR 0143). It wrote `aef_migrated.py` to the repo root —
+   Zone C — until then, so check any graph left over from an older run.*
 2. **At least one module-level numeric constant in it.** Otherwise:
    `the proposer produced nothing from the available evidence`
 3. **A node that actually returns `"reflect"` as its route.** Otherwise:
    `no admissible failure memory: no candidate this cycle`
+   *`aef migrate` now does this for you too: the graph it generates is wired
+   `<call site> -> reflect -> consolidate -> END`. If you write the graph by
+   hand, this one is yours.*
 4. **At least one FAILING `aef run --memory <file>`**, pointed at the same
    file `aef loop cycle --memory` reads. Otherwise: the same line as 3.
    `aef loop bootstrap` cannot do this for you — it gives every input its own
@@ -45,11 +68,21 @@ the top rather than in step five because each one makes `aef loop cycle` exit
 7. **`--entrypoint` on the cycle itself.** Otherwise:
    `no entrypoint configured: G2/G3 will refuse`
 
-**`aef migrate` writes none of the first four.** Its generated node has no
-constants and no reflect node, and `aef_migrated.py` lands at the repo root,
-which is Zone C — a candidate touching it is rejected by G0. Treat that file
-as the plumbing for one call site, and put the graph the loop improves under
-`agents/`.
+**`aef migrate` writes two of the first four, and cannot write the other
+two.** It lands the graph at `{DEFAULT_MIGRATED_OUT}` (item 1, Zone A) and
+wires `<call site> -> reflect -> consolidate -> END` (item 3). Items 2 and 4
+are still yours, and neither is an oversight:
+
+- **no module-level numeric constant** — item 2 is the shape the rule-based
+  proposer mutates, and a generated wrapper has no number of its own to
+  invent. Your node body is where one goes.
+- **`aef migrate` cannot make a run fail** — item 4 is an observation, and
+  ADR 0060's rule holds here as everywhere: the loop records what happened
+  and never invents a failure.
+
+The previous version of this paragraph said migrate writes *none* of the
+four. That was true when ADR 0139 measured it and false the day ADR 0143
+landed; it is corrected here rather than quietly deleted.
 
 **Your first corpus cannot come from a model-calling graph unless you have a
 credential.** The cassette the gates later replay from does not exist until
@@ -59,13 +92,18 @@ something makes the call once, so `aef loop bootstrap` on a routed node exits
 a graph that calls no model. It is not a limitation you can document your way
 around.
 
-**Add `__pycache__/` to `.gitignore` before you bless.** `aef adopt` does not
-write one. Compiled bytecode committed under `agents/` by an ordinary
-`git add -A` is Zone A content the baseline does not have, and G5 charges it
-as drift: measured at **0.468 of a 0.500 budget** for a one-line candidate,
-against **0.024** for the same candidate with the bytecode excluded.
+**Check `__pycache__/` is in `.gitignore` before you bless.** `aef adopt`
+writes one now (aef-core ADR 0142) but **skips an existing `.gitignore`
+rather than appending to it**, and says so in the migration checklist — so a
+repo that already had one may still be missing the pattern. Compiled bytecode
+committed under `{DEFAULT_AGENT_ROOT}/` by an ordinary `git add -A` is Zone A
+content the baseline does not have, and G5 charges it as drift: measured at
+**0.468 of a 0.500 budget** for a one-line candidate, against **0.024** for
+the same candidate with the bytecode excluded.
 
-The sequence that works, start to finish:
+The sequence that works, start to finish. `<your.graph.module>` is the import
+path of the graph you want the loop to improve; if `aef migrate` wrote it,
+that is `{_module_path(DEFAULT_MIGRATED_OUT)}`.
 
 ```
 aef migrate --dir .
