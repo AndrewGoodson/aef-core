@@ -466,6 +466,80 @@ def test_the_monitor_ignores_a_blessed_baseline(tmp_path: Path) -> None:
     assert run.checked == 0, "a baseline has no predecessor and must not be rolled back"
 
 
+def test_bless_refuses_an_agent_path_outside_the_tree_it_would_archive(tmp_path: Path) -> None:
+    """K3's reproduction, in a test (ADR 0147).
+
+    Run against an adopted repo, `aef loop bless --agent-path aef_migrated.py`
+    printed `blessed aef_migrated.py as baseline v1` and archived one file:
+    `agents/README.md`. `bless` checked `path_exists_at(ref, agent_path)` and
+    then archived the Zone A tree — two different questions, and the message
+    named the first while doing the second.
+    """
+    repo = _committed_repo(tmp_path, ROUTED)
+    outside = repo / "aef_migrated.py"
+    outside.write_text("RETRY_BUDGET = 3\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "migrated"], check=True, capture_output=True
+    )
+
+    with pytest.raises(BlessError) as exc:
+        bless(
+            repo_root=repo,
+            state_root=tmp_path / "state",
+            agent_path="aef_migrated.py",
+            graph_id="g",
+            at=NOW,
+        )
+    # BOTH paths, because either alone reads as a typo rather than a mismatch.
+    assert "aef_migrated.py" in str(exc.value)
+    assert "agents" in str(exc.value)
+
+    # And nothing was archived, so the `blessed baseline` obligation stays
+    # red rather than going green on evidence unrelated to the agent.
+    assert archive.versions(tmp_path / "state" / "archive", "g") == ()
+
+
+def test_bless_refuses_when_zone_a_is_empty(tmp_path: Path) -> None:
+    """The sibling case, and the branch that used to carry `pragma: no cover -
+    agent_path is inside agent_root in practice`. That assumption is the one
+    the defect above lived inside, so the branch is reached deliberately: a
+    committed agent at the repo root and no Zone A at all."""
+    repo = tmp_path / "rootonly"
+    (repo).mkdir()
+    (repo / "aef_migrated.py").write_text("RETRY_BUDGET = 3\n")
+    for args in (
+        ("init", "-q", "-b", "main"),
+        ("config", "user.email", "t@example.com"),
+        ("config", "user.name", "t"),
+        ("add", "-A"),
+        ("commit", "-qm", "init"),
+    ):
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+    with pytest.raises(BlessError, match="no files under 'agents'"):
+        bless(
+            repo_root=repo,
+            state_root=tmp_path / "state",
+            agent_path="aef_migrated.py",
+            graph_id="g",
+            at=NOW,
+        )
+
+
+def test_bless_accepts_the_same_file_spelled_with_a_leading_dot_slash(tmp_path: Path) -> None:
+    """The refusal must not fire on a spelling. Git reports
+    `agents/graph.py`; a person types either form."""
+    entry = bless(
+        repo_root=_committed_repo(tmp_path, ROUTED),
+        state_root=tmp_path / "state",
+        agent_path="./agents/graph.py",
+        graph_id="g",
+        at=NOW,
+    )
+    assert entry.version == 1
+
+
 def test_bless_refuses_when_there_is_no_agent_source(tmp_path: Path) -> None:
     with pytest.raises(BlessError, match="nothing to bless"):
         bless(

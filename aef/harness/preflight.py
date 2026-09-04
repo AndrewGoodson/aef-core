@@ -36,7 +36,7 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from aef.harness import archive, ledger
 from aef.harness.corpus import Expected, load_corpus
@@ -460,6 +460,12 @@ def _zone_a_files(repo: GitRepo, ref: str, agent_root: str) -> dict[str, bytes]:
     return {p: repo.run_bytes("show", f"{ref}:{p}") for p in sorted(paths)}
 
 
+def _normalise(path: str) -> str:
+    """One spelling for one file, so `./agents/x.py` and `agents/x.py` are the
+    same answer. Git reports the second; a person types either."""
+    return PurePosixPath(path.replace("\\", "/")).as_posix().removeprefix("./")
+
+
 def bless(
     *,
     repo_root: Path,
@@ -503,8 +509,35 @@ def bless(
         )
 
     files = _zone_a_files(repo, ref, agent_root)
-    if not files:  # pragma: no cover - agent_path is inside agent_root in practice
+    if not files:
         raise BlessError(f"no files under {agent_root!r} at {ref}; nothing to bless")
+
+    # Two different questions, and until ADR 0147 this function asked the
+    # first and answered the second. `path_exists_at` above asks "does the
+    # agent exist?"; `_zone_a_files` asks "what will be archived?" — and
+    # nothing checked that the answer to the second contains the subject of
+    # the first. Reproduced against an adopted repo: `bless --agent-path
+    # aef_migrated.py` printed `blessed aef_migrated.py as baseline v1` while
+    # archiving one file, `agents/README.md` (ADR 0139's second reported
+    # defect).
+    #
+    # The consequence is not cosmetic. The `blessed baseline` obligation goes
+    # green on evidence unrelated to the agent, and G5 then measures every
+    # candidate's structural drift against a baseline that never contained
+    # the file the candidate changes — so the first real proposal is charged
+    # for the whole agent as an addition. Refusing here is the only place the
+    # two paths are both in hand.
+    if _normalise(agent_path) not in {_normalise(p) for p in files}:
+        shown = ", ".join(sorted(files)[:3]) + ("..." if len(files) > 3 else "")
+        raise BlessError(
+            f"{agent_path} exists at {ref} but is NOT inside the tree this would archive: "
+            f"{agent_root!r} at {ref} holds {len(files)} file(s) ({shown}). A baseline is "
+            f"the whole Zone A tree, and G5 measures every candidate's drift against it, so "
+            f"blessing here would report {agent_path} as blessed while archiving a tree that "
+            f"does not contain it. Move the agent under {agent_root!r} (Zone A is the only "
+            f"place the loop may propose changes), or pass --agent-root naming the tree "
+            f"{agent_path} actually lives in."
+        )
 
     entry = archive.record(
         state_root / "archive",
