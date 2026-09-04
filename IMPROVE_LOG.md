@@ -174,3 +174,52 @@ Dimension 3: 3 → **7**. Total: **59 → 63**.
 **Deliberately left.** Self-preference control — nothing here compares model
 outputs. A harder corpus where the judges disagree, which is what would
 justify turning this on.
+
+---
+
+## I4 — Curation: demote, never delete (2026-09-03)
+
+**Branch:** `improve/i4-curation`, off `main` (`f167bd7`).
+**Rubric claim:** dimension 2, up to +6. Total before: 63.
+
+**Reproduce (RUN).** Under a tight budget, entries for resolved failures and
+live ones matched the query equally; which got in was an id tie-break
+(`test_curation_buys_live_coverage_under_a_tight_budget`, arm hl=0: 2 of 3
+live lessons at budget 400). No curation signal existed.
+
+**Expectation.** `runs_since_last_seen` computed per consolidation from
+records (a field, not content — rendering costs budget); retriever demotes by
+`hl/(hl+runs_since)`, deletes nothing; default set by a sweep. Metric fixed
+first: live-lesson coverage. Predicted hl=0 → 1 of 3.
+
+**Measurement.**
+
+```
+first attempt put runs_since into content: ADR 0110 coverage A/B fell 6 -> 5 at budget 400
+  -> moved to a KnowledgeEntry field; A/B back to 6; field costs no budget (asserted)
+
+live coverage of 3, budget 400, R=3, Q=4:    hl=0 -> 2   hl=2 -> 3   hl=5 -> 3   hl=10 -> 3
+total coverage of 6, budget 2000:            6 at every hl
+control (Q=0):                               identical coverage every budget; tie-break now recency
+runs_since (R=2,Q=3):                        resolved fetch/parse/auth 23/22/21; live settle/notify/reconcile 2/1/0
+ADR 0110 coverage A/B with default hl=5:     8 passed, unchanged
+
+predictions wrong, recorded: hl=0 measured 2 not 1; control gave identical coverage, not identical order
+
+mutations (each -> tests fail, reverted):
+  M19 count the entry's own run as later   1 failed
+  M20 never compute staleness              4 failed
+  M21 retriever ignores freshness          3 failed
+
+pytest -q          1672 passed (from 1665; +7, none removed)
+mypy aef examples  123 files clean
+ruff check / format   clean
+```
+
+**Verdict.** Curation exists, is measured, wins by one live lesson at the
+tight budget and costs nothing at the generous one; default on at 5.
+Dimension 2: 8 → **12**. Total: **63 → 67**.
+
+**Deliberately left.** The ACE signal proper (retrieved → outcome) — no node
+writes `retrieved_context`, so nothing can produce it. Curation of lesson
+*text* — entries remain the latest occurrence's verbatim feedback.

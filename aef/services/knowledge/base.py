@@ -68,6 +68,12 @@ class KnowledgeEntry:
     first_seen: datetime | None = None
     last_seen: datetime | None = None
     tags: tuple[str, ...] = field(default_factory=tuple)
+    # Distinct runs of this agent recorded AFTER `last_seen` — how long the
+    # lesson has gone without recurring (ADR 0116). Recomputed by every
+    # consolidation from the records, never incremented; a field rather than
+    # a `content` key so it costs no retrieval budget (rendering `content` is
+    # what the retriever spends tokens on, and I4 measured that trade).
+    runs_since_last_seen: int = 0
 
     def __post_init__(self) -> None:
         # Validation here rather than at write/serialise time — ADR 0108's
@@ -86,6 +92,10 @@ class KnowledgeEntry:
                 f"source_record_ids must be unique; got {self.source_record_ids!r}. "
                 f"A repeated id inflates occurrence_count, which is the entry's only "
                 f"measure of how well-evidenced it is."
+            )
+        if self.runs_since_last_seen < 0:
+            raise ValueError(
+                f"runs_since_last_seen must be non-negative; got {self.runs_since_last_seen}"
             )
         if (
             self.first_seen is not None
