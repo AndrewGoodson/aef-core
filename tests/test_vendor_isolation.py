@@ -3,68 +3,38 @@ and `aef/services/*/adapters/`. This AST-scans `aef/kernel/`,
 `aef/reasoning/`, and `aef/agents/` and fails if any of them import a
 vendor SDK directly. CI runs this as its own step so the isolation can't
 regress silently.
+
+**The scanner itself now lives in `aef/harness/vendor_scan.py`.** It was
+defined here for five phases, which meant the one detector that knows what a
+vendor SDK import looks like could only ever be pointed at this repo — an
+adopted repo's node constructing its own `anthropic.Anthropic()` bypasses the
+policy engine and the fallback chain identically, and nothing looked (ADR
+0137). This file keeps the constraint and the scanner's own regression tests;
+`aef/harness/preflight.py` and `aef/cli/migrate.py` share the same code and
+the same list.
 """
 
 from __future__ import annotations
 
-import ast
 from pathlib import Path
+
+from aef.harness.vendor_scan import (
+    MODEL_SDK_ROOTS,
+    VENDOR_TOP_LEVEL_MODULES,
+    scan_file,
+    scan_source,
+)
 
 REPO_ROOT = Path(__file__).parent.parent
 BANNED_ZONES = ["aef/kernel", "aef/reasoning", "aef/agents"]
-
-# Every vendor/product SDK named or implied by the research report and
-# blueprint as a pluggable backend. Not exhaustive by construction — extend
-# this set whenever a new adapter is added under providers/ or
-# services/*/adapters/.
-BANNED_TOP_LEVEL_MODULES = frozenset(
-    {
-        "anthropic",
-        "openai",
-        "mem0",
-        "mem0ai",
-        "neo4j",
-        "falkordb",
-        "memgraph",
-        "temporalio",
-        "psycopg",
-        "psycopg2",
-        "opentelemetry",
-        "dspy",
-        "gepa",
-        "llmlingua",
-        "ragas",
-        "deepeval",
-        "langfuse",
-        "google",
-    }
-)
 
 
 def _iter_python_files(zone: Path) -> list[Path]:
     return sorted(zone.rglob("*.py"))
 
 
-def _top_level_module(name: str) -> str:
-    return name.split(".", 1)[0]
-
-
 def _find_violations(path: Path) -> list[str]:
-    tree = ast.parse(path.read_text(), filename=str(path))
-    violations: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                mod = _top_level_module(alias.name)
-                if mod in BANNED_TOP_LEVEL_MODULES:
-                    violations.append(f"{path}:{node.lineno}: import {alias.name}")
-        elif isinstance(node, ast.ImportFrom):
-            if node.module is None or node.level > 0:
-                continue  # relative import, e.g. "from . import x" — always in-package
-            mod = _top_level_module(node.module)
-            if mod in BANNED_TOP_LEVEL_MODULES:
-                violations.append(f"{path}:{node.lineno}: from {node.module} import ...")
-    return violations
+    return [str(v) for v in scan_file(path)]
 
 
 def test_no_vendor_imports_in_banned_zones() -> None:
@@ -132,3 +102,45 @@ def test_scanner_catches_import_inside_type_checking_block(tmp_path: Path) -> No
         "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import anthropic\n"
     )
     assert len(_find_violations(bad_file)) == 1
+
+
+# --------------------------------------------------------------------------
+# The lift itself (ADR 0137)
+# --------------------------------------------------------------------------
+
+
+def test_the_scanner_reports_which_vendor_and_where(tmp_path: Path) -> None:
+    """The preflight obligation names the module and the vendor in its
+    message, so the scanner must carry both rather than a formatted string."""
+    bad_file = tmp_path / "svc.py"
+    bad_file.write_text("import os\nimport anthropic\n")
+    (found,) = scan_file(bad_file)
+    assert found.module == "anthropic"
+    assert found.lineno == 2
+    assert found.statement == "import anthropic"
+
+
+def test_model_sdk_roots_are_a_subset_of_the_vendor_list() -> None:
+    """One list, not two. `migrate` asks a narrower question than constraint
+    #3 does — `opentelemetry` is a vendor SDK and is not a model call — but a
+    root it treats as a model SDK that the isolation list does not know about
+    would be exactly the drift ADR 0091 names."""
+    assert MODEL_SDK_ROOTS <= VENDOR_TOP_LEVEL_MODULES, sorted(
+        MODEL_SDK_ROOTS - VENDOR_TOP_LEVEL_MODULES
+    )
+
+
+def test_an_unparseable_file_is_not_reported_as_a_vendor_import(tmp_path: Path) -> None:
+    """A syntax error is a file the scanner cannot speak about. Reporting it
+    as a violation would put a false claim in the adopter's message."""
+    bad_file = tmp_path / "broken.py"
+    bad_file.write_text("def f(:\n")
+    assert scan_file(bad_file) == []
+
+
+def test_scan_source_takes_text_so_generated_code_can_be_checked() -> None:
+    """`aef migrate` renders a module before writing it; the tests that assert
+    the generated node does not import a vendor SDK scan the text, not a
+    file."""
+    assert scan_source("import anthropic\n", path=Path("<generated>")) != []
+    assert scan_source("from aef.kernel import END\n", path=Path("<generated>")) == []

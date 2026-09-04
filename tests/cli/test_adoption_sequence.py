@@ -193,8 +193,15 @@ def test_loop_md_documents_every_obligation(adopted: tuple[Path, Path]) -> None:
         "Observations",
         "Halt notification",
         "blessed baseline",
+        # ADR 0137. The only obligation an adopter cannot discover by being
+        # stuck: a node that builds its own client runs, and doctor was green.
+        "Model calls that go through `Services`",
     ):
         assert obligation in text, f"LOOP.md does not mention: {obligation}"
+    # The count doctor prints and the count LOOP.md promises must agree — two
+    # numbers nobody compares is how this repo keeps finding drift (ADR 0091).
+    assert "Six things you must supply" in text
+    assert "all six obligations" in text
     # The trap that catches everyone once.
     # An edge alone does not route, AND a route with no edge is refused by
     # the executor. LOOP.md documented only the first half, so an adopter

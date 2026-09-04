@@ -1,13 +1,20 @@
-"""Do the five things an adopter must supply actually exist?
+"""Do the things an adopter must supply actually exist?
 
 Each obligation was discovered by an adopter (or by me, in this repo) being
 stuck, one command at a time, in the worst possible order: run the loop, get
-a refusal, fix one thing, get the next refusal. This reports all five at once
-with the command that fixes each.
+a refusal, fix one thing, get the next refusal. This reports all of them at
+once with the command that fixes each.
 
 `bless` lives here too, because LOOP.md obligation 5 told owners to archive a
 blessed baseline and **no command existed to do it** — the obligation was
 literally unmeetable and G5 refused every candidate forever (ADR 0073).
+
+The sixth obligation, *model calls visible*, was added by ADR 0137 and is the
+only one an adopter cannot discover by being stuck: a node that constructs its
+own vendor client works perfectly, `aef doctor` reports green, and the failure
+arrives much later as a gate that either makes live calls or scores the
+candidate 0 — because the call was invisible to the recorder, so the scenario
+carries no cassette to replay.
 """
 
 from __future__ import annotations
@@ -20,6 +27,7 @@ from pathlib import Path
 from aef.harness import archive, ledger
 from aef.harness.corpus import Expected, load_corpus
 from aef.harness.git import GitRepo
+from aef.harness.vendor_scan import VendorImport, scan_file
 from aef.harness.zones import DEFAULT_AGENT_ROOT
 
 
@@ -45,14 +53,15 @@ class Preflight:
 
     def render(self) -> str:
         width = max(len(o.name) for o in self.obligations)
-        lines = ["Loop readiness — five things you must supply", ""]
+        count = len(self.obligations)
+        lines = [f"Loop readiness — {count} things you must supply", ""]
         for o in self.obligations:
             lines.append(f"  [{'OK' if o.met else '--'}] {o.name:<{width}}  {o.detail}")
             if not o.met:
                 lines.append(f"       fix: {o.fix}")
         lines.append("")
         lines.append(
-            "All five green — the loop can gate a candidate on real evidence."
+            f"All {count} green — the loop can gate a candidate on real evidence."
             if self.ready
             else "Until every line is OK the gates refuse for lack of evidence, which is "
             "correct behaviour and not a bug."
@@ -111,6 +120,99 @@ def _reflect_is_routed_to(agent_source: Path) -> tuple[bool, str]:
     return (
         False,
         "a reflect node exists but nothing routes to it — an Edge does not wire it",
+    )
+
+
+def _module_candidates(repo_root: Path, dotted: str) -> list[Path]:
+    """Where an absolute `import a.b.c` could live inside this repo.
+
+    Repo-root-relative, because that is where `aef run <module>` and the node
+    body `aef migrate` generates (`from src.my_agent import run_agent`) both
+    resolve from: the adopter's repo root is on `sys.path`. `a.b` is also
+    tried as `a/b.py` when written `from a import b`, since that form names a
+    module as often as it names a symbol.
+    """
+    parts = dotted.split(".")
+    return [
+        repo_root.joinpath(*parts).with_suffix(".py"),
+        repo_root.joinpath(*parts, "__init__.py"),
+    ]
+
+
+def _reachable_modules(repo_root: Path, entry: Path) -> list[Path]:
+    """Every in-repo `.py` file the entry file reaches by import, transitively.
+
+    Only files that resolve inside `repo_root` are followed. A third-party
+    import is not the adopter's code and is not this obligation's business —
+    `anthropic` itself is expected to import `anthropic`.
+
+    Bounded by the visited set; a circular import terminates.
+    """
+    entry = entry.resolve()
+    seen: set[Path] = {entry}
+    queue: list[Path] = [entry]
+    order: list[Path] = [entry]
+
+    while queue:
+        current = queue.pop()
+        try:
+            tree = ast.parse(current.read_text(encoding="utf-8"), filename=str(current))
+        except (SyntaxError, UnicodeDecodeError, OSError):
+            continue
+        dotted_names: list[str] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                dotted_names.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                dotted_names.append(node.module)
+                # `from a.b import c` — `c` may itself be a module.
+                dotted_names.extend(f"{node.module}.{a.name}" for a in node.names)
+        for dotted in dotted_names:
+            for candidate in _module_candidates(repo_root, dotted):
+                resolved = candidate.resolve()
+                if resolved in seen or not candidate.is_file():
+                    continue
+                seen.add(resolved)
+                order.append(resolved)
+                queue.append(resolved)
+    return order
+
+
+def model_calls_are_visible(repo_root: Path, agent_path: str) -> tuple[bool, str]:
+    """No module reachable from the graph may import a vendor SDK.
+
+    This is constraint #3 pointed at the adopter instead of at this repo. The
+    scanner is the one `tests/test_vendor_isolation.py` has run since Phase 0
+    (`aef/harness/vendor_scan.py`); the difference is only where it is aimed.
+
+    A node that builds its own client is not a style problem. It bypasses the
+    policy engine, the fallback chain and the harness login, and — the part
+    that costs the adopter a whole loop — it is invisible to
+    `aef/harness/recorder.py`, so its scenario carries **no** `RecordedCall`.
+    Replay with `on_miss="fail"` then has nothing to serve and nothing to
+    refuse: the node reaches the vendor live, or fails for want of a
+    credential and scores 0. Both were reproduced (ADR 0137).
+    """
+    entry = (repo_root / agent_path).resolve()
+    if not entry.is_file():
+        return False, f"no agent source at {entry} — nothing to scan"
+
+    modules = _reachable_modules(repo_root, entry)
+    found: list[VendorImport] = []
+    for module in modules:
+        found.extend(scan_file(module))
+    if not found:
+        return True, f"{len(modules)} reachable module(s), none imports a model SDK"
+
+    first = found[0]
+    try:
+        where = first.path.relative_to(repo_root.resolve())
+    except ValueError:  # pragma: no cover - reachability keeps them inside the repo
+        where = first.path
+    extra = f" (+{len(found) - 1} more)" if len(found) > 1 else ""
+    return (
+        False,
+        f"{where}:{first.lineno} imports {first.module}{extra} — the harness cannot see it",
     )
 
 
@@ -193,6 +295,23 @@ def preflight(
             met=bool(versions),
             detail=f"{len(versions)} archived version(s)",
             fix=f"aef loop bless --repo . --state {state_root} --agent-path {agent_path}",
+        )
+    )
+
+    # 6 — every model call reaches the harness (ADR 0137)
+    visible, detail = model_calls_are_visible(repo_root, agent_path)
+    checks.append(
+        Obligation(
+            name="model calls visible",
+            met=visible,
+            detail=detail,
+            fix=(
+                "aef migrate --dir . --force. Route the call through the container: "
+                "`services.require_model_provider().complete(...)` instead of a client the "
+                "node builds itself. A node with its own client bypasses the policy engine "
+                "and the fallback chain, and the recorder captures no RecordedCall for it — "
+                "so the gates replay nothing and either call the vendor live or score it 0."
+            ),
         )
     )
 
