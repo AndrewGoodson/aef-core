@@ -92,6 +92,27 @@ def policy_config_from_payload(payload: dict[str, Any] | None) -> PolicyConfig:
     )
 
 
+def policy_payload(policy: PolicyConfig | None) -> dict[str, Any] | None:
+    """The inverse of `policy_config_from_payload`, for the isolated path.
+
+    The node bodies run in a worker process (ADR 0094), so the policy the
+    harness supplies has to cross a pipe to reach the engine those nodes
+    consult. `None` stays `None` — deny-by-default is what an unconfigured
+    run gets on both sides, and encoding it as an empty object would make
+    "no policy" and "an empty policy" indistinguishable on the wire.
+
+    Sorted, because the frame is compared byte-for-byte in tests and a
+    frozenset's iteration order is not stable across processes.
+    """
+    if policy is None:
+        return None
+    return {
+        "allowed_scopes": sorted(policy.allowed_scopes),
+        "forbidden_tool_names": sorted(policy.forbidden_tool_names),
+        "require_hitl_above_risk": policy.require_hitl_above_risk,
+    }
+
+
 def run_scenario(
     scenario: Scenario,
     graph: Graph,

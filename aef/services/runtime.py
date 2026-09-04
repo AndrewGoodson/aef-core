@@ -125,11 +125,19 @@ def agent_services(
         # ServiceNotConfiguredError in the gate — the fifth service to drift
         # between the two lists. Built over the SAME stores this container
         # carries, so it can never read a different memory than the agent
-        # writes. `agent_id=None` here is not the widening default the
-        # adversarial round found: the caller who has a durable, multi-agent
-        # store (`aef run`) builds a scoped retriever from config and passes
-        # it in; this default only ever fronts a throwaway store, and the gate
-        # paths pass the scenario's agent id besides.
+        # writes.
+        #
+        # `agent_id` is the CALLER'S to supply and every caller with a durable,
+        # multi-agent store must supply it. ADR 0118 claimed the `None` default
+        # "only ever fronts a throwaway store"; that was wrong, and a seam
+        # reproduction showed how: `aef run --memory M` with no `context:`
+        # block gets `None` from `build_retriever`, so THIS default was built
+        # over the durable file store and retrieved another tenant's record.
+        # `aef run` now passes `agent_id`; the gate paths already pass the
+        # scenario's. See ADR 0125 and the erratum on ADR 0118. The default
+        # stays `None` because "all agents" is the honest reading of an
+        # unspecified caller — the fix is that no real caller leaves it
+        # unspecified over a shared store.
         from aef.services.context.memory_retriever import MemoryRetriever
 
         retriever = MemoryRetriever(

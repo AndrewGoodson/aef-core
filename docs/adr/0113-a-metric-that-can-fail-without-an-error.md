@@ -70,6 +70,23 @@ test. Full record in `IMPROVE_LOG.md`.
   into the other is a decision this ADR does not make.
 - Rubric dimension 1: 8 → 13. Not the +7 the worklist allowed: keep/revert
   on the metric (I2) is what makes it a *loop*.
+- **`elapsed_ms` is not the same quantity on both paths** (added 2026-09-03,
+  ADR 0125). One scoring function serves both runners, and it does — but the
+  number handed to it differs by construction. `isolated_suite` starts its
+  stopwatch in the parent and stops it after the executor returns, and
+  between those two points every node body crossed a pipe to a worker
+  process and back; the in-process runner has no such hop. Measured on the
+  4-node fixture in `seam/repro_budget_isolated.py`, three runs each:
+  in-process **0.082 / 0.119 / 0.125 ms**, isolated **0.715 / 0.767 /
+  0.790 ms** — roughly 0.18 ms of IPC per node, about 6x the total on a
+  graph this small. A `budget_ms` calibrated with `aef loop score` at 5x the
+  in-process elapsed (0.417 ms) scores 1.0 in-process and 0.0 at the gate,
+  on identical code. The stopwatch is deliberately NOT changed: timing only
+  the executor's inner work would stop measuring what a candidate costs to
+  run under the gate, and subtracting an estimate of IPC would be inventing
+  a number. The fix is disclosure — `aef loop score --help` now says it, and
+  a budget should be set from an isolated run, or with roughly 0.2 ms per
+  node of headroom.
 
 ## Confidence
 

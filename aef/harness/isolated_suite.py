@@ -25,6 +25,7 @@ from aef.harness.evaluation import score_of, score_scenario
 from aef.harness.isolated import IsolationError, NodeWorkerSession, graph_from
 from aef.harness.outcome import Outcome, classify
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
+from aef.harness.scenario_runner import policy_payload
 from aef.kernel import GraphExecutor
 from aef.security.tool import PolicyConfig
 from aef.services.runtime import agent_services
@@ -148,16 +149,27 @@ def _run_one(
     cassette_miss: str = "fail",
     live_provider: dict[str, str] | None = None,
 ) -> ScenarioResult:
-    # The node bodies run in the worker, so the cassette has to be there too:
-    # a provider on the parent's Services would answer nothing. Sent BEFORE
-    # the stopwatch starts — shipping the recording is the harness's cost,
-    # not the candidate's.
+    # The node bodies run in the worker, so everything a node may `require_*`
+    # has to be there too: a provider — or a POLICY ENGINE — on the parent's
+    # `Services` answers nothing, because the parent's copy is handed to a
+    # proxy that immediately serialises the call away. The policy was missing
+    # here from ADR 0094 until ADR 0125: the worker's `agent_services()` took
+    # no arguments, so every node consulting the engine was judged
+    # deny-by-default and candidate, incumbent and cohort all scored 0.0.
+    #
+    # One frame, not two: a second channel is a second list to drift (ADR
+    # 0091). Sent BEFORE the stopwatch starts — shipping the recording and
+    # the harness's own configuration is the harness's cost, not the
+    # candidate's.
     try:
         session.configure(
             {
                 "model_calls": [c.to_payload() for c in scenario.model_calls],
                 "on_miss": cassette_miss,
                 "live": live_provider if cassette_miss == "live" else None,
+                "policy": policy_payload(policy),
+                "agent_id": scenario.initial_state.agent_id,
+                "clock_values": [v.isoformat() for v in scenario.clock_values],
             }
         )
     except IsolationError as exc:

@@ -687,3 +687,132 @@ is the second source of truth ADR 0091 forbids. One flake, seen once and not
 reproduced twice: `test_closing_the_session_leaves_no_container_running`
 compares host-wide container state and fails if anything else on the machine
 starts one.
+
+---
+
+## Fix wave A — the seams the assembled paths left open (2026-09-03)
+
+**Branch:** `fix/seams-a`, off `main` (`705543d`).
+**Rubric claim:** none. No score moves; one dimension's *evidence* becomes true.
+
+**Reproduce (RUN, before any change).** Six findings from the post-merge
+seam-hunter, every one reproduced by executing an assembled path, none by
+reading it. Scripts kept in `.scratch/`; commands and numbers in ADR 0125.
+
+```
+F1  run_graph_module x3 with --memory, retrieve->work(fails)->reflect->consolidate:
+      retrieved_signatures [] , [] , []      no knowledge chunk in any run
+F2  same script, run 0 retrieved 'memory:failure:d9d484cb…' = OTHER-TENANT's record
+F3  4-node graph, last node asks services.policy_engine, PolicyConfig{net.read}
+      given to BOTH runners:  in-process 1.0 / isolated 0.0
+F4  same script, 3 runs each:  in-process 0.082 / 0.119 / 0.125 ms
+                               isolated   0.715 / 0.767 / 0.790 ms
+      budget_ms = 5x in-process (0.417): in-process 1.0, isolated 0.0
+F7  run_loop with HEAD = loop/kept:  git status --porcelain 'M  agents/demo/graph.py'
+      HEAD commit RETRY_BUDGET = 4, worktree file = 3  (a staged reversal)
+F11 corpus of 2 demo_agent + 3 summary_agent scenarios, CohortBuilder spied:
+      graph_id='demo_agent' -> cohort saw all five
+      graph_id='default'    -> cohort saw all five
+suspected (verified): one aef.yaml with tools.allow [net.read]
+      aef loop score --config  0.0000   |  run_scenario(sc, graph, POL)  1.0
+      aef run --config         allow, no errors
+```
+
+Two were **pre-existing**, not from the I10/I11 wave: F3 since ADR 0094 moved
+node bodies into a worker; the `loop score` policy gap since ADR 0113 added
+the command.
+
+**Expectation.** Five of the six are one shape — a component that is correct,
+tested, and never handed what it needs by the thing that assembles it. Stated
+before fixing: F3 would show a *uniform* zero (candidate, incumbent, cohort),
+which is why no measurement this program has taken could see it — the demo
+agent consults no policy.
+
+**Change.**
+
+```
+F1  aef/cli/run.py: RuleBasedConsolidator().consolidate(memory, knowledge,
+      agent_id=) at run start when memory_path is given. Recompute, not a
+      file-backed store (ADR 0110: stateless by design; a second store is a
+      second source of truth, ADR 0091). `aef loop skills` already did this.
+F2  aef/cli/run.py passes agent_id= to agent_services; runtime.py's comment
+      corrected; erratum appended to ADR 0118 (not a rewrite).
+F3  ADR 0123's `configure` frame EXTENDED — never a second channel — with
+      policy (scenario_runner.policy_payload / policy_config_from_payload,
+      one encoding), agent_id and clock_values. Worker rebuilds services per
+      scenario, carrying memory+knowledge over so one worker still serves the
+      corpus. Clock cursor is independent of the parent's and says so.
+F4  NOT changed. ADR 0113 Consequences + `loop score --help` carry the numbers.
+F7  KeptBranchCheckedOutError before anything is created or gated. update-ref
+      stays: merge/reset on the checked-out branch is the loop touching a
+      person's working tree, which ADR 0114 refuses.
+F11 _scenarios_for_graph: match config.graph_id when any scenario does; gate
+      all when the corpus records ONE graph (--graph-id is the archive key, a
+      different namespace from graph.id); CorpusGraphMismatchError when it
+      records several and none match. G2 gets the same filtered scenarios —
+      it reports anything absent from `precomputed` as missing.
+sus aef/cli/loop.py cmd_score builds the policy from --config, like aef run.
+```
+
+**Measure (after).**
+
+```
+F1  run 0 [] , run 1 [] , run 2 ['failure:work']   (two distinct runs = knowledge)
+F2  run 0 retrieved []                              (OTHER-TENANT gone)
+F3  in-process 1.0 / isolated 1.0, errors 0 both
+F7  KeptBranchCheckedOutError, fake cycle called 0 times, loop/kept == main,
+      git status --porcelain ''
+F11 graph_id='demo_agent' -> ['demo-1','demo-2'];  'default' -> REFUSED by name
+sus aef loop score --config 1.0000 ; without --config 0.0000 (deny-by-default)
+```
+
+**Mutations** (perturb the production value, run, see the named test fail,
+revert; no `MUTATION` marker survives in `aef/`):
+
+```
+M1  aef run's consolidate-at-start removed        1 failed
+M2  aef run passes agent_id=None                  1 failed
+M3/M4 configure frame sends policy/agent_id None  2 failed
+M5  worker ignores the frame's policy             1 failed
+M6  the kept-branch refusal removed               2 failed
+M7  the graph_id filter computed and discarded    1 failed
+M8  a mixed corpus falls back to all scenarios    1 failed
+M9  cmd_score builds no policy from --config      1 failed
+```
+
+Every fix also ships a CONTROL test — no-policy still denies in the worker,
+the loop still runs from any other branch, a single-graph corpus still gates
+on all of it, `loop score` without `--config` is still deny-by-default —
+because a guard that also blocks the ordinary case is an outage, not a guard.
+
+```
+pytest -q          1797 passed (from 1783 at 705543d; +14, none removed)
+mypy aef examples  127 files clean
+ruff check / format   clean
+calls made: 0 (no live model calls in this wave)
+```
+
+Flaky, recorded not papered over: `test_a_timed_out_container_is_actually_dead`
+and `test_closing_the_session_leaves_no_container_running` each failed once
+across three full runs and passed in isolation and on the third full run. Both
+assert on the machine-global `docker ps` set, so a concurrent worker's
+container on the same daemon reads as a leak. Environmental, pre-existing,
+untouched by this diff.
+
+**Verdict.** No rubric score moves — nothing new was built. What changes is
+that **dimension 2's evidence is now true of the path the CLI runs**: ADR
+0118's "A1 is closed on the way" was cited for 15→17, and until this wave the
+run it describes did not happen when `aef run` ran it — `retrieved_signatures`
+was `[]` in every CLI run and the helpful/harmful tally had no producer there.
+The claim was overstated; it is now supported. Dimension 6's G3 evidence gains
+the ability to tell two candidates apart on policy-governed behaviour at all,
+which no measurement in this program could see, because `agents/demo` consults
+no policy and a uniform zero looks like a fair comparison.
+
+**Deliberately left.** `budget_ms` recorded and judged on one path (a design
+change, not a threshold). A parity test comparing the parent's `Services`
+against the WORKER's — `test_service_parity.py` compares `aef run` against the
+in-process gate path and nothing compares either against the worker, so F3's
+completeness rests on inspection rather than a test that enumerates. The
+`shadow.py` `NodeWorkerSession`, which sends no configure frame and therefore
+still runs deny-by-default (safe, but a fourth construction of the same list).

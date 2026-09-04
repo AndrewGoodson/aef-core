@@ -106,3 +106,30 @@ the real executor by an adversarial round and both fixed in ADR 0126:
 
 Neither correction changes what the tally is *used* for: it is still
 surfaced, still not a retrieval multiplier (decision 6 stands).
+## Erratum (2026-09-03, ADR 0125)
+
+Two claims above were false on the assembled `aef run` path, and both were
+found by running `run_graph_module` rather than by reading it.
+
+- **"A1 is closed on the way" (decision 5) was closed only inside one
+  process.** `aef run` built a fresh `InMemoryKnowledgeStore()` per
+  invocation, and the retrieve node runs *before* the consolidate node — so
+  across CLI runs no consolidated lesson was ever in context,
+  `retrieved_signatures` was `[]` in every run, and the helpful/harmful
+  tally of decision 3 had no producer here at all. The retriever and the
+  consolidate node did share a store; the store was empty every time.
+  `aef run` now rebuilds the knowledge store from the durable memory before
+  the graph runs (`RuleBasedConsolidator` is a stateless recompute, ADR
+  0110), so the third run of a recurring failure retrieves it.
+- **"`agent_id=None` on the default is not the widening the adversarial
+  round found ... this default only ever fronts a throwaway store"
+  (decision 4) was wrong.** Without a `context:` block `build_retriever`
+  returns `None`, so `agent_services` defaulted a retriever over the
+  *durable, multi-agent* store `--memory` names, unscoped — and it returned
+  another tenant's record. `aef run` now passes `agent_id`. The default
+  itself stays `None`, which is the honest reading of an unspecified
+  caller; what changed is that no real caller leaves it unspecified over a
+  shared store.
+
+Both are regression-tested in `tests/cli/test_run.py`. See ADR 0125 for the
+reproductions and the numbers.
