@@ -534,3 +534,66 @@ def test_the_real_cycle_emits_the_structural_candidate(flaky_repo: GitRepo, tmp_
     assert run.decision is not None and run.decision.disposition is not Disposition.REJECT, (
         run.decision.reason if run.decision else run.lines
     )
+
+
+def test_run_loop_keeps_the_real_candidate_and_stacks_from_it(
+    flaky_repo: GitRepo, tmp_path: Path
+) -> None:
+    """ADR 0114 through the REAL cycle and REAL gates, not a fake: turn 1's
+    structural candidate passes every gate and is kept on the local branch;
+    turn 2 proposes FROM the kept state, where the retry already exists, so
+    the proposer has nothing and the loop stops. main never moves."""
+    import datetime as dt
+
+    from aef.harness import ledger
+    from aef.harness.loop import run_loop
+    from aef.kernel import Context
+    from aef.reasoning.nodes import make_reflect_node
+    from aef.services.memory.in_memory import InMemoryMemoryStore
+
+    memory = InMemoryMemoryStore()
+    make_reflect_node().fn(
+        AEFState(
+            run_id="r1",
+            agent_id="flaky",
+            objective="fetch the thing",
+            errors=[{"node_id": "fetch", "message": "flaky upstream refused"}],
+        ),
+        Context(
+            run_id="r1",
+            graph_version="0.1.0",
+            trace_id="t",
+            node_id="reflect",
+            now=dt.datetime(2026, 3, 1, tzinfo=dt.UTC),
+            idempotency_key=None,
+        ),
+        agent_services(memory=memory),
+    )
+    _bless(flaky_repo, tmp_path / "state")
+    config = _config(flaky_repo, tmp_path, load_corpus(flaky_repo.root / "corpus"))
+    main_before = flaky_repo.rev_parse("main")
+    with _agent_repo_build_commands():
+        run = run_loop(
+            config,
+            now=NOW,
+            workdir=tmp_path / "work",
+            turns=3,
+            budget_seconds=600.0,
+            memory=memory,
+            agent_path="agents/flaky/graph.py",
+        )
+    assert run.kept_count == 1, run.lines
+    assert RETRY_CONSTANT in flaky_repo.show("loop/kept", "agents/flaky/graph.py")
+    assert RETRY_CONSTANT not in flaky_repo.show("main", "agents/flaky/graph.py")
+    assert flaky_repo.rev_parse("main") == main_before
+    # Observed: turn 2 proposes a numeric tweak FROM the kept state and the
+    # gates reject it; turn 3 re-proposes the identical tree and the driver
+    # stops rather than spend N+2 corpus passes on it again. Either stop
+    # reason is the loop being bounded by its own evidence.
+    assert run.reverted_count >= 1, run.lines
+    assert "already rejected" in run.stopped_because or "no candidate" in run.stopped_because, (
+        run.stopped_because
+    )
+    kinds = [e.kind for e in ledger.read(config.paths.ledger_dir)]
+    assert ledger.EventKind.KEPT in kinds
+    assert ledger.EventKind.MERGED not in kinds

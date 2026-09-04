@@ -70,3 +70,56 @@ they are `must_fail`-shaped and fail by error today; a check would restate
 that. `Expected.MUST_PASS` on the checked ones: `expected` and `checks` say
 different things (a claim about the task vs. a claim about the answer) and
 conflating them is a separate decision. ADR 0113 records both.
+
+---
+
+## I2 — Keep/revert on the metric, inside the gates (2026-09-03)
+
+**Branch:** `improve/i2-keep-revert`, off `main` (`346da37`).
+**Rubric claim:** dimension 1, up to +5. Total before: 55.
+
+**Reproduce (RUN).** `cycle()` proposes from `base_ref` every time and an
+accepted candidate (every gate passed → `ESCALATE`, Tier-1 off) goes nowhere;
+`test_successive_cycles_do_not_compound` pins it. autoresearch's result came
+from stacking kept changes; this loop could not stack anything.
+
+**Expectation.** `run_loop`: N turns / wall-clock budget; each turn proposes
+from a local `loop/kept` branch; every-gate-passed advances that branch
+(guarded `update-ref`, `KEPT` ledger event); rejection leaves it; `main`
+never moves (asserted); stops on turns, budget, halt, no candidate, or a
+candidate tree already rejected this run. Expected through the REAL cycle:
+turn 1 keeps the structural retry, later turns propose from the kept state.
+
+**Measurement.**
+
+```
+real cycle + real gates (flaky-agent fixture, tests/harness/test_structural_acceptance.py):
+  turn 1  proposed structural retry from memory   -> every gate passed -> KEPT   loop/kept advanced
+  turn 2  proposed numeric tweak FROM kept state   -> G3 rejected      -> reverted
+  turn 3  re-proposed the identical tree           -> driver stopped: "already rejected in this run"
+  kept 1, reverted 1; main unchanged; ledger: KEPT present, MERGED absent
+
+driver (fake cycle, 9 tests): keep advances / revert holds / stack / AUTO_MERGE still not main /
+  budget stop / no-candidate stop / halt stop / repeated-tree stop / second run resumes from kept
+
+mutations on run_loop (each -> tests fail, reverted):
+  M11 never advance kept                3 failed
+  M12 propose from main, not kept       2 failed
+  M13 ignore the repeated rejected tree 1 failed
+  M14 ignore the wall-clock budget      1 failed
+
+pytest -q          1648 passed (from 1638; +10, none removed)
+mypy aef examples  122 files clean
+ruff check / format   clean
+```
+
+**Verdict.** The loop stacks, is bounded five ways, and cannot reach main.
+Dimension 1: 13 → **17**. Total: **55 → 59**. The last three points are
+the material: eleven demo scenarios and a proposer that knows numeric
+constants and one structural transformation.
+
+**Deliberately left.** No `aef loop run` invocation on this repo's own
+corpus in the log: it needs a blessed baseline and a failure-memory store,
+which the fixture provides and the repo's checkout does not. The metric
+trajectory per turn is in the ledger's `GATED` evidence, not yet surfaced
+by `run_loop`'s summary.

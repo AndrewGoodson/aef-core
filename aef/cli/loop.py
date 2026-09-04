@@ -368,6 +368,45 @@ def cmd_cycle(args: argparse.Namespace) -> int:
     return run.exit_code
 
 
+def cmd_run(args: argparse.Namespace) -> int:
+    """autoresearch's loop inside the gates (ADR 0114): N turns or a
+    wall-clock budget, keep on a LOCAL branch, never main."""
+    from aef.cli.run import load_graph_module
+    from aef.harness.loop import run_loop
+    from aef.harness.memory_store import FileMemoryStore
+
+    config = _config(args)
+    graph = load_graph_module(args.module) if args.module else None
+    try:
+        run = run_loop(
+            config,
+            now=datetime.now(UTC),
+            workdir=Path(args.workdir),
+            turns=args.turns,
+            budget_seconds=args.budget_minutes * 60.0,
+            kept_branch=args.kept_branch,
+            runs_dir=Path(args.runs) if args.runs else None,
+            corpus_root=Path(args.corpus) if args.corpus else None,
+            graph=graph,
+            memory=FileMemoryStore(path=Path(args.memory)) if args.memory else None,
+            agent_path=args.agent_path,
+        )
+    except PolicyConfigError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
+    except LoopHaltedError as exc:
+        print(f"HALTED: {exc}")
+        return EXIT_HALTED
+    for line in run.lines:
+        print(f"  {line}")
+    print(
+        f"kept {run.kept_count}, reverted {run.reverted_count}, "
+        f"{run.kept_branch}@{run.kept_ref[:12]} — review and merge by hand; "
+        f"Tier-1 auto-merge is off"
+    )
+    return EXIT_HALTED if "halted" in run.stopped_because else EXIT_OK
+
+
 def cmd_bless(args: argparse.Namespace) -> int:
     from aef.harness.preflight import BlessError, bless
 
@@ -627,6 +666,29 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "Defaults to pytest only — anything more is repo-specific.",
     )
     p_cycle.set_defaults(handler=cmd_cycle)
+
+    p_run = loop_subs.add_parser(
+        "run",
+        help="N turns of propose -> gate -> keep-or-revert on a local kept branch (never main)",
+    )
+    _common(p_run)
+    p_run.add_argument("--base", default="main")
+    p_run.add_argument("--workdir", required=True)
+    p_run.add_argument("--module", default=None, help="module exposing build_graph()")
+    p_run.add_argument("--runs", default=None, help="dir from `aef run --record-runs`")
+    p_run.add_argument("--corpus", default=None)
+    p_run.add_argument("--config", default=None, help="aef.yaml path, read from the base ref")
+    p_run.add_argument("--entrypoint", default=None, help="module:factory; G2/G3 refuse without it")
+    p_run.add_argument("--memory", default=None, help="durable memory store the proposer reads")
+    p_run.add_argument("--agent-path", default="agents/demo/graph.py")
+    p_run.add_argument("--turns", type=int, default=10)
+    p_run.add_argument("--budget-minutes", type=float, default=60.0)
+    p_run.add_argument(
+        "--kept-branch",
+        default="loop/kept",
+        help="local branch that advances on every kept candidate; a person merges it",
+    )
+    p_run.set_defaults(handler=cmd_run)
 
     p_bless = loop_subs.add_parser(
         "bless", help="archive the current Zone A state as the owner-blessed baseline"
