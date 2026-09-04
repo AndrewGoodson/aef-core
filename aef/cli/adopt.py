@@ -20,6 +20,7 @@ from aef.cli.adopt_loop import (
     render_loop_md,
     render_loop_monitor_workflow,
 )
+from aef.cli.migrate import DEFAULT_MIGRATED_OUT
 from aef.harness.zones import DEFAULT_AGENT_ROOT
 
 _IGNORED_DIR_NAMES = frozenset(
@@ -167,12 +168,15 @@ Zone B (the harness: `corpus/`, `.github/workflows/`, the gates), and a diff
 touching Zone B is treated as a security event rather than a rejected
 proposal.
 
-This matters the moment you run `aef migrate --dir .`, because it writes
-`aef_migrated.py` to the repo **root**, which is Zone C. Measured, not
-assumed: a candidate touching a root-level graph is rejected with
-`G0 rejected it: candidate touches paths outside Zone A` and the cycle exits
-1, and `aef loop bless` will archive a Zone A tree that does not contain your
-agent at all. Move the generated nodes under `{DEFAULT_AGENT_ROOT}/`
+`aef migrate --dir .` writes its generated graph to
+`{DEFAULT_MIGRATED_OUT}` — inside Zone A — and its report names the zone of
+whatever path it wrote. It did not always: until aef-core ADR 0143 it wrote
+`aef_migrated.py` to the repo **root**, which is Zone C, and said nothing.
+Measured, not assumed: a candidate touching a root-level graph is rejected
+with `G0 rejected it: candidate touches paths outside Zone A` and the cycle
+exits 1, and `aef loop bless` will archive a Zone A tree that does not
+contain your agent at all. So if you pass `--out`, or you have a graph left
+over from an older `aef migrate`, put it under `{DEFAULT_AGENT_ROOT}/`
 (e.g. `{DEFAULT_AGENT_ROOT}/<name>/graph.py`) before running the loop.
 
 The other half of Zone A hygiene is the generated `.gitignore`: bytecode
@@ -310,11 +314,11 @@ def render_migration_checklist(framework: Framework) -> list[str]:
         # Derived from DEFAULT_AGENT_ROOT rather than spelled out, so a repo
         # that moves its agent root cannot be told the wrong directory.
         f"Put every node you convert under `{DEFAULT_AGENT_ROOT}/` — Zone A, the only tree "
-        f"the loop is allowed to propose changes to. `aef migrate` writes `aef_migrated.py` "
-        f"to the repo ROOT, which is Zone C: measured, a candidate touching it is rejected "
-        f"with `G0 rejected it: candidate touches paths outside Zone A` and the cycle exits "
-        f"1. Move the generated nodes under `{DEFAULT_AGENT_ROOT}/` before running the loop "
-        f"(ADR 0142).",
+        f"the loop is allowed to propose changes to. `aef migrate` writes its generated "
+        f"graph to `{DEFAULT_MIGRATED_OUT}`, which is inside Zone A, and names the zone of "
+        f"the path in its report; anywhere else is Zone C and, measured, a candidate "
+        f"touching it is rejected with `G0 rejected it: candidate touches paths outside "
+        f"Zone A` and the cycle exits 1 (ADR 0142, ADR 0143).",
     ]
     by_framework: dict[Framework, list[str]] = {
         "langgraph": [

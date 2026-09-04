@@ -32,6 +32,9 @@ from pathlib import Path
 
 import pytest
 
+from aef.cli.migrate import DEFAULT_MIGRATED_OUT
+from aef.harness.zones import Zone, inspect_path
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 AGENT = """from __future__ import annotations
@@ -317,10 +320,17 @@ def test_loop_md_leads_with_the_measured_minimum(adopted: tuple[Path, Path]) -> 
     ):
         assert quoted in text, f"LOOP.md no longer quotes the measured refusal: {quoted}"
 
-    # The three things `aef migrate` cannot do for you, and the one thing no
+    # What `aef migrate` does and does not do for you, and the one thing no
     # amount of documentation removes.
-    assert "aef migrate` writes none of the first four" in text
-    assert "which is Zone C" in text
+    #
+    # UPDATED DELIBERATELY (ADR 0143). This pinned "`aef migrate` writes none
+    # of the first four" — true when ADR 0139 measured it, and false the
+    # moment L1 and L2 landed. It now writes items 1 and 3, so the document
+    # says two, and this test pins the two it still cannot write rather than
+    # defending a sentence the tool has outgrown.
+    assert "aef migrate` writes two of the first four" in text
+    assert "cannot make a run fail" in text
+    assert "Zone C" in text
     assert "no live provider to fall through to" in text
     assert "__pycache__/" in text and "0.468 of a 0.500 budget" in text
 
@@ -342,30 +352,51 @@ def run_agent(objective: str) -> str:
     return reply.content[0].text
 """
 
-# THE MEASURED MINIMUM (ADR 0139). Every part of this that is not obviously
-# "an agent" is here because removing it was RUN and the cycle went quiet:
+# THE MEASURED MINIMUM (ADR 0139), and what is left of it (ADR 0143).
+#
+# Four things were measured by removal, each RUN and each making the cycle go
+# quiet. TWO OF THEM ARE NOW `aef migrate`'S JOB and are no longer written
+# here — this test asserts them off migrate's own output instead:
+#
+#   the file outside `agents/`        -> "G0 rejected it: candidate touches
+#                                         paths outside Zone A"        [L1]
+#   `return delta, END` (no route)    -> "no admissible failure memory"  [L2]
+#
+# The other two remain the adopter's, and remain hand-written below:
 #
 #   no module-level numeric constant  -> "the proposer produced nothing from
 #                                         the available evidence"
-#   `return delta, END` (no route)    -> "no admissible failure memory"
 #   no failing `aef run --memory`     -> "no admissible failure memory"
-#   the file outside `agents/`        -> "G0 rejected it: candidate touches
-#                                         paths outside Zone A"
 #
-# `aef migrate` generates none of it: its node has no constants, no reflect
-# node, and lands at the repo root, which is Zone C.
-MINIMUM_AGENT = """from __future__ import annotations
+# So the test takes the graph `aef migrate` generated — in migrate's Zone A
+# location, with migrate's `<call site> -> reflect -> consolidate -> END`
+# wiring, unedited — and supplies only the SEMANTICS, which is exactly the
+# half migrate's own report says is yours. It never writes an `Edge`, a
+# `make_reflect_node`, or a route.
 
-from aef.kernel import END, Context, Edge, Graph, Node, Route, Services
-from aef.reasoning.nodes import make_reflect_node
-from aef.state import AEFState, Plan, Provenance, StateDelta
-
+# The constants the rule-based proposer mutates. `aef migrate` writes none: a
+# generated wrapper has no number of its own to invent.
+CONSTANTS = """
 RETRY_BUDGET = 3
 QUALITY_THRESHOLD = 3
 
+"""
 
-def work_node(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
-    difficulty = int(state.working_memory.get("difficulty", 1))
+# The generated ROUTED body, verbatim, and the deterministic body that
+# replaces it. Item 4 needs a run that FAILS, and this sequence has no
+# credential — so the node has to be able to fail without asking a model.
+GENERATED_BODY = """    result = services.require_model_provider().complete(
+        CompletionRequest(
+            messages=(ProviderMessage(role="user", content=state.objective),),
+            model="claude-sonnet-4-5",
+            max_tokens=256,
+        )
+    )
+    key = "src_my_agent__run_agent"
+    return StateDelta(working_memory={key: result.content}), "reflect"
+"""
+
+DETERMINISTIC_BODY = """    difficulty = int(state.working_memory.get("difficulty", 1))
     quality_needed = int(state.working_memory.get("quality_needed", 1))
     prov = Provenance(node_id=ctx.node_id, graph_version=ctx.graph_version,
                       ts=ctx.now, trace_id=ctx.trace_id, token_cost=difficulty * 10)
@@ -375,16 +406,34 @@ def work_node(state: AEFState, ctx: Context, services: Services) -> tuple[StateD
     return StateDelta(plan=Plan(goal=state.objective, status="failed"),
                       errors=[{"node_id": ctx.node_id, "error": "gave up"}],
                       scores={"quality": 0.0}, provenance=[prov]), "reflect"
-
-
-def build_graph() -> Graph:
-    work = Node(id="work", version="0.1.0", fn=work_node, deterministic=True)
-    reflect = make_reflect_node(route=END)
-    return Graph(id="mine", version="0.1.0",
-                 nodes={"work": work, "reflect": reflect},
-                 edges=[Edge(from_node="work", to_node="reflect")],
-                 entry_node="work")
 """
+
+GENERATED_STATE_IMPORT = "from aef.state import AEFState, StateDelta"
+PATCHED_STATE_IMPORT = "from aef.state import AEFState, Plan, Provenance, StateDelta"
+
+
+def _supply_the_semantics(source: str) -> str:
+    """Everything the test still hand-writes, and nothing else.
+
+    Every substitution asserts before and after. A patch that silently
+    no-opped is how three scripts in this programme printed "fixed" while
+    changing nothing (`.claude/skills/reproduce-first`), and here it would
+    leave the test passing against migrate's unedited model-calling node.
+    """
+    assert GENERATED_BODY in source, "migrate's routed body has changed shape"
+    source = source.replace(GENERATED_BODY, DETERMINISTIC_BODY)
+    # The docstrings still describe routing; what must be gone is the CALL.
+    assert "services.require_model_provider().complete(" not in source, "the call survived"
+
+    assert GENERATED_STATE_IMPORT in source, "migrate's state import has changed shape"
+    source = source.replace(GENERATED_STATE_IMPORT, PATCHED_STATE_IMPORT)
+
+    anchor = "def _idempotency_key("
+    assert anchor in source, "migrate no longer emits _idempotency_key"
+    source = source.replace(anchor, CONSTANTS.lstrip("\n") + anchor, 1)
+    assert "RETRY_BUDGET = 3" in source, "the constants patch did not take"
+    return source
+
 
 BOOTSTRAP_INPUTS = [
     {"objective": "an ordinary task"},
@@ -468,24 +517,40 @@ def test_an_adopted_repo_gates_a_candidate_end_to_end(
     repo, tmp_path = raw_sdk_adoptee
     state = tmp_path / "loop-state"
 
-    # 1. migrate — K1's routed form, so the model call is visible.
+    agent_path = DEFAULT_MIGRATED_OUT
+    module = agent_path.removesuffix(".py").replace("/", ".")
+
+    # 1. migrate — K1's routed form, so the model call is visible, landed in
+    #    ZONE A by the command rather than by this test (L1, ADR 0143). The
+    #    zone is asserted with the classifier the GATE uses; before L1 the
+    #    same assertion returned `Zone C (core) — not under the agent root`.
     migrate = _aef(repo, "migrate", "--dir", ".")
     assert migrate.returncode == 0, migrate.stderr
     assert "1 routed through Services.model_provider" in migrate.stdout
-    assert (repo / "aef_migrated.py").is_file()
+    assert (repo / agent_path).is_file(), migrate.stdout
+    assert not (repo / "aef_migrated.py").exists(), "the repo root is Zone C"
+    assert inspect_path(agent_path).zone is Zone.A, inspect_path(agent_path).reason
+    assert "Zone A" in migrate.stdout, migrate.stdout
+
+    generated = (repo / agent_path).read_text()
+    # ...and wired to LEARN by the command, not by this test (L2). No `Edge`,
+    # no `make_reflect_node` and no route is written anywhere in this file.
+    assert 'make_reflect_node(route="consolidate")' in generated
+    assert "make_consolidate_node(route=END)" in generated
+    assert 'Edge(from_node="src_my_agent__run_agent", to_node="reflect")' in generated
 
     # 2. ...and it still cannot carry the loop. Recording ANY scenario from a
     #    routed model call needs a live provider — the cassette it will later
     #    replay from does not exist until something makes the call once. That
-    #    is why the gated graph below calls no model, and it is the first line
-    #    of the minimum LOOP.md now leads with.
+    #    is why the node body is replaced below, and it is the first line of
+    #    the minimum LOOP.md now leads with.
     inputs = tmp_path / "inputs.json"
     inputs.write_text(json.dumps(BOOTSTRAP_INPUTS))
     migrated = _aef(
         repo,
         "loop",
         "bootstrap",
-        "aef_migrated",
+        module,
         "--corpus",
         "corpus",
         "--inputs",
@@ -499,16 +564,15 @@ def test_an_adopted_repo_gates_a_candidate_end_to_end(
     assert "NOTHING was recorded" in migrated.stdout
     assert "no live provider" in migrated.stdout
 
-    # 3. The minimum, hand-written. See MINIMUM_AGENT for why each part is here.
-    (repo / "agents" / "mine").mkdir(parents=True, exist_ok=True)
-    (repo / "agents" / "__init__.py").write_text("")
-    (repo / "agents" / "mine" / "__init__.py").write_text("")
-    (repo / "agents" / "mine" / "graph.py").write_text(MINIMUM_AGENT)
+    # 3. What is LEFT of the hand-written minimum: the semantics. Two module-
+    #    level numeric constants for the proposer, and a node body that can
+    #    fail without a credential. Placement and wiring are migrate's.
+    (repo / agent_path).write_text(_supply_the_semantics(generated))
     (repo / "tests").mkdir(exist_ok=True)
     (repo / "tests" / "test_smoke.py").write_text(
         "def test_builds() -> None:\n"
-        "    from agents.mine.graph import build_graph\n"
-        "    assert build_graph().id == 'mine'\n"
+        f"    from {module} import build_graph\n"
+        "    assert build_graph().entry_node == 'src_my_agent__run_agent'\n"
     )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "adopted")
@@ -518,7 +582,7 @@ def test_an_adopted_repo_gates_a_candidate_end_to_end(
         repo,
         "loop",
         "bootstrap",
-        "agents.mine.graph",
+        module,
         "--corpus",
         "corpus",
         "--inputs",
@@ -548,7 +612,7 @@ def test_an_adopted_repo_gates_a_candidate_end_to_end(
     run = _aef(
         repo,
         "run",
-        "agents.mine.graph",
+        module,
         "--objective",
         "hard",
         "--working-memory",
@@ -570,7 +634,7 @@ def test_an_adopted_repo_gates_a_candidate_end_to_end(
         "--state",
         str(state),
         "--agent-path",
-        "agents/mine/graph.py",
+        agent_path,
     )
     assert blessed.returncode == 0, blessed.stderr
 
@@ -585,7 +649,7 @@ def test_an_adopted_repo_gates_a_candidate_end_to_end(
         "--corpus",
         "corpus",
         "--agent-path",
-        "agents/mine/graph.py",
+        agent_path,
     )
     assert "[OK] corpus + tripwire" in doctor.stdout
     assert "[OK] reflect node routed to" in doctor.stdout
@@ -607,15 +671,15 @@ def test_an_adopted_repo_gates_a_candidate_end_to_end(
         "--workdir",
         str(state / "work"),
         "--module",
-        "agents.mine.graph",
+        module,
         "--corpus",
         "corpus",
         "--entrypoint",
-        "agents.mine.graph:build_graph",
+        f"{module}:build_graph",
         "--memory",
         str(state / "memory.jsonl"),
         "--agent-path",
-        "agents/mine/graph.py",
+        agent_path,
         "--build-command",
         "python -m pytest -q",
     )
@@ -641,6 +705,18 @@ def test_an_adopted_repo_gates_a_candidate_end_to_end(
     # nothing built one is the exact thing this test exists to rule out.
     assert "no null-hypothesis control cohort" not in str(gates["G3"]["reason"]), gates["G3"]
     assert "control cohort" in str(gates["G3"]["reason"]), gates["G3"]
+
+    # THE VERDICT IS A REJECTION, read from the ledger rather than the CLI's
+    # summary line, and that is the assertion — a test demanding an acceptance
+    # could be satisfied by weakening G3 (ADR 0139).
+    assert gates["G3"]["outcome"] == "fail", gates["G3"]
+    kinds = [
+        json.loads(line)["kind"]
+        for line in (state / "ledger.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert "rejected" in kinds, kinds
+    assert "accepted" not in kinds, kinds
 
     # And the proposal was grounded in the failing run of step 6.
     grounded = detail["grounded_in"]

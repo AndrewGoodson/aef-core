@@ -8,8 +8,9 @@ first version had against a real repo, not hypotheticals.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from aef.cli.migrate import render, run_migrate, scan
+from aef.cli.migrate import DEFAULT_MIGRATED_OUT, render, run_migrate, scan
 
 
 def _write(root: Path, rel: str, body: str) -> None:
@@ -131,15 +132,16 @@ def test_run_migrate_never_overwrites_without_force(tmp_path: Path) -> None:
     )
     first = run_migrate(tmp_path)
     assert first.written is not None
-    (tmp_path / "aef_migrated.py").write_text("# hand-edited\n", encoding="utf-8")
+    generated = tmp_path / DEFAULT_MIGRATED_OUT
+    generated.write_text("# hand-edited\n", encoding="utf-8")
 
     second = run_migrate(tmp_path)
     assert second.written is None, "must not overwrite an edited generated file"
-    assert (tmp_path / "aef_migrated.py").read_text() == "# hand-edited\n"
+    assert generated.read_text() == "# hand-edited\n"
 
     third = run_migrate(tmp_path, force=True)
     assert third.written is not None
-    assert "# hand-edited" not in (tmp_path / "aef_migrated.py").read_text()
+    assert "# hand-edited" not in generated.read_text()
 
 
 def test_report_names_what_was_skipped(tmp_path: Path) -> None:
@@ -665,7 +667,7 @@ def test_force_backs_up_a_file_that_differs_before_overwriting(tmp_path: Path) -
 
     _write(tmp_path, "svc.py", THIN)
     run_migrate(tmp_path)
-    out = tmp_path / "aef_migrated.py"
+    out = tmp_path / DEFAULT_MIGRATED_OUT
     edited = out.read_text() + "\n# HAND EDIT: the system prompt, re-expressed\n"
     out.write_text(edited, encoding="utf-8")
 
@@ -682,7 +684,7 @@ def test_force_does_not_back_up_an_untouched_generated_file(tmp_path: Path) -> N
     run_migrate(tmp_path)
     result = run_migrate(tmp_path, force=True)
     assert result.backup is None
-    assert not list(tmp_path.glob("*.bak*"))
+    assert not list(tmp_path.rglob("*.bak*"))
 
 
 def test_a_second_force_does_not_destroy_the_first_backup(tmp_path: Path) -> None:
@@ -690,7 +692,7 @@ def test_a_second_force_does_not_destroy_the_first_backup(tmp_path: Path) -> Non
     one step along."""
     _write(tmp_path, "svc.py", THIN)
     run_migrate(tmp_path)
-    out = tmp_path / "aef_migrated.py"
+    out = tmp_path / DEFAULT_MIGRATED_OUT
 
     out.write_text(out.read_text() + "\n# EDIT ONE\n", encoding="utf-8")
     first = run_migrate(tmp_path, force=True)
@@ -777,3 +779,264 @@ def test_a_long_node_id_keeps_the_generated_file_within_the_line_limit(tmp_path:
         "src/services/llm/anthropic_backend_client.py",
         THIN.replace("def ask(", "def call_llm_with_backend_and_budget("),
     )
+
+
+# --------------------------------------------------------------------------
+# ADR 0143 / L1 — migrate writes into Zone A
+#
+# REPRODUCED before the change, by running the harness's own classifier over
+# a real commit: a candidate whose only changed path was the generated file
+# came back `allowed: False ... Zone C (core) — not under the agent root
+# 'agents'`. The one file this command exists to produce was the one file the
+# loop could never propose a change to, and the report said nothing about it.
+# --------------------------------------------------------------------------
+
+
+def test_the_default_output_lands_inside_zone_a(tmp_path: Path) -> None:
+    """The whole of L1 in one assertion, made by the classifier the GATE uses
+    rather than by a string comparison here."""
+    from aef.harness.zones import Zone, inspect_path
+
+    _write(tmp_path, "svc.py", THIN)
+    result = run_migrate(tmp_path)
+
+    assert result.out_relative is not None
+    verdict = inspect_path(result.out_relative)
+    assert verdict.zone is Zone.A, verdict.reason
+    assert verdict.allowed, verdict.reason
+    assert result.written == tmp_path / DEFAULT_MIGRATED_OUT
+    assert not (tmp_path / "aef_migrated.py").exists(), "the repo root is Zone C"
+
+
+def test_the_default_output_is_derived_from_the_agent_root() -> None:
+    """A second hardcoded `agents` is the drift ADR 0091 is about, and it is
+    the drift that produced this defect: the old default was a literal path
+    with its own idea of where an adopting repo's agents live."""
+    from aef.harness.zones import DEFAULT_AGENT_ROOT
+
+    assert DEFAULT_MIGRATED_OUT.startswith(f"{DEFAULT_AGENT_ROOT}/"), DEFAULT_MIGRATED_OUT
+    assert DEFAULT_MIGRATED_OUT.endswith(".py")
+
+
+def test_the_output_directories_are_created(tmp_path: Path) -> None:
+    """`aef adopt` writes `agents/README.md` and nothing under it, so the
+    default path's parent does not exist on an adopter's first run."""
+    _write(tmp_path, "svc.py", THIN)
+    assert not (tmp_path / DEFAULT_MIGRATED_OUT).parent.exists()
+    result = run_migrate(tmp_path)
+    assert result.written is not None and result.written.is_file()
+
+
+def test_the_report_names_the_zone_of_the_path_it_wrote(tmp_path: Path) -> None:
+    """The failure this closes is a report silent about the one property of
+    the path that decides whether the loop can ever use the file."""
+    from aef.cli.migrate import report
+
+    _write(tmp_path, "svc.py", THIN)
+    text = report(run_migrate(tmp_path))
+    assert "Zone A" in text, text
+    assert "the only tree the self-rewiring loop may propose changes to" in text
+
+
+def test_out_can_still_put_the_graph_in_zone_c_and_is_told_so(tmp_path: Path) -> None:
+    """`--out` is not a quiet trap door. An owner may have a reason to write
+    elsewhere; they are told what it costs, in the words the gate itself uses."""
+    from aef.cli.migrate import report
+
+    _write(tmp_path, "svc.py", THIN)
+    result = run_migrate(tmp_path, out="aef_migrated.py")
+    assert result.written == tmp_path / "aef_migrated.py"
+    assert result.out_relative == "aef_migrated.py"
+    text = report(result)
+    assert "Zone C" in text, text
+    assert "G0 rejected it: candidate touches paths outside Zone A" in text
+    assert DEFAULT_MIGRATED_OUT in text, "the fix must name the path that works"
+
+
+def test_out_accepts_an_absolute_path_and_says_it_is_outside_the_repo(tmp_path: Path) -> None:
+    from aef.cli.migrate import report
+
+    root = tmp_path / "repo"
+    _write(root, "svc.py", THIN)
+    elsewhere = tmp_path / "elsewhere" / "graph.py"
+    result = run_migrate(root, out=elsewhere)
+    assert result.written == elsewhere and elsewhere.is_file()
+    assert result.out_relative is None
+    assert "OUTSIDE the repo" in report(result)
+
+
+def test_never_overwrite_and_force_backup_follow_the_out_path(tmp_path: Path) -> None:
+    """ADR 0140's two rules are properties of the file, not of one hardcoded
+    name — moving the name must not have left them behind."""
+    _write(tmp_path, "svc.py", THIN)
+    run_migrate(tmp_path, out="custom/here.py")
+    out = tmp_path / "custom" / "here.py"
+    out.write_text(out.read_text() + "\n# HAND EDIT\n", encoding="utf-8")
+
+    blocked = run_migrate(tmp_path, out="custom/here.py")
+    assert blocked.written is None
+    assert "HAND EDIT" in out.read_text()
+
+    forced = run_migrate(tmp_path, out="custom/here.py", force=True)
+    assert forced.backup == tmp_path / "custom" / "here.py.bak"
+    assert "HAND EDIT" in forced.backup.read_text()
+    assert "HAND EDIT" not in out.read_text()
+
+
+def test_doctor_discovers_the_migrated_graph_at_its_new_default(tmp_path: Path) -> None:
+    """The seam L1 could have left open: migrate's default moved, and doctor's
+    discovery list is where the old name lived."""
+    from aef.cli.doctor import _graph_entries
+
+    _write(tmp_path, "svc.py", THIN)
+    run_migrate(tmp_path)
+    entries = _graph_entries(tmp_path, None)
+    assert DEFAULT_MIGRATED_OUT in entries, entries
+    assert len(entries) == len(set(entries)), entries
+
+
+def test_doctor_still_discovers_a_repo_migrated_before_the_default_moved(tmp_path: Path) -> None:
+    """A repo migrated by an older `aef` keeps its root-level file. Dropping it
+    from discovery would silently stop the model-call advisory firing there."""
+    from aef.cli.doctor import _graph_entries
+    from aef.cli.migrate import LEGACY_MIGRATED_OUT
+
+    _write(tmp_path, "svc.py", THIN)
+    run_migrate(tmp_path, out=LEGACY_MIGRATED_OUT)
+    assert LEGACY_MIGRATED_OUT in _graph_entries(tmp_path, None)
+
+
+# --------------------------------------------------------------------------
+# ADR 0143 / L2 — the generated graph is wired to LEARN
+#
+# REPRODUCED before the change: the generated graph had one node returning
+# `END`, nothing wrote failure memory, and `aef loop cycle` exited 0 with
+# `no admissible failure memory: no candidate this cycle`.
+# --------------------------------------------------------------------------
+
+
+def _built_graph(tmp_path: Path, name: str, body: str) -> Any:
+    import importlib.util
+
+    root = tmp_path / name
+    _write(root, "svc.py", body)
+    out = root / "graph.py"
+    out.write_text(render(scan(root), name), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location(f"gen_{name}_graph", out)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.build_graph()
+
+
+def test_the_generated_graph_wires_call_site_reflect_consolidate(tmp_path: Path) -> None:
+    for name, body in (("routed_wiring", THIN), ("unrouted_wiring", UNROUTABLE)):
+        graph = _built_graph(tmp_path, name, body)
+        entry = graph.entry_node
+        assert set(graph.nodes) == {entry, "reflect", "consolidate"}, name
+        assert {(e.from_node, e.to_node) for e in graph.edges} == {
+            (entry, "reflect"),
+            ("reflect", "consolidate"),
+        }, name
+        source = (tmp_path / name / "graph.py").read_text()
+        assert 'make_reflect_node(route="consolidate")' in source, name
+        assert "make_consolidate_node(route=END)" in source, name
+
+
+def test_no_generated_node_still_routes_to_end(tmp_path: Path) -> None:
+    """The mutation that makes the loop silently inert is one word wide, so it
+    is asserted directly rather than inferred from the graph."""
+    _write(tmp_path, "svc.py", THIN)
+    source = render(scan(tmp_path), "demo")
+    returns = [
+        ln.strip() for ln in source.splitlines() if ln.strip().startswith("return StateDelta")
+    ]
+    assert returns, source
+    assert all(ln.endswith('"reflect"') for ln in returns), returns
+
+
+def test_the_generated_file_says_what_removing_the_tail_costs(tmp_path: Path) -> None:
+    """The failure mode is `exit 0`, which reads as success. A generated file
+    whose docstring does not say so hands the adopter a silent trap."""
+    _write(tmp_path, "svc.py", THIN)
+    source = render(scan(tmp_path), "demo")
+    assert "no admissible failure memory: no candidate this cycle" in source
+    assert "makes this repo learn" in source.lower()
+    assert "agent_services" in source
+
+
+def test_the_report_says_the_tail_is_what_makes_the_repo_learn(tmp_path: Path) -> None:
+    from aef.cli.migrate import report
+
+    _write(tmp_path, "svc.py", THIN)
+    text = report(run_migrate(tmp_path, write=False))
+    assert "reflect -> consolidate -> END" in text
+    assert "no admissible failure memory: no candidate this cycle" in text
+
+
+class _StubProvider:
+    """No network, no credential. The claim under test is the wiring."""
+
+    name = "stub"
+
+    def complete(self, request: Any) -> Any:
+        from aef.providers.base import CompletionResult
+
+        return CompletionResult(
+            content="a stubbed answer", model="stub", input_tokens=1, output_tokens=1
+        )
+
+
+def test_the_reflect_tail_actually_writes_failure_memory(tmp_path: Path) -> None:
+    """The measurement, not the wiring: EXECUTE the generated graph and read
+    the memory store. Before L2 it held 0 records, and the proposer reads
+    exactly these records and nothing else.
+    """
+    import json
+
+    from aef.harness.memory_store import FileMemoryStore
+    from aef.kernel import GraphExecutor
+    from aef.services.runtime import agent_services
+    from aef.state import AEFState
+
+    graph = _built_graph(tmp_path, "learns", THIN)
+    memory_path = tmp_path / "memory.jsonl"
+    services = agent_services(
+        memory=FileMemoryStore(path=memory_path),
+        model_provider=_StubProvider(),  # type: ignore[arg-type]
+        agent_id="a",
+    )
+    final = (
+        GraphExecutor(graph.compile(), services)
+        .run(AEFState(run_id="r1", agent_id="a", objective="o"))
+        .final_state
+    )
+
+    records = [json.loads(x) for x in memory_path.read_text().splitlines() if x.strip()]
+    assert len(records) == 1, records
+    assert records[0]["kind"] in ("success", "failure")
+
+    # THE FALSIFICATION CLAUSE, asserted rather than argued: wiring reflect
+    # must not change what the node returns to the adopter's caller. The
+    # answer is exactly where it was.
+    assert final.working_memory[graph.entry_node] == "a stubbed answer"
+
+
+def test_the_wired_graph_needs_the_services_agent_services_supplies(tmp_path: Path) -> None:
+    """The documented trade (ADR 0143). Executing the generated graph now
+    needs critic/judge/memory/knowledge; a hand-built bare `Services` that
+    previously ran raises. `agent_services()` supplies all four, which is why
+    `aef run`, `aef loop bootstrap` and the gates are unaffected — and that
+    difference is the whole content of the trade, so it is pinned here.
+    """
+    import pytest
+
+    from aef.kernel import GraphExecutor, Services
+    from aef.kernel.contracts import ServiceNotConfiguredError
+    from aef.state import AEFState
+
+    graph = _built_graph(tmp_path, "bare", THIN)
+    bare = Services(model_provider=_StubProvider())  # type: ignore[arg-type]
+    with pytest.raises(ServiceNotConfiguredError) as excinfo:
+        GraphExecutor(graph.compile(), bare).run(AEFState(run_id="r", agent_id="a", objective="o"))
+    assert "critic" in str(excinfo.value)

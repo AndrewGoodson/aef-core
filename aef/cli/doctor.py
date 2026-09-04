@@ -10,6 +10,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from aef.cli.migrate import DEFAULT_MIGRATED_OUT, LEGACY_MIGRATED_OUT
 from aef.config import AgentConfig, AgentConfigError, load_agent_config
 from aef.harness.preflight import model_calls_are_visible
 from aef.harness.zones import DEFAULT_AGENT_ROOT
@@ -66,30 +67,39 @@ def _adapter_check(adapter: Path) -> DoctorCheck:
 def _graph_entries(target_dir: Path, agent_path: str | None) -> list[str]:
     """Which files are "the configured graph" for the model-call advisory.
 
-    Keyed on the graph, not on `aef_migrated.py`. The advisory was written
+    Keyed on the graph, not on migrate's output file. The advisory was written
     against the fixture the K1 increment had in hand — an adopter who ran
-    `aef migrate` — and `aef_migrated.py` is the artefact of a *different*
+    `aef migrate` — and migrate's output is the artefact of a *different*
     command. The documented adoption path is `aef adopt`, wire
-    `aef_adapter.py`, write nodes under `agents/**`; a repo that followed it
-    to the letter never produced `aef_migrated.py`, so the advisory could not
-    fire for the only path the docs describe (reproduced, ADR 0141).
+    `aef_adapter.py`, write nodes under `<agent_root>/**`; a repo that followed
+    it to the letter produced no migrated file at all, so the advisory could
+    not fire for the only path the docs describe (reproduced, ADR 0141).
 
     An explicit `--agent-path` wins outright — it is the same flag
     `aef loop doctor` takes and it means the owner has said which file it is.
     Otherwise every entry the adoption contract names, that exists, is
-    scanned: the adapter shim, migrate's output if it is there, and each
+    scanned: the adapter shim, migrate's output, and each
     `<agent_root>/*/graph.py` — which is what `--agent-path` defaults into.
+
+    Every path here is derived from `DEFAULT_AGENT_ROOT` via
+    `aef.cli.migrate`, so moving the agent root or migrate's default cannot
+    leave this list naming a directory nothing writes to. `LEGACY_MIGRATED_OUT`
+    is the one exception and is named as such: it is where migrate wrote
+    before ADR 0143, and dropping it would silently stop discovering the graph
+    in every repo migrated before that day.
     """
     if agent_path:
         return [agent_path]
     entries: list[str] = []
-    for name in ("aef_adapter.py", "aef_migrated.py"):
+    for name in ("aef_adapter.py", DEFAULT_MIGRATED_OUT, LEGACY_MIGRATED_OUT):
         if (target_dir / name).is_file():
             entries.append(name)
     agents_root = target_dir / DEFAULT_AGENT_ROOT
     if agents_root.is_dir():
         for graph in sorted(agents_root.glob("*/graph.py")):
-            entries.append(str(graph.relative_to(target_dir)))
+            relative = graph.relative_to(target_dir).as_posix()
+            if relative not in entries:
+                entries.append(relative)
     return entries
 
 
