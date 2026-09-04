@@ -27,7 +27,7 @@ does not yet, and what only you can decide.
 *escalated to you*, not merged. Turning it on is a deliberate source change,
 not a config flag — see aef-core ADR 0045 for why that distinction is kept.
 
-## Five things you must supply before the loop can approve anything
+## Six things you must supply before the loop can approve anything
 
 1. **A corpus.** `corpus/` starts empty, and an empty corpus makes G2 and G3
    refuse — correctly: absence of evidence is not evidence of non-regression.
@@ -115,6 +115,32 @@ not a config flag — see aef-core ADR 0045 for why that distinction is kept.
    decision, and silently replacing the baseline would reset the drift budget
    without anyone choosing to.
 
+6. **Model calls that go through `Services`.** This is the one that does not
+   announce itself: a node whose body — or whose function, or that function's
+   function — builds its own `anthropic.Anthropic()` runs perfectly, and
+   `aef doctor` reports green. The bill arrives at gate time. Nothing routed
+   through your own client is seen by the policy engine, covered by the
+   fallback chain, or paid for by the harness login, and — the expensive part
+   — `aef loop record` captures no model call for it, so the scenario carries
+   an empty cassette and the gates cannot replay it. They reach your vendor
+   live from inside a gate, or fail for want of a credential and score the
+   candidate 0.
+
+   ```
+   aef migrate --dir . --force
+   ```
+
+   `aef migrate` generates a node that calls
+   `services.require_model_provider().complete(...)` when your function is
+   thin enough that routing loses nothing, and otherwise generates the wrapper
+   and tells you, in that node's own docstring, exactly what routing would
+   have dropped — a retry loop, a `try`, a stream, a backend router. That
+   second case is a decision only you can make; the obligation is that the
+   call becomes visible, not that a tool rewrites your retry policy.
+
+   `aef loop doctor` names the file and the vendor it found (aef-core ADR
+   0137).
+
 ## Zones — what agents may and may not touch
 
 | Zone | Path | Agent-writable |
@@ -130,7 +156,7 @@ faces the original one.
 
 ## Running it
 
-**Start here:** `aef loop doctor` reports all five obligations at once, with
+**Start here:** `aef loop doctor` reports all six obligations at once, with
 the exact command to fix each. Work down its output until every line is OK.
 
 ```

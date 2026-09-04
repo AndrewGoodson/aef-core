@@ -184,3 +184,22 @@ def test_the_command_extractor_detects_a_command_the_cli_rejects(
     with pytest.raises(SystemExit):
         for argv in commands:
             parser.parse_args(argv)
+
+
+def test_the_doctor_help_names_the_number_of_obligations_it_reports() -> None:
+    """K1 added a sixth obligation and the `--help` text still said five —
+    the same two-numbers-nobody-compares drift ADR 0091 records, in the
+    string an adopter reads first. Derived from `preflight`, so the next
+    obligation cannot make it wrong again."""
+    import re
+
+    from aef.cli import loop as loop_cli
+    from aef.harness import preflight
+
+    names = set(re.findall(r'name="([^"]+)"', Path(preflight.__file__).read_text()))
+    words = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven"}
+    help_text = Path(loop_cli.__file__).read_text()
+    assert f"report all {words[len(names)]} loop obligations" in help_text, (
+        f"preflight declares {len(names)} obligations {sorted(names)}; "
+        f"`loop doctor --help` names a different number"
+    )

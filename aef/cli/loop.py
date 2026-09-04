@@ -1091,7 +1091,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_bless.set_defaults(handler=cmd_bless)
 
     p_doctor = loop_subs.add_parser(
-        "doctor", help="report all five loop obligations at once, with the fix for each"
+        "doctor", help="report all six loop obligations at once, with the fix for each"
     )
     _common(p_doctor)
     p_doctor.add_argument("--corpus", default="corpus")

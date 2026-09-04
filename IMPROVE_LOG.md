@@ -998,3 +998,113 @@ and re-recording it under a new id keeps the recorder's refusal ("a task the
 agent just completed cannot be a tripwire") on the path. `checks` and
 `budget_ms` are per-input; `agent_id` is per-invocation, and the first real
 inputs file may want it per-input.
+
+---
+
+## K1 — An adopted repo's model call must be visible to the harness (2026-09-04)
+
+**Branch:** `improve/k1-provider-visible`, off `4872088`.
+**Rubric claim: none.** The ready loop's definition of done is four
+command-backed statements, not points. K1 makes **statement 2** true ("every
+model call in an adopted repo is visible to the harness, or the tooling says
+loudly that it is not") and **statement 3** true of `aef loop doctor` ("green
+only when those things are true"). Statement 1 needs K2, statement 4 is the
+owner's.
+
+**Reproduce (RUN), all four, on the adopted+migrated repo.**
+
+```
+1. aef doctor --dir <adoptee>          EXIT 0, green
+                                       2 advisories, neither about the model call
+2. node run against a counting provider, fake anthropic installed:
+     vendor SDK reached      ['anthropic.Anthropic()', 'client.messages.create']
+     Services.model_provider 0 call(s)
+3. record_run -> 0 RecordedCall(s); replay on_miss="fail", live_provider=None:
+     score 0.5 and a LIVE vendor call inside the gate
+     cassette {'hits': 0, 'misses': 0}   <- not even a miss; it was never asked
+     with the SDK removed: score 0.0, TypeError "Could not resolve authentication"
+4. aef loop doctor  -> five obligations, none about this
+   aef migrate      -> "1 wrapped, 0 skipped", nothing about the bypass
+   aef doctor       -> above
+```
+
+The disjunction `READY_LOOP.md` predicted, confirmed exactly: **a live call
+inside a gate told not to make one, or 0.**
+
+**Expectation.** Lift `tests/test_vendor_isolation.py`'s scanner into `aef/`,
+add a preflight obligation, and teach `migrate` the routed form. Expected the
+routed form to be the easy half and the falsification clause to be the
+argument. It was the reverse — the decision rule fell out of what
+`ModelProvider.complete()` *is* (one shot, non-streaming, single-backend), so
+every blocker is a specific AST feature naming what routing would drop. What
+took the time was that neither generated form had ever been linted or executed.
+
+**Change.** `aef/harness/vendor_scan.py` (new): the scanner and ONE list;
+`tests/test_vendor_isolation.py` imports it back. `preflight()` gains a sixth
+obligation, **model calls visible**, walking imports reachable from the
+configured graph. `aef doctor` gains the same as an advisory. `aef migrate`
+emits a routed node when the function is nothing but the call, and otherwise
+today's wrapper plus a docstring warning naming the specific thing routing
+would have dropped — the report says which and why for every site.
+
+**Measurement.**
+
+```
+after routing, same four questions:
+  Services.model_provider  1 call(s)      vendor SDK reached  []
+  recorded scenario        1 RecordedCall(s)
+  replay, anthropic DELETED from sys.modules, no credential:
+      score 0.5, cassette {'hits': 1, 'misses': 0}, live calls []
+  aef loop doctor  [OK] model calls visible  1 reachable module(s), none imports a model SDK
+
+mutations (each -> fails, reverted; git diff --exit-code = 0):
+  M1 vendor scan reports nothing              3 failed
+  M2 reachability stops at the entry file     1 failed
+  M3 everything declared routable             1 failed
+  M4 try/except no longer blocks routing      2 failed
+  M5 routed node bypasses require_...()       1 failed
+  M6 _skip tests the ABSOLUTE path again      1 failed
+  M7 cohere drops out of the vendor list      1 failed
+  M8 scanner ignores nested imports           3 failed
+
+pytest -q          1847 passed, 1 skipped (+27, none removed)
+mypy aef examples  128 files clean
+ruff check .       clean
+ruff format --check aef tests examples   clean
+calls made: 0 (no live model call anywhere in this increment)
+```
+
+**Verdict.** The green light is gone: `aef loop doctor` refuses, `aef doctor`
+warns, and `aef migrate` states its choice. The measured adoptee routes, and
+its gate now replays without the vendor SDK installed or any credential — which
+is what ADR 0112's harness login was for and what nothing had ever exercised
+through an adopted repo.
+
+**Three findings the work turned up, none of them the increment.**
+
+1. The subset test `MODEL_SDK_ROOTS <= VENDOR_TOP_LEVEL_MODULES` **failed on
+   its first run**: `cohere` had been in `migrate.py`'s tuple and never in the
+   constraint #3 list, so `import cohere` in `aef/kernel/` would not have been
+   caught. The drift the test was written to prevent was already there.
+2. `migrate._skip` tested the **absolute** path, so any repo living under a
+   dot-directory — `~/.local/src/app`, a git worktree under `.claude/`, a
+   checkout in `.build/` — had every file skipped and was reported
+   `scanned 0 Python file(s) ... 0 call site(s)`, exit 0. Reproduced with two
+   identical repos differing only in location: 1 site vs 0. Fixed here because
+   K1's own reproduction runs in a worktree under `.claude/`, and it is the
+   same defect class as K1 itself — success reported for a question declined.
+3. The generated module had **never passed the repo's own ruff**: two `E501`s
+   and an `F401` in the empty form, which imported `Any` and never used it. A
+   test now runs ruff on all three forms and another executes both node forms.
+
+**Deliberately left.** The routable predicate is designed against one toy and
+seven hand-written counter-shapes; a retry *decorator* is invisible to it,
+because it reads only the function body, and would be routed and lost. The
+reachability walk resolves absolute imports against the repo root and does not
+follow `sys.path` edits, namespace packages, src layouts rooted elsewhere or
+dynamic `importlib` — it can under-report, which is the safe direction for a
+gate, and is stated in the ADR rather than fixed. `aef doctor`'s check is
+advisory and only fires when `aef_migrated.py` exists; a hand-written graph
+that builds its own client is caught by `aef loop doctor` and not by
+`aef doctor`. And nothing here has run against a repo nobody wrote to be
+scanned, which is K5's whole point.

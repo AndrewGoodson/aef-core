@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from aef.config import AgentConfig, AgentConfigError, load_agent_config
+from aef.harness.preflight import model_calls_are_visible
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,35 @@ def run_doctor(target_dir: Path) -> list[DoctorCheck]:
                 "adapter_present",
                 False,
                 f"{adapter} is not a file — restore it or rerun `aef adopt`",
+            )
+        )
+
+    # ADR 0137. `aef doctor` reported this repo green: `aef migrate` had
+    # wrapped a function that builds its own `anthropic.Anthropic()`, so the
+    # model call reached no `Services.model_provider`, the recorder captured
+    # no `RecordedCall`, and the gates could only replay it by calling the
+    # vendor live or scoring it 0. Nothing anywhere said so.
+    #
+    # Advisory, not an error: `aef doctor` checks that a setup is coherent,
+    # while readiness to be gated is `aef loop doctor`'s question — and that is
+    # where the same finding refuses (obligation "model calls visible"). An
+    # adopter who has not routed their calls yet is mid-migration, not broken.
+    migrated = target_dir / "aef_migrated.py"
+    if migrated.is_file():
+        visible, detail = model_calls_are_visible(target_dir, migrated.name)
+        checks.append(
+            DoctorCheck(
+                "model_calls_visible",
+                visible,
+                detail
+                + (
+                    ""
+                    if visible
+                    else ". It bypasses the policy engine and the fallback chain, and the "
+                    "gates cannot replay a call the recorder never saw. "
+                    "`aef loop doctor` refuses on this; see the `aef migrate` report."
+                ),
+                level="info" if visible else "advisory",
             )
         )
 

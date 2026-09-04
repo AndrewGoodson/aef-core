@@ -1,9 +1,13 @@
-"""The five obligations, and the command that makes the fifth meetable.
+"""The six obligations, and the command that makes the fifth meetable.
 
 Every obligation here was discovered by someone being stuck — one refusal at
-a time, in the worst order. `doctor` reports all five at once; `bless` makes
+a time, in the worst order. `doctor` reports all six at once; `bless` makes
 obligation 5 possible at all, since LOOP.md told owners to archive a baseline
 and no command existed to do it (ADR 0073).
+
+Obligation 6 is the exception to "discovered by being stuck": a node that
+builds its own vendor client never gets stuck. It runs, `aef doctor` reports
+green, and the bill arrives at gate time (ADR 0137).
 """
 
 import subprocess
@@ -46,7 +50,7 @@ def work(state, ctx, services):
 
 def _repo(tmp_path: Path, source: str) -> Path:
     repo = tmp_path / "repo"
-    (repo / "agents").mkdir(parents=True)
+    (repo / "agents").mkdir(parents=True, exist_ok=True)
     (repo / "agents" / "graph.py").write_text(source)
     return repo
 
@@ -118,7 +122,7 @@ def test_a_custom_reflect_node_id_is_honoured(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------
 
 
-def test_all_five_obligations_are_reported(tmp_path: Path) -> None:
+def test_all_six_obligations_are_reported(tmp_path: Path) -> None:
     names = {o.name for o in _check(tmp_path, ROUTED).obligations}
     assert names == {
         "corpus + tripwire",
@@ -126,6 +130,7 @@ def test_all_five_obligations_are_reported(tmp_path: Path) -> None:
         "observations",
         "halt channel",
         "blessed baseline",
+        "model calls visible",
     }
 
 
@@ -145,6 +150,96 @@ def test_the_bless_fix_string_is_the_command_the_cli_accepts(tmp_path: Path) -> 
 
 def test_a_fresh_repo_is_not_ready(tmp_path: Path) -> None:
     assert not _check(tmp_path, ROUTED).ready
+
+
+# --------------------------------------------------------------------------
+# Obligation 6 — the model call must be visible to the harness (ADR 0137)
+#
+# Reproduced before it was written: an adopted repo whose node called its own
+# `run_agent()`, which built its own `anthropic.Anthropic()`. `aef doctor`
+# exit 0; `Services.model_provider` 0 calls; the recorded scenario carried 0
+# RecordedCalls; replay with on_miss="fail" reached the vendor live, and with
+# no SDK installed scored 0.0. Nothing anywhere warned.
+# --------------------------------------------------------------------------
+
+BYPASSING_NODE = ROUTED.replace(
+    "def work(state, ctx, services):",
+    "def work(state, ctx, services):\n"
+    "    from vendor_client import ask\n\n"
+    "    ask(state.objective)",
+)
+
+
+def _with_vendor_module(tmp_path: Path, source: str, body: str) -> Path:
+    repo = _repo(tmp_path, source)
+    (repo / "vendor_client.py").write_text(body)
+    return repo
+
+
+def test_a_node_reaching_a_module_that_builds_its_own_client_is_unmet(tmp_path: Path) -> None:
+    repo = _with_vendor_module(
+        tmp_path,
+        BYPASSING_NODE,
+        "import anthropic\n\n\ndef ask(p):\n    return anthropic.Anthropic()\n",
+    )
+    obligation = _obligation(
+        _check(tmp_path, BYPASSING_NODE, repo_root=repo), "model calls visible"
+    )
+    assert not obligation.met
+    assert "vendor_client.py" in obligation.detail
+    assert "anthropic" in obligation.detail
+
+
+def test_the_obligation_is_met_when_nothing_reachable_imports_a_vendor_sdk(
+    tmp_path: Path,
+) -> None:
+    """The routed node `aef migrate` now generates: it asks
+    `services.require_model_provider()` and imports no SDK at all."""
+    obligation = _obligation(_check(tmp_path, ROUTED), "model calls visible")
+    assert obligation.met
+    assert "none imports a model SDK" in obligation.detail
+
+
+def test_a_vendor_import_two_modules_deep_is_still_found(tmp_path: Path) -> None:
+    """Reachability is transitive. The adopted repo that motivated this had the
+    SDK two hops from the graph — the generated node imported `src.my_agent`,
+    which imported `anthropic` — and a one-level check would have passed it."""
+    repo = _with_vendor_module(tmp_path, BYPASSING_NODE, "from deeper import ask  # noqa: F401\n")
+    (repo / "deeper.py").write_text("import anthropic\n\n\ndef ask(p):\n    return anthropic\n")
+    obligation = _obligation(
+        _check(tmp_path, BYPASSING_NODE, repo_root=repo), "model calls visible"
+    )
+    assert not obligation.met
+    assert "deeper.py" in obligation.detail
+
+
+def test_a_third_party_import_is_not_followed_out_of_the_repo(tmp_path: Path) -> None:
+    """`anthropic` imports `anthropic`. Following imports that resolve outside
+    the repo would report every adopter's whole site-packages tree."""
+    source = ROUTED.replace(
+        "def work(state, ctx, services):",
+        "def work(state, ctx, services):\n    import json\n\n    json.dumps({})",
+    )
+    assert _obligation(_check(tmp_path, source), "model calls visible").met
+
+
+def test_a_circular_import_terminates(tmp_path: Path) -> None:
+    circular = "import other\n\n\ndef ask(p):\n    return other\n"
+    repo = _with_vendor_module(tmp_path, BYPASSING_NODE, circular)
+    (repo / "other.py").write_text("import vendor_client\n")
+    assert _obligation(_check(tmp_path, BYPASSING_NODE, repo_root=repo), "model calls visible").met
+
+
+def test_the_fix_names_the_call_that_replaces_the_client(tmp_path: Path) -> None:
+    """A fix that says "don't do that" is not a fix. This one names the call,
+    the command that generates it, and what the adopter loses by not doing it."""
+    repo = _with_vendor_module(
+        tmp_path, BYPASSING_NODE, "import anthropic\n\n\ndef ask(p):\n    return anthropic\n"
+    )
+    fix = _obligation(_check(tmp_path, BYPASSING_NODE, repo_root=repo), "model calls visible").fix
+    assert "services.require_model_provider().complete(" in fix
+    assert "aef migrate" in fix
+    assert "RecordedCall" in fix
 
 
 # --------------------------------------------------------------------------

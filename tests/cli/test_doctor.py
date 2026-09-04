@@ -168,3 +168,52 @@ def test_the_generated_todo_objective_is_flagged(tmp_path: Path) -> None:
     )
     advisories = [c for c in run_doctor(tmp_path) if not c.ok and "empty_objectives" in c.name]
     assert advisories, "the placeholder adopt itself writes is not flagged"
+
+
+# --------------------------------------------------------------------------
+# ADR 0137 — `aef doctor` reported the bypass green
+#
+# Reproduced on the adopted+migrated repo the ready loop built: exit 0, two
+# advisories, and neither about the fact that the migrated node's model call
+# reached no `Services.model_provider` at all. Advisory here, because whether
+# a repo is READY TO BE GATED is `aef loop doctor`'s question and that one
+# refuses; this surface only has to stop saying nothing.
+# --------------------------------------------------------------------------
+
+
+def _migrated(tmp_path: Path, node_body: str) -> None:
+    (tmp_path / "aef_migrated.py").write_text(
+        "from aef.kernel import END, Graph, Node\n"
+        "from aef.state import StateDelta\n\n\n"
+        "def work(state, ctx, services):\n"
+        f"{node_body}"
+        "    return StateDelta(), END\n\n\n"
+        "def build_graph():\n"
+        "    return Graph(id='g', version='1',\n"
+        "                 nodes={'work': Node(id='work', version='1', fn=work,\n"
+        "                                     deterministic=False)},\n"
+        "                 edges=[], entry_node='work')\n"
+    )
+
+
+def test_a_migrated_node_whose_call_bypasses_the_provider_is_flagged(tmp_path: Path) -> None:
+    (tmp_path / "legacy.py").write_text("import anthropic\n\n\ndef ask(p):\n    return anthropic\n")
+    _migrated(tmp_path, "    from legacy import ask\n\n    ask(state.objective)\n")
+
+    check = next(c for c in run_doctor(tmp_path) if c.name == "model_calls_visible")
+    assert not check.ok
+    assert check.level == "advisory"
+    assert "legacy.py" in check.detail
+    assert "cannot replay" in check.detail
+
+
+def test_a_routed_migrated_node_is_not_flagged(tmp_path: Path) -> None:
+    _migrated(tmp_path, "    services.require_model_provider()\n")
+    check = next(c for c in run_doctor(tmp_path) if c.name == "model_calls_visible")
+    assert check.ok
+
+
+def test_the_check_is_absent_when_the_repo_has_not_been_migrated(tmp_path: Path) -> None:
+    """`aef init`-shaped repos have no `aef_migrated.py`, and a check that
+    cannot look at anything must not report on it either way."""
+    assert not any(c.name == "model_calls_visible" for c in run_doctor(tmp_path))
