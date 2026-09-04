@@ -43,6 +43,7 @@ from aef.harness.corpus import (
 )
 from aef.harness.corpus import fixed_clock as _fixed_clock
 from aef.harness.outcome import is_recovered
+from aef.harness.redaction import RedactionPolicy
 from aef.harness.trace_codec import decode_trace, dumps, encode_trace, loads
 from aef.kernel import GraphExecutor, Services
 from aef.kernel.executor import NodeExecutionRecord
@@ -52,6 +53,8 @@ from aef.services.runtime import agent_services
 from aef.state import AEFState
 
 DEFAULT_DAILY_LIMIT = 5
+# On by default: the corpus lives in git (ADR 0119). `redaction=None` turns it off.
+DEFAULT_REDACTION = RedactionPolicy()
 
 
 class HarvestError(RuntimeError):
@@ -131,6 +134,12 @@ class HarvestOutcome:
     skipped_existing: tuple[str, ...] = ()
     rejected_nondeterministic: tuple[str, ...] = ()
     skipped_rate_limited: tuple[str, ...] = ()
+    # Redaction (ADR 0119): the run's behaviour depended on something the
+    # redactor removed, or a secret survived into the scenario that would
+    # have been written. Neither is recorded.
+    rejected_redaction_changed_behaviour: tuple[str, ...] = ()
+    rejected_unredactable: tuple[str, ...] = ()
+    redactions: int = 0
 
     @property
     def lines(self) -> tuple[str, ...]:
@@ -140,9 +149,16 @@ class HarvestOutcome:
             ("passed, not promoted", self.skipped_passing),
             ("REJECTED, did not re-execute deterministically", self.rejected_nondeterministic),
             ("held back by the daily rate limit", self.skipped_rate_limited),
+            (
+                "REJECTED, behaviour changed under redaction",
+                self.rejected_redaction_changed_behaviour,
+            ),
+            ("REJECTED, a secret survived redaction", self.rejected_unredactable),
         ):
             if items:
                 out.append(f"  {len(items)} {label}: {', '.join(sorted(items)[:5])}")
+        if self.redactions:
+            out.append(f"  {self.redactions} substitution(s) made by the redaction policy")
         return tuple(out)
 
 
@@ -183,6 +199,41 @@ def _reexecutes_identically(run: RecordedRun, graph: Graph) -> bool:
     return dumps(encode_trace(result.trace)) == dumps(encode_trace(run.trace))
 
 
+def _reexecute(
+    state: AEFState, run: RecordedRun, graph: Graph
+) -> tuple[NodeExecutionRecord, ...] | None:
+    """Trace of re-running `graph` on `state` under the run's recorded clock,
+    or None if it failed to run at all."""
+    scenario = Scenario(
+        id=run.run_id,
+        split=Split.TRAIN,
+        graph_id=run.graph_id,
+        graph_version=run.graph_version,
+        initial_state=state,
+        trace=run.trace,
+        recorded_at=run.at,
+    )
+    try:
+        result = GraphExecutor(graph.compile(), _reexecution_services(scenario)).run(
+            state, record_trace=True
+        )
+    except Exception:  # noqa: BLE001 - any failure to reproduce is a rejection
+        return None
+    return result.trace
+
+
+def _behaviour(initial: AEFState, trace: tuple[NodeExecutionRecord, ...]) -> tuple[Any, ...]:
+    """What must survive redaction for the scenario to still be the same
+    failure: the node path, which nodes errored, and the plan's status.
+    Text is allowed to differ — that is what redaction changes."""
+    final = initial
+    for record in trace:
+        final = record.delta.apply(final)
+    failing = tuple(e.get("node_id") for e in final.errors if not is_recovered(e))
+    status = final.plan.status if final.plan is not None else None
+    return (tuple(r.node_id for r in trace), failing, status)
+
+
 def harvest(
     runs_dir: Path,
     corpus_root: Path,
@@ -191,7 +242,11 @@ def harvest(
     now: datetime,
     include_successes: bool = False,
     daily_limit: int = DEFAULT_DAILY_LIMIT,
+    redaction: RedactionPolicy | None = DEFAULT_REDACTION,
 ) -> HarvestOutcome:
+    """`redaction` is ON by default and `None` turns it off explicitly — the
+    corpus lives in git, and a harvest that writes tenant text unless told
+    not to is the wrong default (ADR 0119)."""
     corpus = load_corpus(corpus_root) if corpus_root.is_dir() else None
     existing = {s.id for s in corpus.scenarios} if corpus else set()
 
@@ -204,6 +259,9 @@ def harvest(
     duplicate: list[str] = []
     flaky: list[str] = []
     limited: list[str] = []
+    changed: list[str] = []
+    unredactable: list[str] = []
+    substitutions = 0
 
     for run in load_runs(runs_dir):
         if run.run_id in existing:
@@ -219,23 +277,43 @@ def harvest(
             flaky.append(run.run_id)
             continue
 
-        save_scenario(
-            corpus_root,
-            Scenario(
-                id=run.run_id,
-                split=Split.TRAIN,
-                graph_id=run.graph_id,
-                graph_version=run.graph_version,
-                initial_state=run.initial_state,
-                trace=run.trace,
-                recorded_at=run.at,
-                notes="harvested from a real run; re-execution verified",
-                # Harvested runs carry NO owner claim. Only a human can say a
-                # task should have failed, and a MUST_FAIL label invented by
-                # the system would be a tripwire the system set for itself.
-                expected=Expected.UNSPECIFIED,
-            ),
+        initial_state, trace = run.initial_state, run.trace
+        notes = "harvested from a real run; re-execution verified"
+        if redaction is not None:
+            redacted_state, count = redaction.redact_state(run.initial_state)
+            if count:
+                # Redact the input, re-execute, keep THAT trace — never patch
+                # the recorded one. Admit only if the failure is the same
+                # failure; text may differ, behaviour may not.
+                redacted_trace = _reexecute(redacted_state, run, graph)
+                if redacted_trace is None or _behaviour(
+                    redacted_state, redacted_trace
+                ) != _behaviour(run.initial_state, run.trace):
+                    changed.append(run.run_id)
+                    continue
+                initial_state, trace = redacted_state, redacted_trace
+                notes += f"; {count} redaction(s) applied to the input before re-execution"
+                substitutions += count
+        scenario = Scenario(
+            id=run.run_id,
+            split=Split.TRAIN,
+            graph_id=run.graph_id,
+            graph_version=run.graph_version,
+            initial_state=initial_state,
+            trace=trace,
+            recorded_at=run.at,
+            notes=notes,
+            # Harvested runs carry NO owner claim. Only a human can say a
+            # task should have failed, and a MUST_FAIL label invented by
+            # the system would be a tripwire the system set for itself.
+            expected=Expected.UNSPECIFIED,
         )
+        # The output scan: a secret that survived the input redaction came
+        # from somewhere the redactor cannot reach. Rejected, not written.
+        if redaction is not None and redaction.find(scenario.to_payload()):
+            unredactable.append(run.run_id)
+            continue
+        save_scenario(corpus_root, scenario)
         promoted.append(run.run_id)
 
     return HarvestOutcome(
@@ -244,4 +322,7 @@ def harvest(
         skipped_existing=tuple(duplicate),
         rejected_nondeterministic=tuple(flaky),
         skipped_rate_limited=tuple(limited),
+        rejected_redaction_changed_behaviour=tuple(changed),
+        rejected_unredactable=tuple(unredactable),
+        redactions=substitutions,
     )
