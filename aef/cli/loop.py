@@ -266,6 +266,87 @@ def cmd_record(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_bootstrap(args: argparse.Namespace) -> int:
+    """A corpus on day one: run the configured graph once per input and
+    record each run as a TRAIN scenario (ADR 0138).
+
+    Everything that makes this safe lives in `aef.harness.bootstrap` — train
+    only, no `expected` label, no overwrite, and the failure count reported.
+    This function is the boundary: it reads the file, builds the same
+    services `aef loop record` builds, and prints.
+    """
+    from aef.cli.run import load_graph_module
+    from aef.harness.bootstrap import BootstrapError, bootstrap, load_inputs
+    from aef.harness.recorder import RecorderError
+    from aef.kernel import Services
+    from aef.services.memory.in_memory import InMemoryMemoryStore
+    from aef.services.runtime import agent_services
+
+    # Bootstrap writes to corpus/, which IS the evidence every behavioural
+    # gate is measured against, so it honours the same halt `harvest` does
+    # (ADR 0069): a halted loop must not have its gate evidence changed
+    # underneath it. `--state` is OPTIONAL here and required there, because
+    # this is the day-one command and a loop state dir does not exist yet —
+    # with no state dir there is no loop to have halted.
+    if getattr(args, "state", None):
+        try:
+            LoopPaths(root=Path(args.state)).kill_switch.check()
+        except LoopHaltedError as exc:
+            print(f"HALTED: {exc}")
+            return EXIT_HALTED
+
+    graph = load_graph_module(args.module)
+
+    # The provider `aef run` would use, from the same config, so what gets
+    # recorded is what production would have said — identical to `record`.
+    model_provider = None
+    reflection = "rule_based"
+    reflection_model: str | None = None
+    if getattr(args, "config", None):
+        from aef.config import build_model_provider, load_agent_config
+
+        config = load_agent_config(args.config)
+        model_provider = build_model_provider(config.model_provider)
+        reflection = config.reflection.impl
+        reflection_model = config.model_provider.model
+
+    def services() -> Services:
+        # A FACTORY, not one instance: each input gets its own memory store,
+        # because the gates re-execute each scenario in isolation and a
+        # scenario that only reproduces after its predecessors ran is one
+        # nothing downstream can trust.
+        return agent_services(
+            memory=InMemoryMemoryStore(),
+            model_provider=model_provider,
+            reflection=reflection,
+            reflection_model=reflection_model,
+            agent_id=args.agent_id,
+        )
+
+    try:
+        inputs = load_inputs(Path(args.inputs), prefix=args.prefix)
+        outcome = bootstrap(
+            Path(args.corpus),
+            graph,
+            services,
+            inputs=inputs,
+            now=datetime.now(UTC),
+            agent_id=args.agent_id,
+        )
+    except (BootstrapError, RecorderError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
+
+    for line in outcome.lines:
+        print(line)
+    for command in outcome.tripwire_commands(args.module, args.corpus, inputs):
+        print(f"    {command}")
+    # A command that recorded nothing did not seed a corpus, and a workflow
+    # keying off exit 0 would believe it had. The ready loop's rule: the
+    # tooling does not report green for something that did not happen.
+    return EXIT_OK if outcome.recorded else EXIT_REJECTED
+
+
 def _parse_checks(raw: list[str] | None) -> tuple[TaskCheck, ...]:
     """`--check` values: each a JSON object or a JSON list of objects.
     Malformed checks fail here, before anything runs — a check that loaded
@@ -809,6 +890,61 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         help="wall-clock budget for the re-execution, judged on the runner's stopwatch",
     )
     p_record.set_defaults(handler=cmd_record)
+
+    p_bootstrap = loop_subs.add_parser(
+        "bootstrap",
+        help="a corpus on day one: run the graph once per input, record each as a scenario",
+        description=(
+            "INPUTS FILE SHAPE: a JSON list of objects, or an object with an "
+            "'inputs' list. Each object needs `objective` (string) and may set "
+            "`id` (default <prefix>-<n>), `working_memory` (object seeding "
+            "AEFState.working_memory — how you reach the agent's FAILING cases), "
+            "`notes`, `checks` (owner checks, ADR 0113) and `budget_ms`.\n\n"
+            'EXAMPLE: [{"objective": "summarise the ticket", '
+            '"working_memory": {"difficulty": 9}, '
+            '"checks": [{"path": "scores.quality", "op": "equals", '
+            '"value": 1.0}]}]\n\n'
+            "WHAT IT WILL NOT DO. It writes the TRAIN split only and offers no "
+            "flag to override, the same rule as `harvest`: if the system could "
+            "fill the set that gates it, the gate would measure the system's own "
+            "choices. It never labels `expected` — only an owner can say a task "
+            "SHOULD have failed (ADR 0060) — and an `expected` key in the file is "
+            "refused rather than ignored. It refuses the whole invocation if any "
+            "id already exists, before running anything."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_bootstrap.add_argument("module", help="importable module exposing build_graph()")
+    p_bootstrap.add_argument("--corpus", required=True)
+    p_bootstrap.add_argument(
+        "--inputs", required=True, help="JSON file of inputs; see the description above"
+    )
+    p_bootstrap.add_argument(
+        "--prefix",
+        default="bootstrap",
+        help="scenario id prefix for inputs that do not name one (default: bootstrap). "
+        "Stable on purpose: re-running the same file is refused rather than "
+        "overwriting what it recorded.",
+    )
+    p_bootstrap.add_argument("--agent-id", default="bootstrap")
+    p_bootstrap.add_argument(
+        "--state",
+        default=None,
+        help="loop state dir, if one exists. Optional, unlike every other loop "
+        "subcommand: this is the day-one command and there may be no loop yet. Given "
+        "one, an engaged kill switch stops the run — corpus/ is gate evidence, and a "
+        "halted loop must not have it changed underneath it (ADR 0069).",
+    )
+    p_bootstrap.add_argument(
+        "--config",
+        default=None,
+        help=(
+            "aef.yaml path; wires the real model_provider (e.g. impl: claude_code) so a "
+            "graph that calls a model can be recorded. Every call it makes is pinned in "
+            "the scenario and replayed by the gates without a credential (ADR 0123)."
+        ),
+    )
+    p_bootstrap.set_defaults(handler=cmd_bootstrap)
 
     p_score = loop_subs.add_parser(
         "score",

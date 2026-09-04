@@ -904,3 +904,97 @@ reply — the same overhead class ADR 0126 cut from ~211k to ~4.7k on the
 Claude path — and no Codex equivalent of `--safe-mode` has been looked for.
 An MCP `HTTP 405` appears on stderr of every successful run. Both recorded
 in ADR 0131, neither acted on.
+
+---
+
+## K2 — A corpus on day one (2026-09-04)
+
+**Branch:** `improve/k2-bootstrap`, off `4872088`.
+**Rubric claim:** none. This is `READY_LOOP.md`, not the rubric — the score
+does not move. It makes definition-of-done statement **1** ("a raw-SDK repo
+goes from `git clone` to a gated candidate without hand-writing a node or a
+scenario") true on its *scenario* half; the node half is K1's.
+
+**Reproduce (RUN).** Fresh repo, one 8-line raw-SDK agent, `aef adopt` then
+`aef migrate`:
+
+```
+ls corpus/                        -> README.md, and nothing else
+aef loop doctor ... --corpus corpus
+  [--] corpus + tripwire       0 scenario(s), 0 tripwire(s)
+aef loop record ... --scenario-id s1 --objective "an ordinary task"
+  -> passed=True                  (the happy path is all you can reach)
+aef loop record ... --scenario-id s2 --objective "a hard task" \
+    --working-memory '{"difficulty": 9, "quality_needed": 9}'
+  -> passed=False                 (a hand-written JSON blob, per scenario)
+```
+
+**Expectation, before starting.** That bootstrap alone would turn the corpus
+obligation green. Wrong: `preflight`'s first obligation is
+`scenarios AND tripwires`, and rule 2 forbids bootstrap from labelling one.
+So the design changed — bootstrap generates the `aef loop record --expected
+must_fail` line with the objective and working memory already filled in, and
+the owner runs it. One pasted line, no hand-written scenario, and the label
+stays the owner's (ADR 0060).
+
+**Change.** `aef/harness/bootstrap.py` (new), `aef loop bootstrap` in
+`aef/cli/loop.py`, and `recorder.refuse_existing_ids` — the no-overwrite
+rule lifted out of `record_to_corpus` so bootstrap can apply it to a whole
+batch *before* running anything, one implementation and one wording.
+
+**Measurement.**
+
+```
+aef loop doctor  BEFORE            [--] corpus + tripwire  0 scenario(s), 0 tripwire(s)
+aef loop bootstrap agents.demo.graph --corpus corpus --inputs inputs.json
+                                   recorded 4 scenario(s) in the train split
+                                   2 of 4 recorded run(s) FAILED.   exit=0
+aef loop doctor  AFTER BOOTSTRAP   [--] corpus + tripwire  4 scenario(s), 0 tripwire(s)
+<the printed record command, pasted verbatim>
+aef loop doctor  AFTER             [OK] corpus + tripwire  5 scenario(s), 1 tripwire(s)
+aef loop score agents.demo.graph:build_graph --corpus corpus
+                                   train n=4 mean=0.5000  validation n=1 mean=0.0000
+
+re-run bootstrap over its own output -> exit 1, "already exist", corpus unchanged
+an "expected" key in inputs.json     -> exit 1, refused, naming ADR 0060
+
+mutations (production value perturbed, test run, reverted):
+  M1 writes a non-train split          2 failed
+  M2 labels expected                  11 failed
+  M3 overwrites an existing id         2 failed
+  M4 failure count not reported        2 failed
+  M5 zero-failure warning removed      1 failed
+  M6 one shared Services per batch     1 failed
+  M7 a refused key is ignored          2 failed
+  M8 the halt check removed            1 failed
+pytest -q          1847 passed, 1 skipped (from 1820; +27, none removed)
+mypy aef examples  128 files clean
+ruff check / format   clean
+```
+
+**Verdict.** The measurement uses this repo's `agents/demo`, not the
+adoptee's own graph, and the reason is a second measurement rather than
+convenience: bootstrapping `aef_migrated` records **0 of 4** and exits 1,
+because the migrated node calls the adopter's function, which builds its own
+`anthropic.Anthropic()`, and the run raises before producing a trace. That
+is K1's defect seen from the corpus side.
+
+**A wrong prediction, recorded.** The first implementation printed the
+zero-failure line for that run — *"0 of 0 recorded run(s) failed. A corpus
+where everything passes cannot demonstrate an improvement"* — when nothing
+had passed and nothing had run. A green light for something that did not
+hold, written by the increment whose subject is that shape. Fixed, and the
+test asserts the everything-passed sentence is absent.
+
+**One NEW defect, found by seam-hunting this diff before it shipped.**
+`cmd_harvest` checks the kill switch before writing to `corpus/` (ADR 0069);
+`cmd_bootstrap`, writing to the same directory for the same consumers, did
+not. Fixed in the same increment, with an optional `--state` (day one has no
+loop state dir yet) and mutation M8.
+
+**Deliberately left.** No `aef loop label` command: marking an existing
+scenario `must_fail` in place would be a second way to write an owner claim,
+and re-recording it under a new id keeps the recorder's refusal ("a task the
+agent just completed cannot be a tripwire") on the path. `checks` and
+`budget_ms` are per-input; `agent_id` is per-invocation, and the first real
+inputs file may want it per-input.

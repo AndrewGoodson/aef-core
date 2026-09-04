@@ -17,6 +17,7 @@ noticing — so writing there needs an explicit, separate act.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -44,6 +45,37 @@ class HoldoutWriteRefused(RecorderError):
 class RecordedScenario:
     scenario: Scenario
     path: Path
+
+
+def refuse_existing_ids(root: Path, scenario_ids: Sequence[str]) -> None:
+    """Raise unless every id is new to the corpus at `root`, and distinct.
+
+    Silently replacing a scenario is how a corpus stops binding: the entry
+    that used to fail is gone, and `check_never_shrinks` cannot tell, because
+    the id is still there.
+
+    Batch-shaped because `bootstrap` records many scenarios in one act and
+    must refuse the whole invocation before writing any of them. One
+    implementation and one wording, shared with `record_to_corpus` — a second
+    copy of a rule is where the two drift apart (ADR 0091).
+    """
+    seen: set[str] = set()
+    repeated: set[str] = set()
+    for sid in scenario_ids:
+        (repeated if sid in seen else seen).add(sid)
+    if repeated:
+        raise RecorderError(
+            f"scenario id(s) requested more than once in the same batch: {sorted(repeated)}. The "
+            f"second recording would overwrite the first before anything could read it."
+        )
+    existing = {s.id for s in load_corpus(root).scenarios} if root.is_dir() else set()
+    clashing = sorted(set(scenario_ids) & existing)
+    if clashing:
+        raise RecorderError(
+            f"scenario id(s) already exist: {clashing}. Overwriting would replace the "
+            f"behaviour the corpus recorded with the behaviour it has now, which is "
+            f"precisely the regression a corpus exists to catch. Pick a new id."
+        )
 
 
 def record_run(
@@ -140,19 +172,9 @@ def record_to_corpus(
     checks: tuple[TaskCheck, ...] = (),
     budget_ms: float | None = None,
 ) -> RecordedScenario:
-    """Record and persist, refusing to overwrite an existing scenario.
-
-    Silently replacing a scenario is how a corpus stops binding: the entry
-    that used to fail is gone, and `check_never_shrinks` cannot tell, because
-    the id is still there.
-    """
-    existing = {s.id for s in load_corpus(root).scenarios} if root.is_dir() else set()
-    if scenario_id in existing:
-        raise RecorderError(
-            f"scenario {scenario_id!r} already exists. Overwriting it would replace the "
-            f"behaviour the corpus recorded with the behaviour it has now, which is "
-            f"precisely the regression a corpus exists to catch. Pick a new id."
-        )
+    """Record and persist, refusing to overwrite an existing scenario —
+    see `refuse_existing_ids`, which is that rule."""
+    refuse_existing_ids(root, [scenario_id])
 
     scenario = record_run(
         graph,
