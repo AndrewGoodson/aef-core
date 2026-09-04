@@ -409,8 +409,11 @@ def raw_sdk_adoptee(tmp_path: Path) -> tuple[Path, Path]:
     repo = tmp_path / "adoptee"
     repo.mkdir()
     (repo / "README.md").write_text("# mine\n")
-    # NOT written by `aef adopt`, and the reason it is here is measured
-    # (ADR 0139). Without it the adopter's first `git add -A` commits
+    # Written BEFORE `aef adopt` deliberately, so this fixture still exercises
+    # the never-overwrite path: adopt writes a `.gitignore` itself now (ADR
+    # 0142) and skips an existing one. When ADR 0139 measured this it did NOT,
+    # and the reason the file is here is that measurement. Without it the
+    # adopter's first `git add -A` commits
     # `agents/**/__pycache__/*.pyc` into ZONE A, and because those files did
     # not exist when the baseline was blessed, G5 charges them as drift:
     # **0.4675 of a 0.500 budget for a one-line candidate**, against 0.0238

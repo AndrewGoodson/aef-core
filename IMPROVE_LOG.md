@@ -1381,3 +1381,137 @@ request type, and this predicate answers only the second question. Named in ADR
 0140 rather than closed: closing it means either a per-adapter capability
 declaration or excluding a real field by hand, and the second is the drift this
 wave is about.
+
+---
+
+## Fix wave E — Zone A hygiene: the adopter pays for what `adopt` did not write (2026-09-04)
+
+**ADR:** `docs/adr/0142-zone-a-hygiene-the-adopter-pays-for-what-adopt-did-not-write.md`
+**No rubric dimension moves.** Two defects, both found by K3 (ADR 0139) while
+proving an adopted repo can gate a candidate, both reported there rather than
+fixed because they sat outside that increment's file scope.
+
+**E1 — committed bytecode is charged as drift. REPRODUCED, then fixed.**
+`aef adopt` wrote no `.gitignore`, so an ordinary `git add -A` on day one
+commits `agents/**/__pycache__/*.pyc` into **Zone A**. The bytecode is created
+*after* `aef loop bless` archives the baseline (by `bootstrap`, `aef run`,
+`pytest` — anything that imports the agent) and committed *before* the cycle,
+so it is on the candidate side only, and `structural_drift` charges every line.
+
+K3's numbers re-derived rather than copied — the K3 adoption sequence driven
+twice against a fresh `git init`, each arm ending in a real `aef loop cycle`
+that wrote its own ledger:
+
+```
+WITHOUT .gitignore   3 .pyc tracked under agents/
+                     G5: drift 0.468/0.500 from the blessed baseline
+WITH .gitignore      0 .pyc tracked
+                     G5: drift 0.024/0.500
+```
+
+and itemised by re-running `structural_drift` over the same archive and the
+same candidate branch:
+
+```
+agents/mine/__pycache__/graph.cpython-313.pyc   differing 29 of 29
+agents/mine/__pycache__/__init__...pyc          differing  3 of  3
+agents/__pycache__/__init__...pyc               differing  3 of  3
+agents/mine/graph.py                            differing  1 of 30
+TOTAL 36/77 -> 0.4675324675   93.5% of budget, headroom 0.0325
+(without the bytecode: 1/42 -> 0.0238095, headroom 0.4762)
+```
+
+**35 of the 36 differing lines are bytecode; 1 is the candidate.**
+`_drift_exhausted_twice` halts the loop on two consecutive drift rejections,
+so day one put an adopter two candidates from a halt for reasons that have
+nothing to do with their agent. This is ADR 0074's defect from the other
+side, and unreachable by that fix: 0074 made both sides read from git, which
+cannot help when the bytecode is *in* git.
+
+`run_adopt` now writes a `.gitignore` under the scaffold's never-overwrite
+rule. **An existing one is skipped and reported, never appended to** —
+silently adding a generated line to a tracked config the adopter owns is the
+never-overwrite rule broken by another route — with the report landing in the
+checklist `adopt` both prints and writes to `AEF_MIGRATION_CHECKLIST.md`,
+naming the two patterns and the measured cost. Coverage is an exact match in
+two families (`__pycache__/…`, `*.pyc`-shaped) because either alone suffices
+on CPython 3 and nagging for an equivalent pattern is how generated advice
+stops being read; a comment is not a rule. `corpus/` and `.github/workflows/`
+are deliberately not ignored — Zone B is evidence read from git, and an
+ignored corpus is an empty one.
+
+After, same script unchanged: **0.468 → 0.024**, both arms identical.
+
+**E2 — `aef migrate` writes to the one directory the loop cannot touch.
+REPRODUCED; the half that is mine is fixed.** `run_migrate` hardcodes
+`out = root / "aef_migrated.py"`; the repo root is Zone C. Reproduced through
+the harness's own `read_candidate`/`inspect_candidate` on a real commit —
+`allowed: False`, `aef_migrated.py: Zone C (core) — not under the agent root
+'agents'` — and neither migrate's report nor **any** file `aef adopt`
+generated said so: the strings `Zone A` and `agents/` appeared nowhere in
+`CLAUDE.md`, `AGENTS.md` or `AEF_MIGRATION_CHECKLIST.md`, while the checklist
+said "Convert each call site into a Node function".
+
+`migrate.py` belongs to another worker this wave, so `adopt` now states the
+constraint where the adopter meets it: a `## Where converted nodes have to
+live` section in the generated CLAUDE.md/AGENTS.md and a
+framework-independent checklist item, both interpolated from
+`aef.harness.zones.DEFAULT_AGENT_ROOT` and cross-checked by test against the
+directory `adopt` actually creates.
+
+**Routed, not done here.** `aef/cli/migrate.py:run_migrate` needs an `--out`
+threaded from `main._cmd_migrate`, defaulting to
+`f"{DEFAULT_AGENT_ROOT}/migrated/graph.py"` (imported, never spelled out),
+keeping the never-overwrite/`--force` rule; and `report()` should name the
+zone of the path it wrote. Related and still open: `aef loop bless
+--agent-path <a path outside Zone A>` succeeds while archiving a tree that
+does not contain it (K3's other reported defect,
+`aef/harness/preflight.py:bless`).
+
+**Tests.** Eight new: seven in `tests/cli/test_adopt.py` (including
+`test_the_generated_gitignore_actually_makes_git_ignore_zone_a_bytecode`,
+which asks `git check-ignore` rather than matching a string, and
+`test_gitignore_gaps_ignores_commented_out_patterns`, the detector's own
+control) and one end-to-end in `tests/cli/test_pristine_adoption.py` on
+**unmodified** adopt output, asserting through `bless`'s archive and the
+gate's own `structural_drift`.
+
+**`test_adopt.py`'s pins were updated deliberately**, and this line is the
+record of it: the exact written-file set gains `.gitignore`, and
+`test_run_adopt_is_idempotent_on_second_run` goes 15 → 16 on both counts.
+That pin is what makes "adopt quietly started writing something" a failure
+rather than a discovery, so it was edited by hand and not relaxed.
+
+**Mutations** (66-test baseline, each reverted from a byte-identical backup):
+
+```
+BASELINE                                                    66 passed
+M1  run_adopt writes no .gitignore                           6 failed
+M2  render_gitignore drops __pycache__/ and *.py[cod]        3 failed
+M3  gitignore_gaps always returns ()                         2 failed
+M4  gitignore_gaps uses a naive `"__pycache__" in text`      1 failed
+M5  the checklist names `src/` instead of DEFAULT_AGENT_ROOT 1 failed
+M7  the CLAUDE.md Zone A section is deleted                  1 failed
+REVERTED                                                    66 passed
+```
+
+**Two attempted mutations survived and are recorded rather than hidden.**
+Editing only the checklist item's first f-string fragment, and renaming only
+the CLAUDE.md heading, each left every asserted string intact — correct
+non-detections, because a partial edit is not a deletion. M5 and M7 are the
+versions that remove the information.
+
+**Green bar:** `pytest -q` 1885 passed, 1 skipped (ADR 0139 recorded 1877/1
+— **+8, none removed**); `mypy aef examples` clean on 129 files;
+`ruff check .` clean; `ruff format --check aef tests examples` 239 formatted.
+**Zero model calls.**
+
+**Deliberately left.** `gitignore_gaps` is a textual floor: an adopter using
+`agents/**/*.pyc` or a global `core.excludesFile` is told about a gap they do
+not have. The failure direction is a redundant checklist line rather than a
+spent drift budget, which is the right way round, but it is a false positive
+and it is not proved absent — `git check-ignore` would answer exactly and
+needs a repo and a subprocess in a path that today runs against a bare
+directory. And the generated `.gitignore` is written for a Python adoptee: a
+Zone A carrying `node_modules/`, `target/` or `dist/` gets nothing for it,
+and the same arithmetic applies with a bigger numerator.
