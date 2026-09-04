@@ -74,6 +74,12 @@ class KnowledgeEntry:
     # a `content` key so it costs no retrieval budget (rendering `content` is
     # what the retriever spends tokens on, and I4 measured that trade).
     runs_since_last_seen: int = 0
+    # ACE's outcome signal (ADR 0118), computed by the consolidator from the
+    # records: runs where this lesson was in context and the run did NOT
+    # reproduce this failure (helpful), or did (harmful). Surfaced in chunk
+    # metadata and skill drafts; not yet a ranking input — see the retriever.
+    helpful: int = 0
+    harmful: int = 0
 
     def __post_init__(self) -> None:
         # Validation here rather than at write/serialise time — ADR 0108's
@@ -93,6 +99,8 @@ class KnowledgeEntry:
                 f"A repeated id inflates occurrence_count, which is the entry's only "
                 f"measure of how well-evidenced it is."
             )
+        if self.helpful < 0 or self.harmful < 0:
+            raise ValueError("helpful/harmful tallies must be non-negative")
         if self.runs_since_last_seen < 0:
             raise ValueError(
                 f"runs_since_last_seen must be non-negative; got {self.runs_since_last_seen}"

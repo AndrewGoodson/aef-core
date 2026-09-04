@@ -85,6 +85,8 @@ def render_skill(entry: KnowledgeEntry) -> str:
         f"- occurrences (distinct runs): {entry.occurrence_count}",
         f"- confidence: {entry.confidence:.2f}",
         f"- runs since last seen: {entry.runs_since_last_seen}",
+        f"- in context and the run avoided this failure (helpful): {entry.helpful}",
+        f"- in context and this failure recurred anyway (harmful): {entry.harmful}",
         f"- first seen: {first}",
         f"- last seen: {last}",
         f"- run ids: {', '.join(str(r) for r in runs) if runs else 'n/a'}",

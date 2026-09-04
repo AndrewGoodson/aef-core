@@ -144,12 +144,26 @@ class RuleBasedConsolidator:
         # that has stopped recurring while the agent keeps running is stale,
         # and the retriever demotes it rather than this layer deleting it.
         runs_seen: dict[tuple[str | None, str], datetime] = {}
+        # (agent, run) -> the signatures in context, and the signature the run
+        # itself produced. ACE's helpful/harmful tally is derived from these
+        # two per run (ADR 0118).
+        in_context: dict[tuple[str | None, str], set[str]] = {}
+        produced: dict[tuple[str | None, str], set[str]] = {}
         for kind in self.kinds:
             for record in memory.query(kind, agent_id=agent_id, limit=self.candidates_per_kind):
                 if record.run_id and record.created_at is not None:
                     key = (record.agent_id, record.run_id)
                     runs_seen[key] = max(runs_seen.get(key, _EPOCH), record.created_at)
                 signature = self.signature_fn(record)
+                if record.run_id:
+                    run_key = (record.agent_id, record.run_id)
+                    shown = record.content.get("retrieved_signatures")
+                    if isinstance(shown, (list, tuple)):
+                        in_context.setdefault(run_key, set()).update(
+                            s for s in shown if isinstance(s, str)
+                        )
+                    if signature is not None:
+                        produced.setdefault(run_key, set()).add(signature)
                 if signature is None:
                     continue
                 groups.setdefault((record.agent_id, signature), []).append(record)
@@ -160,9 +174,12 @@ class RuleBasedConsolidator:
             if len(representatives) < self.min_occurrences:
                 continue
             entry = _build_entry(signature, record_agent_id, representatives, self.summarise)
+            helpful, harmful = _tally(signature, record_agent_id, in_context, produced)
             entry = dataclasses.replace(
                 entry,
                 runs_since_last_seen=_runs_since(entry.last_seen, record_agent_id, runs_seen),
+                helpful=helpful,
+                harmful=harmful,
             )
             written.append(knowledge.upsert(entry))
 
@@ -258,6 +275,26 @@ def _runs_since(
         for (run_agent, _), latest in runs_seen.items()
         if run_agent == agent_id and latest > last_seen
     )
+
+
+def _tally(
+    signature: str,
+    agent_id: str | None,
+    in_context: dict[tuple[str | None, str], set[str]],
+    produced: dict[tuple[str | None, str], set[str]],
+) -> tuple[int, int]:
+    """Runs of this agent that had `signature` in context: harmful if the
+    run reproduced that very failure, helpful otherwise. A lesson never
+    shown to a run scores nothing either way — absence of evidence."""
+    helpful = harmful = 0
+    for run_key, shown in in_context.items():
+        if run_key[0] != agent_id or signature not in shown:
+            continue
+        if signature in produced.get(run_key, set()):
+            harmful += 1
+        else:
+            helpful += 1
+    return helpful, harmful
 
 
 def _rank(record: MemoryRecord) -> tuple[datetime, str]:

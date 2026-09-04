@@ -253,6 +253,8 @@ class MemoryRetriever(Retriever):
                                 "occurrence_count": entry.occurrence_count,
                                 "confidence": entry.confidence,
                                 "runs_since_last_seen": entry.runs_since_last_seen,
+                                "helpful": entry.helpful,
+                                "harmful": entry.harmful,
                                 "source_record_ids": list(entry.source_record_ids),
                             },
                         ),

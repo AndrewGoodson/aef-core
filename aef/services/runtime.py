@@ -85,6 +85,7 @@ def agent_services(
     knowledge: KnowledgeStore | None = None,
     reflection: str = "rule_based",
     reflection_model: str | None = None,
+    agent_id: str | None = None,
 ) -> Services:
     """Everything a Zone A node may `require_*`, with working defaults.
 
@@ -116,13 +117,28 @@ def agent_services(
         judge = LLMJudge(provider=model_provider, model=model, rubric=rubric)
     elif reflection != "rule_based":
         raise ValueError(f"unknown reflection impl {reflection!r}")
+    memory_store = memory if memory is not None else InMemoryMemoryStore()
+    knowledge_store = knowledge if knowledge is not None else InMemoryKnowledgeStore()
+    if retriever is None:
+        # Defaulted since ADR 0118, for the ADR 0091 reason: a graph with a
+        # retrieve node ran under `aef run --config` and raised
+        # ServiceNotConfiguredError in the gate — the fifth service to drift
+        # between the two lists. Built over the SAME stores this container
+        # carries, so it can never read a different memory than the agent
+        # writes. `agent_id=None` here is not the widening default the
+        # adversarial round found: the caller who has a durable, multi-agent
+        # store (`aef run`) builds a scoped retriever from config and passes
+        # it in; this default only ever fronts a throwaway store, and the gate
+        # paths pass the scenario's agent id besides.
+        from aef.services.context.memory_retriever import MemoryRetriever
+
+        retriever = MemoryRetriever(
+            memory=memory_store, knowledge=knowledge_store, agent_id=agent_id
+        )
     return Services(
         model_provider=model_provider,
-        # `None` unless configured. A retriever is per-agent Knowledge, so an
-        # unconfigured agent gets no retriever rather than a default one whose
-        # ranking it never chose (ADR 0101).
         retriever=retriever,
-        memory=memory if memory is not None else InMemoryMemoryStore(),
+        memory=memory_store,
         # In-memory by default, NOT absent — and the reasoning is memory's, not
         # the retriever's. `retriever` defaults to None because ranking is a
         # per-agent choice an unconfigured agent never made. A knowledge STORE
@@ -131,7 +147,7 @@ def agent_services(
         # ServiceNotConfiguredError in the gate is the ADR 0073/0075/0079/0091
         # shape for a fifth time. Throwaway for the same reason memory is — a
         # gate re-execution must not write into the adopter's knowledge.
-        knowledge=knowledge if knowledge is not None else InMemoryKnowledgeStore(),
+        knowledge=knowledge_store,
         tracer=tracer if tracer is not None else InMemoryTracer(),
         # In-memory by default, not absent. A node calling
         # `require_durability()` worked under `aef run` and raised in the

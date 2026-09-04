@@ -14,6 +14,8 @@ something writes it.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from aef.kernel.contracts import END, Context, Node, Route, Services, SideEffect
 from aef.reasoning.rule_based_reflection import failure_signals
 from aef.services.knowledge.consolidate import RuleBasedConsolidator
@@ -36,6 +38,83 @@ def _failing_nodes(state: AEFState) -> list[str]:
         if isinstance(node_id, str) and node_id and node_id not in seen:
             seen.append(node_id)
     return seen
+
+
+KNOWLEDGE_SOURCE_PREFIX = "knowledge:"
+
+
+def retrieved_signatures(state: AEFState) -> list[str]:
+    """Signatures of the consolidated lessons this run was shown, read from
+    `state.retrieved_context`. Computed from the chunks the retrieve node
+    wrote, so the outcome signal ADR 0118 records is about lessons the agent
+    actually had in context — not lessons that existed."""
+    seen: list[str] = []
+    for chunk in state.retrieved_context:
+        source = chunk.get("source")
+        if not isinstance(source, str) or not source.startswith(KNOWLEDGE_SOURCE_PREFIX):
+            continue
+        metadata = chunk.get("metadata")
+        signature = metadata.get("signature") if isinstance(metadata, dict) else None
+        if isinstance(signature, str) and signature and signature not in seen:
+            seen.append(signature)
+    return seen
+
+
+def make_retrieve_node(
+    *,
+    node_id: str = "retrieve",
+    version: str = "0.1.0",
+    route: Route = END,
+    query_fn: Callable[[AEFState], str] | None = None,
+) -> Node:
+    """A `Node` that asks `Services.retriever` for context and writes the
+    chunks to `state.retrieved_context` (ADR 0118).
+
+    Until this existed `Retriever` was a declared injection point with no
+    production caller: `MemoryRetriever` was "the first thing to enforce
+    `context_budget_tokens`" and nothing in a run ever invoked it. The
+    budget it enforces is the state's own, so one number governs both what
+    the owner configured and what a node receives.
+
+    The query defaults to the objective. Ranking is the retriever's policy;
+    this node only decides when retrieval happens (before the work) and
+    where the result goes (onto state, as plain dicts, so the reflect node
+    can later say which lessons were in context when the run went the way
+    it went).
+    """
+    ask = query_fn if query_fn is not None else (lambda s: s.objective)
+
+    def retrieve_fn(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
+        chunks = services.require_retriever().retrieve(
+            ask(state), token_budget=state.context_budget_tokens
+        )
+        return (
+            StateDelta(
+                retrieved_context=[
+                    {
+                        "content": c.content,
+                        "source": c.source,
+                        "relevance_score": c.relevance_score,
+                        "token_estimate": c.token_estimate,
+                        "metadata": dict(c.metadata),
+                    }
+                    for c in chunks
+                ]
+            ),
+            route,
+        )
+
+    return Node(
+        id=node_id,
+        version=version,
+        fn=retrieve_fn,
+        # Reads a store that other runs write to. Declared non-deterministic so
+        # replay trusts the recorded chunks rather than re-querying a store
+        # that has since learned more.
+        deterministic=False,
+        side_effects=SideEffect.IO,
+        idempotency_key_fn=lambda s: f"{s.run_id}:{node_id}:{s.checkpoint_seq}",
+    )
 
 
 def make_reflect_node(
@@ -82,6 +161,12 @@ def make_reflect_node(
                     # cannot begin without it: "add a fallback to the flaky
                     # node" requires knowing which node was flaky (ADR 0096).
                     "failing_nodes": _failing_nodes(state),
+                    # Which consolidated lessons were IN CONTEXT for this run.
+                    # This is what lets the consolidator tally a lesson as
+                    # helpful (retrieved, then the run went well) or harmful
+                    # (retrieved, and the same failure recurred) — ACE's
+                    # signal, computed rather than asked of a model (ADR 0118).
+                    "retrieved_signatures": retrieved_signatures(state),
                     "graph_version": ctx.graph_version,
                     "objective": state.objective,
                 },

@@ -27,6 +27,7 @@ from aef.config.schema import (
 from aef.providers.base import FallbackProvider, ModelProvider
 from aef.security.tool import PolicyConfig
 from aef.services.context.base import Retriever
+from aef.services.knowledge.base import KnowledgeStore
 from aef.services.memory.base import MemoryStore
 
 # `claude_code` first: in the repos this scaffold is built for, the harness
@@ -104,7 +105,11 @@ def build_policy_config(tools: ToolsConfig, policies: PoliciesConfig) -> PolicyC
 
 
 def build_retriever(
-    config: ContextConfig | None, *, memory: MemoryStore, agent_id: str | None = None
+    config: ContextConfig | None,
+    *,
+    memory: MemoryStore,
+    agent_id: str | None = None,
+    knowledge: KnowledgeStore | None = None,
 ) -> Retriever | None:
     """The retriever an `aef.yaml` asks for, or `None` when it asks for none.
 
@@ -112,6 +117,12 @@ def build_retriever(
     retriever reading a DIFFERENT store than the one its agent writes to
     would retrieve nothing and look like an empty memory. Two constructions
     of the same dependency drifting apart is the failure ADR 0091 records.
+
+    `knowledge` is the same story one layer up, and was missing for a whole
+    release (MERGE_READY_LOOP A1, closed in ADR 0118): a retriever built from
+    `aef.yaml` had no knowledge store, so the consolidated layer was reachable
+    only by hand-constructing `Services` — the shape ADR 0101 deleted
+    `GraphStore` for.
     """
     if config is None:
         return None
@@ -119,7 +130,10 @@ def build_retriever(
         from aef.services.context.memory_retriever import MemoryRetriever
 
         return MemoryRetriever(
-            memory=memory, agent_id=agent_id, max_token_budget=config.token_budget
+            memory=memory,
+            agent_id=agent_id,
+            knowledge=knowledge,
+            max_token_budget=config.token_budget,
         )
     # Unreachable while `ContextConfig` validates against the same set, and
     # kept anyway: the two would otherwise be a pair that must agree with

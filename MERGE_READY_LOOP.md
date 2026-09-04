@@ -46,7 +46,7 @@ pytest -q ; mypy aef examples ; ruff check . ; ruff format --check aef tests exa
 Note `mypy aef examples`, not `mypy aef` — that is what CI runs, and the
 narrower command was used throughout the build.
 
-### A1 — the config path cannot reach the layer. This is the real blocker.
+### A1 — the config path cannot reach the layer. This is the real blocker. **CLOSED 2026-09-03 by ADR 0118** (`build_retriever(knowledge=)`, one store shared by retriever and consolidate node in `aef run`).
 
 `aef/config/factory.py::build_retriever` takes `memory=` and has **no
 `knowledge=` parameter**, so a `MemoryRetriever` built from an `aef.yaml` can
