@@ -186,6 +186,99 @@ def test_the_command_extractor_detects_a_command_the_cli_rejects(
             parser.parse_args(argv)
 
 
+def test_the_first_git_add_dash_a_does_not_spend_the_drift_budget_on_bytecode(
+    pristine: Path, tmp_path: Path
+) -> None:
+    """E1 (ADR 0142), end to end on unmodified `aef adopt` output.
+
+    `aef adopt` wrote no `.gitignore`, so an ordinary `git add -A` on day one
+    committed `agents/**/__pycache__/*.pyc` into **Zone A**. That bytecode is
+    absent from the tree `aef loop bless` archived, so G5's
+    `structural_drift(baseline, candidate)` charges every line of it:
+    **0.4675 of the 0.500 budget** for a ONE-LINE candidate, measured, against
+    **0.0238** for the same candidate with the bytecode excluded — 35 of 36
+    differing lines were `.pyc`. Two consecutive drift rejections halt the
+    loop, so that is two candidates from a halt caused by nothing the agent
+    did.
+
+    Asserted through the harness's own `bless` archive and `structural_drift`,
+    on a real git history, rather than against hand-built dicts: the defect
+    lived in the join between "what git tracks" and "what the gate compares".
+    """
+    import subprocess
+
+    from aef.harness import archive
+    from aef.harness.gates.g5_rate_drift import DEFAULT_MAX_DRIFT, structural_drift
+    from aef.harness.git import GitRepo
+    from aef.harness.zones import DEFAULT_AGENT_ROOT
+
+    state = tmp_path / "loop-state"
+    agent_dir = pristine / DEFAULT_AGENT_ROOT / "mine"
+    agent_dir.mkdir(parents=True)
+    (pristine / DEFAULT_AGENT_ROOT / "__init__.py").write_text("")
+    (agent_dir / "__init__.py").write_text("")
+    (agent_dir / "graph.py").write_text(
+        "RETRY_BUDGET = 3\n\n\ndef build_graph() -> int:\n    return RETRY_BUDGET\n"
+    )
+    _git(pristine, "add", "-A")
+    _git(pristine, "commit", "-qm", "my agent")
+
+    blessed = _run(
+        pristine,
+        "aef.cli.main",
+        "loop",
+        "bless",
+        "--repo",
+        ".",
+        "--state",
+        str(state),
+        "--agent-path",
+        f"{DEFAULT_AGENT_ROOT}/mine/graph.py",
+    )
+    assert blessed.returncode == 0, blessed.stdout + blessed.stderr
+
+    # Day one, verbatim: run something (which compiles the agent), then stage
+    # everything. This is the step that used to commit the bytecode.
+    compiled = subprocess.run(
+        [sys.executable, "-m", "compileall", "-q", DEFAULT_AGENT_ROOT],
+        cwd=pristine,
+        capture_output=True,
+        text=True,
+    )
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+    assert list((agent_dir / "__pycache__").glob("*.pyc")), "compileall wrote no bytecode"
+    _git(pristine, "add", "-A")
+    # `--allow-empty` because with the fix in place there is nothing to stage:
+    # the bytecode is ignored. Without it, `git commit` would fail here for
+    # the right reason and the assertions below would never run.
+    _git(pristine, "commit", "-qm", "day one", "--allow-empty")
+
+    # ...and a one-line candidate on top, the shape the proposer emits.
+    _git(pristine, "checkout", "-q", "-b", "cand")
+    source = agent_dir / "graph.py"
+    source.write_text(source.read_text().replace("RETRY_BUDGET = 3", "RETRY_BUDGET = 4"))
+    _git(pristine, "add", "--", f"{DEFAULT_AGENT_ROOT}/mine/graph.py")
+    _git(pristine, "commit", "-qm", "candidate")
+
+    repo = GitRepo(root=pristine)
+    graph_id = next(p.name for p in (state / "archive").iterdir() if p.is_dir())
+    baseline = archive.read_files(
+        state / "archive", graph_id, archive.versions(state / "archive", graph_id)[0]
+    )
+    paths = sorted(repo.list_tree("cand", DEFAULT_AGENT_ROOT))
+    candidate = {p: repo.run_bytes("show", f"cand:{p}") for p in paths}
+
+    assert [p for p in paths if p.endswith(".pyc")] == [], (
+        f"bytecode is tracked in Zone A: {paths}. G5 charges it as drift the candidate "
+        f"did not cause — 0.4675 of {DEFAULT_MAX_DRIFT} when this was last measured."
+    )
+    drift = structural_drift(baseline, candidate)
+    assert drift < 0.10, (
+        f"a one-line candidate drifted {drift:.4f} of {DEFAULT_MAX_DRIFT}; it measured "
+        f"0.4675 with committed bytecode and 0.0238 without (ADR 0142)"
+    )
+
+
 def test_the_doctor_help_names_the_number_of_obligations_it_reports() -> None:
     """K1 added a sixth obligation and the `--help` text still said five —
     the same two-numbers-nobody-compares drift ADR 0091 records, in the

@@ -71,6 +71,10 @@ def test_run_adopt_writes_all_artifacts(tmp_path: Path) -> None:
         ".github/workflows/loop-monitor.yml",
         # per-model-release re-audit (docs/adr/0111)
         ".claude/skills/new-model-check/SKILL.md",
+        # Zone A hygiene (docs/adr/0142): without it the adopter's first
+        # `git add -A` commits bytecode into Zone A and G5 charges it as
+        # drift — 0.4675 of a 0.500 budget for a one-line candidate.
+        ".gitignore",
     }
     for path in result.written_files:
         assert path.exists()
@@ -193,9 +197,12 @@ def test_run_adopt_never_overwrites_existing_aef_yaml(tmp_path: Path) -> None:
 def test_run_adopt_is_idempotent_on_second_run(tmp_path: Path) -> None:
     first = run_adopt(tmp_path)
     second = run_adopt(tmp_path)
-    assert len(first.written_files) == 15
+    # 15 -> 16 with the `.gitignore` of ADR 0142. Updated deliberately: this
+    # count is the pin that makes "adopt quietly started writing something"
+    # a test failure rather than a discovery.
+    assert len(first.written_files) == 16
     assert len(second.written_files) == 0
-    assert len(second.skipped_files) == 15
+    assert len(second.skipped_files) == 16
 
 
 def test_checklist_nonempty_for_every_framework() -> None:
@@ -415,3 +422,134 @@ def test_new_model_check_skill_template_matches_repo_copy() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     repo_copy = repo_root / ".claude" / "skills" / "new-model-check" / "SKILL.md"
     assert repo_copy.read_text() == render_new_model_check_skill()
+
+
+# --------------------------------------------------------------------------
+# Zone A hygiene (ADR 0142)
+# --------------------------------------------------------------------------
+
+
+def test_run_adopt_writes_a_gitignore_that_keeps_bytecode_out_of_zone_a(tmp_path: Path) -> None:
+    """`aef adopt` wrote no `.gitignore`, so the adopter's first `git add -A`
+    committed `agents/**/__pycache__/*.pyc` into ZONE A. Those files are not
+    in the baseline `aef loop bless` archived, so G5 charges every line of
+    them: **0.4675 of a 0.500 drift budget for a ONE-LINE candidate**, against
+    0.0238 with the bytecode excluded — 35 of the 36 differing lines were
+    bytecode. Two consecutive drift rejections halt the loop (ADR 0142)."""
+    result = run_adopt(tmp_path)
+    path = tmp_path / ".gitignore"
+    assert path in result.written_files
+    body = path.read_text()
+    patterns = {line.strip() for line in body.splitlines() if line.strip()}
+    assert "__pycache__/" in patterns
+    assert "*.py[cod]" in patterns
+    # Zone B is EVIDENCE, read from git. An ignored corpus is an empty one,
+    # and the gates would then judge against nothing.
+    assert "corpus" not in patterns
+    assert ".github" not in patterns
+
+
+def test_the_generated_gitignore_actually_makes_git_ignore_zone_a_bytecode(tmp_path: Path) -> None:
+    """The patterns are asserted above; this asserts GIT agrees, because the
+    thing that matters is what `git check-ignore` answers, not a string
+    match against a file nobody consulted."""
+    import subprocess
+
+    run_adopt(tmp_path)
+    subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True, capture_output=True)
+    bytecode = tmp_path / "agents" / "mine" / "__pycache__" / "graph.cpython-313.pyc"
+    bytecode.parent.mkdir(parents=True)
+    bytecode.write_bytes(b"\x00\x01")
+    checked = subprocess.run(
+        ["git", "-C", str(tmp_path), "check-ignore", "-v", str(bytecode)],
+        capture_output=True,
+        text=True,
+    )
+    assert checked.returncode == 0, f"git does not ignore it: {checked.stdout}{checked.stderr}"
+    # ...and the agent source itself is NOT ignored, or the loop has no agent.
+    source = tmp_path / "agents" / "mine" / "graph.py"
+    source.write_text("x = 1\n")
+    not_ignored = subprocess.run(
+        ["git", "-C", str(tmp_path), "check-ignore", str(source)], capture_output=True, text=True
+    )
+    assert not_ignored.returncode == 1, not_ignored.stdout
+
+
+def test_run_adopt_never_overwrites_a_gitignore_and_says_what_is_missing(tmp_path: Path) -> None:
+    """Never-overwrite is the scaffold's rule, and appending is the same
+    trespass wearing a politer hat. So the gap is REPORTED instead — in the
+    checklist, which `aef adopt` prints and also writes to disk."""
+    (tmp_path / ".gitignore").write_text("# mine\nnode_modules/\n")
+    result = run_adopt(tmp_path)
+
+    assert (tmp_path / ".gitignore").read_text() == "# mine\nnode_modules/\n"
+    assert tmp_path / ".gitignore" in result.skipped_files
+
+    told = [item for item in result.checklist if "__pycache__/" in item]
+    assert told, result.checklist
+    assert "0.4675" in told[0] and "0.500" in told[0], told[0]
+    # and it reaches disk, not just the return value
+    assert "__pycache__/" in (tmp_path / "AEF_MIGRATION_CHECKLIST.md").read_text()
+
+
+def test_a_gitignore_that_already_covers_bytecode_is_not_nagged(tmp_path: Path) -> None:
+    """`*.pyc` alone keeps every CPython 3 bytecode file out of the tree, and
+    so does `__pycache__/` alone. Telling an adopter to add a pattern
+    equivalent to one they already have is how generated advice stops being
+    read."""
+    (tmp_path / ".gitignore").write_text("*.pyc\n.venv/\n")
+    result = run_adopt(tmp_path)
+    assert [item for item in result.checklist if "__pycache__/" in item] == []
+
+
+def test_gitignore_gaps_ignores_commented_out_patterns() -> None:
+    """A commented pattern ignores nothing. Reading one as coverage is the
+    detector failing in the direction that costs the adopter a drift budget."""
+    from aef.cli.adopt import gitignore_gaps
+
+    assert gitignore_gaps("# __pycache__/\n# *.pyc\n"), "a comment is not a rule"
+    assert gitignore_gaps("__pycache__/\n") == ()
+    assert gitignore_gaps("*.py[cod]\n") == ()
+
+
+def test_the_checklist_names_the_zone_a_root_the_harness_actually_uses(tmp_path: Path) -> None:
+    """E2 (ADR 0142): `aef migrate` writes `aef_migrated.py` to the repo ROOT,
+    which is Zone C — the one place the loop is structurally forbidden to
+    propose changes to (`G0 rejected it: candidate touches paths outside Zone
+    A`, measured). Nothing `aef adopt` generated said so: neither the string
+    "Zone A" nor "agents/" appeared anywhere in CLAUDE.md or the checklist.
+
+    Derived from `DEFAULT_AGENT_ROOT`, not hardcoded, and cross-checked
+    against the directory `adopt` really creates — a doc naming a directory
+    the harness does not use is the same defect one level up.
+    """
+    from aef.harness.zones import DEFAULT_AGENT_ROOT
+
+    result = run_adopt(tmp_path)
+
+    named = [item for item in result.checklist if f"{DEFAULT_AGENT_ROOT}/" in item]
+    assert named, result.checklist
+    assert "aef_migrated.py" in named[0], named[0]
+    assert "Zone A" in named[0], named[0]
+
+    # The same directory adopt actually writes its Zone A README into.
+    zone_a = {
+        p.relative_to(tmp_path).parts[0]
+        for p in result.written_files
+        if p.name == "README.md" and p.parent != tmp_path
+    }
+    assert DEFAULT_AGENT_ROOT in zone_a, zone_a
+
+
+def test_claude_md_states_where_converted_nodes_must_live(tmp_path: Path) -> None:
+    """The checklist is step-by-step; CLAUDE.md is what a fresh session with
+    no other context reads first. Both have to carry it (ADR 0142)."""
+    from aef.harness.zones import DEFAULT_AGENT_ROOT
+
+    run_adopt(tmp_path)
+    for name in ("CLAUDE.md", "AGENTS.md"):
+        text = (tmp_path / name).read_text()
+        assert "Zone A" in text, name
+        assert f"{DEFAULT_AGENT_ROOT}/" in text, name
+        assert "aef_migrated.py" in text, name
+        assert "outside Zone A" in text, name
