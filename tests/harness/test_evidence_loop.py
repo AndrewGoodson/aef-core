@@ -149,7 +149,11 @@ def test_the_seed_corpus_is_recorded_not_hand_authored() -> None:
     assert corpus.scenarios
     for scenario in corpus.scenarios:
         assert scenario.trace, f"{scenario.id} has an empty trace"
-        assert "recorded from a real" in scenario.notes
+        assert "recorded" in scenario.notes, scenario.id
+        if scenario.graph_id == "summary_agent":
+            # A model-calling graph's recording carries the calls it made
+            # (ADR 0123); a scenario without them could not have been recorded.
+            assert scenario.model_calls, f"{scenario.id} pins no model calls"
 
 
 def test_the_seed_corpus_has_both_passing_and_failing_scenarios() -> None:
@@ -162,11 +166,15 @@ def test_the_seed_corpus_has_both_passing_and_failing_scenarios() -> None:
     assert any(not o.passed for o in outcomes)
 
 
-def test_the_seed_corpus_holdout_is_empty() -> None:
-    # The holdout is the owner's to spend, and nothing filled it by accident.
+def test_the_seed_corpus_holdout_holds_only_what_was_spent_deliberately() -> None:
+    # The holdout is the owner's to spend. ADR 0123 spent it once, on purpose,
+    # for two summary scenarios (`--i-am-spending-the-holdout`); nothing else
+    # may land there by accident.
     from aef.harness.corpus import Split
 
-    assert load_corpus(REPO_ROOT / "corpus").split(Split.HOLDOUT) == ()
+    holdout = load_corpus(REPO_ROOT / "corpus").split(Split.HOLDOUT)
+    assert {s.id for s in holdout} == {"sum-19-tram-depot", "sum-20-seed-bank"}
+    assert all(s.graph_id == "summary_agent" for s in holdout)
 
 
 # --------------------------------------------------------------------------

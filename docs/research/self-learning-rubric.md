@@ -19,10 +19,12 @@ A self-graded number is exactly the failure the trust case warns about.
 | 7 | Real-signal ingestion | 10 | Learns from live runs and real tenants, not a synthetic corpus; telemetry closes the loop | Arize "closing the loop"; Live-SWE-agent (on-the-fly) |
 | 8 | Adoptability / harness-native | 5 | Drops into a repo whose agents are coding-agent sessions; no key; cross-tool | — |
 
-## Current — 2026-09-03 after I6 — **79 / 100**
+## Current — 2026-09-03 after I11 — **82 / 100**
 
 | # | Score | What moved and the artifact |
 |---|---|---|
+| 1 | 19/20 | I11 (ADR 0123): a content task a model can fail — `agents/summary`, 20 recorded scenarios with owner checks (12/6/2), `CassetteProvider` replays every pinned model call with no credential, miss FAILS by default; cassette score train 0.9792 / validation 0.9167, repeat spread 0; three real content failures (0.75); planted prompt regression → 0.0000 under the default with no live call. Remaining: the live noise floor did not get measured (three attempts past a ten-minute wall); no turn kept/reverted on this suite yet (I12) |
+| 3 | 8/10 | I11 (ADR 0123): I3's judge A/B re-run on the 18 summary states (36 calls): rule 3/18, LLM 9/18 agreement with the checks, disagree with each other on 10/18, position delta up to 0.2 — the corpus where the judges disagree now exists, and it shows neither judge's evidence contains the answer. Remaining: a judge that reads `working_memory`; self-preference control |
 | 6 | 6/10 | I6 (ADR 0121): G3 scores reach the driver; archive of kept members with lineage; `sample_parents` by sigmoid(score)/(1+children), seeded; kept branch = best member; duplicates skipped. Measured on the real cycle: zero diversity gain (deterministic proposer) → off by default. Remaining: a proposer with a repertoire |
 | 5 | 10/10 | I8 (ADR 0120): `tests/test_prompt_surface.py` pins required blocks, forbidden text, kept verification lines; every detector proved against a planted fault; found a broken regex and a missing reproduce-first line in the shipped CLAUDE.md |
 | 7 | 5/10 | I5 (ADR 0119): harvest redacts the input, re-executes, admits only if behaviour is unchanged, scans the output; on by default; 4 mutations detected. Remaining: has never run against a real tenant — owner decision |
