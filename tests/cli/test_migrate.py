@@ -439,3 +439,341 @@ def test_a_repo_under_a_dot_directory_is_still_scanned(tmp_path: Path) -> None:
     result = scan(root)
     assert result.scanned_files == 1, "the repo's own file must be scanned"
     assert [s.module for s in result.sites] == ["svc"], "the in-repo dot-dir must still be skipped"
+
+
+# --------------------------------------------------------------------------
+# ADR 0140 — what the routable predicate refuses now, and why
+#
+# ADR 0137's falsification clause enumerated retries, streams and backends —
+# control flow — and never asked whether the REQUEST survives translation into
+# `CompletionRequest`. Four shapes were routed that dropped something real.
+# Each test below is one of them, reproduced before it was fixed.
+# --------------------------------------------------------------------------
+
+
+def test_a_system_prompt_is_not_routed_because_there_is_nowhere_to_put_it(tmp_path: Path) -> None:
+    """REPRODUCED: a claims adjuster whose `system=` said "NEVER approve a
+    payout above $5,000" was routed, and the generated node carried only
+    messages/model/max_tokens. `CompletionRequest` has no `system` field, so
+    "yours to re-express" named a place that does not exist — while the
+    generated docstring said "there is nothing here for routing to lose".
+    """
+    _write(
+        tmp_path,
+        "svc.py",
+        "import anthropic\n\n"
+        "def ask(p):\n"
+        "    client = anthropic.Anthropic()\n"
+        "    r = client.messages.create(\n"
+        "        model='claude-sonnet-4-6', max_tokens=8192,\n"
+        "        system='You are a claims adjuster. NEVER approve above $5,000.',\n"
+        "        tools=[{'name': 'lookup_policy'}],\n"
+        "        stop_sequences=['</done>'],\n"
+        "        messages=[{'role': 'user', 'content': p}],\n"
+        "    )\n"
+        "    return r.content[0].text\n",
+    )
+    site = _only_site(tmp_path)
+    assert not site.routed
+    assert "system=" in site.form_reason
+    assert "tools=" in site.form_reason and "stop_sequences=" in site.form_reason
+    assert "no system field" in site.form_reason
+    assert "semantic decision" in site.form_reason
+
+    source = render(scan(tmp_path), "demo")
+    assert "UNROUTED wrapper" in source, "must not route away a system prompt"
+    assert "from svc import ask" in source, "the adopter's function keeps its own request"
+    assert "CompletionRequest(" not in source
+    assert "NEVER approve" not in source
+
+
+def test_a_keyword_the_request_type_cannot_express_is_not_routed(tmp_path: Path) -> None:
+    """Without `system=`, the refusal still names the exact keywords."""
+    _write(
+        tmp_path,
+        "svc.py",
+        "import anthropic\n\n"
+        "def ask(p):\n"
+        "    client = anthropic.Anthropic()\n"
+        "    return client.messages.create(model='m', max_tokens=10, messages=[],\n"
+        "                                  tool_choice={'type': 'any'})\n",
+    )
+    site = _only_site(tmp_path)
+    assert not site.routed
+    assert "tool_choice=" in site.form_reason
+
+
+def test_the_routable_keywords_are_read_off_the_request_type(tmp_path: Path) -> None:
+    """The anti-drift assertion (ADR 0091's rule, applied to this predicate).
+
+    A second hardcoded list here is how the defect happened: the predicate
+    judged control flow and had no idea what `CompletionRequest` holds. Adding
+    a field to the request type must widen this set on the same commit.
+    """
+    from dataclasses import fields as _fields
+
+    from aef.cli.migrate import _CARRIED_FIELDS, _REQUEST_FIELDS
+    from aef.providers.base import CompletionRequest
+
+    declared = {f.name for f in _fields(CompletionRequest)}
+    assert _REQUEST_FIELDS == frozenset(declared) | {"messages"}
+    assert set(_CARRIED_FIELDS) == declared - {"messages"}
+    assert "system" not in _REQUEST_FIELDS, "the whole point: the request type has no system field"
+
+
+def test_a_carried_keyword_is_reproduced_verbatim_in_the_routed_node(tmp_path: Path) -> None:
+    """Expressible keywords are carried, not silently defaulted."""
+    _write(
+        tmp_path,
+        "svc.py",
+        "import anthropic\n\n"
+        "def ask(p):\n"
+        "    client = anthropic.Anthropic()\n"
+        "    return client.messages.create(model='claude-sonnet-4-6', max_tokens=77,\n"
+        "                                  temperature=0.0, messages=[])\n",
+    )
+    site = _only_site(tmp_path)
+    assert site.routed
+    assert site.request_args == (
+        ("model", '"claude-sonnet-4-6"'),
+        ("max_tokens", "77"),
+        ("temperature", "0.0"),
+    )
+    source = render(scan(tmp_path), "demo")
+    assert "temperature=0.0," in source, "a carried keyword must reach the generated request"
+
+
+def test_a_non_literal_expressible_keyword_is_not_routed(tmp_path: Path) -> None:
+    """`max_tokens=MAX` used to route as no max_tokens at all, so
+    `CompletionRequest`'s default (16000) silently replaced the adopter's cap.
+    """
+    _write(
+        tmp_path,
+        "svc.py",
+        "import anthropic\n\n"
+        "MAX = 256\n\n"
+        "def ask(p):\n"
+        "    client = anthropic.Anthropic()\n"
+        "    return client.messages.create(model='m', max_tokens=MAX, messages=[])\n",
+    )
+    site = _only_site(tmp_path)
+    assert not site.routed
+    assert "max_tokens=" in site.form_reason and "not a literal" in site.form_reason
+
+
+def test_a_bare_decorator_is_not_routed(tmp_path: Path) -> None:
+    """REPRODUCED: `@retry` bare is an `ast.Name`, not an `ast.Call`, so it
+    left no `Call` node for the "body also calls retry()" rule to trip over.
+    The called form `@retry(...)` was caught only by that accident. Retries
+    were dropped for the bare form, silently.
+    """
+    _write(
+        tmp_path,
+        "svc.py",
+        "import anthropic\n"
+        "from tenacity import retry\n\n"
+        "@retry\n"
+        "def ask(p):\n"
+        "    client = anthropic.Anthropic()\n"
+        "    return client.messages.create(model='m', max_tokens=10, messages=[])\n",
+    )
+    site = _only_site(tmp_path)
+    assert not site.routed
+    assert "decorated (@retry)" in site.form_reason
+
+
+def test_a_called_decorator_is_not_routed_for_the_right_reason(tmp_path: Path) -> None:
+    """It was already refused — by the rule about *body* calls, which is the
+    wrong reason and the reason that missed the bare form."""
+    _write(
+        tmp_path,
+        "svc.py",
+        "import anthropic\n"
+        "from tenacity import retry, stop_after_attempt\n\n"
+        "@retry(stop=stop_after_attempt(5))\n"
+        "def ask(p):\n"
+        "    client = anthropic.Anthropic()\n"
+        "    return client.messages.create(model='m', max_tokens=10, messages=[])\n",
+    )
+    site = _only_site(tmp_path)
+    assert not site.routed
+    assert "decorated (@retry)" in site.form_reason
+
+
+def test_kwargs_forwarded_into_the_sdk_call_are_not_routed(tmp_path: Path) -> None:
+    """REPRODUCED: `**kwargs` is an `ast.keyword` with `arg=None` and was
+    filtered out before any keyword was inspected, so the call looked thin and
+    routed. A caller passing `stream=True` at runtime then defeats the stream
+    check without touching the code migrate read.
+    """
+    _write(
+        tmp_path,
+        "svc.py",
+        "import anthropic\n\n"
+        "def ask(p, **kwargs):\n"
+        "    client = anthropic.Anthropic()\n"
+        "    return client.messages.create(model='m', max_tokens=10, messages=[], **kwargs)\n",
+    )
+    site = _only_site(tmp_path)
+    assert not site.routed
+    assert "**kwargs" in site.form_reason
+    assert "stream=" in site.form_reason
+
+
+def test_a_client_constructed_with_arguments_is_not_routed(tmp_path: Path) -> None:
+    """REPRODUCED with the corporate-gateway shape. `Services.model_provider`
+    resolves its own endpoint and credential, so routing this call sends it to
+    a different endpoint, on a different key, billed to a different account —
+    and drops the SDK's own `max_retries` on the way.
+    """
+    _write(
+        tmp_path,
+        "svc.py",
+        "import anthropic\n\n"
+        "def ask(p):\n"
+        "    client = anthropic.Anthropic(\n"
+        "        base_url='https://llm-gateway.corp/v1', timeout=120.0, max_retries=8\n"
+        "    )\n"
+        "    return client.messages.create(model='m', max_tokens=10, messages=[])\n",
+    )
+    site = _only_site(tmp_path)
+    assert not site.routed
+    assert "configures its own client" in site.form_reason
+    assert "base_url=" in site.form_reason and "max_retries=" in site.form_reason
+
+
+def test_an_unconfigured_client_still_routes(tmp_path: Path) -> None:
+    """The refusals above are not "refuse everything": the thin shape the ready
+    loop measured must still route, or the increment they belong to is undone.
+    """
+    _write(tmp_path, "svc.py", THIN)
+    assert _only_site(tmp_path).routed
+
+
+# --------------------------------------------------------------------------
+# ADR 0140 — --force must not discard an adopter's edits
+# --------------------------------------------------------------------------
+
+
+def test_force_backs_up_a_file_that_differs_before_overwriting(tmp_path: Path) -> None:
+    """REPRODUCED: hand-edit the generated node body, run the `--force` line
+    that `aef loop doctor`'s fix string prints, and the edits are gone — no
+    backup, no diff, no warning, exit 0. This module's own comment calls an
+    edited generated file "the expensive thing to lose".
+    """
+    from aef.cli.migrate import report
+
+    _write(tmp_path, "svc.py", THIN)
+    run_migrate(tmp_path)
+    out = tmp_path / "aef_migrated.py"
+    edited = out.read_text() + "\n# HAND EDIT: the system prompt, re-expressed\n"
+    out.write_text(edited, encoding="utf-8")
+
+    result = run_migrate(tmp_path, force=True)
+    assert result.backup is not None, "an edited file must not be overwritten silently"
+    assert result.backup.read_text() == edited
+    assert "HAND EDIT" not in out.read_text()
+    assert "backed up" in report(result)
+
+
+def test_force_does_not_back_up_an_untouched_generated_file(tmp_path: Path) -> None:
+    """A .bak per regeneration would be noise. Identical means nothing to lose."""
+    _write(tmp_path, "svc.py", THIN)
+    run_migrate(tmp_path)
+    result = run_migrate(tmp_path, force=True)
+    assert result.backup is None
+    assert not list(tmp_path.glob("*.bak*"))
+
+
+def test_a_second_force_does_not_destroy_the_first_backup(tmp_path: Path) -> None:
+    """Losing the first round of edits to save the second is the same failure
+    one step along."""
+    _write(tmp_path, "svc.py", THIN)
+    run_migrate(tmp_path)
+    out = tmp_path / "aef_migrated.py"
+
+    out.write_text(out.read_text() + "\n# EDIT ONE\n", encoding="utf-8")
+    first = run_migrate(tmp_path, force=True)
+    out.write_text(out.read_text() + "\n# EDIT TWO\n", encoding="utf-8")
+    second = run_migrate(tmp_path, force=True)
+
+    assert first.backup is not None and second.backup is not None
+    assert first.backup != second.backup
+    assert "EDIT ONE" in first.backup.read_text()
+    assert "EDIT TWO" in second.backup.read_text()
+
+
+# --------------------------------------------------------------------------
+# ADR 0140 — a generated node that reaches a model is not pure
+# --------------------------------------------------------------------------
+
+
+def _built_node(tmp_path: Path, name: str, body: str) -> tuple[str, object]:
+    import importlib.util
+
+    root = tmp_path / name
+    _write(root, "svc.py", body)
+    out = root / "aef_migrated.py"
+    source = render(scan(root), name)
+    out.write_text(source, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location(f"gen_{name}_effects", out)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    graph = module.build_graph()
+    return source, graph.nodes[graph.entry_node]
+
+
+def test_every_generated_node_declares_its_model_call_as_an_external_call(tmp_path: Path) -> None:
+    """REPRODUCED: `render()` emitted `Node(...)` with no `side_effects`, so
+    every generated node defaulted to `SideEffect.PURE` — a live model call
+    declared to have no effect on the world, in both forms.
+    """
+    from aef.kernel import SideEffect
+    from aef.state import AEFState
+
+    for name, body in (("routed", THIN), ("unrouted", UNROUTABLE)):
+        source, node = _built_node(tmp_path, name, body)
+        assert "side_effects=SideEffect.EXTERNAL_CALL," in source, name
+        assert node.side_effects is SideEffect.EXTERNAL_CALL, name
+        assert node.idempotency_key_fn is not None, name
+        key = node.idempotency_key_fn(AEFState(run_id="r1", agent_id="a", objective="o"))
+        assert node.id in key and "r1" in key
+
+
+def test_bounded_retry_engages_on_a_generated_node_instead_of_seeing_pure(tmp_path: Path) -> None:
+    """The consequence of the PURE default, and the point of fixing it.
+
+    `add_bounded_retry` reads the declaration from source before wrapping a
+    node in a 3-attempt retry; its own comment says it "requires the
+    declaration rather than assuming it". The generator never wrote one, so
+    the guard asked a question nobody had answered and got the
+    safest-sounding wrong answer — a live routed model call retried as pure.
+    """
+    from aef.harness.transformations import TransformationError, add_bounded_retry
+
+    source, node = _built_node(tmp_path, "retryable", THIN)
+    add_bounded_retry(source=source, failing_node=node.id, citation="run-1", attempts=3)
+
+    # The declaration is what engages the guard: strip the key the generator
+    # supplies and the same node is refused, rather than passing as pure.
+    keyless = "\n".join(ln for ln in source.splitlines() if "idempotency_key_fn=" not in ln)
+    try:
+        add_bounded_retry(source=keyless, failing_node=node.id, citation="run-1", attempts=3)
+    except TransformationError as exc:
+        assert "idempotency_key_fn" in str(exc)
+    else:  # pragma: no cover - the guard must refuse
+        raise AssertionError("a non-pure node with no key must not be retried")
+
+
+def test_a_long_node_id_keeps_the_generated_file_within_the_line_limit(tmp_path: Path) -> None:
+    """Node ids come from the adopter's module paths, and the new
+    `idempotency_key_fn=` line repeats the id. `src/services/llm/client.py`
+    plus `call_llm_with_backend` is an ordinary shape and already 44
+    characters; ADR 0137 records three E501s nobody had run ruff to find.
+    """
+    _ruff_the_generated_module(
+        tmp_path,
+        "src/services/llm/anthropic_backend_client.py",
+        THIN.replace("def ask(", "def call_llm_with_backend_and_budget("),
+    )

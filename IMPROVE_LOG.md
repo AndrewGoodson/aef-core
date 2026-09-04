@@ -1247,3 +1247,137 @@ integer constant may not yield five distinct control mutations and would fail
 cohort generation with a message none of this quotes. Neither was run. And
 the adoptee is still a fixture this repo authored — smaller and less helpful
 than before, but authored. K5 is the only thing that closes that.
+
+---
+
+## Fix wave C — the routed form dropped the request, not just the retries (ADR 0140)
+
+A seam hunt over ADR 0137's diff, hours after it merged, found four defects in
+the **routed** node form `aef migrate` had just started generating. Every one
+is the same mistake: the generator routed a call it should have refused.
+
+**All four reproduced by running, before anything changed.**
+
+**R1 — the request itself.** ADR 0137's falsification clause lists retries,
+loops, `try`, streams, guessed model ids and transitive wrappers. Every item
+is about **control flow**. `CompletionRequest` has five fields, and nothing in
+the predicate had ever looked at the keywords the call passes. A claims
+adjuster —
+
+```python
+client.messages.create(
+    model="claude-sonnet-4-6", max_tokens=8192,
+    system="You are a claims adjuster. NEVER approve a payout above $5,000.",
+    temperature=0.0, tools=[{"name": "lookup_policy"}], stop_sequences=["</done>"],
+    messages=[{"role": "user", "content": prompt}],
+)
+```
+
+— was judged `ROUTED`, and the node it wrote carried `messages/model/max_tokens`
+and a docstring reading *"there is nothing here for routing to lose."* The
+payout ceiling and the tool grant were gone.
+
+The routable keyword set now comes from `dataclasses.fields(CompletionRequest)`
+plus `messages`. A second hardcoded list here is ADR 0091's drift and is
+*exactly what produced this defect* — the predicate had its own idea of what a
+request contains and it was never the request type's. Anything else refuses and
+names itself; `system=` gets its own reason. **Expressible is not sufficient**:
+`max_tokens=MAX` used to route as *no* `max_tokens`, silently substituting the
+request type's default of 16000, so a non-literal value refuses too.
+
+**A correction found by checking the finding.** The seam hunt said a system
+prompt is "not expressible at all". It is *representable*: `ProviderMessage`
+has a `system` role and both the Anthropic and harness adapters fold it into
+the vendor's system parameter. What is missing is a `system` **field**, and any
+basis for deciding how a literal system prompt pairs with the objective this
+node substitutes for the call's own message list. The refusal stands; its
+reason was rewritten mid-fix to say the narrower true thing, and carrying a
+lone `system=` as a synthesised system-role message is recorded in ADR 0140 as
+a follow-up rather than done.
+
+**R2 — three shapes, two of them predicted in ADR 0137's own Confidence
+section and shipped anyway.** A bare `@retry` is an `ast.Name`, not an
+`ast.Call`, so it left nothing in `decorator_list` for the "body also calls
+`retry()`" rule to trip over — that rule caught the *called* form by accident
+and the bare form not at all. `**kwargs` at the SDK call is an `ast.keyword`
+with `arg=None`, filtered out before any keyword was read, so a caller passing
+`stream=True` at runtime defeated the stream check without touching the code
+migrate read. And `anthropic.Anthropic(base_url="https://llm-gateway.corp/v1",
+timeout=120.0, max_retries=8)` — the corporate-gateway shape — routed, sending
+the call to a different endpoint, on a different credential, billed to a
+different account. Now: **any decorator at all**, **any `*args`/`**kwargs` at
+the call**, **any argument to the client constructor** → unrouted, each with
+its own reason and its own test. A predicted defect that ships is a defect.
+
+**R10 — `--force` discarded adopter edits, and the doctor recommends it.** The
+"model calls visible" obligation prints `aef migrate --dir . --force` as its
+fix. Hand-edit the node, run that line: edits gone, no backup, no diff, no
+warning, exit 0 — three lines below a comment reading *"A generated file the
+operator has since edited is the expensive thing to lose."* `--force` now
+renders first and compares; identical writes no `.bak` (noise), different
+writes `aef_migrated.py.bak` — `.bak.1`, `.bak.2`, … so a second `--force`
+cannot destroy the first backup — and `report()` says so on stdout.
+
+**R11 — every generated node declared itself PURE.** `render()` emitted
+`Node(...)` with no `side_effects`. `add_bounded_retry`'s guard reads the
+declaration from source and its own comment says it *"requires the declaration
+rather than assuming it"* — but the check is `if effects is not None`, so an
+**absent** declaration skips it. The loop could wrap a live, billed, routed
+model call in a 3-attempt retry with nobody asked. Both forms now declare
+`side_effects=SideEffect.EXTERNAL_CALL` with a generated `idempotency_key_fn`.
+
+The alternative — emit the key as a `TODO` so `Node.__post_init__` raises — was
+rejected and the reason is recorded: `build_graph()` would raise at import, and
+running the generated graph *is* ADR 0137's evidence chain (provider call →
+`RecordedCall` → credential-free replay) and K3's premise. The shape generated
+is the one `agents/summary/graph.py`'s `draft` node already uses for this
+repo's own live model call. The generated `_idempotency_key` factory's
+docstring states what the key does not buy: `ModelProvider.complete()` accepts
+no idempotency key, so nothing dedupes on it and a retry is a second billed
+call — the adopter reads that in their own file, with the declaration in front
+of them.
+
+**A new defect, found by the test written to prevent one.** A long-node-id ruff
+case, added because the new `idempotency_key_fn=` line repeats the node id,
+failed for three **pre-existing** reasons: with a realistic module path
+(`src/services/llm/anthropic_backend_client.py` +
+`call_llm_with_backend_and_budget`) the generated docstring's qualified-name
+lines and `return StateDelta(working_memory={"<node id>": ...})` were already
+116, 125 and 138 characters, in both forms. ADR 0137 added a ruff-the-output
+test and ran it only on short names, so the E501s it records finding were not
+all of them. Reflowed, and the long case is now asserted.
+
+**Ten mutations, ten caught**, each reverted byte-for-byte
+(`git diff --exit-code` = 0): the derived keyword set replaced by a literal;
+each of the four new refusals disabled; the non-literal check bypassed; the
+backup skipped; the `side_effects` declaration removed; the key fn removed;
+`EXTERNAL_CALL` downgraded to `IO`.
+
+**Green bar.**
+
+```
+pytest -q          1891 passed, 1 skipped   (+16 tests in tests/cli/test_migrate.py, none removed)
+mypy aef examples  129 files clean
+ruff check .       clean
+ruff format --check aef tests examples   239 files already formatted
+calls made: 0 — no live model call anywhere in this wave
+```
+
+**No rubric score moves.** This is a correctness-and-safety fix to something
+that shipped hours earlier, not an increment.
+
+**Left for the orchestrator.** `aef/harness/preflight.py` belongs to another
+worker and its fix string for the "model calls visible" obligation still prints
+a bare `aef migrate --dir . --force`. It should say that `--force` preserves an
+edited file as `.bak` — the behaviour now exists, and the surface that
+recommends the command is where an adopter reads about it.
+
+**Left unfixed, deliberately.** `temperature` is a real field of
+`CompletionRequest`, so a literal `temperature=0.0` is carried into the routed
+request — and `AnthropicProvider` deliberately does not forward it, because
+current Anthropic models reject sampling parameters with a 400. That is a gap
+between the request type and one adapter, not between the call site and the
+request type, and this predicate answers only the second question. Named in ADR
+0140 rather than closed: closing it means either a per-adapter capability
+declaration or excluding a real field by hand, and the second is the drift this
+wave is about.
