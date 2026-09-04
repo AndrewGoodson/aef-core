@@ -25,6 +25,8 @@ tested, and every caller in this repo passes `False`.
 from __future__ import annotations
 
 import json
+import math
+import random
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -181,6 +183,11 @@ class GateRun:
     report: str
     exit_code: int
     halted: bool = False
+    # G3's task-metric means for this candidate and the incumbent it was
+    # gated against, when the behavioural gates ran (ADR 0121). None when a
+    # cheap gate rejected first and nothing was scored.
+    candidate_score: float | None = None
+    incumbent_score: float | None = None
 
 
 class PolicyConfigError(RuntimeError):
@@ -575,6 +582,8 @@ def gate(
     #
     # Canonical order is preserved exactly — G0,G1,G4,G5 then G2,G3 — and a
     # candidate rejected by a cheap gate now never executes at all.
+    candidate_score: float | None = None
+    incumbent_score: float | None = None
     cheap = run_pipeline(_cheap_gates(config, verdict, now), ctx)
     if not cheap.passed:
         result = cheap
@@ -585,6 +594,13 @@ def gate(
     else:
         behavioural, evidence_note = _gates_with_evidence(config, verdict, workdir, now)
         result = PipelineResult(results=cheap.results + run_pipeline(behavioural, ctx).results)
+        cohort_verdict = next(
+            (g.verdict for g in behavioural if isinstance(g, G3Improvement) and g.verdict),
+            None,
+        )
+        if cohort_verdict is not None and cohort_verdict.candidate.n and cohort_verdict.incumbent.n:
+            candidate_score = cohort_verdict.candidate.mean
+            incumbent_score = cohort_verdict.incumbent.mean
 
     ledger.append(
         config.paths.ledger_dir,
@@ -667,7 +683,14 @@ def gate(
                 exit_code=EXIT_HALTED,
                 halted=True,
             )
-        return GateRun(decision=decision, result=result, report=report, exit_code=EXIT_REJECTED)
+        return GateRun(
+            decision=decision,
+            result=result,
+            report=report,
+            exit_code=EXIT_REJECTED,
+            candidate_score=candidate_score,
+            incumbent_score=incumbent_score,
+        )
 
     if decision.disposition is Disposition.ESCALATE:
         ledger.append(
@@ -681,7 +704,14 @@ def gate(
         # Exit 0: an escalation is a successful run that produced a question,
         # not a failure. A non-zero exit here would train whoever reads CI to
         # treat "needs your decision" as "broken".
-        return GateRun(decision=decision, result=result, report=report, exit_code=EXIT_OK)
+        return GateRun(
+            decision=decision,
+            result=result,
+            report=report,
+            exit_code=EXIT_OK,
+            candidate_score=candidate_score,
+            incumbent_score=incumbent_score,
+        )
 
     # AUTO_MERGE — unreachable while tier1_enabled is False.
     files = {
@@ -711,7 +741,14 @@ def gate(
         # message blaming the gates (ADR 0072). Absence now means unmeasured.
         detail={"archive_version": archived.version},
     )
-    return GateRun(decision=decision, result=result, report=report, exit_code=EXIT_OK)
+    return GateRun(
+        decision=decision,
+        result=result,
+        report=report,
+        exit_code=EXIT_OK,
+        candidate_score=candidate_score,
+        incumbent_score=incumbent_score,
+    )
 
 
 def _render(
@@ -1021,6 +1058,8 @@ class CycleRun:
     decision: Decision | None = None
     lines: tuple[str, ...] = ()
     exit_code: int = EXIT_OK
+    score: float | None = None  # G3 candidate mean, when the behavioural gates ran
+    incumbent_score: float | None = None
 
 
 def cycle(
@@ -1109,6 +1148,8 @@ def cycle(
         decision=run.decision,
         lines=tuple(lines),
         exit_code=run.exit_code,
+        score=run.candidate_score,
+        incumbent_score=run.incumbent_score,
     )
 
 
@@ -1119,17 +1160,36 @@ class LoopTurn:
     disposition: Disposition | None
     kept: bool
     kept_ref: str  # the kept branch's commit after this turn
+    parent_ref: str = ""  # what this turn proposed FROM
+    score: float | None = None
+    duplicate: bool = False  # tree already in the archive; neither kept nor reverted
+
+
+@dataclass
+class ArchiveMember:
+    """One kept candidate, DGM-style (ADR 0121): its score, its parent, and
+    how many children have been proposed from it. Children count is the
+    novelty term — a member that has spawned many attempts is less worth
+    sampling again than one that has spawned none."""
+
+    ref: str
+    score: float | None
+    parent_ref: str | None
+    children: int = 0
+    tree: str = ""
 
 
 @dataclass(frozen=True)
 class LoopRun:
-    """What `run_loop` did: the autoresearch shape inside the gates (ADR 0114)."""
+    """What `run_loop` did: the autoresearch shape inside the gates (ADR 0114),
+    with DGM's archive when `sample_parents` is on (ADR 0121)."""
 
     turns: tuple[LoopTurn, ...]
     kept_branch: str
     kept_ref: str
     stopped_because: str
     lines: tuple[str, ...]
+    archive: tuple[ArchiveMember, ...] = ()
 
     @property
     def kept_count(self) -> int:
@@ -1137,7 +1197,13 @@ class LoopRun:
 
     @property
     def reverted_count(self) -> int:
-        return sum(1 for t in self.turns if t.proposed is not None and not t.kept)
+        return sum(
+            1 for t in self.turns if t.proposed is not None and not t.kept and not t.duplicate
+        )
+
+    @property
+    def distinct_kept_trees(self) -> int:
+        return len({m.tree for m in self.archive if m.parent_ref is not None})
 
 
 def _ensure_branch(config: LoopConfig, branch: str) -> str:
@@ -1152,6 +1218,20 @@ def _tree_of(config: LoopConfig, ref: str) -> str:
     return config.repo.run("rev-parse", f"{ref}^{{tree}}").strip()
 
 
+def _parent_weight(member: ArchiveMember) -> float:
+    """DGM's sampling rule in miniature: a sigmoid of the score, scaled by
+    1/(1+children). A member with no score yet (the root, before anything
+    was gated against it) weighs as a 0.5."""
+    score = 0.5 if member.score is None else member.score
+    fitness = 1.0 / (1.0 + math.exp(-10.0 * (score - 0.5)))
+    return fitness / (1.0 + member.children)
+
+
+def _choose_parent(archive: list[ArchiveMember], rng: random.Random) -> ArchiveMember:
+    weights = [_parent_weight(m) for m in archive]
+    return rng.choices(archive, weights=weights, k=1)[0]
+
+
 def run_loop(
     config: LoopConfig,
     *,
@@ -1162,6 +1242,8 @@ def run_loop(
     kept_branch: str = "loop/kept",
     clock: Callable[[], float] = time.monotonic,
     cycle_fn: Callable[..., CycleRun] | None = None,
+    sample_parents: bool = False,
+    seed: int = 0,
     **cycle_kwargs: Any,
 ) -> LoopRun:
     """Keep/revert on the metric, inside the gates (ADR 0114).
@@ -1177,16 +1259,27 @@ def run_loop(
     made FROM the kept state, so improvements stack instead of each cycle
     re-proposing from the same base.
 
+    With `sample_parents` (ADR 0121) the next proposal is made from a parent
+    SAMPLED from the archive of everything kept so far — weighted by score
+    and against how many children it already has — rather than always from
+    the latest kept. Stepping stones survive; the kept branch points at the
+    best-scoring member. Off by default: measured, not assumed.
+
     Stops on: the turn count, the wall-clock budget, a halt, a turn that
     produced no candidate, or a candidate whose tree matches one already
     rejected in this run — the proposer is deterministic from its evidence,
     so re-gating the same rejected diff would spend N+2 corpus passes to
-    learn nothing.
+    learn nothing. A candidate whose tree matches one already KEPT is a
+    duplicate: neither kept nor reverted, and the loop continues, because a
+    different parent may produce something new.
     """
     _cycle = cycle if cycle_fn is None else cycle_fn
     started = clock()
+    rng = random.Random(seed)
     kept_ref = _ensure_branch(config, kept_branch)
     main_before = config.repo.rev_parse(config.base_ref)
+    root = ArchiveMember(ref=kept_ref, score=None, parent_ref=None, tree=_tree_of(config, kept_ref))
+    archive: list[ArchiveMember] = [root]
     lines: list[str] = [f"kept branch {kept_branch} at {kept_ref[:12]} (from {config.base_ref})"]
     rejected_trees: set[str] = set()
     done: list[LoopTurn] = []
@@ -1198,35 +1291,76 @@ def run_loop(
                 f"wall-clock budget of {budget_seconds:.0f}s exceeded after {turn - 1} turn(s)"
             )
             break
-        turn_config = replace(config, base_ref=kept_branch)
+        parent = _choose_parent(archive, rng) if sample_parents else archive[-1]
+        parent.children += 1
+        turn_config = replace(config, base_ref=parent.ref)
         run = _cycle(
             turn_config, now=now + timedelta(seconds=turn), workdir=workdir, **cycle_kwargs
         )
         lines.extend(f"turn {turn}: {line}" for line in run.lines)
         if run.proposed is None:
-            done.append(LoopTurn(turn, None, None, False, kept_ref))
+            done.append(LoopTurn(turn, None, None, False, kept_ref, parent.ref))
             stopped_because = f"turn {turn} produced no candidate"
             break
         candidate_branch = f"loop/{run.proposed}"
         disposition = run.decision.disposition if run.decision else None
         passed = disposition in (Disposition.ESCALATE, Disposition.AUTO_MERGE)
-        if passed and not run.exit_code == EXIT_HALTED:
+        tree = _tree_of(config, candidate_branch)
+        if any(m.tree == tree for m in archive):
+            done.append(
+                LoopTurn(
+                    turn, run.proposed, disposition, False, kept_ref, parent.ref, run.score, True
+                )
+            )
+            lines.append(f"turn {turn}: duplicate of a kept tree from {parent.ref[:12]}; skipped")
+            continue
+        if passed and run.exit_code != EXIT_HALTED:
             candidate_ref = config.repo.rev_parse(candidate_branch)
-            config.repo.run("update-ref", f"refs/heads/{kept_branch}", candidate_ref, kept_ref)
-            kept_ref = candidate_ref
+            if root.score is None and run.incumbent_score is not None:
+                root.score = run.incumbent_score
+            member = ArchiveMember(
+                ref=candidate_ref, score=run.score, parent_ref=parent.ref, tree=tree
+            )
+            archive.append(member)
+            # The kept branch points at the best-scoring member (greedy mode:
+            # always the newest, since each is proposed from the last).
+            best = max(
+                (m for m in archive if m.parent_ref is not None),
+                key=lambda m: (m.score if m.score is not None else -1.0, m.ref),
+            )
+            if sample_parents:
+                target = best.ref
+            else:
+                target = candidate_ref
+            config.repo.run("update-ref", f"refs/heads/{kept_branch}", target, kept_ref)
+            kept_ref = target
             ledger.append(
                 config.paths.ledger_dir,
                 kind=ledger.EventKind.KEPT,
                 at=now + timedelta(seconds=turn),
                 proposal_id=run.proposed,
-                summary=f"every gate passed; {kept_branch} advanced to {kept_ref[:12]} (not main)",
-                detail={"turn": turn, "kept_branch": kept_branch, "kept_ref": kept_ref},
+                summary=f"every gate passed; {kept_branch} -> {kept_ref[:12]} (not main)",
+                detail={
+                    "turn": turn,
+                    "kept_branch": kept_branch,
+                    "kept_ref": kept_ref,
+                    "candidate_ref": candidate_ref,
+                    "parent_ref": parent.ref,
+                    "score": run.score,
+                    "incumbent_score": run.incumbent_score,
+                },
             )
-            lines.append(f"turn {turn}: KEPT -> {kept_branch}@{kept_ref[:12]}")
-            done.append(LoopTurn(turn, run.proposed, disposition, True, kept_ref))
+            lines.append(
+                f"turn {turn}: KEPT {candidate_ref[:12]} from {parent.ref[:12]} "
+                f"(score {run.score}); {kept_branch}@{kept_ref[:12]}"
+            )
+            done.append(
+                LoopTurn(turn, run.proposed, disposition, True, kept_ref, parent.ref, run.score)
+            )
         else:
-            tree = _tree_of(config, candidate_branch)
-            done.append(LoopTurn(turn, run.proposed, disposition, False, kept_ref))
+            done.append(
+                LoopTurn(turn, run.proposed, disposition, False, kept_ref, parent.ref, run.score)
+            )
             lines.append(
                 f"turn {turn}: reverted ({disposition.value if disposition else 'halted'})"
             )
@@ -1249,6 +1383,7 @@ def run_loop(
         kept_ref=kept_ref,
         stopped_because=stopped_because,
         lines=tuple(lines),
+        archive=tuple(archive),
     )
 
 

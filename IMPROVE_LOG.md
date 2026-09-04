@@ -386,3 +386,51 @@ ruff check / format   clean
 
 **Verdict.** Prompt edits have a check that fails on regression. A lint, not
 an eval. Dimension 5: 9 → **10**. Total: **75 → 76**.
+
+---
+
+## I6 — An archive, not a ladder (2026-09-03)
+
+**Branch:** `improve/i6-archive`, off `main` (`d1f3c55`).
+**Rubric claim:** dimension 6, up to +4. Total before: 76.
+
+**Reproduce (RUN).** `run_loop` proposed every turn from the latest kept
+state and kept no lineage; a candidate that scored below the leader could
+never be built on (`test_greedy_mode_is_unchanged_by_the_archive` pins the
+ladder as the default).
+
+**Expectation.** G3 scores surfaced through GateRun/CycleRun; an archive of
+kept members with score, parent, children; `sample_parents` by
+sigmoid(score)/(1+children) with a seeded RNG; kept branch = best member;
+duplicates of kept trees skipped, not reverted. Measured on the real cycle:
+expected NO diversity gain, because the proposer is deterministic.
+
+**Measurement.**
+
+```
+real cycle, flaky fixture, 4 turns, greedy vs sampled (seed 0):
+  greedy   kept 1  distinct trees 1  (turn 2 numeric tweak rejected, turn 3 repeat -> stop)
+  sampled  kept 1  distinct trees 1  (root re-drawn -> duplicate of the kept tree -> skipped)
+  G3 candidate mean reached the archive; main unchanged in both
+
+driver (fake scored cycle): greedy unchanged; lineage + best-score kept branch; non-greedy
+  parent observed under seed 3 (as a duplicate); duplicates neither kept nor reverted
+
+mutations (each -> tests fail, reverted):
+  M35 sampling silently greedy            1 failed
+  M36 kept branch not the best member     1 failed
+  M37 duplicates treated as new           1 failed
+  M38 novelty term dropped                NOT DETECTED -> direct _parent_weight test added -> 1 failed
+
+pytest -q          1720 passed (from 1714; +6, none removed)
+mypy aef examples  125 files clean
+ruff check / format   clean
+```
+
+**Verdict.** Archive, lineage, sampling and duplicate handling exist and are
+tested; measured diversity gain on this proposer is zero, so the knob is off.
+Dimension 6: 3 → **6**. Total: **76 → 79**.
+
+**Deliberately left.** A proposer with a wider repertoire, which is what
+would give the archive something to sample. Fourth test-side hole in six
+increments (M38), recorded.

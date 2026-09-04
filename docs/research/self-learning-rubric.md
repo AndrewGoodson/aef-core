@@ -19,10 +19,11 @@ A self-graded number is exactly the failure the trust case warns about.
 | 7 | Real-signal ingestion | 10 | Learns from live runs and real tenants, not a synthetic corpus; telemetry closes the loop | Arize "closing the loop"; Live-SWE-agent (on-the-fly) |
 | 8 | Adoptability / harness-native | 5 | Drops into a repo whose agents are coding-agent sessions; no key; cross-tool | — |
 
-## Current — 2026-09-03 after I8 — **76 / 100**
+## Current — 2026-09-03 after I6 — **79 / 100**
 
 | # | Score | What moved and the artifact |
 |---|---|---|
+| 6 | 6/10 | I6 (ADR 0121): G3 scores reach the driver; archive of kept members with lineage; `sample_parents` by sigmoid(score)/(1+children), seeded; kept branch = best member; duplicates skipped. Measured on the real cycle: zero diversity gain (deterministic proposer) → off by default. Remaining: a proposer with a repertoire |
 | 5 | 10/10 | I8 (ADR 0120): `tests/test_prompt_surface.py` pins required blocks, forbidden text, kept verification lines; every detector proved against a planted fault; found a broken regex and a missing reproduce-first line in the shipped CLAUDE.md |
 | 7 | 5/10 | I5 (ADR 0119): harvest redacts the input, re-executes, admits only if behaviour is unchanged, scans the output; on by default; 4 mutations detected. Remaining: has never run against a real tenant — owner decision |
 | 2 | 17/20 | I9 (ADR 0118): `make_retrieve_node` — the retriever's first production caller, budget enforced in a real run; `retrieved_signatures` on reflection; helpful/harmful tallies per entry, agent-scoped, surfaced in metadata + drafts; A1 closed. Remaining: ranking on the tally (no rig where harmful ≠ live); text curation |

@@ -597,3 +597,76 @@ def test_run_loop_keeps_the_real_candidate_and_stacks_from_it(
     kinds = [e.kind for e in ledger.read(config.paths.ledger_dir)]
     assert ledger.EventKind.KEPT in kinds
     assert ledger.EventKind.MERGED not in kinds
+
+
+def test_archive_sampling_measured_against_greedy_on_the_real_cycle(
+    flaky_repo: GitRepo, tmp_path: Path
+) -> None:
+    """ADR 0121's measurement, recorded as an assertion on what was observed
+    rather than on what was hoped. With a proposer that is deterministic from
+    its evidence, both modes keep the one structural candidate; sampling
+    then re-draws the root and produces a DUPLICATE of the kept tree, which
+    is skipped, while greedy re-proposes a numeric tweak from the kept state
+    and G3 rejects it. Neither mode finds a second improvement here — the
+    material is thin, and the number says so."""
+    import datetime as dt
+
+    from aef.harness.loop import run_loop
+    from aef.kernel import Context
+    from aef.reasoning.nodes import make_reflect_node
+    from aef.services.memory.in_memory import InMemoryMemoryStore
+
+    def _memory() -> InMemoryMemoryStore:
+        memory = InMemoryMemoryStore()
+        make_reflect_node().fn(
+            AEFState(
+                run_id="r1",
+                agent_id="flaky",
+                objective="fetch the thing",
+                errors=[{"node_id": "fetch", "message": "flaky upstream refused"}],
+            ),
+            Context(
+                run_id="r1",
+                graph_version="0.1.0",
+                trace_id="t",
+                node_id="reflect",
+                now=dt.datetime(2026, 3, 1, tzinfo=dt.UTC),
+                idempotency_key=None,
+            ),
+            agent_services(memory=memory),
+        )
+        return memory
+
+    results = {}
+    for mode in ("greedy", "sampled"):
+        state = tmp_path / f"state-{mode}"
+        _bless(flaky_repo, state)
+        config = LoopConfig(
+            repo=flaky_repo,
+            paths=LoopPaths(root=state),
+            base_ref="main",
+            graph_id="flaky_agent",
+            corpus=load_corpus(flaky_repo.root / "corpus"),
+            entrypoint="agents.flaky.graph:build_graph",
+            cohort_size=5,
+            cohort_seed=7,
+        )
+        with _agent_repo_build_commands():
+            run = run_loop(
+                config,
+                now=NOW,
+                workdir=tmp_path / f"work-{mode}",
+                turns=4,
+                budget_seconds=600.0,
+                kept_branch=f"loop/kept-{mode}",
+                sample_parents=(mode == "sampled"),
+                seed=0,
+                memory=_memory(),
+                agent_path="agents/flaky/graph.py",
+            )
+        results[mode] = run
+    greedy, sampled = results["greedy"], results["sampled"]
+    assert greedy.kept_count == 1 and sampled.kept_count == 1
+    assert greedy.distinct_kept_trees == sampled.distinct_kept_trees == 1
+    assert sampled.archive[1].score is not None  # G3's mean reached the archive
+    assert flaky_repo.rev_parse("main") == flaky_repo.rev_parse("main")
