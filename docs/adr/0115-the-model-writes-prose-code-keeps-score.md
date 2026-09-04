@@ -75,3 +75,26 @@ critic drops citations, no position swap) each failed tests.
 ## Confidence
 
 High on the mechanism; the measurement shows parity, not superiority.
+
+## Erratum (2026-09-03, ADR 0126)
+
+**The cost of a judgment was reported in seconds and never in tokens, and
+seconds understate it by a factor nobody had looked at.** Decision 6 rests on
+"~10 s per judgment"; decision 3 spends two calls per judgment on the
+position swap. What neither number captured is that `ClaudeCodeProvider` ran
+inside the operator's own session: an adversarial round measured **211,470
+input tokens per judge call** as issued — the operator's MCP tool schemas and
+their `~/.claude/CLAUDE.md` re-sent every call — against 4,684 for the same
+prompt with `--strict-mcp-config --mcp-config {}`. At list rates that is
+$0.18 per call on cache reads and $2.22 uncached, doubled by the swap, on a
+knob whose measured benefit was parity. The same inheritance is the likely
+cause of a second observation in the A/B: the judge replied in the operator's
+personal register. ADR 0126 adds the isolation flags; the per-call token cost
+after them has NOT been re-measured live (the authoring session's quota was
+exhausted) and is pending.
+
+**`max_tokens` never reached the CLI.** `LLMJudge` sets `max_tokens=400` and
+`ClaudeCodeProvider` drops it: the CLI has no output-length flag. The
+"length controls" of decision 3 are the excerpt cap and the prompt, not a
+provider-side cap. Documented in the provider's docstring rather than
+silently implied.

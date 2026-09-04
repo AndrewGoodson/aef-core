@@ -43,7 +43,19 @@ DEFAULT_PATTERNS: tuple[tuple[str, str], ...] = (
     ("api_key", r"\b(?:sk|pk|rk|ak)[-_](?:live|test|ant|proj)?[-_]?[A-Za-z0-9]{16,}\b"),
     ("bearer", r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{16,}"),
     ("aws_key", r"\bAKIA[0-9A-Z]{16}\b"),
-    ("opaque_secret", r"\b[A-Za-z0-9+/=_-]{40,}\b"),
+    # Long, high-entropy-looking: 40+ chars carrying BOTH a letter and a
+    # digit, and no hyphen. All three constraints are corrections (ADR 0126):
+    # the first version matched any 40+ run of `[A-Za-z0-9+/=_-]`, so
+    # `migrate-the-customer-billing-pipeline-to-v2-with-zero-downtime` — a
+    # plain-English objective — was redacted, and the harvested scenario was
+    # admitted with a placeholder objective, which is a scenario that no
+    # longer tests what the run did. Hyphenated key shapes are not lost:
+    # `api_key` and `bearer` already carry them, and they are prefix-anchored
+    # rather than shape-guessed.
+    (
+        "opaque_secret",
+        r"\b(?=[A-Za-z0-9+/=_]*[A-Za-z])(?=[A-Za-z0-9+/=_]*\d)[A-Za-z0-9+/=_]{40,}\b",
+    ),
 )
 
 

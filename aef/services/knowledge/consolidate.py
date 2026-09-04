@@ -174,7 +174,7 @@ class RuleBasedConsolidator:
             if len(representatives) < self.min_occurrences:
                 continue
             entry = _build_entry(signature, record_agent_id, representatives, self.summarise)
-            helpful, harmful = _tally(signature, record_agent_id, in_context, produced)
+            helpful, harmful = _tally(signature, entry.kind, record_agent_id, in_context, produced)
             entry = dataclasses.replace(
                 entry,
                 runs_since_last_seen=_runs_since(entry.last_seen, record_agent_id, runs_seen),
@@ -279,22 +279,73 @@ def _runs_since(
 
 def _tally(
     signature: str,
+    kind: KnowledgeKind,
     agent_id: str | None,
     in_context: dict[tuple[str | None, str], set[str]],
     produced: dict[tuple[str | None, str], set[str]],
 ) -> tuple[int, int]:
     """Runs of this agent that had `signature` in context: harmful if the
-    run reproduced that very failure, helpful otherwise. A lesson never
-    shown to a run scores nothing either way — absence of evidence."""
+    run REPRODUCED that failure, helpful otherwise. A lesson never shown to a
+    run scores nothing either way — absence of evidence.
+
+    Two rules, both fixes for defects an adversarial round reproduced (ADR
+    0126, erratum to 0118):
+
+    1. **Only `failure` entries are tallied.** A success entry keeps `(0, 0)`.
+       The tally asks "was this failure avoided", and every run that repeats a
+       success necessarily re-produces the success signature, so a success
+       lesson scored `harmful` once per time it worked — the metric read
+       backwards on exactly the entries it was most confident about.
+    2. **Reproduced means the entry's failing-node list appears, in order,
+       inside a failure signature the run produced.** Not string equality: a
+       run whose `fetch` failure cascaded into `parse` signs itself
+       `failure:fetch>parse`, which is a different string from the
+       `failure:fetch` lesson it was shown, so equality counted the run
+       *helpful* — the lesson was credited with preventing the very failure
+       that had just happened. Order is kept (a subsequence, not a set
+       subset) because `default_signature` states that `A>B` and `B>A` are
+       different failures. A signature this rule cannot parse as a node list
+       — a custom `signature_fn` — still matches itself by equality.
+    """
+    if kind != "failure":
+        return 0, 0
+    entry_nodes = _failure_nodes(signature)
     helpful = harmful = 0
     for run_key, shown in in_context.items():
         if run_key[0] != agent_id or signature not in shown:
             continue
-        if signature in produced.get(run_key, set()):
+        if _reproduced(signature, entry_nodes, produced.get(run_key, set())):
             harmful += 1
         else:
             helpful += 1
     return helpful, harmful
+
+
+def _failure_nodes(signature: str) -> tuple[str, ...] | None:
+    """The node list `default_signature` encoded, or `None` for any signature
+    that is not in that shape (a custom `signature_fn`, or a success)."""
+    if not signature.startswith("failure:"):
+        return None
+    nodes = tuple(n for n in signature[len("failure:") :].split(">") if n)
+    return nodes or None
+
+
+def _reproduced(signature: str, entry_nodes: tuple[str, ...] | None, produced: set[str]) -> bool:
+    if signature in produced:
+        return True
+    if entry_nodes is None:
+        return False
+    for candidate in produced:
+        candidate_nodes = _failure_nodes(candidate)
+        if candidate_nodes is not None and _is_subsequence(entry_nodes, candidate_nodes):
+            return True
+    return False
+
+
+def _is_subsequence(needle: tuple[str, ...], haystack: tuple[str, ...]) -> bool:
+    """`needle`'s elements appear in `haystack` in the same relative order."""
+    it = iter(haystack)
+    return all(node in it for node in needle)
 
 
 def _rank(record: MemoryRecord) -> tuple[datetime, str]:

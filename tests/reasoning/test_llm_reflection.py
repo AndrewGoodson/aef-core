@@ -168,6 +168,63 @@ def test_judge_rubric_is_validated_like_the_rule_based_one() -> None:
         LLMJudge(provider=FakeProvider(), model="m", rubric={"q": -1.0})
 
 
+def test_the_judge_is_shown_the_answer_it_is_scoring() -> None:
+    """Measured cause of the ADR 0123 A/B result (rule 3/18, LLM 9/18 agreement
+    with the owner's checks): neither judge's evidence contained the summary."""
+    answer = "The ferry service resumed on Tuesday after the kestrel nest fledged."
+    state = AEFState(
+        run_id="r",
+        agent_id="a",
+        objective="summarise the notice",
+        working_memory={"summary": answer, "max_words": 35, "must_mention": ["ferry"]},
+    )
+    provider = FakeProvider(replies=['{"quality": 1}'])
+    LLMJudge(provider=provider, model="m", rubric={"quality": 1.0}, position_swap=False).judge(
+        state
+    )
+    user = provider.requests[0].messages[1].content
+    assert f"working_memory[summary]: {answer}" in user
+    # Non-string entries are not rendered: they are configuration, not an answer.
+    assert "max_words" not in user and "must_mention" not in user
+
+
+def test_the_critic_is_shown_the_answer_too() -> None:
+    provider = FakeProvider(replies=["x"])
+    state = AEFState(
+        run_id="r", agent_id="a", objective="o", working_memory={"summary": "the answer"}
+    )
+    LLMCritic(provider=provider, model="m").critique(state)
+    assert "working_memory[summary]: the answer" in provider.requests[0].messages[1].content
+
+
+def test_the_answer_is_excerpted_and_the_item_cap_still_holds() -> None:
+    """A higher cap for this class, not no cap — and a working memory full of
+    strings cannot crowd the errors out of the total item cap."""
+    from aef.reasoning.llm_reflection import (
+        MAX_ANSWER_CHARS,
+        MAX_EVIDENCE_ITEMS,
+        MAX_WORKING_MEMORY_ITEMS,
+    )
+
+    state = AEFState(
+        run_id="r",
+        agent_id="a",
+        objective="o",
+        working_memory={f"k{i}": "y" * 5000 for i in range(10)},
+        errors=[{"node_id": "n", "error": "boom"}],
+    )
+    provider = FakeProvider(replies=['{"quality": 1}'])
+    LLMJudge(provider=provider, model="m", rubric={"quality": 1.0}, position_swap=False).judge(
+        state
+    )
+    user = provider.requests[0].messages[1].content
+    assert "y" * (MAX_ANSWER_CHARS + 1) not in user
+    lines = [line for line in user.splitlines() if line.startswith("- ")]
+    assert len(lines) <= MAX_EVIDENCE_ITEMS
+    assert sum(1 for line in lines if "working_memory[" in line) == MAX_WORKING_MEMORY_ITEMS
+    assert any("errors[0]" in line for line in lines), "the answer crowded out the errors"
+
+
 def test_evidence_is_excerpted_so_bulk_cannot_read_as_quality() -> None:
     state = AEFState(
         run_id="r",

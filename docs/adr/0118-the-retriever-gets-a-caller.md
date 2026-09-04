@@ -83,3 +83,26 @@ tally swapped; the tally not agent-scoped) each failed tests.
 
 High on the node and the tally; the tally's value as a ranking input is
 explicitly unmeasured.
+
+## Erratum (2026-09-03, ADR 0126)
+
+Decision 3's tally as shipped was wrong in two ways, both reproduced through
+the real executor by an adversarial round and both fixed in ADR 0126:
+
+- It tallied **success** entries. Every run that repeats a success
+  necessarily re-produces that success's signature, so a success lesson that
+  was in context and then worked was scored `harmful` — the metric read
+  backwards on exactly the entries it was most confident about. Four clean
+  runs left `success:<objective>` at `helpful 0, harmful 2`. Only `failure`
+  entries are tallied now; a success entry keeps `(0, 0)`.
+- "Reproduced" was string equality on the signature. A run shown
+  `failure:fetch` whose fetch failure cascaded into `parse` signs itself
+  `failure:fetch>parse` — a different string — so the lesson was credited
+  `helpful 1, harmful 0` for the very failure that had just recurred.
+  Reproduction is now "the entry's failing-node list appears, in order,
+  inside a failure signature the run produced" (`helpful 0, harmful 1` on
+  the same case). Order is kept, because `default_signature` already states
+  that `A>B` and `B>A` are different failures.
+
+Neither correction changes what the tally is *used* for: it is still
+surfaced, still not a retrieval multiplier (decision 6 stands).

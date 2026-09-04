@@ -99,6 +99,37 @@ class ClaudeCodeProvider(ModelProvider):
 
     `--bare` is deliberately NOT passed: it skips the keychain read and
     answers "Not logged in" — the one flag that would defeat the whole point.
+
+    **The session is isolated, because it used to be inherited** (ADR 0126).
+    As first shipped this argv ran inside whatever session the operator had
+    configured: an adversarial round measured **211,470 input tokens per
+    judge call** ($0.18 at cache-read rates, $2.22 uncached) against 4,684
+    for the same prompt with the MCP configuration suppressed — the operator's
+    MCP tool schemas and their `~/.claude/CLAUDE.md` were being re-sent on
+    every critic and judge call, and the judge answered in the operator's
+    personal register. Three flags fix it:
+
+    - `--strict-mcp-config` with `--mcp-config {}` — "only use MCP servers
+      from `--mcp-config`", and that config declares none. This is the pair
+      the 4,684-token measurement used.
+    - `--safe-mode` — "all customizations (CLAUDE.md, skills, plugins, hooks,
+      MCP servers, custom commands and agents ...) disabled ... Auth, model
+      selection, built-in tools, and permissions work normally". It is the
+      only documented flag that drops CLAUDE.md discovery *without* dropping
+      the keychain login the way `--bare` does. `--restricted` and
+      `--setting-sources` reach settings files only, not memory files.
+
+    `--safe-mode` is taken from `claude --help` (CLI 2.1.260) and is **not
+    re-measured live** — the authoring session's model quota was exhausted.
+    The CLI tolerates unknown options silently (verified: an invented flag
+    changes nothing), so the worst case if a future CLI drops it is that the
+    cost stays where it was, not a broken call.
+
+    **`CompletionRequest.max_tokens` is dropped.** The CLI has no
+    output-length flag and never had one; a caller that sets `max_tokens=400`
+    (`LLMJudge` does) gets whatever the model writes. Stated here because a
+    silently ignored parameter reads as a control that exists. The length
+    controls that do work are prompt-side.
     """
 
     name = "claude_code"
@@ -133,6 +164,12 @@ class ClaudeCodeProvider(ModelProvider):
             "1",
             "--tools",
             "",
+            # Isolation from the operator's own session — see the class
+            # docstring for the 211,470 -> 4,684 input-token measurement.
+            "--strict-mcp-config",
+            "--mcp-config",
+            "{}",
+            "--safe-mode",
         ]
         if model:
             argv += ["--model", model]
