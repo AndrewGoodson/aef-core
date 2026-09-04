@@ -134,19 +134,40 @@ def _edges_for(graph: Graph) -> list[Edge]:  # pragma: no cover - kept for symme
 
 
 def _configure(services: Any, settings: Any) -> Any:
-    """Swap the model provider for the scenario's cassette (ADR 0123).
+    """Everything the parent owns about ONE scenario, in one frame.
 
-    Only the provider changes. The rest of `services` — memory in
-    particular — is kept, because one worker serves the whole corpus so
-    module-level and store-level agent state behave as they do in
-    production, and rebuilding everything per scenario would quietly undo
-    that. A live provider is built ONLY when the parent says so, from the
-    impl and model it passes; nothing here reads a config file, since the
-    workspace's config is the candidate's to edit (ADR 0082).
+    The cassette (ADR 0123), the harness's `PolicyConfig`, the scenario's
+    agent id and its pinned clock. All four are the parent's to supply and
+    none of them can be read here: the workspace's `aef.yaml` is the
+    candidate's to edit, so a worker that built its own policy from it would
+    be judged under rules it wrote (ADR 0082).
+
+    The POLICY is why this frame grew. Since ADR 0094 moved the node bodies
+    out, `agent_services()` in this process took no policy at all — so a node
+    calling `services.policy_engine.evaluate` was judged deny-by-default no
+    matter what the base ref configured, and candidate, incumbent and every
+    cohort member scored the same 0.0. That is the ADR 0073/0075/0079/0091
+    shape for a sixth time, one process boundary further out (ADR 0125).
+
+    `memory` and `knowledge` are CARRIED OVER rather than rebuilt: one worker
+    serves the whole corpus so that store-level agent state behaves as it does
+    in production, and a fresh store per scenario would quietly undo that.
+    Everything else is rebuilt, from `agent_services` — the same one list
+    ADR 0091 exists to keep.
+
+    The clock is pinned to the scenario's recorded values so a node that
+    reads it gets a recording rather than wall time. Its cursor is
+    INDEPENDENT of the parent's: the executor consumes the parent's copy to
+    build each `Context.now`, and that consumption happens in another
+    process. `Context.now` — the value the contract says a node actually
+    uses ("nodes never call the clock themselves", `kernel/contracts.py`) —
+    is pinned exactly, by the parent, and unaffected by this.
     """
-    from dataclasses import replace
+    from datetime import datetime
 
+    from aef.harness.scenario_runner import policy_config_from_payload
     from aef.providers.cassette_provider import CassetteProvider, RecordedCall
+    from aef.services.runtime import agent_services as build_services
 
     if not isinstance(settings, dict):
         raise WorkerError(f"configure payload must be an object, got {type(settings).__name__}")
@@ -161,7 +182,38 @@ def _configure(services: Any, settings: Any) -> Any:
         inner = build_model_provider(
             ModelProviderConfig(impl=str(live["impl"]), model=str(live.get("model", "")))
         )
-    return replace(services, model_provider=CassetteProvider(inner, calls, on_miss=on_miss))
+
+    agent_id = settings.get("agent_id")
+    clock_values = [datetime.fromisoformat(v) for v in settings.get("clock_values", ())]
+    return build_services(
+        memory=services.memory,
+        knowledge=services.knowledge,
+        model_provider=CassetteProvider(inner, calls, on_miss=on_miss),
+        policy=policy_config_from_payload(settings.get("policy")),
+        agent_id=str(agent_id) if agent_id is not None else None,
+        **({"clock": _pinned_clock(clock_values)} if clock_values else {}),
+    )
+
+
+def _pinned_clock(values: list[Any]) -> Any:
+    """`fixed_clock`'s rule, worker-side: replay, never invent.
+
+    Running past the recording raises rather than returning wall time —
+    inventing a timestamp is how a non-deterministic candidate scores as a
+    deterministic one.
+    """
+    remaining = list(values)
+
+    def clock() -> Any:
+        if not remaining:
+            raise WorkerError(
+                "the run asked for more clock values than the recording pinned; "
+                "a candidate taking more steps than the recording is a behavioural "
+                "difference to report, not a timestamp to invent"
+            )
+        return remaining.pop(0)
+
+    return clock
 
 
 def main(argv: list[str]) -> int:

@@ -39,7 +39,7 @@ from aef.config.loader import AgentConfigError, load_agent_config_text
 from aef.config.schema import AgentConfig
 from aef.harness import archive, ledger
 from aef.harness.candidate import CandidateVerdict, inspect_candidate
-from aef.harness.corpus import Corpus
+from aef.harness.corpus import Corpus, Scenario
 from aef.harness.gates.base import Gate, GateContext, PipelineResult, run_pipeline
 from aef.harness.gates.g0_static_safety import G0StaticSafety
 from aef.harness.gates.g1_builds import G1Builds
@@ -375,6 +375,61 @@ def _behavioural_only(gates: tuple[Gate, ...]) -> tuple[Gate, ...]:
     return tuple(g for g in gates if g.id not in _CHEAP)
 
 
+class CorpusGraphMismatchError(RuntimeError):
+    """The corpus holds several graphs' recordings and none are this one's.
+
+    Named, and raised, rather than returning an empty scenario list: an empty
+    corpus reads to G2/G3 as "no evidence", which escalates — the same
+    outcome a corpus this loop simply cannot use, with none of the
+    information about why (ADR 0125).
+    """
+
+
+def _scenarios_for_graph(
+    config: LoopConfig, scenarios: tuple[Scenario, ...]
+) -> tuple[tuple[Scenario, ...], str]:
+    """The gated scenarios recorded FROM this graph.
+
+    `corpus/` now holds two agents' recordings (`demo_agent` and
+    `summary_agent`, ADR 0123), and the gates ran every one of them against
+    whichever graph the entrypoint named — so a demo candidate was scored on
+    summary scenarios it could not possibly satisfy and every mean was
+    diluted by them. `aef loop score` already filtered (it can load the
+    graph in-process and read `graph.id`); the gates, which cannot, did not.
+
+    The rule, stated because it is a choice rather than a deduction:
+
+    - Some gated scenario carries `graph_id == config.graph_id` → gate on
+      exactly those. This is the case the mixed corpus creates.
+    - No scenario matches and the corpus records ONE graph → gate on all of
+      them. `--graph-id` defaults to `"default"` and is the ARCHIVE key, a
+      different namespace from `graph.id`; a single-graph corpus has nothing
+      to disambiguate, so requiring the two namespaces to agree would break
+      every existing single-graph corpus to fix a mixed-corpus defect.
+    - No scenario matches and the corpus records SEVERAL graphs → refuse by
+      name. There is no defensible subset, and running all of them is the
+      defect.
+    """
+    matching = tuple(s for s in scenarios if s.graph_id == config.graph_id)
+    present = sorted({s.graph_id for s in scenarios})
+    if matching:
+        return matching, (
+            f"{len(matching)}/{len(scenarios)} gated scenario(s) recorded from "
+            f"graph {config.graph_id!r}"
+        )
+    if len(present) == 1:
+        return scenarios, (
+            f"corpus records one graph ({present[0]!r}); gating all "
+            f"{len(scenarios)} gated scenario(s)"
+        )
+    raise CorpusGraphMismatchError(
+        f"the corpus records {len(present)} graphs ({', '.join(repr(g) for g in present)}) "
+        f"and none of them is --graph-id {config.graph_id!r}. Gating one graph against "
+        f"another's scenarios dilutes every mean with scenarios the candidate cannot "
+        f"satisfy. Pass --graph-id naming the graph this loop improves."
+    )
+
+
 def _gates_with_evidence(
     config: LoopConfig, verdict: CandidateVerdict, workdir: Path, now: datetime
 ) -> tuple[tuple[Gate, ...], str]:
@@ -417,6 +472,7 @@ def _gates_with_evidence(
     scenarios = tuple(s for s in config.corpus.scenarios if s.split in GATED_SPLITS)
     if not scenarios:
         return _behavioural_only(tuple(gates)), "no gated-split scenarios: G2/G3 will refuse"
+    scenarios, graph_note = _scenarios_for_graph(config, scenarios)
 
     policy_config = _policy_from_base_ref(config)
     builder = CohortBuilder(
@@ -454,7 +510,12 @@ def _gates_with_evidence(
         if isinstance(g, G2OutcomeNonRegression):
             rebuilt.append(
                 G2OutcomeNonRegression(
-                    corpus=config.corpus,
+                    # The SAME scenarios the cohort ran. G2 reads its corpus
+                    # itself and reports anything absent from `precomputed`
+                    # as missing — so handing it the unfiltered corpus after
+                    # filtering the cohort would turn every other graph's
+                    # scenario into a missing one, which is a rejection.
+                    corpus=replace(config.corpus, scenarios=scenarios),
                     precomputed=candidate_run.outcomes,
                     policy_config=policy_config,
                 )
@@ -469,7 +530,7 @@ def _gates_with_evidence(
             rebuilt.append(G3Improvement(verdict=cohort_verdict))
         else:
             rebuilt.append(g)
-    return _behavioural_only(tuple(rebuilt)), note
+    return _behavioural_only(tuple(rebuilt)), f"{note}; {graph_note}"
 
 
 def _with_g5(
@@ -1295,6 +1356,35 @@ class LoopRun:
         return len({m.tree for m in self.archive if m.parent_ref is not None})
 
 
+class KeptBranchCheckedOutError(RuntimeError):
+    """`run_loop` was started while HEAD is the branch it advances.
+
+    The loop moves the kept branch with `update-ref`, which changes where the
+    branch points WITHOUT touching the index or the working tree. When that
+    branch is also HEAD, the result is a repository whose index disagrees
+    with its own HEAD commit: `git status` reads as a staged reversal of the
+    change the loop just kept, and the next `git commit` in that checkout
+    would undo it. Reproduced, not argued (ADR 0125).
+
+    `update-ref` is deliberate — `merge`/`reset` on the checked-out branch is
+    the loop touching a person's working tree, which ADR 0114 refuses. So the
+    refusal is the fix: the reviewer stands somewhere else.
+    """
+
+
+def _refuse_if_kept_branch_is_checked_out(config: LoopConfig, kept_branch: str) -> None:
+    head = config.repo.run("rev-parse", "--abbrev-ref", "HEAD").strip()
+    if head != kept_branch:
+        return
+    raise KeptBranchCheckedOutError(
+        f"HEAD is {kept_branch!r}, the branch this loop advances with update-ref — "
+        f"which would leave your index reading as a staged reversal of whatever the "
+        f"loop keeps. Check out another branch first "
+        f"(e.g. `git checkout {config.base_ref}`) and re-run; {kept_branch} is for "
+        f"reviewing, and `git log {kept_branch}` reads it without standing on it."
+    )
+
+
 def _ensure_branch(config: LoopConfig, branch: str) -> str:
     try:
         return config.repo.rev_parse(branch)
@@ -1365,6 +1455,9 @@ def run_loop(
     _cycle = cycle if cycle_fn is None else cycle_fn
     started = clock()
     rng = random.Random(seed)
+    # BEFORE anything is created or gated: standing on the kept branch makes
+    # every `update-ref` below leave a staged reversal behind (ADR 0125).
+    _refuse_if_kept_branch_is_checked_out(config, kept_branch)
     kept_ref = _ensure_branch(config, kept_branch)
     main_before = config.repo.rev_parse(config.base_ref)
     root = ArchiveMember(ref=kept_ref, score=None, parent_ref=None, tree=_tree_of(config, kept_ref))

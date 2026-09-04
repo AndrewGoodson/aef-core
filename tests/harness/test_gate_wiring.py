@@ -444,3 +444,157 @@ def test_every_fix_doctor_prints_is_a_command_the_cli_accepts(tmp_path: Path) ->
         parser.parse_args(argv)  # raises SystemExit if the CLI would refuse
         checked += 1
     assert checked >= 2, "no runnable fix strings were actually checked"
+
+
+# --------------------------------------------------------------------------
+# The gates run one graph's scenarios, not the whole corpus (ADR 0125)
+# --------------------------------------------------------------------------
+
+
+def _scenario_for(sid: str, graph_id: str):  # type: ignore[no-untyped-def]
+    from aef.harness.corpus import Scenario, Split
+    from aef.kernel import END, Graph, GraphExecutor, Node
+    from aef.services.runtime import agent_services
+    from aef.state import AEFState, Plan, StateDelta
+
+    def passing(state, ctx, services):  # type: ignore[no-untyped-def]
+        return (
+            StateDelta(plan=Plan(goal=state.objective, status="done"), scores={"quality": 1.0}),
+            END,
+        )
+
+    graph = Graph(
+        id=graph_id,
+        version="1",
+        nodes={"do": Node(id="do", version="1", fn=passing, deterministic=True)},
+        edges=[],
+        entry_node="do",
+    )
+    state = AEFState(run_id=sid, agent_id="a", objective="o")
+    recorded = GraphExecutor(graph.compile(), agent_services()).run(state, record_trace=True)
+    return Scenario(
+        id=sid,
+        split=Split.TRAIN,
+        graph_id=graph_id,
+        graph_version="1",
+        initial_state=state,
+        trace=recorded.trace,
+        recorded_at=NOW,
+    )
+
+
+def _two_graph_corpus(tmp_path: Path):  # type: ignore[no-untyped-def]
+    from aef.harness.corpus import Corpus
+
+    return Corpus(
+        root=tmp_path / "corpus",
+        scenarios=(
+            _scenario_for("demo-1", "demo_agent"),
+            _scenario_for("demo-2", "demo_agent"),
+            _scenario_for("sum-1", "summary_agent"),
+            _scenario_for("sum-2", "summary_agent"),
+            _scenario_for("sum-3", "summary_agent"),
+        ),
+    )
+
+
+def _verdict():  # type: ignore[no-untyped-def]
+    from aef.harness.candidate import CandidateDiff, CandidateVerdict
+    from aef.harness.zones import ZoneVerdict
+
+    return CandidateVerdict(
+        diff=CandidateDiff(
+            base_ref="main", head_ref="main", base_sha="a" * 40, head_sha="b" * 40, entries=()
+        ),
+        zones=ZoneVerdict(verdicts=()),
+        mode_violations=(),
+    )
+
+
+class _SpyCohortBuilder:
+    """Captures the scenarios the cohort was asked to run, then stops."""
+
+    seen: list[str] = []
+
+    def __init__(self, **_: object) -> None:
+        pass
+
+    def build(self, diff, scenarios, workdir):  # type: ignore[no-untyped-def]
+        type(self).seen = [s.id for s in scenarios]
+        raise RuntimeError("spy: the cohort is not built in this test")
+
+
+def test_the_gates_run_only_the_scenarios_recorded_from_this_graph(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`corpus/` holds `demo_agent` and `summary_agent` recordings since ADR
+    0123, and the gates ran all of them against whichever graph the
+    entrypoint named — diluting every mean with scenarios the candidate could
+    not satisfy. `aef loop score` filtered; the gates did not."""
+    import aef.harness.loop as loop_module
+    from aef.harness.loop import LoopConfig, LoopPaths, _gates_with_evidence
+
+    monkeypatch.setattr(loop_module, "CohortBuilder", _SpyCohortBuilder)
+    _SpyCohortBuilder.seen = []
+    config = LoopConfig(
+        repo=GitRepo(root=_repo(tmp_path)),
+        paths=LoopPaths(root=tmp_path / "state"),
+        corpus=_two_graph_corpus(tmp_path),
+        entrypoint="agents.demo.graph:build_graph",
+        graph_id="demo_agent",
+    )
+    _gates_with_evidence(config, _verdict(), tmp_path / "w", NOW)
+    assert _SpyCohortBuilder.seen == ["demo-1", "demo-2"]
+
+
+def test_a_mixed_corpus_with_no_matching_graph_refuses_by_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Not silent emptiness: an empty scenario list reads to G2/G3 as "no
+    evidence", which escalates with none of the information about why."""
+    import aef.harness.loop as loop_module
+    from aef.harness.loop import (
+        CorpusGraphMismatchError,
+        LoopConfig,
+        LoopPaths,
+        _gates_with_evidence,
+    )
+
+    monkeypatch.setattr(loop_module, "CohortBuilder", _SpyCohortBuilder)
+    config = LoopConfig(
+        repo=GitRepo(root=_repo(tmp_path)),
+        paths=LoopPaths(root=tmp_path / "state"),
+        corpus=_two_graph_corpus(tmp_path),
+        entrypoint="agents.demo.graph:build_graph",
+        graph_id="default",
+    )
+    with pytest.raises(CorpusGraphMismatchError, match="--graph-id"):
+        _gates_with_evidence(config, _verdict(), tmp_path / "w", NOW)
+
+
+def test_a_single_graph_corpus_still_gates_on_all_of_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The rule stated in ADR 0125: `--graph-id` defaults to `"default"` and
+    is the ARCHIVE key, a different namespace from `graph.id`. A corpus that
+    records one graph has nothing to disambiguate, so requiring the two
+    namespaces to agree would break every existing single-graph corpus to fix
+    a mixed-corpus defect."""
+    import aef.harness.loop as loop_module
+    from aef.harness.corpus import Corpus
+    from aef.harness.loop import LoopConfig, LoopPaths, _gates_with_evidence
+
+    monkeypatch.setattr(loop_module, "CohortBuilder", _SpyCohortBuilder)
+    _SpyCohortBuilder.seen = []
+    config = LoopConfig(
+        repo=GitRepo(root=_repo(tmp_path)),
+        paths=LoopPaths(root=tmp_path / "state"),
+        corpus=Corpus(
+            root=tmp_path / "corpus",
+            scenarios=(_scenario_for("only-1", "g"), _scenario_for("only-2", "g")),
+        ),
+        entrypoint="agents.demo.graph:build_graph",
+        graph_id="default",
+    )
+    _gates_with_evidence(config, _verdict(), tmp_path / "w", NOW)
+    assert _SpyCohortBuilder.seen == ["only-1", "only-2"]

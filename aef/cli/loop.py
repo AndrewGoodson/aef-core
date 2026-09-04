@@ -28,6 +28,8 @@ from aef.harness.loop import (
     EXIT_OK,
     EXIT_REJECTED,
     PROPOSERS,
+    CorpusGraphMismatchError,
+    KeptBranchCheckedOutError,
     LoopConfig,
     LoopPaths,
     PolicyConfigError,
@@ -309,10 +311,21 @@ def cmd_score(args: argparse.Namespace) -> int:
     # score with live misses is a different measurement from a replayed one.
     cassette_miss = getattr(args, "cassette_miss", "fail")
     live_provider = None
-    if cassette_miss == "live" and getattr(args, "config", None):
-        from aef.config import build_model_provider, load_agent_config
+    # The OWNER'S policy, from the owner's own `aef.yaml` — the same one
+    # `aef run --config` applies and the same one `_policy_from_base_ref`
+    # hands the gates. This read `None`, so `loop score` judged every tool
+    # call deny-by-default while both other paths allowed it: reproduced at
+    # 0.0 here against 1.0 there, on identical code and one config file
+    # (ADR 0125). Two lists that must agree, with nothing checking that they
+    # did — ADR 0091's finding, in a third place.
+    score_policy = None
+    if getattr(args, "config", None):
+        from aef.config import build_model_provider, build_policy_config, load_agent_config
 
-        live_provider = build_model_provider(load_agent_config(args.config).model_provider)
+        agent_config = load_agent_config(args.config)
+        score_policy = build_policy_config(agent_config.tools, agent_config.policies)
+        if cassette_miss == "live":
+            live_provider = build_model_provider(agent_config.model_provider)
 
     # Only the scenarios recorded FROM this graph. A corpus may hold several
     # graphs' recordings (the demo's and the summary agent's); scoring one
@@ -329,7 +342,11 @@ def cmd_score(args: argparse.Namespace) -> int:
             cost = 0
             for scenario in scenarios:
                 result = run_scenario(
-                    scenario, graph, cassette_miss=cassette_miss, live_provider=live_provider
+                    scenario,
+                    graph,
+                    score_policy,
+                    cassette_miss=cassette_miss,
+                    live_provider=live_provider,
                 )
                 per_scenario[scenario.id] = float(result["score"])
                 cost += int(result["cost_tokens"])
@@ -467,7 +484,7 @@ def cmd_cycle(args: argparse.Namespace) -> int:
             memory=FileMemoryStore(path=Path(args.memory)) if args.memory else None,
             agent_path=args.agent_path,
         )
-    except PolicyConfigError as exc:
+    except (PolicyConfigError, CorpusGraphMismatchError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_REJECTED
     except LoopHaltedError as exc:
@@ -502,7 +519,9 @@ def cmd_run(args: argparse.Namespace) -> int:
             memory=FileMemoryStore(path=Path(args.memory)) if args.memory else None,
             agent_path=args.agent_path,
         )
-    except PolicyConfigError as exc:
+    except (PolicyConfigError, KeptBranchCheckedOutError, CorpusGraphMismatchError) as exc:
+        # Named refusals, printed as one line rather than a traceback: each
+        # names an operator action (stand somewhere else; pass --graph-id).
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_REJECTED
     except LoopHaltedError as exc:
@@ -792,7 +811,14 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_record.set_defaults(handler=cmd_record)
 
     p_score = loop_subs.add_parser(
-        "score", help="the task metric: score the incumbent graph over the corpus"
+        "score",
+        help="the task metric: score the incumbent graph over the corpus",
+        description=(
+            "Scores IN-PROCESS. A scenario's `budget_ms` is judged on this "
+            "stopwatch, and the gates' isolated path adds per-node IPC to the "
+            "same measurement (~0.7 ms more on a 4-node graph, ADR 0113), so a "
+            "budget calibrated here can fail at the gate — leave headroom."
+        ),
     )
     p_score.add_argument("entrypoint", help="'module:factory' returning the incumbent Graph")
     p_score.add_argument("--corpus", required=True)
@@ -814,8 +840,10 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_score.add_argument(
         "--config",
         default=None,
-        help="aef.yaml path; its model_provider answers cassette misses under "
-        "--cassette-miss live. Ignored under 'fail'.",
+        help="aef.yaml path. Its tools/policies block is the policy the scored "
+        "run gets — the same one `aef run --config` and the gates apply; without "
+        "it the run is deny-by-default. Its model_provider also answers cassette "
+        "misses under --cassette-miss live.",
     )
     p_score.set_defaults(handler=cmd_score)
 

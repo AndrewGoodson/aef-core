@@ -447,3 +447,138 @@ def test_an_honest_agent_still_passes_under_full_confinement(corpus) -> None:  #
         sandbox=SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED),
     )
     assert sum(1 for r in results.values() if r.outcome.passed) == 3
+
+
+# --- The harness's PolicyConfig reaches the node bodies (ADR 0125) ---
+# Pre-existing since ADR 0094: the worker built `agent_services()` with no
+# arguments, so the base ref's policy never crossed the process boundary and
+# any node consulting the engine scored 0.0 for candidate, incumbent AND
+# every cohort member — the uniform-zero shape ADR 0091 exists to stop.
+# Reproduced with `seam/repro_budget_isolated.py`: in-process 1.0, isolated 0.0.
+
+POLICY_AGENT = """
+from aef.kernel import END, Graph, Node
+from aef.security.tool import Tool, ToolCall
+from aef.state import Plan, StateDelta
+
+
+class NetTool(Tool):
+    name = "net"
+    required_scopes = ("net.read",)
+
+    def invoke(self, arguments):
+        return {}
+
+
+def do(state, ctx, services):
+    result = services.policy_engine.evaluate(NetTool(), ToolCall(tool_name="net", arguments={}))
+    if result.allowed:
+        return (
+            StateDelta(plan=Plan(goal=state.objective, status="done"), scores={"quality": 1.0}),
+            END,
+        )
+    return (
+        StateDelta(
+            plan=Plan(goal=state.objective, status="failed"),
+            errors=[{"node_id": "do", "error": "denied: " + str(result.reason)}],
+        ),
+        END,
+    )
+
+
+def build_graph():
+    return Graph(
+        id="g", version="1",
+        nodes={"do": Node(id="do", version="1", fn=do, deterministic=True)},
+        edges=[], entry_node="do",
+    )
+"""
+
+
+def test_the_harness_policy_reaches_a_node_running_in_the_worker(corpus) -> None:  # type: ignore[no-untyped-def]
+    """A node that asks the policy engine gets the BASE REF's policy.
+
+    Without this the answer was always deny-by-default, so a candidate could
+    not be told apart from its incumbent by any behaviour the engine governs.
+    The same graph scored 1.0 in-process and 0.0 here."""
+    from aef.security.tool import PolicyConfig
+
+    ws, scenarios = corpus
+    (ws / "agents" / "graph.py").write_text(POLICY_AGENT)
+    results = run_corpus_isolated(
+        ws,
+        scenarios,
+        entrypoint="agents.graph:build_graph",
+        policy=PolicyConfig(allowed_scopes=frozenset({"net.read"})),
+    )
+    assert [r.score for r in results.values()] == [1.0, 1.0, 1.0]
+    assert all(r.outcome.error_count == 0 for r in results.values())
+
+
+def test_no_policy_still_means_deny_by_default_in_the_worker(corpus) -> None:  # type: ignore[no-untyped-def]
+    """The control on the control. Carrying the policy across must not become
+    a way for the scope to arrive by accident: with no policy supplied, the
+    worker denies exactly as an unconfigured production run does."""
+    ws, scenarios = corpus
+    (ws / "agents" / "graph.py").write_text(POLICY_AGENT)
+    results = run_corpus_isolated(ws, scenarios, entrypoint="agents.graph:build_graph")
+    assert [r.score for r in results.values()] == [0.0, 0.0, 0.0]
+
+
+AGENT_ID_AGENT = """
+from aef.kernel import END, Graph, Node
+from aef.state import Plan, StateDelta
+
+
+def do(state, ctx, services):
+    seen = getattr(services.retriever, "agent_id", "NO-RETRIEVER")
+    if seen != state.agent_id:
+        return (
+            StateDelta(
+                plan=Plan(goal=state.objective, status="failed"),
+                errors=[{"node_id": "do", "error": "retriever scoped to " + repr(seen)}],
+            ),
+            END,
+        )
+    return (
+        StateDelta(plan=Plan(goal=state.objective, status="done"), scores={"quality": 1.0}),
+        END,
+    )
+
+
+def build_graph():
+    return Graph(
+        id="g", version="1",
+        nodes={"do": Node(id="do", version="1", fn=do, deterministic=True)},
+        edges=[], entry_node="do",
+    )
+"""
+
+
+def test_the_scenarios_agent_id_reaches_the_worker(corpus) -> None:  # type: ignore[no-untyped-def]
+    """Same frame, same reason: services built in the worker were unscoped,
+    while the parent's own `agent_services` had the scenario's id all along.
+    The node FAILS the scenario when the id it sees is not its own, so a
+    silently-unscoped worker cannot pass this by doing nothing."""
+    ws, scenarios = corpus
+    (ws / "agents" / "graph.py").write_text(AGENT_ID_AGENT)
+    results = run_corpus_isolated(ws, scenarios, entrypoint="agents.graph:build_graph")
+    assert [r.score for r in results.values()] == [1.0, 1.0, 1.0]
+
+
+def test_policy_payload_round_trips_through_the_configure_frame() -> None:
+    """One channel, encoded and decoded by inverse functions in one module —
+    two hand-written encodings of the same config is the drift ADR 0091
+    records."""
+    from aef.harness.scenario_runner import policy_config_from_payload, policy_payload
+    from aef.security.tool import PolicyConfig
+
+    original = PolicyConfig(
+        allowed_scopes=frozenset({"net.read", "fs.read"}),
+        forbidden_tool_names=frozenset({"rm"}),
+        require_hitl_above_risk=0.7,
+    )
+    assert policy_config_from_payload(policy_payload(original)) == original
+    # `None` is not an empty policy: it must stay distinguishable on the wire.
+    assert policy_payload(None) is None
+    assert policy_config_from_payload(None) == PolicyConfig()

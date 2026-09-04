@@ -218,3 +218,108 @@ def test_run_with_checkpoints_dir_persists_to_a_real_file_backend_readable_by_ev
 
     provenance = trace_run(checkpoints_dir, final_state.run_id)
     assert provenance == []  # this graph makes no model calls; empty is correct, not broken
+
+
+# --- The assembled `aef run` path: consolidated lessons, and one tenant's ---
+# ADR 0125. Both reproduced through `run_graph_module` (what the CLI calls)
+# before the fix, with the seam reproduction `repro_run_path.py`.
+
+_RETRIEVE_WORK_REFLECT_CONSOLIDATE = """
+from aef.kernel import END, Context, Edge, Graph, Node, Route, Services
+from aef.reasoning.nodes import make_consolidate_node, make_reflect_node, make_retrieve_node
+from aef.state import AEFState, StateDelta
+
+
+def work(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
+    return StateDelta(errors=[{"node_id": "work", "error": "fetch timed out"}]), "reflect"
+
+
+def build_graph() -> Graph:
+    nodes = [
+        make_retrieve_node(route="work"),
+        Node(id="work", version="1", fn=work, deterministic=True),
+        make_reflect_node(route="consolidate"),
+        make_consolidate_node(route=END),
+    ]
+    return Graph(
+        id="seam",
+        version="1",
+        nodes={n.id: n for n in nodes},
+        edges=[Edge("retrieve", "work"), Edge("work", "reflect"), Edge("reflect", "consolidate")],
+        entry_node="retrieve",
+    )
+"""
+
+
+@pytest.fixture
+def wiki_graph_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    (tmp_path / "cli_wiki_graph_mod.py").write_text(_RETRIEVE_WORK_REFLECT_CONSOLIDATE)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    yield "cli_wiki_graph_mod"
+    sys.modules.pop("cli_wiki_graph_mod", None)
+
+
+def _last_memory_record(path: Path) -> dict:
+    import json
+
+    loaded: dict = json.loads(path.read_text(encoding="utf-8").splitlines()[-1])
+    return loaded
+
+
+def test_run_with_durable_memory_retrieves_the_lesson_consolidated_by_earlier_runs(
+    wiki_graph_module: str, tmp_path: Path
+) -> None:
+    """A1 on the ASSEMBLED path, not just for a caller who builds `Services`
+    by hand. `run_graph_module` built a fresh `InMemoryKnowledgeStore()` per
+    process and the retrieve node runs BEFORE the consolidate node, so across
+    CLI runs no consolidated lesson was ever in context: `retrieved_signatures`
+    was `[]` in every run, and ADR 0118's helpful/harmful tally had no producer
+    here at all.
+
+    The consolidator needs a signature in TWO distinct runs (one is an episode,
+    ADR 0110), so the entry exists only from the third run's point of view."""
+    memory_path = tmp_path / "memory.jsonl"
+    signatures = []
+    for _ in range(3):
+        run_graph_module(
+            wiki_graph_module, agent_id="mine", objective="settle it", memory_path=memory_path
+        )
+        signatures.append(_last_memory_record(memory_path)["content"]["retrieved_signatures"])
+
+    assert signatures[0] == []  # nothing recorded yet
+    assert signatures[1] == []  # one run's failure is an episode, not knowledge
+    assert signatures[2] == ["failure:work"]
+
+
+def test_run_without_a_context_block_does_not_retrieve_another_tenants_record(
+    wiki_graph_module: str, tmp_path: Path
+) -> None:
+    """`build_retriever` returns None without a `context:` block, so
+    `agent_services` defaulted a retriever with `agent_id=None` — over the
+    DURABLE, multi-agent file store `--memory` names. Another tenant's failure
+    landed in this agent's context. ADR 0118's comment claimed that default
+    "only ever fronts a throwaway store"; it did not."""
+    from datetime import UTC, datetime
+
+    from aef.harness.memory_store import FileMemoryStore
+    from aef.services.memory.base import MemoryRecord
+
+    memory_path = tmp_path / "memory.jsonl"
+    FileMemoryStore(path=memory_path).write(
+        MemoryRecord(
+            kind="failure",
+            agent_id="OTHER-TENANT",
+            run_id="o1",
+            created_at=datetime.now(UTC),
+            content={
+                "verbal_feedback": "fetch timed out settling the invoice for acme",
+                "failing_nodes": ["work"],
+                "objective": "settle it",
+            },
+        )
+    )
+
+    final = run_graph_module(
+        wiki_graph_module, agent_id="mine", objective="settle it", memory_path=memory_path
+    )
+    assert final.retrieved_context == []

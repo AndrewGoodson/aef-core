@@ -325,3 +325,56 @@ def test_parent_weight_prefers_score_and_penalises_children() -> None:
     assert _parent_weight(tired) == pytest.approx(_parent_weight(fresh) / 4)
     assert _parent_weight(weak) < _parent_weight(fresh)
     assert _parent_weight(unknown) == pytest.approx(0.5)  # a 0.5 score, no children
+
+
+# ---------------------------------------------------------------------------
+# The kept branch is for reviewing, not for standing on (ADR 0125)
+# ---------------------------------------------------------------------------
+
+
+def test_refuses_to_start_while_the_kept_branch_is_checked_out(
+    repo: GitRepo, tmp_path: Path
+) -> None:
+    """`update-ref` moves a branch without touching the index or the working
+    tree. When that branch is HEAD, the reviewer is left with a repository
+    whose index reads as a STAGED REVERSAL of the change the loop just kept —
+    reproduced: `git status --porcelain` returned `M  agents/demo/graph.py`
+    with the worktree still at RETRY_BUDGET = 3 while loop/kept had 4."""
+    from aef.harness.loop import KeptBranchCheckedOutError
+
+    _git(repo.root, "branch", "loop/kept", "main")
+    _git(repo.root, "checkout", "-q", "loop/kept")
+
+    fake = _FakeCycle([Disposition.ESCALATE])
+    with pytest.raises(KeptBranchCheckedOutError, match="loop/kept"):
+        _run(_config(repo, tmp_path), tmp_path, fake)
+
+    # Refused BEFORE anything ran, so nothing was gated and nothing moved.
+    assert fake.calls == 0
+    assert _git(repo.root, "rev-parse", "loop/kept") == _git(repo.root, "rev-parse", "main")
+    assert _git(repo.root, "status", "--porcelain") == ""
+
+
+def test_the_same_loop_runs_from_any_other_branch(repo: GitRepo, tmp_path: Path) -> None:
+    """The control. A refusal that also blocks the ordinary case is not a
+    guard, it is an outage."""
+    _git(repo.root, "branch", "loop/kept", "main")
+    _git(repo.root, "checkout", "-q", "main")
+    run = _run(_config(repo, tmp_path), tmp_path, _FakeCycle([Disposition.ESCALATE]))
+    assert run.kept_count == 1
+    assert _git(repo.root, "status", "--porcelain") == ""
+
+
+def test_a_non_default_kept_branch_name_is_the_one_refused(repo: GitRepo, tmp_path: Path) -> None:
+    """`--kept-branch` is a flag; the guard must read it rather than a
+    hard-coded 'loop/kept'."""
+    from aef.harness.loop import KeptBranchCheckedOutError
+
+    _git(repo.root, "checkout", "-qb", "review/mine")
+    with pytest.raises(KeptBranchCheckedOutError, match="review/mine"):
+        _run(
+            _config(repo, tmp_path),
+            tmp_path,
+            _FakeCycle([Disposition.ESCALATE]),
+            kept_branch="review/mine",
+        )

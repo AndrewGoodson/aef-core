@@ -44,6 +44,7 @@ from aef.kernel import (
     InMemoryDurabilityBackend,
 )
 from aef.security.tool import FileAuditLogWriter
+from aef.services.knowledge.consolidate import RuleBasedConsolidator
 from aef.services.knowledge.in_memory import InMemoryKnowledgeStore
 from aef.services.memory.base import MemoryStore
 from aef.services.memory.in_memory import InMemoryMemoryStore
@@ -163,7 +164,22 @@ def run_graph_module(
     # a different store retrieves nothing and reads as an empty memory.
     # One knowledge store for the retriever AND the consolidate node, or the
     # lessons the graph writes are never the lessons it reads (A1, ADR 0118).
+    #
+    # And it is REBUILT FROM THE DURABLE MEMORY BEFORE THE GRAPH RUNS, because
+    # a fresh store per process plus a retrieve node that runs before the
+    # consolidate node means no consolidated lesson is ever in context on any
+    # CLI run: `retrieved_signatures` was `[]` in every `aef run`, so ADR
+    # 0118's helpful/harmful tally had no producer on the assembled path and
+    # A1 was closed only for a caller that constructs `Services` by hand
+    # (ADR 0125, reproduced end-to-end through `run_graph_module`).
+    # Recompute rather than persist: the consolidator is a stateless function
+    # of the memory store by design (ADR 0110), so re-deriving is exactly
+    # equivalent to having stored it, with no second source of truth about
+    # what has been seen. With an in-memory store there is nothing to rebuild
+    # from — the run is a one-off — so this is skipped.
     knowledge = InMemoryKnowledgeStore()
+    if memory_path is not None:
+        RuleBasedConsolidator().consolidate(memory, knowledge, agent_id=agent_id)
     retriever = build_retriever(
         context_config, memory=memory, agent_id=agent_id, knowledge=knowledge
     )
@@ -178,6 +194,10 @@ def run_graph_module(
         audit_log=FileAuditLogWriter(Path(audit_log_path)) if audit_log_path else None,
         reflection=reflection,
         reflection_model=reflection_model,
+        # Without a `context:` block `build_retriever` returns None and
+        # `agent_services` defaults one — over THIS durable, multi-agent store.
+        # Unscoped, that handed the run another tenant's records (ADR 0125).
+        agent_id=agent_id,
     )
     # Without this an adopter cannot produce a FAILING run from the CLI, so the
     # workflow LOOP.md documents ("record scenarios that fail as well as ones
