@@ -816,3 +816,45 @@ in-process gate path and nothing compares either against the worker, so F3's
 completeness rests on inspection rather than a test that enumerates. The
 `shadow.py` `NodeWorkerSession`, which sends no configure frame and therefore
 still runs deny-by-default (safe, but a fourth construction of the same list).
+
+---
+
+## I0 — The scoreboard is under test (2026-09-04)
+
+**Branch:** `improve/i0-rubric-arithmetic`, off `94f5575`. **Rubric claim:
+none** — this corrects an addition, it measures no capability.
+
+**Reproduce (RUN).** Summed the rubric's latest row per dimension, carrying
+the two dimensions that have never moved (4 and 8) from the baseline: **85**
+against a stated **84**. Walked back: the baseline's own rows sum to **51**
+against a stated **50**. Every total since did `previous + delta` from the
+wrong base. The guard test against the uncorrected file: 3 failed, 3 passed.
+
+**Expectation.** Correct both totals with a note that no row moves; add a
+test that recomputes the heading from the rows and encodes the table's real
+shape (prepend-ordered; unmoved dimensions carry from baseline).
+
+**Measurement.**
+
+```
+guard vs uncorrected file      3 failed, 3 passed
+guard vs corrected file        6 passed
+mutations (each -> fails, reverted):
+  M1 heading one point high              2 failed
+  M2 dimension scores above its weight   3 failed
+  M3 dimension that is not weighted      4 failed
+  M4 baseline restored to its old error  1 failed
+pytest -q          1820 passed (from 1814; +6, none removed)
+mypy aef examples  127 files clean
+ruff check / format   clean
+```
+
+**Verdict.** Score is **85**, not 84 — an addition error, not a new
+capability, and no dimension's evidence changes. 90 is five points away:
+I12 (+2), live noise floor (+1), judge A/B re-run (+1), Codex smoke (+1).
+
+**Deliberately left.** The totals quoted in earlier ADRs, log entries and
+`docs/research/above-90-2026-09-04.md` stand as written: they are dated
+records of what was believed, and rewriting them would erase the error
+rather than record it. ADR 0127 is the correction and the rubric points
+at it.
