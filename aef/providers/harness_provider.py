@@ -35,6 +35,11 @@ from aef.providers.base import (
     ModelProviderError,
 )
 
+# The smallest VALID MCP config: an explicit, empty server set. Paired with
+# `--strict-mcp-config` this is what stops the operator's own MCP servers
+# reaching a node's model call. A bare `{}` fails the CLI's schema.
+_EMPTY_MCP_CONFIG = '{"mcpServers":{}}'
+
 
 @dataclass(frozen=True)
 class HarnessRun:
@@ -109,8 +114,10 @@ class ClaudeCodeProvider(ModelProvider):
     every critic and judge call, and the judge answered in the operator's
     personal register. Three flags fix it:
 
-    - `--strict-mcp-config` with `--mcp-config {}` — "only use MCP servers
-      from `--mcp-config`", and that config declares none. This is the pair
+    - `--strict-mcp-config` with `--mcp-config '{"mcpServers":{}}'` — "only use
+      MCP servers from `--mcp-config`", and that config declares none. The
+      value must be a valid MCP config document: a bare `{}` is refused by the
+      CLI's own schema (ADR 0150). This is the pair
       the 4,684-token measurement used.
     - `--safe-mode` — "all customizations (CLAUDE.md, skills, plugins, hooks,
       MCP servers, custom commands and agents ...) disabled ... Auth, model
@@ -168,7 +175,13 @@ class ClaudeCodeProvider(ModelProvider):
             # docstring for the 211,470 -> 4,684 input-token measurement.
             "--strict-mcp-config",
             "--mcp-config",
-            "{}",
+            # `{}` is REJECTED — the CLI validates this against a schema whose
+            # `mcpServers` key is required, and every call died with
+            # `Error: Invalid MCP configuration: mcpServers: Invalid input`
+            # from the moment ADR 0126 added the flag until ADR 0150 fixed it.
+            # It shipped because the quota was exhausted that day, so the tests
+            # could only assert the SHAPE of argv, and argv was well-formed.
+            _EMPTY_MCP_CONFIG,
             "--safe-mode",
         ]
         if model:

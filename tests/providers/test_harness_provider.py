@@ -96,7 +96,12 @@ def test_claude_argv_does_not_inherit_the_operators_session() -> None:
     ClaudeCodeProvider(runner=runner).complete(_request())
     argv = runner.calls[0]
     assert "--strict-mcp-config" in argv
-    assert argv[argv.index("--mcp-config") + 1] == "{}"
+    # A VALID empty MCP config, not a bare `{}` — the CLI's schema requires
+    # `mcpServers`, and asserting the shape of argv is exactly what let a
+    # malformed value ship (ADR 0150). `test_claude_answers_through_the_provider`
+    # in test_harness_live.py is the guard that runs the real CLI.
+    payload = json.loads(argv[argv.index("--mcp-config") + 1])
+    assert payload == {"mcpServers": {}}, payload
     assert "--safe-mode" in argv  # no CLAUDE.md, no skills, keychain intact
     assert "--bare" not in argv
     # Isolation flags precede the prompt, which stays last and positional.

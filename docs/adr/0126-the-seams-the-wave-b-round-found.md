@@ -182,6 +182,17 @@ clean. One flake seen once and not reproduced in two further full runs:
 containers running on the host, so anything else on the machine starting a
 container while it runs fails it. Nothing in this wave touches that path.
 
+## Erratum (2026-09-04, ADR 0150)
+
+The `--mcp-config {}` this wave added is **rejected by the CLI** — its
+schema requires `mcpServers` — so every `ClaudeCodeProvider` call exited 1
+from the moment this ADR landed until ADR 0150 fixed it. The tests could
+only assert argv's shape because the quota was exhausted that day, and
+argv was well formed. ADR 0150 also separates the attribution this ADR
+never did: `--safe-mode` alone reproduces the isolation (input_tokens 2),
+so the 211,470 -> 4,684 reduction credited to the MCP flags belongs to
+`--safe-mode`. The MCP flags are kept, correct and redundant.
+
 ## Consequences
 
 - **No rubric dimension moves.** This wave fixes defects and documents two
