@@ -1,3 +1,4 @@
+import dataclasses
 from datetime import UTC, datetime
 
 import pytest
@@ -351,3 +352,92 @@ def test_a_custom_signature_function_is_honoured() -> None:
     ).consolidate(memory, knowledge, agent_id="a1")
     assert len(written) == 1
     assert written[0].occurrence_count == 2
+
+
+# ---------------------------------------------------------------------------
+# The helpful/harmful tally (ADR 0118, corrected by ADR 0126)
+# ---------------------------------------------------------------------------
+def _shown(record: MemoryRecord, signatures: list[str]) -> MemoryRecord:
+    """The same record, with `retrieved_signatures` — what `make_reflect_node`
+    writes when the retrieve node put those lessons in context."""
+    content = dict(record.content)
+    content["retrieved_signatures"] = signatures
+    return dataclasses.replace(record, content=content)
+
+
+def test_a_success_lesson_is_never_tallied() -> None:
+    """A success entry keeps (0, 0). Reproduced end-to-end before the fix: four
+    identical clean runs left `success:<objective>` at harmful=2, because every
+    run that repeats a success re-produces its signature and equality read that
+    as 'the lesson failed to prevent it'."""
+    signature = "success:settle the invoice"
+    memory, knowledge = _stores(
+        [
+            _success(run_id="s0", created_at=T1),
+            _success(run_id="s1", created_at=T1),
+            _shown(_success(run_id="s2", created_at=T2), [signature]),
+            _shown(_success(run_id="s3", created_at=T3), [signature]),
+        ]
+    )
+    written = RuleBasedConsolidator().consolidate(memory, knowledge, agent_id="a1")
+    entry = next(e for e in written if e.signature == signature)
+    assert entry.occurrence_count == 4
+    assert (entry.helpful, entry.harmful) == (0, 0)
+
+
+def test_a_chained_failure_reproduces_the_lesson_it_was_shown() -> None:
+    """`failure:fetch` in context and the run fails `fetch` -> `parse`: the
+    fetch failure recurred, so the lesson is harmful. Before the fix the
+    produced signature `failure:fetch>parse` was a different string and the
+    lesson was credited as helpful for the very failure it did not prevent."""
+    memory, knowledge = _stores(
+        [
+            _failure(run_id="f0", failing_nodes=["fetch"], created_at=T1),
+            _failure(run_id="f1", failing_nodes=["fetch"], created_at=T1),
+            _shown(
+                _failure(run_id="f2", failing_nodes=["fetch", "parse"], created_at=T2),
+                ["failure:fetch"],
+            ),
+        ]
+    )
+    written = RuleBasedConsolidator().consolidate(memory, knowledge, agent_id="a1")
+    entry = next(e for e in written if e.signature == "failure:fetch")
+    assert (entry.helpful, entry.harmful) == (0, 1)
+
+
+def test_a_downstream_node_counts_as_a_recurrence_of_its_own_lesson() -> None:
+    """`failure:parse` recurs inside `failure:fetch>parse` — the parse failure
+    did happen — so the lesson that was shown is harmful."""
+    memory, knowledge = _stores(
+        [
+            _failure(run_id="p0", failing_nodes=["parse"], created_at=T1),
+            _failure(run_id="p1", failing_nodes=["parse"], created_at=T1),
+            _shown(
+                _failure(run_id="p2", failing_nodes=["fetch", "parse"], created_at=T2),
+                ["failure:parse"],
+            ),
+        ]
+    )
+    written = RuleBasedConsolidator().consolidate(memory, knowledge, agent_id="a1")
+    entry = next(e for e in written if e.signature == "failure:parse")
+    assert (entry.helpful, entry.harmful) == (0, 1)
+
+
+def test_a_reordered_chain_is_a_different_failure_and_is_not_a_recurrence() -> None:
+    """The rule is SUBSEQUENCE, not set membership. `default_signature` states
+    that `A>B` and `B>A` are different failures — a run shown `fetch>parse`
+    that instead failed `parse>fetch` did not reproduce the lesson, and a set
+    subset would have said it did."""
+    memory, knowledge = _stores(
+        [
+            _failure(run_id="q0", failing_nodes=["fetch", "parse"], created_at=T1),
+            _failure(run_id="q1", failing_nodes=["fetch", "parse"], created_at=T1),
+            _shown(
+                _failure(run_id="q2", failing_nodes=["parse", "fetch"], created_at=T2),
+                ["failure:fetch>parse"],
+            ),
+        ]
+    )
+    written = RuleBasedConsolidator().consolidate(memory, knowledge, agent_id="a1")
+    entry = next(e for e in written if e.signature == "failure:fetch>parse")
+    assert (entry.helpful, entry.harmful) == (1, 0)

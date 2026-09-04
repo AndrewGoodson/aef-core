@@ -187,7 +187,41 @@ def test_every_default_pattern_is_exercised() -> None:
         "api_key": TOKEN,
         "bearer": BEARER,
         "aws_key": "AKIAIOSFODNN7EXAMPLE",
-        "opaque_secret": "A" * 44,
+        # Was `"A" * 44`, which the corrected `opaque_secret` no longer
+        # matches: 40+ chars is not on its own a secret (ADR 0126).
+        "opaque_secret": "a1B2c3D4" * 5 + "xyz9",
     }
     for label, pattern in DEFAULT_PATTERNS:
         assert re.search(pattern, samples[label]), label
+
+
+def test_a_hyphenated_english_objective_is_not_a_secret() -> None:
+    """Reproduced against the real policy: this objective was redacted and the
+    harvested scenario admitted with a placeholder, which is a scenario that
+    no longer tests what the run did (ADR 0126)."""
+    slug = "migrate-the-customer-billing-pipeline-to-v2-with-zero-downtime"
+    # The second slug leads with a segment carrying both a letter and a
+    # numeral, so only excluding the hyphen itself keeps it out of the match.
+    versioned = "v2-migrate-the-customer-billing-pipeline-with-zero-downtime"
+    for text in (slug, versioned):
+        assert len(text) >= 40
+        assert RedactionPolicy().find({"objective": text}) == (), text
+        state = AEFState(run_id="r1", agent_id="a1", objective=text)
+        assert RedactionPolicy().redact_state(state)[0].objective == text
+    # Nor is a long snake_case identifier, the other shape 40+ chars catches.
+    ident = "test_a_downstream_node_counts_as_a_recurrence_of_its_own_lesson"
+    assert RedactionPolicy().find({"note": ident}) == ()
+
+
+def test_a_long_mixed_token_is_still_a_secret() -> None:
+    """The control the previous test must not weaken: 44 chars carrying both
+    letters and numerals, with no prefix any other pattern anchors on."""
+    token = "a1B2c3D4" * 5 + "xyz9"
+    assert len(token) == 44
+    assert RedactionPolicy().find({"objective": token}) == ("opaque_secret",)
+    state = AEFState(run_id="r1", agent_id="a1", objective=token)
+    redacted, hits = RedactionPolicy().redact_state(state)
+    assert redacted.objective == "[REDACTED:opaque_secret]" and hits == 1
+    # Base64 payloads keep matching too.
+    b64 = "aGVsbG8gd29ybGQgdGhpcyBpcyBhIHNlY3JldCB0b2tlbjEyMw=="
+    assert RedactionPolicy().find({"objective": b64}) == ("opaque_secret",)

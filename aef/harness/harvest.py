@@ -48,6 +48,7 @@ from aef.harness.trace_codec import decode_trace, dumps, encode_trace, loads
 from aef.kernel import GraphExecutor, Services
 from aef.kernel.executor import NodeExecutionRecord
 from aef.kernel.graph import Graph
+from aef.providers.cassette_provider import CassetteProvider, RecordedCall
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.services.runtime import agent_services
 from aef.state import AEFState
@@ -71,6 +72,13 @@ class RecordedRun:
     initial_state: AEFState
     trace: tuple[NodeExecutionRecord, ...]
     at: datetime
+    # Every model completion the run made (ADR 0123's cassette, ADR 0126).
+    # Without these a run whose graph calls a model cannot re-execute at all:
+    # the determinism re-check runs with no credential, the call fails, and
+    # the run is rejected as non-deterministic — a correct-looking rejection
+    # for the wrong reason. Empty for a legacy recorded run and for any graph
+    # that never asked a model anything, exactly as `Scenario.model_calls` is.
+    model_calls: tuple[RecordedCall, ...] = ()
 
     @property
     def failed(self) -> bool:
@@ -95,6 +103,7 @@ class RecordedRun:
             "initial_state": self.initial_state.model_dump(mode="json"),
             "trace": encode_trace(self.trace),
             "at": self.at.isoformat(),
+            "model_calls": [call.to_payload() for call in self.model_calls],
         }
 
     @classmethod
@@ -107,6 +116,11 @@ class RecordedRun:
                 initial_state=AEFState.model_validate(payload["initial_state"]),
                 trace=decode_trace(payload["trace"]),
                 at=datetime.fromisoformat(payload["at"]),
+                # Legacy runs recorded before the cassette existed load with
+                # none, and behave exactly as they did.
+                model_calls=tuple(
+                    RecordedCall.from_payload(c) for c in payload.get("model_calls", ())
+                ),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise HarvestError(f"malformed recorded run: {exc}") from exc
@@ -164,8 +178,22 @@ class HarvestOutcome:
 
 def _reexecution_services(scenario: Scenario) -> Services:
     """Mirrors `scenario_runner.run_scenario` — harvest asks the same
-    question the gates do, so it has to ask it of the same environment."""
-    return agent_services(clock=_fixed_clock(scenario), memory=InMemoryMemoryStore())
+    question the gates do, so it has to ask it of the same environment.
+
+    That includes the cassette (ADR 0126). The clock was pinned here and the
+    model was not, so a harvested run whose graph calls a model re-executed
+    against no provider at all, failed, and was rejected as
+    "non-deterministic" — the rejection a flaky run gets, for a run that was
+    perfectly reproducible. `on_miss="fail"` and no live provider, because a
+    harvest that reaches the network to decide whether a run is deterministic
+    has already lost the property it is checking.
+    """
+    cassette = CassetteProvider(None, scenario.model_calls, on_miss="fail")
+    return agent_services(
+        clock=_fixed_clock(scenario),
+        memory=InMemoryMemoryStore(),
+        model_provider=cassette,
+    )
 
 
 def _reexecutes_identically(run: RecordedRun, graph: Graph) -> bool:
@@ -183,6 +211,7 @@ def _reexecutes_identically(run: RecordedRun, graph: Graph) -> bool:
         initial_state=run.initial_state,
         trace=run.trace,
         recorded_at=run.at,
+        model_calls=run.model_calls,
     )
     try:
         # The same services the gate runner supplies. A bare `Services()`
@@ -212,6 +241,7 @@ def _reexecute(
         initial_state=state,
         trace=run.trace,
         recorded_at=run.at,
+        model_calls=run.model_calls,
     )
     try:
         result = GraphExecutor(graph.compile(), _reexecution_services(scenario)).run(
@@ -220,6 +250,27 @@ def _reexecute(
     except Exception:  # noqa: BLE001 - any failure to reproduce is a rejection
         return None
     return result.trace
+
+
+def _scannable(scenario: Scenario) -> dict[str, Any]:
+    """The scenario payload the output scan reads: everything except the
+    cassette's own request digests.
+
+    A `RecordedCall.key` is a 64-character SHA-256 hex string the harness
+    computes from the request — it is not tenant text, it is recomputed on
+    load rather than trusted, and it matches `opaque_secret` every single
+    time. Left in, it rejected EVERY model-calling run as
+    "a secret survived redaction" (found while fixing ADR 0126's F12; the
+    twenty summary scenarios ADR 0123 recorded all match it too). Everything
+    a model was actually asked and answered is still scanned.
+    """
+    payload = scenario.to_payload()
+    calls = payload.get("model_calls")
+    if isinstance(calls, list):
+        for call in calls:
+            if isinstance(call, dict):
+                call.pop("key", None)
+    return payload
 
 
 def _behaviour(initial: AEFState, trace: tuple[NodeExecutionRecord, ...]) -> tuple[Any, ...]:
@@ -303,6 +354,9 @@ def harvest(
             trace=trace,
             recorded_at=run.at,
             notes=notes,
+            # The cassette travels with the scenario, or the gates that
+            # re-execute it hit the same wall harvest just cleared.
+            model_calls=run.model_calls,
             # Harvested runs carry NO owner claim. Only a human can say a
             # task should have failed, and a MUST_FAIL label invented by
             # the system would be a tripwire the system set for itself.
@@ -310,7 +364,7 @@ def harvest(
         )
         # The output scan: a secret that survived the input redaction came
         # from somewhere the redactor cannot reach. Rejected, not written.
-        if redaction is not None and redaction.find(scenario.to_payload()):
+        if redaction is not None and redaction.find(_scannable(scenario)):
             unredactable.append(run.run_id)
             continue
         save_scenario(corpus_root, scenario)

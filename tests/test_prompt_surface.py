@@ -71,17 +71,68 @@ def _surface() -> dict[str, str]:
     return files
 
 
+# An inline code span. The prompt surfaces legitimately QUOTE the patterns
+# when describing what a model check strips out, and a quoted pattern is not
+# an instruction — but only inside backticks. Anything else is prose the
+# model reads as an instruction, whatever the sentence around it claims.
+_CODE_SPAN = re.compile(r"`[^`]*`")
+
+
+def _prose(text: str) -> list[str]:
+    """The surface with code spans blanked out — what a model reads as
+    instruction. Nothing else is filtered. The first version of this also
+    dropped every line containing "guide" or "remove", which hid a planted
+    "Do not narrate your steps; the model guide says so." from its own
+    detector: three of the four planted faults became invisible (ADR 0126)."""
+    return [_CODE_SPAN.sub(" ", line) for line in text.splitlines()]
+
+
 def test_the_detectors_detect() -> None:
-    """Planted faults. Each forbidden pattern must match its sample and the
-    required-block check must fail on a document missing one."""
+    """Planted faults, pushed THROUGH the filter the real test uses.
+
+    Asserting only that the regexes match is what let the defect in: the
+    regexes were fine and the line filter threw their input away before they
+    ever saw it. Every sample here therefore goes through `_prose` exactly as
+    a real surface line would.
+    """
     samples = {
         "anti-narration": "Don't narrate every step; hold all findings for the end.",
         "anti-formatting": "Never use bullets. No headers.",
         "escalation": "CRITICAL: YOU MUST call the tool first.",
     }
+    # The same faults dressed in the words the old filter dropped on sight.
+    # Each of these was invisible to the surface test (ADR 0126).
+    disguised = {
+        "anti-narration": "Do not narrate your steps; the model guide says so.",
+        "anti-formatting": "Never use bullets in the final report (see the style guide).",
+        "escalation": "CRITICAL: YOU MUST verify before you remove anything.",
+    }
     for label, pattern in FORBIDDEN:
         assert pattern.search(samples[label]), f"{label} detector matched nothing"
+        for planted in (samples[label], disguised[label]):
+            assert any(pattern.search(line) for line in _prose(planted)), (
+                f"{label}: the filter hid a planted fault from its own detector: {planted!r}"
+            )
     assert not all(block in "an empty contract" for block in REQUIRED_BLOCKS)
+
+
+def test_the_filter_still_exempts_a_quoted_pattern() -> None:
+    """The exemption that survives: a pattern inside backticks is a quotation,
+    not an instruction — this is how the reproduce-first skill and CLAUDE.md
+    describe what a model check strips out without tripping the check."""
+    quoted = "The check strips `Never use bullets` and `CRITICAL: YOU MUST` from prompts."
+    for _label, pattern in FORBIDDEN:
+        assert not any(pattern.search(line) for line in _prose(quoted))
+    # ... and the exemption is the code span, not the surrounding sentence,
+    # and not the whole line either: an instruction standing beside a quoted
+    # command is still an instruction. Dropping the line wholesale — the rule
+    # this test replaced — hides it.
+    unquoted = "The check strips Never use bullets from prompts."
+    mixed = "Run `aef loop score` after each edit. Never use bullets in the report."
+    for planted in (unquoted, mixed):
+        assert any(
+            pattern.search(line) for _label, pattern in FORBIDDEN for line in _prose(planted)
+        ), f"the filter hid a planted fault beside a code span: {planted!r}"
 
 
 @pytest.mark.parametrize("name", ["docs/autonomy/self-improving-loop.md", "<adopt: AUTONOMY.md>"])
@@ -93,15 +144,7 @@ def test_unattended_run_surfaces_carry_the_guides_blocks(name: str) -> None:
 
 @pytest.mark.parametrize("name", sorted(_surface()))
 def test_no_prompt_surface_carries_text_the_guide_removed(name: str) -> None:
-    text = _surface()[name]
-    # The reproduce-first skill and this repo's CLAUDE.md legitimately QUOTE
-    # the patterns when describing what to remove; only match outside code
-    # spans and outside lines that name the pattern as a thing to avoid.
-    lines = [
-        line
-        for line in text.splitlines()
-        if "`" not in line and "remove" not in line.lower() and "guide" not in line.lower()
-    ]
+    lines = _prose(_surface()[name])
     for label, pattern in FORBIDDEN:
         hits = [line for line in lines if pattern.search(line)]
         assert not hits, f"{name}: {label} text is back: {hits[:2]}"

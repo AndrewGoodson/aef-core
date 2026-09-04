@@ -79,6 +79,20 @@ predicted to give identical *order* and gave identical *coverage* only.
 - A lesson for a task the agent simply stopped attempting is demoted the
   same as one it fixed. Both mean "less relevant to current runs"; the
   distinction is not recoverable from records and is not claimed.
+- **The tallies are recomputed over the read window; the provenance is
+  not.** `_merge` (ADR 0116's upsert) unions `source_record_ids` across
+  consolidations but takes `helpful`, `harmful` and `runs_since_last_seen`
+  from the incoming entry, and the incoming entry is computed from the last
+  `candidates_per_kind` records only. Reproduced (`.scratch/repro_tally.py`
+  part 5, six failing runs with the lesson in context): at the default window
+  the entry reads `occurrence_count 6, harmful 4`; re-consolidating the same
+  unchanged store with `candidates_per_kind=2` leaves it at
+  `occurrence_count 6, harmful 2` — a tally over two runs standing against a
+  provenance of six. That is a disclosure, not a defect to patch here: a
+  windowed recompute is what "stateless recompute" buys, and the alternative
+  (carrying tallies forward) is the second source of truth ADR 0091 forbids.
+  An owner who shrinks `candidates_per_kind` shrinks the tally's evidence
+  base with it, and the entry does not say so on its face.
 
 ## Confidence
 

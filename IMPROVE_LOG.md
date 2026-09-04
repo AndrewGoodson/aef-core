@@ -580,3 +580,110 @@ neither sees the answer). Total: **79 → 82**.
 when the harness answers at recording speed again). A judge whose evidence
 includes the answer. Case-insensitive term checks, or `(?i)` regexes, for
 the next recording. Filtering gate scenarios by `graph_id`.
+
+---
+
+## Fix wave B — six seams, and a judge that could not read the answer (2026-09-03)
+
+**Branch:** `fix/seams-b`, off `main` (`705543d`).
+**Rubric claim:** none. A fix wave measures no new capability; two of the six
+findings are disclosures with numbers and no code.
+
+**Reproduce (RUN).** Every finding was reproduced before anything changed,
+from the seam-hunter's scripts copied into `.scratch/`:
+
+```
+F5  .scratch/repro_tally.py 4a/4b
+      success:<objective>  occ 4  helpful 0  harmful 2   (four clean runs)
+      failure:fetch        occ 2  helpful 1  harmful 0   (run failed fetch>parse)
+F6  .scratch/repro_provider.py + `claude --help` (2.1.260)
+      argv carried no MCP or settings isolation; max_tokens=400 absent from argv
+      seam-hunter measured 211,470 input tokens/call ($0.18 cached, $2.22 uncached)
+      vs 4,684 with --strict-mcp-config --mcp-config {}
+F9  .scratch/repro_prompt_filter.py
+      3 of 4 planted faults invisible to the surface test's own filter
+F10 .scratch/repro_redaction.py
+      "migrate-the-customer-billing-pipeline-to-v2-with-zero-downtime"
+      -> [REDACTED:opaque_secret], scenario admitted with a placeholder objective
+F8  .scratch/repro_tally.py 5
+      occ 6 harmful 4  ->  occ 6 harmful 2 at candidates_per_kind=2 (same store)
+F12 a graph whose node calls the provider, harvested
+      promoted () / rejected_nondeterministic ("m1",)
+F13 (I11 reported it) judge evidence contains no working_memory: rule 3/18,
+      LLM 9/18 agreement with the owner's checks on the summary corpus
+```
+
+**Expectation.** Stated before fixing: the tally must count only failures and
+must treat a chained failure as a recurrence; the provider argv must isolate
+the session without dropping the keychain; the surface filter must blank code
+spans and nothing else; `opaque_secret` must need a letter, a numeral and no
+hyphen; harvest must re-execute under a cassette; the judges must see the
+answer. Predicted that no current prompt surface would fail the stricter
+filter — confirmed, so no prompt file needed editing.
+
+**Measurement (after).**
+
+```
+F5  success:<objective>  occ 4  helpful 0  harmful 0
+    failure:fetch        occ 2  helpful 0  harmful 1
+F6  claude -p ... --tools "" --strict-mcp-config --mcp-config {} --safe-mode ...
+    --bare still absent; max_tokens documented as dropped (no CLI flag exists)
+    NOT re-measured live: the claude-fable-5-1 quota was exhausted. Flag names
+    confirmed from `claude --help`; --safe-mode is "CLAUDE.md, skills, plugins,
+    hooks, MCP servers ... disabled ... auth ... work normally", the only
+    documented flag that drops memory files without dropping the login.
+F9  all four planted faults visible through the filter; 0 surface files trip it
+F10 slug -> () ; "v2-migrate-...-downtime" -> () ; long snake_case ident -> ()
+    44-char mixed token -> ("opaque_secret",) ; base64 payload -> same
+F12 promoted ("m1",), live provider called exactly once (the recording)
+    found on the way: the output scan read RecordedCall.key (a SHA-256 the
+    harness computes) as an opaque_secret, so EVERY model-calling run was
+    rejected "a secret survived redaction" — all 20 ADR 0123 scenarios match
+    it. Digest dropped from the scan; a secret in the model's reply still fails.
+F13 judge prompt now carries `working_memory[summary]: <answer>`, capped at
+    MAX_ANSWER_CHARS=600 (vs 160), at most 4 entries, total item cap unchanged.
+    Live A/B NOT re-run (quota) — 3/18 and 9/18 stand as the measurement of the
+    defect, not of the fix.
+
+mutations (each: perturb, run, fail, revert, diff clean)
+  M1  success entries tallied again                    1 failed
+  M2  reproduction by string equality                  2 failed
+  M3  subsequence weakened to a set subset             1 failed
+  M4  isolation flags removed from the argv            1 failed
+  M5  --mcp-config points at the operator's config     1 failed
+  M6  the old guide/remove line filter restored        1 failed
+  M7  any line containing a backtick dropped whole     1 failed
+  M8  the shape-only opaque_secret restored            1 failed
+  M9  hyphens allowed back into the character class    1 failed
+  M10 the letter+numeral requirement dropped           1 failed
+  M11 harvest re-executes with an empty cassette       3 failed
+  M12 model_calls not loaded from the payload          4 failed
+  M13 the output scan reads the digest as tenant text  2 failed
+  M14 working_memory left out of the evidence          3 failed
+  M15 the answer excerpt uncapped                      1 failed
+  M16 no inner cap on working_memory items             1 failed
+
+pytest -q          1800 passed (from 1744; +56)
+mypy aef examples  127 files clean
+ruff check / format   clean
+model calls made: 0 (quota exhausted; `claude --help` and `--version` only)
+```
+
+**Verdict.** Six findings reproduced and five fixed in code, one documented.
+No rubric dimension moves: a fix wave restores what the numbers already
+claimed rather than claiming more. Two of the loop's own past numbers are now
+known to be measurements of defects — ADR 0123's judge A/B (neither judge read
+the answer) and ADR 0115's cost-in-seconds (which omitted a 211,470-token
+input) — and both errata say so at the source.
+
+**Deliberately left.** The live re-measurement of the provider's per-call
+cost and of the judge A/B with the answer in evidence — both need quota. The
+recording half of F12: `aef/cli/run.py` belongs to another worker this wave,
+so `RecordedRun(..., model_calls=recording.recorded)` and the recording
+cassette around the configured provider are specified in ADR 0126's
+Consequences for the orchestrator to wire. `_merge`'s window/provenance
+mismatch (F8) is disclosed in ADR 0116, not patched: carrying tallies forward
+is the second source of truth ADR 0091 forbids. One flake, seen once and not
+reproduced twice: `test_closing_the_session_leaves_no_container_running`
+compares host-wide container state and fails if anything else on the machine
+starts one.

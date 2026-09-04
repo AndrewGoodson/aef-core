@@ -13,8 +13,16 @@ model returned, with the rule-based anti-omission rule intact: a rubric term
 the model did not score counts as 0.0. A model that returns nothing usable
 falls back to the rule-based implementation and says so in the rationale.
 
+**The judge sees the answer.** Evidence is the errors, the tool results, the
+scores, the reflections — and the string-valued `working_memory` entries,
+which on a content task is where the answer is (ADR 0126). Without them the
+judges were scoring a run they could not read: on the summary corpus the
+rule-based judge agreed with the owner's checks 3/18 and the LLM judge 9/18,
+and neither's evidence contained the summary.
+
 **Bias controls are structural, not requested.** The evidence the judge sees
-is capped per item (`MAX_EXCERPT_CHARS`) so a longer failure cannot read as a
+is capped per item (`MAX_EXCERPT_CHARS`, and `MAX_ANSWER_CHARS` for the
+answer class) so a longer failure cannot read as a
 worse or a better one by bulk alone; and the judge asks twice with the
 evidence in opposite orders and averages — a position-swap control for
 single-item grading — reporting the disagreement as `position_delta` so a
@@ -51,6 +59,20 @@ from aef.state import AEFState
 MAX_EVIDENCE_ITEMS = 12
 DEFAULT_MAX_TOKENS = 2000
 
+# `working_memory` strings are excerpted at a HIGHER cap than everything else,
+# and the reason is that they are not corroborating evidence — on a content
+# task the answer lives here, and it is the thing being scored (ADR 0126).
+# `MAX_EXCERPT_CHARS` is 160; a 35-word summary is roughly 250 characters, so
+# the shared cap would hand the judge the first two thirds of every answer and
+# ask it to score completeness. 600 covers the corpus's longest answer with
+# headroom and is still a cap: an unbounded working memory cannot flood the
+# prompt, and every entry in this class is cut at the same length, so bulk
+# still cannot read as quality WITHIN the class.
+MAX_ANSWER_CHARS = 600
+# ... and only the first few, so a state carrying many strings cannot crowd
+# the errors that explain the answer out of the total item cap.
+MAX_WORKING_MEMORY_ITEMS = 4
+
 CRITIC_SYSTEM = (
     "You are the critic in an agent's reflection step. You are given the objective, "
     "the recorded errors and tool results of one run, and nothing else. Write a short "
@@ -77,13 +99,27 @@ class _Evidence:
         return "\n".join(f"- {item}" for item in ordered) if ordered else "- (none)"
 
 
-def _excerpt(value: object) -> str:
+def _excerpt(value: object, limit: int = MAX_EXCERPT_CHARS) -> str:
     text = str(value)
-    return text if len(text) <= MAX_EXCERPT_CHARS else text[: MAX_EXCERPT_CHARS - 1] + "…"
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 def _evidence(state: AEFState) -> _Evidence:
     items: list[str] = []
+    # First, because it is what the run produced. Measured on the summary
+    # corpus (ADR 0123's A/B): the rule-based judge agreed with the owner's
+    # checks on 3 of 18 states and the LLM judge on 9, and the reason was
+    # this — neither judge's evidence contained the answer it was scoring.
+    # Every counted field is still computed from the state; this only lets
+    # the model see what it is being asked about. Sorted by key so two runs
+    # with the same memory render the same prompt.
+    strings = [
+        (key, value)
+        for key, value in sorted(state.working_memory.items(), key=lambda kv: kv[0])
+        if isinstance(value, str) and value
+    ]
+    for key, value in strings[:MAX_WORKING_MEMORY_ITEMS]:
+        items.append(f"working_memory[{key}]: {_excerpt(value, MAX_ANSWER_CHARS)}")
     for i, error in enumerate(state.errors):
         detail = error.get("error") or error.get("message") or error
         items.append(f"errors[{i}] ({error.get('node_id', '?')}): {_excerpt(detail)}")

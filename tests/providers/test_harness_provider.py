@@ -87,6 +87,33 @@ def test_claude_argv_is_a_toolless_single_turn_under_the_session_login() -> None
     assert "--bare" not in argv
 
 
+def test_claude_argv_does_not_inherit_the_operators_session() -> None:
+    """The operator's MCP schemas and `~/.claude/CLAUDE.md` were reaching every
+    judge call: 211,470 input tokens per call as issued, 4,684 with the MCP
+    configuration suppressed (ADR 0126). These three flags are that fix, and
+    `--bare` — which would also drop the keychain login — stays absent."""
+    runner = _Recorder(_ok(_CLAUDE_OK))
+    ClaudeCodeProvider(runner=runner).complete(_request())
+    argv = runner.calls[0]
+    assert "--strict-mcp-config" in argv
+    assert argv[argv.index("--mcp-config") + 1] == "{}"
+    assert "--safe-mode" in argv  # no CLAUDE.md, no skills, keychain intact
+    assert "--bare" not in argv
+    # Isolation flags precede the prompt, which stays last and positional.
+    assert argv[-1] == "hello"
+
+
+def test_claude_drops_max_tokens_and_says_so() -> None:
+    """The CLI has no output-length flag. A caller that sets `max_tokens`
+    (`LLMJudge` sets 400) gets no cap — pinned so the omission stays a
+    documented fact rather than a silently missing control."""
+    runner = _Recorder(_ok(_CLAUDE_OK))
+    ClaudeCodeProvider(runner=runner).complete(_request(max_tokens=400))
+    argv = runner.calls[0]
+    assert not any("400" in a or "max-tokens" in a or "max_tokens" in a for a in argv)
+    assert "max_tokens" in (ClaudeCodeProvider.__doc__ or "")
+
+
 def test_claude_result_maps_text_usage_and_the_answering_model() -> None:
     result = ClaudeCodeProvider(runner=_Recorder(_ok(_CLAUDE_OK))).complete(_request())
     assert result.content == "OK"
