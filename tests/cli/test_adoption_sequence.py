@@ -362,11 +362,26 @@ def run_agent(objective: str) -> str:
 #                                         paths outside Zone A"        [L1]
 #   `return delta, END` (no route)    -> "no admissible failure memory"  [L2]
 #
-# The other two remain the adopter's, and remain hand-written below:
+# A third is now closed by tooling too:
+#
+#   no failing `aef run --memory`     -> "no admissible failure memory"  [L3]
+#                                        closed by `bootstrap --memory`,
+#                                        which mirrors the failing input's
+#                                        reflection into the store the cycle
+#                                        reads (ADR 0145). Deleted from this
+#                                        test; the mutation that disables the
+#                                        mirror fails it.
+#
+# ONE remains the adopter's, and remains hand-written below:
 #
 #   no module-level numeric constant  -> "the proposer produced nothing from
 #                                         the available evidence"
-#   no failing `aef run --memory`     -> "no admissible failure memory"
+#
+# and it is a property of `RuleBasedProposer`, which mutates numeric
+# constants. ADR 0122's `LLMProposer` writes the whole file and may not need
+# one; nobody has measured it, and that measurement (INGEST_LOOP L4) is
+# blocked on model quota. Until it runs, this line is the honest remainder
+# and definition-of-done statement 1 is NOT true.
 #
 # So the test takes the graph `aef migrate` generated — in migrate's Zone A
 # location, with migrate's `<call site> -> reflect -> consolidate -> END`
@@ -589,10 +604,18 @@ def test_an_adopted_repo_gates_a_candidate_end_to_end(
         str(inputs),
         "--state",
         str(state),
+        # ADR 0145: the failing input's reflection is mirrored into the
+        # durable store the proposer reads, so no hand-written `aef run
+        # --memory` is needed to give the cycle its evidence. This flag is
+        # what step 6 used to be.
+        "--memory",
+        str(state / "memory.jsonl"),
     )
     assert boot.returncode == 0, boot.stderr
     assert "recorded 4 scenario(s) in the train split" in boot.stdout
     assert "2 of 4 recorded run(s) FAILED." in boot.stdout
+    memory = [json.loads(line) for line in (state / "memory.jsonl").read_text().splitlines()]
+    assert [r for r in memory if r["kind"] == "failure"], memory
 
     # 5. The tripwire line bootstrap printed, run VERBATIM. The owner's one
     #    act, and the only place a `must_fail` label may come from (ADR 0060).
@@ -605,24 +628,6 @@ def test_an_adopted_repo_gates_a_candidate_end_to_end(
     tripwire = _aef(repo, *shlex.split(printed[0])[1:])
     assert tripwire.returncode == 0, f"{printed[0]}\n{tripwire.stderr}"
     assert "(validation)" in tripwire.stdout
-
-    # 6. A FAILING run into the durable memory file the proposer will read.
-    #    bootstrap cannot do this for you: it gives every input its own
-    #    InMemoryMemoryStore, so nothing it learns survives the process.
-    run = _aef(
-        repo,
-        "run",
-        module,
-        "--objective",
-        "hard",
-        "--working-memory",
-        json.dumps({"difficulty": 9}),
-        "--memory",
-        str(state / "memory.jsonl"),
-    )
-    assert run.returncode == 0, run.stderr
-    memory = [json.loads(line) for line in (state / "memory.jsonl").read_text().splitlines()]
-    assert [r for r in memory if r["kind"] == "failure"], memory
 
     # 7. bless, then doctor — every obligation this sequence can meet is met.
     blessed = _aef(
