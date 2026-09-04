@@ -257,3 +257,39 @@ here is `outcome.classify(...).passed == False` — the same definition G2
 uses, deliberately — but on a graph whose failure mode is a raised exception
 rather than a `failed` plan, the runs land in `errored`, not `failed`, and
 the count reads 0. The adoptee measurement above is exactly that case.
+
+
+## Erratum, 2026-09-04 (ADR 0141, fix wave D)
+
+Two things above are wrong, both about the halt check this ADR added at the end.
+
+**1. The Evidence block's `aef loop bootstrap` invocations omit `--state`, and
+that was the invocation the kill switch did not bind on.** `cmd_bootstrap` read
+`if getattr(args, "state", None):` — enforcement opt-in by the caller — while
+"`--state` is *optional* here" made omitting it the natural thing to type.
+Reproduced with the switch engaged:
+
+```
+$ aef loop bootstrap ... --inputs inputs.json --state state
+HALTED: the self-rewiring loop is halted ...   EXIT=2   corpus/train: 0
+
+$ aef loop bootstrap ... --inputs inputs.json
+recorded 2 scenario(s) in the train split      EXIT=0   corpus/train: 2
+```
+
+So the paragraph "A halted loop stops it" was true only of the form its own
+evidence does not use. One of `--state` / `--no-loop-state` is now **required**:
+day one is still reachable, as an assertion the owner makes rather than
+something silence is read as. Every invocation in the Evidence block above
+would today need `--no-loop-state` appended.
+
+**2. Bootstrap's scenarios spent `harvest`'s daily rate limit.** Not mentioned
+above, and it defeats `READY_LOOP.md`'s K5 pilot sequence — adopt, bootstrap,
+run for real, harvest — because `harvest` counted every scenario with
+`recorded_at` inside 24 hours and `bootstrap` stamps `recorded_at = now` on all
+of its. A 12-input bootstrap against `DEFAULT_DAILY_LIMIT = 5` gave
+`promoted 0 run(s)`, `3 held back by the daily rate limit`, exit 0. Scenarios
+carry a `Source` now and only `harvest`'s own promotions are charged; the
+held-back line says what did and did not count. A scenario written by a
+pre-0141 harvest inside the same 24 hours loads as `UNSPECIFIED` and is not
+charged — a window that closes on the first harvest run under this version.

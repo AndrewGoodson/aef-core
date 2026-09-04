@@ -144,3 +144,99 @@ def test_no_build_commands_falls_back_to_the_default() -> None:
     g1 = next(g for g in config.default_gates() if g.id == "G1")
     assert isinstance(g1, G1Builds)
     assert g1.commands == DEFAULT_BUILD_COMMANDS
+
+
+# --------------------------------------------------------------------------
+# ADR 0141 — nothing consumed `Preflight.ready`
+# --------------------------------------------------------------------------
+
+
+def test_cycle_and_gate_report_unmet_obligations() -> None:
+    """`Preflight.ready` had exactly one reader in `aef/`: `cmd_doctor`.
+    ADR 0137 §2 said "`Preflight.ready` is false while it stands, so the gates
+    refuse". Reproduced otherwise — `loop doctor` exit 1 with obligation 6
+    red, then `loop cycle` proposes and gates the same repo.
+
+    The decision (ADR 0141) was NOT to make them blocking: obligation 4 is
+    only knowable at this boundary, `harness.loop.cycle()` is importable and
+    would stay unguarded, three of the six enforce themselves later anyway,
+    and turning five long-advisory obligations into blockers is an owner's
+    call. So the surface must at least SAY it."""
+    for command in ("cmd_cycle", "cmd_gate"):
+        assert "_warn_unmet_obligations" in _source_of(command), command
+
+
+def test_the_warning_is_advisory_and_says_so() -> None:
+    source = _source_of("_warn_unmet_obligations")
+    assert "ADVISORY" in source
+    assert "return EXIT" not in source, (
+        "this is a warning by decision; making it a refusal is an owner's call, "
+        "not a side effect (ADR 0141)"
+    )
+
+
+def test_preflight_ready_has_a_reader_that_is_not_only_doctor() -> None:
+    """The property is the wiring: `result.unmet` must be read somewhere other
+    than `cmd_doctor`, or the obligations are computed for nobody."""
+    readers = [
+        name
+        for name in ("cmd_cycle", "cmd_gate", "cmd_doctor", "_warn_unmet_obligations")
+        if "unmet" in _source_of(name) or "result.ready" in _source_of(name)
+    ]
+    assert set(readers) >= {"cmd_doctor", "_warn_unmet_obligations"}
+
+
+# --------------------------------------------------------------------------
+# ADR 0141 — `corpus.check_never_shrinks` had no production caller
+# --------------------------------------------------------------------------
+
+
+def test_the_loop_preflight_checks_the_corpus_never_shrank() -> None:
+    """Reproduced: delete the two scenarios the agent fails, `aef loop score`
+    rises 0.6667 to 1.0000, exit 0, nothing complains — while
+    `recorder.refuse_existing_ids` justified its own rule by citing this
+    guard. It had test callers and no production one."""
+    import aef.harness.loop as loop_harness
+
+    source = inspect.getsource(loop_harness._preflight)
+    assert "check_never_shrinks(config.corpus" in source
+    assert "archive.check_never_shrinks" in source, "the archive check must still be there"
+
+
+def test_a_shrunken_corpus_stops_a_cycle(tmp_path: Path) -> None:
+    """End to end through the real driver, not a source assertion."""
+    from datetime import UTC, datetime
+
+    from aef.harness.corpus import CorpusShrankError, Scenario, Split, load_corpus, save_scenario
+    from aef.harness.git import GitRepo
+    from aef.harness.loop import LoopConfig, LoopPaths, _preflight
+    from aef.state import AEFState
+
+    corpus_root = tmp_path / "corpus"
+    for sid in ("keep-me", "delete-me"):
+        save_scenario(
+            corpus_root,
+            Scenario(
+                id=sid,
+                split=Split.TRAIN,
+                graph_id="g",
+                graph_version="1",
+                initial_state=AEFState(run_id=sid, agent_id="a", objective="o"),
+                trace=(),
+                recorded_at=datetime(2026, 3, 1, tzinfo=UTC),
+            ),
+        )
+
+    def config() -> LoopConfig:
+        return LoopConfig(
+            repo=GitRepo(root=tmp_path / "repo"),
+            paths=LoopPaths(root=tmp_path / "state"),
+            corpus=load_corpus(corpus_root),
+        )
+
+    (tmp_path / "repo").mkdir()
+    _preflight(config())  # the unshrunken corpus passes
+
+    (corpus_root / "train" / "delete-me.json").unlink()
+    with pytest.raises(CorpusShrankError, match="delete-me"):
+        _preflight(config())

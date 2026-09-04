@@ -200,7 +200,7 @@ def test_a_migrated_node_whose_call_bypasses_the_provider_is_flagged(tmp_path: P
     (tmp_path / "legacy.py").write_text("import anthropic\n\n\ndef ask(p):\n    return anthropic\n")
     _migrated(tmp_path, "    from legacy import ask\n\n    ask(state.objective)\n")
 
-    check = next(c for c in run_doctor(tmp_path) if c.name == "model_calls_visible")
+    check = next(c for c in run_doctor(tmp_path) if c.name.startswith("model_calls_visible"))
     assert not check.ok
     assert check.level == "advisory"
     assert "legacy.py" in check.detail
@@ -209,11 +209,80 @@ def test_a_migrated_node_whose_call_bypasses_the_provider_is_flagged(tmp_path: P
 
 def test_a_routed_migrated_node_is_not_flagged(tmp_path: Path) -> None:
     _migrated(tmp_path, "    services.require_model_provider()\n")
-    check = next(c for c in run_doctor(tmp_path) if c.name == "model_calls_visible")
+    check = next(c for c in run_doctor(tmp_path) if c.name.startswith("model_calls_visible"))
     assert check.ok
 
 
 def test_the_check_is_absent_when_the_repo_has_not_been_migrated(tmp_path: Path) -> None:
     """`aef init`-shaped repos have no `aef_migrated.py`, and a check that
     cannot look at anything must not report on it either way."""
-    assert not any(c.name == "model_calls_visible" for c in run_doctor(tmp_path))
+    assert not any(c.name.startswith("model_calls_visible") for c in run_doctor(tmp_path))
+
+
+# --------------------------------------------------------------------------
+# ADR 0141 — the advisory is keyed on the graph, not on migrate's artefact
+# --------------------------------------------------------------------------
+
+
+_ADAPTER = (
+    "from aef.kernel import END, Graph, Node\n"
+    "from aef.state import StateDelta\n\n\n"
+    "def work(state, ctx, services):\n"
+    "{body}"
+    "    return StateDelta(), END\n\n\n"
+    "def build_graph():\n"
+    "    return Graph(id='g', version='1',\n"
+    "                 nodes={{'work': Node(id='work', version='1', fn=work,\n"
+    "                                     deterministic=False)}},\n"
+    "                 edges=[], entry_node='work')\n"
+)
+
+
+def test_the_documented_adoption_path_triggers_the_advisory(tmp_path: Path) -> None:
+    """`aef adopt`, wire `aef_adapter.py`, write nodes under `agents/**` — the
+    only path the docs describe, and it never produced `aef_migrated.py`, so
+    the advisory could not fire for it (reproduced, ADR 0141). The check was
+    keyed on the artefact of a different command."""
+    (tmp_path / "agents" / "mine").mkdir(parents=True)
+    (tmp_path / "agents" / "mine" / "vendor_helper.py").write_text(
+        "import anthropic\n\n\ndef ask(p):\n    return anthropic\n"
+    )
+    (tmp_path / "agents" / "mine" / "graph.py").write_text(
+        _ADAPTER.format(body="    from agents.mine.vendor_helper import ask\n\n    ask(1)\n")
+    )
+    assert not (tmp_path / "aef_migrated.py").exists()
+
+    checks = [c for c in run_doctor(tmp_path) if c.name.startswith("model_calls_visible")]
+    assert checks, "the documented path produced no finding at all"
+    flagged = [c for c in checks if not c.ok]
+    assert flagged and "vendor_helper.py" in flagged[0].detail
+
+
+def test_the_adapter_shim_is_scanned_too(tmp_path: Path) -> None:
+    (tmp_path / "legacy.py").write_text("import openai\n\n\ndef ask(p):\n    return openai\n")
+    (tmp_path / "aef_adapter.py").write_text(
+        _ADAPTER.format(body="    from legacy import ask\n\n    ask(1)\n")
+    )
+    flagged = [
+        c for c in run_doctor(tmp_path) if c.name.startswith("model_calls_visible") and not c.ok
+    ]
+    assert flagged and "legacy.py" in flagged[0].detail
+    assert flagged[0].level == "advisory", "aef doctor never fails on this; loop doctor asks"
+
+
+def test_an_explicit_agent_path_wins_over_discovery(tmp_path: Path) -> None:
+    """The same flag `aef loop doctor` takes. When the owner says which file
+    it is, doctor does not go looking for others."""
+    (tmp_path / "legacy.py").write_text("import openai\n\n\ndef ask(p):\n    return openai\n")
+    (tmp_path / "aef_adapter.py").write_text(
+        _ADAPTER.format(body="    from legacy import ask\n\n    ask(1)\n")
+    )
+    (tmp_path / "clean.py").write_text(_ADAPTER.format(body=""))
+
+    names = [
+        c.name
+        for c in run_doctor(tmp_path, agent_path="clean.py")
+        if c.name.startswith("model_calls_visible")
+    ]
+    assert names == ["model_calls_visible:clean.py"]
+    assert all(c.ok for c in run_doctor(tmp_path, agent_path="clean.py") if c.name in names)

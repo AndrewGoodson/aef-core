@@ -1515,3 +1515,69 @@ needs a repo and a subprocess in a path that today runs against a bare
 directory. And the generated `.gitignore` is written for a Python adoptee: a
 Zone A carrying `node_modules/`, `target/` or `dist/` gets nothing for it,
 and the same arithmetic applies with a bigger numerator.
+
+---
+
+## Fix wave D — the obligation and the guards (ADR 0141)
+
+**Planted.** A seam hunt of the K1/K2 merge (`c2d14b1`) returned eight
+reproduced defects across the sixth preflight obligation, the kill switch and
+the corpus guards, plus one suspected item. Two of them make sentences in ADRs
+0137 and 0138 false as written.
+
+**Measured — every finding by running a command before touching anything.**
+
+| # | Before | After |
+|---|---|---|
+| R9 | `import psycopg2` in a reachable module → `(False, 'db.py:1 imports psycopg2 (+2 more)')`, permanently unmeetable | `(True, '2 reachable module(s), none imports a model SDK')`; constraint #3 still sees all three |
+| R4 | fix = `aef migrate --dir . --force`; running it regenerates the identical wrapper, obligation byte-identically red | fix quotes migrate's own refusal, says it **will not fix this and will loop**, names both edits including deleting the import |
+| R5 | halted loop, `--state` → exit 2, corpus 0; **no `--state` → exit 0, corpus 2** | exit 2 / exit 1, corpus 0 both ways |
+| R6 | bootstrap 12 then harvest 3 → `promoted 0, 3 held back by the daily rate limit`, exit 0 | `promoted 3`, and the held-back line now carries its arithmetic and what did not count |
+| R7 | `loop doctor` exit 1 (obligation 6 red) → `loop cycle` proposes and gates the same repo | same behaviour, deliberately, and now stated: `preflight: 5 of 6 obligation(s) unmet ... ADVISORY` |
+| R8 | documented adoption path (no `aef_migrated.py`) → `aef doctor` says nothing about `agents/mine/vendor_helper.py` importing `anthropic` | `[WARN] model_calls_visible:agents/mine/graph.py: ...vendor_helper.py:2 imports anthropic` |
+| R12 | delete the two failing scenarios → `loop score` 0.6667 → 1.0000, exit 0, nothing complains | `error: corpus shrank: 2 previously-admitted scenario(s) are gone` |
+| SUS | `error: malformed scenario payload: 'graph_id'` — no file named, exit 1 from `main()`'s catch-all | `error: .../train/broken.json: malformed scenario payload: 'graph_id'`, this command's own rejection code |
+
+**Changed.** `scan_*` take `roots` and the obligation passes `MODEL_SDK_ROOTS`
+(14 of 19 constraint-#3 names are not model SDKs). `preflight` reads migrate's
+`UNROUTED wrapper for ... / Not routed because ...` docstring back to choose
+between two fix messages. `aef loop bootstrap` requires one of
+`--state`/`--no-loop-state`. `Scenario.source` rides on the scenario and only
+`harvest` is charged against `daily_limit`. `Preflight.render()`, the module
+docstring and `cmd_cycle`/`cmd_gate` say what is true about who reads `ready`.
+`aef doctor` keys the advisory on the graph and gains `--agent-path`.
+`save_scenario` writes the never-shrinks ledger and `_preflight`/`cmd_score`
+read it.
+
+**The decision on R7, because it is the one a reader will want argued.** Left
+ADVISORY, not made blocking. A refusal could live only in the CLI — obligation 4
+is knowable only there, deliberately (`_halt_notifier`) — so the importable
+`harness.loop.cycle()` would stay unguarded and ADR 0137's sentence would still
+be false. Three of the six enforce themselves later anyway. And it would refuse
+`READY_LOOP.md` K3's own first-day sequence, where production observations
+cannot exist yet. Strengthening five long-advisory controls is an owner's
+decision, not a fix wave's side effect — so the wave says it loudly and leaves
+the decision available.
+
+**Mutation.** 13 planted, 13 caught, `git diff --exit-code` clean afterwards.
+The two worth naming: M1 (obligation 6 back on the default list) failed 15
+tests, because the behavioural sweep over all 14 non-model vendors and the AST
+caller-pin both fire; M12 (manifest regenerated from disk rather than unioned)
+failed 2, and would otherwise have made the never-shrinks ledger forget exactly
+the scenario that had just been deleted.
+
+**Green bar.** `pytest -q` 1918 passed, 1 skipped (from 1875; +43, none
+removed). `mypy aef examples` 129 files clean. `ruff check .` clean.
+`ruff format --check` 239 files formatted. **No rubric dimension moves**, and no
+live model call was made.
+
+**Deliberately left.** R12's baseline is read from the base ref only when the
+corpus is tracked inside the repo; the working-tree fallback does not stop a
+candidate that deletes a scenario and its manifest entry in one commit, and no
+CI job reads either — `corpus.py`'s docstring claimed one did and is corrected
+there rather than made true. A scenario written by a pre-0141 harvest inside the
+same 24 hours is not charged against the limit; that window closes on the first
+harvest under this version. `aef doctor`'s discovery names the three entries the
+adoption contract names and will miss a graph kept elsewhere, which is what
+`--agent-path` is for. And nothing here ran against a repo nobody wrote to be
+scanned — K5's whole point, still.

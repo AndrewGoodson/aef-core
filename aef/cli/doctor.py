@@ -12,6 +12,7 @@ from pathlib import Path
 
 from aef.config import AgentConfig, AgentConfigError, load_agent_config
 from aef.harness.preflight import model_calls_are_visible
+from aef.harness.zones import DEFAULT_AGENT_ROOT
 
 
 @dataclass(frozen=True)
@@ -62,7 +63,37 @@ def _adapter_check(adapter: Path) -> DoctorCheck:
     )
 
 
-def run_doctor(target_dir: Path) -> list[DoctorCheck]:
+def _graph_entries(target_dir: Path, agent_path: str | None) -> list[str]:
+    """Which files are "the configured graph" for the model-call advisory.
+
+    Keyed on the graph, not on `aef_migrated.py`. The advisory was written
+    against the fixture the K1 increment had in hand — an adopter who ran
+    `aef migrate` — and `aef_migrated.py` is the artefact of a *different*
+    command. The documented adoption path is `aef adopt`, wire
+    `aef_adapter.py`, write nodes under `agents/**`; a repo that followed it
+    to the letter never produced `aef_migrated.py`, so the advisory could not
+    fire for the only path the docs describe (reproduced, ADR 0141).
+
+    An explicit `--agent-path` wins outright — it is the same flag
+    `aef loop doctor` takes and it means the owner has said which file it is.
+    Otherwise every entry the adoption contract names, that exists, is
+    scanned: the adapter shim, migrate's output if it is there, and each
+    `<agent_root>/*/graph.py` — which is what `--agent-path` defaults into.
+    """
+    if agent_path:
+        return [agent_path]
+    entries: list[str] = []
+    for name in ("aef_adapter.py", "aef_migrated.py"):
+        if (target_dir / name).is_file():
+            entries.append(name)
+    agents_root = target_dir / DEFAULT_AGENT_ROOT
+    if agents_root.is_dir():
+        for graph in sorted(agents_root.glob("*/graph.py")):
+            entries.append(str(graph.relative_to(target_dir)))
+    return entries
+
+
+def run_doctor(target_dir: Path, *, agent_path: str | None = None) -> list[DoctorCheck]:
     target_dir = target_dir.resolve()
     checks: list[DoctorCheck] = []
 
@@ -128,23 +159,20 @@ def run_doctor(target_dir: Path) -> list[DoctorCheck]:
     # vendor live or scoring it 0. Nothing anywhere said so.
     #
     # Advisory, not an error: `aef doctor` checks that a setup is coherent,
-    # while readiness to be gated is `aef loop doctor`'s question — and that is
-    # where the same finding refuses (obligation "model calls visible"). An
-    # adopter who has not routed their calls yet is mid-migration, not broken.
-    migrated = target_dir / "aef_migrated.py"
-    if migrated.is_file():
-        visible, detail = model_calls_are_visible(target_dir, migrated.name)
+    # while readiness to be gated is `aef loop doctor`'s question. An adopter
+    # who has not routed their calls yet is mid-migration, not broken.
+    for entry in _graph_entries(target_dir, agent_path):
+        visible, detail, fix = model_calls_are_visible(target_dir, entry)
         checks.append(
             DoctorCheck(
-                "model_calls_visible",
+                f"model_calls_visible:{entry}",
                 visible,
                 detail
                 + (
                     ""
                     if visible
                     else ". It bypasses the policy engine and the fallback chain, and the "
-                    "gates cannot replay a call the recorder never saw. "
-                    "`aef loop doctor` refuses on this; see the `aef migrate` report."
+                    f"gates cannot replay a call the recorder never saw. fix: {fix}"
                 ),
                 level="info" if visible else "advisory",
             )

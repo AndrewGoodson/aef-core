@@ -75,6 +75,27 @@ def test_score_refuses_the_holdout_without_the_flag(tmp_path: Path, capsys) -> N
     assert "holdout" in capsys.readouterr().err
 
 
+def test_score_refuses_a_corpus_that_lost_its_failing_cases(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    """Reproduced (ADR 0141): delete the scenario the graph fails and this
+    command reported a better number, exit 0, with nothing complaining —
+    while `recorder.refuse_existing_ids` justified its own rule by citing
+    `check_never_shrinks`, which had no production caller anywhere.
+
+    Retiring a scenario deliberately means editing `corpus/manifest.json`,
+    which is a visible act in git rather than a silent deletion.
+    """
+    root = _corpus(tmp_path)
+    assert main(["loop", "score", ENTRYPOINT, "--corpus", str(root)]) == 0
+    capsys.readouterr()
+
+    (root / "validation" / "hard.json").unlink()
+
+    assert main(["loop", "score", ENTRYPOINT, "--corpus", str(root)]) != 0
+    err = capsys.readouterr().err
+    assert "corpus shrank" in err
+    assert "hard" in err
+
+
 def test_score_human_output_lists_each_scenario(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
     root = _corpus(tmp_path)
     assert main(["loop", "score", ENTRYPOINT, "--corpus", str(root)]) == 0

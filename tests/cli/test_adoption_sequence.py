@@ -482,7 +482,18 @@ def test_an_adopted_repo_gates_a_candidate_end_to_end(
     inputs = tmp_path / "inputs.json"
     inputs.write_text(json.dumps(BOOTSTRAP_INPUTS))
     migrated = _aef(
-        repo, "loop", "bootstrap", "aef_migrated", "--corpus", "corpus", "--inputs", str(inputs)
+        repo,
+        "loop",
+        "bootstrap",
+        "aef_migrated",
+        "--corpus",
+        "corpus",
+        "--inputs",
+        str(inputs),
+        # Day one: no loop state exists yet, and since ADR 0141 silence is no
+        # longer allowed to mean "do not check the kill switch" — the adopter
+        # must say which it is. This is that flag's reason for existing.
+        "--no-loop-state",
     )
     assert migrated.returncode == 1, migrated.stdout
     assert "NOTHING was recorded" in migrated.stdout

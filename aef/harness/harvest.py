@@ -22,9 +22,17 @@ recorded.** A flaky scenario makes every downstream gate unreliable, and one
 admitted flake poisons every future comparison — the cost is not one bad
 scenario, it is a corpus nobody can trust.
 
-**Rate-limited.** One bad deploy can produce thousands of failing runs;
-without a limit the corpus fills with a single incident and the gates start
-measuring that incident instead of the agent.
+**Rate-limited, and the limit counts HARVEST's own promotions only.** One bad
+deploy can produce thousands of failing runs; without a limit the corpus fills
+with a single incident and the gates start measuring that incident instead of
+the agent. That is a statement about what *this* command writes — and the
+first version counted every scenario recorded in the last 24 hours, whoever
+wrote it. `aef loop bootstrap` stamps `recorded_at = now` on every scenario it
+records, so the K5 pilot sequence (adopt, bootstrap, run for real, harvest)
+silently dropped every real production failure: bootstrap 12 inputs, harvest 3
+real runs, `promoted 0 run(s)`, `3 held back by the daily rate limit`, exit 0
+(reproduced, ADR 0141). `Scenario.source` now says who wrote each one and only
+`Source.HARVEST` is charged.
 """
 
 from __future__ import annotations
@@ -37,6 +45,7 @@ from typing import Any
 from aef.harness.corpus import (
     Expected,
     Scenario,
+    Source,
     Split,
     load_corpus,
     save_scenario,
@@ -154,6 +163,13 @@ class HarvestOutcome:
     rejected_redaction_changed_behaviour: tuple[str, ...] = ()
     rejected_unredactable: tuple[str, ...] = ()
     redactions: int = 0
+    # What the rate limit was and what had already spent it. "held back by the
+    # daily rate limit" named a rule and no arithmetic, so a run held back by a
+    # budget something ELSE had consumed read exactly like one held back by
+    # harvest's own volume (ADR 0141).
+    daily_limit: int = DEFAULT_DAILY_LIMIT
+    harvested_today: int = 0
+    other_sources_today: tuple[tuple[str, int], ...] = ()
 
     @property
     def lines(self) -> tuple[str, ...]:
@@ -171,6 +187,20 @@ class HarvestOutcome:
         ):
             if items:
                 out.append(f"  {len(items)} {label}: {', '.join(sorted(items)[:5])}")
+            if items and label.startswith("held back"):
+                out.append(
+                    f"      the limit is {self.daily_limit} HARVESTED scenario(s) per 24h; "
+                    f"{self.harvested_today} had been harvested before this run and "
+                    f"{len(self.promoted)} were promoted by it"
+                )
+                if self.other_sources_today:
+                    spent = ", ".join(
+                        f"{count} from {name}" for name, count in self.other_sources_today
+                    )
+                    out.append(
+                        f"      ({spent} today, which do NOT count against it — "
+                        f"the limit is on this command's own promotions, ADR 0141)"
+                    )
         if self.redactions:
             out.append(f"  {self.redactions} substitution(s) made by the redaction policy")
         return tuple(out)
@@ -302,7 +332,16 @@ def harvest(
     existing = {s.id for s in corpus.scenarios} if corpus else set()
 
     cutoff = now - timedelta(days=1)
-    already_today = sum(1 for s in corpus.scenarios if s.recorded_at > cutoff) if corpus else 0
+    # HARVEST's own promotions only. A scenario `bootstrap` or `record`
+    # wrote today is not this command filling the corpus with one incident,
+    # and charging it here dropped every real run of the K5 pilot sequence
+    # (ADR 0141).
+    recent = tuple(s for s in corpus.scenarios if s.recorded_at > cutoff) if corpus else ()
+    already_today = sum(1 for s in recent if s.source is Source.HARVEST)
+    others_today = {
+        source: sum(1 for s in recent if s.source is source)
+        for source in (Source.BOOTSTRAP, Source.RECORD, Source.UNSPECIFIED)
+    }
     budget = max(daily_limit - already_today, 0)
 
     promoted: list[str] = []
@@ -361,6 +400,9 @@ def harvest(
             # task should have failed, and a MUST_FAIL label invented by
             # the system would be a tripwire the system set for itself.
             expected=Expected.UNSPECIFIED,
+            # Provenance, so this command's rate limit charges this command
+            # and nothing else (ADR 0141).
+            source=Source.HARVEST,
         )
         # The output scan: a secret that survived the input redaction came
         # from somewhere the redactor cannot reach. Rejected, not written.
@@ -371,6 +413,11 @@ def harvest(
         promoted.append(run.run_id)
 
     return HarvestOutcome(
+        daily_limit=daily_limit,
+        harvested_today=already_today,
+        other_sources_today=tuple(
+            (source.value, count) for source, count in others_today.items() if count
+        ),
         promoted=tuple(promoted),
         skipped_passing=tuple(passing),
         skipped_existing=tuple(duplicate),

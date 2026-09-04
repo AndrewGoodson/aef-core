@@ -230,6 +230,161 @@ def test_a_circular_import_terminates(tmp_path: Path) -> None:
     assert _obligation(_check(tmp_path, BYPASSING_NODE, repo_root=repo), "model calls visible").met
 
 
+# --------------------------------------------------------------------------
+# ADR 0141 — obligation 6 asks the MODEL question, with the model list
+# --------------------------------------------------------------------------
+
+
+# The 14 constraint-#3 names that are NOT model SDKs. `google` is deliberately
+# absent: it IS in MODEL_SDK_ROOTS so a Gemini client construction is seen at
+# all, and vendor_scan.py already records the cost of that (a non-model
+# `google.*` import reads as a call site). That over-report predates ADR 0141
+# and is a stated trade, not the defect this test is about.
+NON_MODEL_VENDORS = (
+    "mem0ai",
+    "neo4j",
+    "falkordb",
+    "memgraph",
+    "temporalio",
+    "psycopg",
+    "psycopg2",
+    "opentelemetry",
+    "dspy",
+    "gepa",
+    "llmlingua",
+    "ragas",
+    "deepeval",
+    "langfuse",
+)
+
+
+@pytest.mark.parametrize("vendor", NON_MODEL_VENDORS)
+def test_a_non_model_vendor_import_does_not_block_the_adopter(tmp_path: Path, vendor: str) -> None:
+    """`import psycopg2` in a reachable module used to make obligation 6
+    unmeetable forever, with a fix telling the adopter to route a Postgres
+    connection through `require_model_provider().complete(...)`.
+
+    The obligation scans `MODEL_SDK_ROOTS`; 14 of the 19 names in the
+    constraint #3 list are not model SDKs. ADR 0137's "it over-reports
+    nothing" was false for every one of them (ADR 0141).
+    """
+    repo = _with_vendor_module(
+        tmp_path, BYPASSING_NODE, f"import {vendor}\n\n\ndef ask(p):\n    return {vendor}\n"
+    )
+    obligation = _obligation(
+        _check(tmp_path, BYPASSING_NODE, repo_root=repo), "model calls visible"
+    )
+    assert obligation.met, obligation.detail
+
+
+@pytest.mark.parametrize("vendor", ["anthropic", "openai", "cohere", "mem0"])
+def test_a_model_sdk_import_still_blocks(tmp_path: Path, vendor: str) -> None:
+    """The narrowing must not have narrowed away the thing the obligation is
+    for. Every model SDK is still an unmet obligation."""
+    repo = _with_vendor_module(
+        tmp_path, BYPASSING_NODE, f"import {vendor}\n\n\ndef ask(p):\n    return {vendor}\n"
+    )
+    obligation = _obligation(
+        _check(tmp_path, BYPASSING_NODE, repo_root=repo), "model calls visible"
+    )
+    assert not obligation.met
+    assert vendor in obligation.detail
+
+
+# --------------------------------------------------------------------------
+# ADR 0141 — the fix names the remedy that actually applies
+# --------------------------------------------------------------------------
+
+
+def _unrouted_graph(dotted: str, reason: str) -> str:
+    """What `aef migrate` writes when it refuses to route a call site — the
+    marker this file parses back.
+
+    A HAND COPY, and it cannot catch drift: this docstring used to claim it
+    could, and then ADR 0140 rewrote the real template, this fixture kept
+    passing, and every refusal silently stopped being parsed. The guard that
+    actually holds the contract is
+    `test_the_generated_docstring_is_a_contract_between_migrate_and_preflight`,
+    which runs the real `aef migrate` and reads its real output back. This
+    stays because it keeps the other cases fast."""
+    return f'''from aef.kernel import END, Edge, Graph, Node
+from aef.reasoning.nodes import make_reflect_node
+from aef.state import StateDelta
+
+
+def work(state, ctx, services):
+    """UNROUTED wrapper for one of this repo's model call sites.
+
+    Wraps `{dotted}.ask` (line 6), unchanged.
+    Detected by: `anthropic.Anthropic`
+    Not routed because {reason}.
+
+    WARNING — this node calls your function.
+    """
+    from {dotted} import ask
+
+    ask(state.objective)
+    return StateDelta(), "reflect"
+
+
+def build_graph():
+    return Graph(id="g", version="1",
+                 nodes={{"work": Node(id="work", version="1", fn=work, deterministic=True),
+                        "reflect": make_reflect_node()}},
+                 edges=[Edge(from_node="work", to_node="reflect")], entry_node="work")
+'''
+
+
+def test_the_fix_does_not_send_an_adopter_round_a_loop(tmp_path: Path) -> None:
+    """`aef migrate --dir . --force` was the printed fix for EVERY unmet
+    obligation 6, including the population migrate's falsification clause
+    deliberately creates. Running it regenerates the same unrouted wrapper
+    and the obligation is red again, with the same message (reproduced,
+    ADR 0141). When migrate has already refused, the fix says so and names
+    the two edits that are actually required."""
+    reason = "its body loops — a retry, backoff or pagination policy"
+    source = _unrouted_graph("vendor_client", reason)
+    repo = _with_vendor_module(
+        tmp_path, source, "import anthropic\n\n\ndef ask(p):\n    return anthropic\n"
+    )
+    fix = _obligation(_check(tmp_path, source, repo_root=repo), "model calls visible").fix
+
+    assert "will NOT fix this" in fix
+    assert "loop" in fix
+    assert reason.split("—")[0].strip() in fix, "the refusal reason is quoted back"
+    # Both halves of the real remedy, and the second is the one stated nowhere.
+    assert "services.require_model_provider().complete(" in fix
+    assert "DELETE" in fix and "from vendor_client import" in fix
+
+
+def test_the_generic_fix_applies_when_migrate_has_not_refused_this_module(
+    tmp_path: Path,
+) -> None:
+    """No UNROUTED marker naming the module means migrate has not looked at
+    it, and running migrate genuinely is the next step."""
+    repo = _with_vendor_module(
+        tmp_path, BYPASSING_NODE, "import anthropic\n\n\ndef ask(p):\n    return anthropic\n"
+    )
+    fix = _obligation(_check(tmp_path, BYPASSING_NODE, repo_root=repo), "model calls visible").fix
+    assert "will NOT fix this" not in fix
+    assert "aef migrate --dir . --force" in fix
+
+
+# --------------------------------------------------------------------------
+# ADR 0141 — render() says what is true about who reads `ready`
+# --------------------------------------------------------------------------
+
+
+def test_render_does_not_claim_the_gates_refuse(tmp_path: Path) -> None:
+    """`Preflight.ready` has exactly one reader in `aef/`: `cmd_doctor`.
+    The closing line claimed the gates refuse on it, and `loop cycle` on a
+    repo with obligation 6 red proposes and gates (reproduced, ADR 0141)."""
+    rendered = _check(tmp_path, NO_REFLECT).render()
+    assert "the gates refuse for lack of evidence" not in rendered
+    assert "ADVISORY" in rendered
+    assert "aef loop cycle" in rendered
+
+
 def test_the_fix_names_the_call_that_replaces_the_client(tmp_path: Path) -> None:
     """A fix that says "don't do that" is not a fix. This one names the call,
     the command that generates it, and what the adopter loses by not doing it."""
@@ -320,3 +475,39 @@ def test_bless_refuses_when_there_is_no_agent_source(tmp_path: Path) -> None:
             graph_id="g",
             at=NOW,
         )
+
+
+def test_the_generated_docstring_is_a_contract_between_migrate_and_preflight(
+    tmp_path: Path,
+) -> None:
+    """ADR 0140 rewrote `aef migrate`'s generated docstring; ADR 0141's fix
+    string parses that docstring back. Both landed the same day, the full
+    suite passed, and every refusal silently stopped being parsed — so the
+    obligation went back to printing the generic fix ADR 0141 exists to
+    replace. Two modules, one format, nothing comparing them (ADR 0091).
+
+    This runs the REAL migrate and reads its REAL output back through the
+    REAL parser, so the format cannot drift again without failing here."""
+    from aef.cli.migrate import run_migrate
+    from aef.harness.preflight import _migrate_refusals
+
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "agent.py").write_text(
+        "import anthropic\n"
+        "def ask(prompt: str) -> str:\n"
+        "    client = anthropic.Anthropic()\n"
+        "    r = client.messages.create(\n"
+        '        model="m", max_tokens=8,\n'
+        '        system="a system prompt makes this unroutable",\n'
+        '        messages=[{"role": "user", "content": prompt}])\n'
+        "    return r.content[0].text\n"
+    )
+    result = run_migrate(tmp_path, write=True)
+    assert result.sites, "migrate found no call site; the fixture is wrong, not the parser"
+    assert not result.sites[0].routed, "the fixture must be UNROUTED for this contract"
+
+    assert result.written is not None, "migrate wrote no file to parse back"
+    refusals = _migrate_refusals(result.written)
+    assert refusals, "preflight parsed no refusal out of migrate's own generated docstring"
+    assert "src.agent" in refusals, refusals
+    assert "system" in refusals["src.agent"], refusals["src.agent"]

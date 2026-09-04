@@ -25,6 +25,17 @@ strict subset. They are separate because `opentelemetry` is a vendor SDK that
 must not be imported in `aef/kernel/`, and is emphatically not a model call
 site worth generating a node for. A test asserts the subset relation holds, so
 the two cannot drift apart into two independent lists.
+
+**Which list a caller wants is the caller's decision, so it is a parameter.**
+`scan_*` defaults to `VENDOR_TOP_LEVEL_MODULES` — the constraint #3 question,
+which is what this scanner was written to ask about *this* repo. ADR 0137
+pointed it at an adopter's graph and inherited that default, so the sixth
+preflight obligation answered the wrong question: `import psycopg2` in a
+reachable module permanently blocked the adopter, with a fix telling them to
+route a Postgres connection through `require_model_provider().complete(...)`.
+Fourteen of the nineteen names are not model SDKs. The obligation now passes
+`MODEL_SDK_ROOTS` explicitly and a test pins which caller passes which
+(ADR 0141).
 """
 
 from __future__ import annotations
@@ -98,13 +109,20 @@ def top_level_module(name: str) -> str:
     return name.split(".", 1)[0]
 
 
-def scan_source(source: str, *, path: Path) -> list[VendorImport]:
-    """Every vendor SDK import in `source`, wherever it hides.
+def scan_source(
+    source: str, *, path: Path, roots: frozenset[str] = VENDOR_TOP_LEVEL_MODULES
+) -> list[VendorImport]:
+    """Every import of a module in `roots` in `source`, wherever it hides.
 
     `ast.walk` rather than a scan of module-level statements: a lazy import
     inside a function body, inside a `try/except ImportError`, or inside an
     `if TYPE_CHECKING:` block is still an import of a vendor SDK, and each of
     those shapes has its own regression test.
+
+    `roots` defaults to the constraint #3 list because that is the question
+    this scanner was written to ask. A caller asking the narrower *model* call
+    question passes `MODEL_SDK_ROOTS` — see the module docstring for why the
+    default was the wrong answer for the preflight obligation.
     """
     tree = ast.parse(source, filename=str(path))
     found: list[VendorImport] = []
@@ -112,33 +130,37 @@ def scan_source(source: str, *, path: Path) -> list[VendorImport]:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 mod = top_level_module(alias.name)
-                if mod in VENDOR_TOP_LEVEL_MODULES:
+                if mod in roots:
                     found.append(VendorImport(path, node.lineno, mod, f"import {alias.name}"))
         elif isinstance(node, ast.ImportFrom):
             if node.module is None or node.level > 0:
                 continue  # relative import, e.g. "from . import x" — always in-package
             mod = top_level_module(node.module)
-            if mod in VENDOR_TOP_LEVEL_MODULES:
+            if mod in roots:
                 found.append(VendorImport(path, node.lineno, mod, f"from {node.module} import ..."))
     return found
 
 
-def scan_file(path: Path) -> list[VendorImport]:
-    """Vendor imports in one file. Unreadable or unparseable is *not* a
-    violation — it is a file this scanner cannot speak about, and reporting a
-    syntax error as a vendor import would be a lie in the caller's message."""
+def scan_file(
+    path: Path, *, roots: frozenset[str] = VENDOR_TOP_LEVEL_MODULES
+) -> list[VendorImport]:
+    """Imports in one file. Unreadable or unparseable is *not* a violation —
+    it is a file this scanner cannot speak about, and reporting a syntax error
+    as a vendor import would be a lie in the caller's message."""
     try:
         source = path.read_text(encoding="utf-8")
     except (UnicodeDecodeError, OSError):
         return []
     try:
-        return scan_source(source, path=path)
+        return scan_source(source, path=path, roots=roots)
     except SyntaxError:
         return []
 
 
-def scan_tree(root: Path) -> list[VendorImport]:
-    """Vendor imports under `root`, skipping vendored trees and dot-dirs.
+def scan_tree(
+    root: Path, *, roots: frozenset[str] = VENDOR_TOP_LEVEL_MODULES
+) -> list[VendorImport]:
+    """Imports under `root`, skipping vendored trees and dot-dirs.
 
     Paths are tested **relative to `root`**, not absolutely: a repo that itself
     lives under a dot-directory (`~/.local/src/app`, a git worktree under
@@ -150,5 +172,5 @@ def scan_tree(root: Path) -> list[VendorImport]:
         rel = path.relative_to(root)
         if any(part in SKIP_DIRS or part.startswith(".") for part in rel.parts):
             continue
-        found.extend(scan_file(path))
+        found.extend(scan_file(path, roots=roots))
     return found

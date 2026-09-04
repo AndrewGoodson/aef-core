@@ -398,3 +398,61 @@ def test_a_baseline_naming_an_absent_scenario_is_caught(tmp_path: Path) -> None:
     baseline = CorpusManifest(ids={"s1": Split.TRAIN})
     with pytest.raises(CorpusShrankError):
         check_never_shrinks(load_corpus(tmp_path), baseline)
+
+
+# --------------------------------------------------------------------------
+# ADR 0141 — the never-shrinks ledger is written by the act that admits
+# --------------------------------------------------------------------------
+
+
+def test_saving_a_scenario_records_it_in_the_manifest(tmp_path: Path) -> None:
+    """`CorpusManifest` and `check_never_shrinks` existed from the start and
+    NOTHING ever wrote a manifest, so the ledger was empty everywhere and the
+    check — wherever it ran — passed vacuously (ADR 0141)."""
+    save_scenario(tmp_path, _record_scenario("s1", Split.TRAIN))
+    save_scenario(tmp_path, _record_scenario("s2", Split.VALIDATION))
+
+    assert load_manifest(tmp_path).ids == {"s1": Split.TRAIN, "s2": Split.VALIDATION}
+
+
+def test_the_manifest_is_a_union_not_a_regeneration(tmp_path: Path) -> None:
+    """A manifest rebuilt from the corpus on disk would forget precisely the
+    scenario that had just been deleted — the deletion this ledger exists to
+    notice. So the delete-then-add sequence must still fail the check."""
+    save_scenario(tmp_path, _record_scenario("s1"))
+    path = save_scenario(tmp_path, _record_scenario("s2"))
+
+    path.unlink()
+    save_scenario(tmp_path, _record_scenario("s3"))
+
+    assert set(load_manifest(tmp_path).ids) == {"s1", "s2", "s3"}
+    with pytest.raises(CorpusShrankError, match="corpus shrank"):
+        check_never_shrinks(load_corpus(tmp_path), load_manifest(tmp_path))
+
+
+def test_a_malformed_scenario_names_the_file_it_came_from(tmp_path: Path) -> None:
+    """`from_payload` named the missing key and nothing else, so an adopter
+    with forty scenarios read `malformed scenario payload: 'graph_id'` and had
+    no way to tell which file (ADR 0141)."""
+    (tmp_path / "train").mkdir()
+    (tmp_path / "train" / "broken.json").write_text('{"id": "broken", "split": "train"}')
+
+    with pytest.raises(CorpusError, match="broken.json"):
+        load_corpus(tmp_path)
+
+
+def test_the_source_field_round_trips_and_defaults_for_legacy_files(tmp_path: Path) -> None:
+    """Provenance for harvest's rate limit (ADR 0141). Absent in every file
+    written before it existed, which is exactly what UNSPECIFIED means."""
+    import json
+    from dataclasses import replace
+
+    from aef.harness.corpus import Source
+
+    path = save_scenario(tmp_path, replace(_record_scenario("s1"), source=Source.BOOTSTRAP))
+    assert load_scenario(path).source is Source.BOOTSTRAP
+
+    payload = json.loads(path.read_text())
+    del payload["source"]
+    path.write_text(json.dumps(payload))
+    assert load_scenario(path).source is Source.UNSPECIFIED

@@ -15,6 +15,20 @@ own vendor client works perfectly, `aef doctor` reports green, and the failure
 arrives much later as a gate that either makes live calls or scores the
 candidate 0 — because the call was invisible to the recorder, so the scenario
 carries no cassette to replay.
+
+**These obligations are ADVISORY, and this file used to say otherwise.** Only
+`aef loop doctor` reads `Preflight.ready`; `cycle`, `gate` and `run` never
+have. ADR 0137 §2 claimed "`Preflight.ready` is false while it stands, so the
+gates refuse", and `render()` closed with "the gates refuse for lack of
+evidence" — both false, and reproduced: `loop doctor` exits 1 with obligation
+6 red and `loop cycle` then proposes and gates the same repo. What is true is
+narrower and is now what the text says: obligations 1, 2 and 5 are enforced
+later by the gates themselves (G2/G3 refuse an empty corpus, G5 refuses
+without a blessed baseline, a graph nothing routes to reflect records no
+failure memory so the proposer never proposes), while 3, 4 and 6 are not
+enforced anywhere and the loop will run without them. `cmd_cycle`/`cmd_gate`
+print the unmet ones so the surface stops saying nothing. See ADR 0141 for
+why they were not made blocking.
 """
 
 from __future__ import annotations
@@ -27,7 +41,7 @@ from pathlib import Path
 from aef.harness import archive, ledger
 from aef.harness.corpus import Expected, load_corpus
 from aef.harness.git import GitRepo
-from aef.harness.vendor_scan import VendorImport, scan_file
+from aef.harness.vendor_scan import MODEL_SDK_ROOTS, VendorImport, scan_file
 from aef.harness.zones import DEFAULT_AGENT_ROOT
 
 
@@ -51,6 +65,10 @@ class Preflight:
     def ready(self) -> bool:
         return all(o.met for o in self.obligations)
 
+    @property
+    def unmet(self) -> tuple[Obligation, ...]:
+        return tuple(o for o in self.obligations if not o.met)
+
     def render(self) -> str:
         width = max(len(o.name) for o in self.obligations)
         count = len(self.obligations)
@@ -60,11 +78,19 @@ class Preflight:
             if not o.met:
                 lines.append(f"       fix: {o.fix}")
         lines.append("")
+        # This used to close with "the gates refuse for lack of evidence,
+        # which is correct behaviour and not a bug." Nothing but this command
+        # reads `ready`, so that sentence described a control that does not
+        # exist: `loop doctor` exits 1 and `loop cycle` then gates the same
+        # repo anyway (ADR 0141). Say what is true instead.
         lines.append(
             f"All {count} green — the loop can gate a candidate on real evidence."
             if self.ready
-            else "Until every line is OK the gates refuse for lack of evidence, which is "
-            "correct behaviour and not a bug."
+            else "These are ADVISORY and this command is the only thing that reads them: "
+            "`aef loop cycle` and `aef loop gate` will still run, and will print the "
+            "unmet ones. Some enforce themselves later — G2/G3 refuse an empty corpus "
+            "and G5 refuses without a blessed baseline — but a missing halt channel or "
+            "an invisible model call stops nothing, which is why they are listed here."
         )
         return "\n".join(lines)
 
@@ -178,12 +204,104 @@ def _reachable_modules(repo_root: Path, entry: Path) -> list[Path]:
     return order
 
 
-def model_calls_are_visible(repo_root: Path, agent_path: str) -> tuple[bool, str]:
-    """No module reachable from the graph may import a vendor SDK.
+_UNROUTED_MARKER = "UNROUTED wrapper for "
+_WRAPS_MARKER = "Wraps `"
+_NOT_ROUTED_MARKER = "Not routed because "
+
+
+def _migrate_refusals(entry: Path) -> dict[str, str]:
+    """`{dotted module: why migrate refused to route it}`, read from the graph.
+
+    `aef migrate` writes the decision into every generated node's own
+    docstring — `UNROUTED wrapper for \\`src.my_agent.run_agent\\`` followed by
+    `Not routed because <reason>`. Parsing that back is how this file tells
+    "migrate has not looked at this yet" from "migrate looked and refused",
+    which are the two cases whose remedies are completely different.
+
+    Read from the docstring rather than by importing `aef.cli.migrate`: the
+    harness does not import the CLI, and the generated file is the artefact
+    the adopter actually has in front of them.
+    """
+    try:
+        tree = ast.parse(entry.read_text(encoding="utf-8"), filename=str(entry))
+    except (SyntaxError, UnicodeDecodeError, OSError):
+        return {}
+    refusals: dict[str, str] = {}
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        doc = ast.get_docstring(fn) or ""
+        if not doc.startswith(_UNROUTED_MARKER):
+            continue
+        # The dotted name follows `Wraps \`...\``. It used to sit on the first
+        # line, and this parser read it from there — then ADR 0140 rewrote the
+        # docstring and every refusal silently stopped being parsed, because
+        # two modules shared a format and nothing compared them (ADR 0091, in
+        # the file that exists to stop an adopter reading a fix that does not
+        # fix anything). `test_the_generated_docstring_is_a_contract...` runs
+        # the real `aef migrate` and reads its output back through here.
+        _, _, after = doc.partition(_WRAPS_MARKER)
+        dotted = after.split("`", 1)[0] if after else ""
+        if not dotted:
+            continue
+        module = dotted.rsplit(".", 1)[0] if "." in dotted else dotted
+        _, _, tail = doc.partition(_NOT_ROUTED_MARKER)
+        reason = " ".join(tail.split("\n\n", 1)[0].split()).rstrip(".")
+        refusals[module] = reason
+    return refusals
+
+
+def _dotted_from(repo_root: Path, path: Path) -> str:
+    try:
+        rel = path.relative_to(repo_root.resolve())
+    except ValueError:  # pragma: no cover - reachability keeps them inside the repo
+        return path.stem
+    parts = list(rel.with_suffix("").parts)
+    if parts and parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts)
+
+
+_GENERIC_FIX = (
+    "run `aef migrate --dir . --force` and READ ITS REPORT. Where it can, it rewrites the "
+    "node to call `services.require_model_provider().complete(...)` instead of a client the "
+    "node builds itself. Where it cannot it prints `NOT routed because ...` and generates a "
+    "wrapper that leaves this obligation red — re-running it then changes nothing, and the "
+    "remedy becomes the hand-routing one this message will name once migrate has said so."
+)
+
+
+def _hand_routing_fix(module: str, reason: str) -> str:
+    return (
+        f"`aef migrate --dir . --force` will NOT fix this and will loop: it already refused to "
+        f"route {module} ({reason}), and regenerating produces the same unrouted wrapper. Two "
+        f"edits, both yours. (1) Rewrite that node's body to call "
+        f"`services.require_model_provider().complete(...)` instead of calling your function, "
+        f"re-expressing whatever the refusal reason names. (2) DELETE the "
+        f"`from {module} import ...` line from the node — {module} stays in the graph's "
+        f"reachable set while that import stands, so the obligation stays red even after the "
+        f"body is routed. Neither step is optional and neither is automatic."
+    )
+
+
+def model_calls_are_visible(repo_root: Path, agent_path: str) -> tuple[bool, str, str]:
+    """`(visible, detail, fix)` — no module reachable from the graph may import
+    a **model** SDK.
 
     This is constraint #3 pointed at the adopter instead of at this repo. The
     scanner is the one `tests/test_vendor_isolation.py` has run since Phase 0
-    (`aef/harness/vendor_scan.py`); the difference is only where it is aimed.
+    (`aef/harness/vendor_scan.py`); the difference is where it is aimed and
+    **which list it is aimed with**.
+
+    `MODEL_SDK_ROOTS`, not `VENDOR_TOP_LEVEL_MODULES`. The first version of
+    this function inherited `scan_file`'s constraint-#3 default, so an adopter
+    whose graph reached a module doing `import psycopg2` was permanently
+    blocked and told to route their Postgres connection through
+    `require_model_provider().complete(...)`. Fourteen of the nineteen names
+    in the constraint #3 list are not model SDKs; ADR 0137's "it over-reports
+    nothing" was false for all fourteen (ADR 0141). Constraint #3 still uses
+    the full list where it belongs — inside this repo, in
+    `tests/test_vendor_isolation.py`.
 
     A node that builds its own client is not a style problem. It bypasses the
     policy engine, the fallback chain and the harness login, and — the part
@@ -195,14 +313,23 @@ def model_calls_are_visible(repo_root: Path, agent_path: str) -> tuple[bool, str
     """
     entry = (repo_root / agent_path).resolve()
     if not entry.is_file():
-        return False, f"no agent source at {entry} — nothing to scan"
+        return (
+            False,
+            f"no agent source at {entry} — nothing to scan",
+            f"point --agent-path at the module that builds your graph; {agent_path!r} is "
+            f"not a file under {repo_root}",
+        )
 
     modules = _reachable_modules(repo_root, entry)
     found: list[VendorImport] = []
     for module in modules:
-        found.extend(scan_file(module))
+        found.extend(scan_file(module, roots=MODEL_SDK_ROOTS))
     if not found:
-        return True, f"{len(modules)} reachable module(s), none imports a model SDK"
+        return (
+            True,
+            f"{len(modules)} reachable module(s), none imports a model SDK",
+            "",
+        )
 
     first = found[0]
     try:
@@ -210,10 +337,22 @@ def model_calls_are_visible(repo_root: Path, agent_path: str) -> tuple[bool, str
     except ValueError:  # pragma: no cover - reachability keeps them inside the repo
         where = first.path
     extra = f" (+{len(found) - 1} more)" if len(found) > 1 else ""
-    return (
-        False,
-        f"{where}:{first.lineno} imports {first.module}{extra} — the harness cannot see it",
+    detail = f"{where}:{first.lineno} imports {first.module}{extra} — the harness cannot see it"
+
+    # WHICH fix, and this is the whole point of ADR 0141's R4. Telling an
+    # adopter to re-run migrate when migrate has already refused this exact
+    # function is a loop: the same wrapper is regenerated and the obligation
+    # is red again, with the same message.
+    refusals = _migrate_refusals(entry)
+    dotted = _dotted_from(repo_root, first.path)
+    reason = refusals.get(dotted)
+    consequence = (
+        " A node with its own client bypasses the policy engine and the fallback chain, "
+        "and the recorder captures no RecordedCall for it — so the gates replay nothing "
+        "and either call the vendor live or score it 0."
     )
+    fix = _hand_routing_fix(dotted, reason) if reason is not None else _GENERIC_FIX
+    return False, detail, fix + consequence
 
 
 def preflight(
@@ -298,22 +437,9 @@ def preflight(
         )
     )
 
-    # 6 — every model call reaches the harness (ADR 0137)
-    visible, detail = model_calls_are_visible(repo_root, agent_path)
-    checks.append(
-        Obligation(
-            name="model calls visible",
-            met=visible,
-            detail=detail,
-            fix=(
-                "aef migrate --dir . --force. Route the call through the container: "
-                "`services.require_model_provider().complete(...)` instead of a client the "
-                "node builds itself. A node with its own client bypasses the policy engine "
-                "and the fallback chain, and the recorder captures no RecordedCall for it — "
-                "so the gates replay nothing and either call the vendor live or score it 0."
-            ),
-        )
-    )
+    # 6 — every model call reaches the harness (ADR 0137, corrected by 0141)
+    visible, detail, fix = model_calls_are_visible(repo_root, agent_path)
+    checks.append(Obligation(name="model calls visible", met=visible, detail=detail, fix=fix))
 
     return Preflight(obligations=tuple(checks))
 

@@ -4,11 +4,19 @@ The rules exist because their opposites each break the corpus in a different
 way, so each has its own test and its own reason.
 """
 
+import functools
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from aef.harness.corpus import Expected, Split, load_corpus
+from aef.harness.corpus import (
+    Expected,
+    Scenario,
+    Source,
+    Split,
+    load_corpus,
+    save_scenario,
+)
 from aef.harness.harvest import (
     RecordedRun,
     harvest,
@@ -214,6 +222,89 @@ def test_the_rate_limit_counts_what_was_already_recorded_today(tmp_path: Path) -
 
     second = _harvest(tmp_path, daily_limit=2)
     assert second.promoted == (), "the limit must span runs, not reset per invocation"
+
+
+def _bootstrapped(root: Path, count: int, *, at: datetime) -> None:
+    """`count` scenarios recorded today by a command that is not harvest."""
+    graph = _graph()
+    for i in range(count):
+        state = AEFState(
+            run_id=f"boot-{i}", agent_id="demo", objective="task", working_memory={"fail": False}
+        )
+        ticks = iter([at + timedelta(seconds=j) for j in range(20)])
+        clock = functools.partial(next, ticks)
+        result = GraphExecutor(graph.compile(), Services(clock=clock)).run(state, record_trace=True)
+        assert result.trace is not None
+        save_scenario(
+            root,
+            Scenario(
+                id=f"boot-{i}",
+                split=Split.TRAIN,
+                graph_id=graph.id,
+                graph_version=graph.version,
+                initial_state=state,
+                trace=result.trace,
+                recorded_at=at,
+                source=Source.BOOTSTRAP,
+            ),
+        )
+
+
+def test_bootstrap_does_not_spend_harvests_daily_budget(tmp_path: Path) -> None:
+    """The K5 pilot sequence is adopt, bootstrap, run for real, harvest — and
+    it silently dropped every real production failure.
+
+    `already_today` counted every scenario recorded in the last 24 hours and
+    `bootstrap` stamps `recorded_at = now` on all of its, so a 12-input
+    bootstrap exhausted a limit of 5: `promoted 0 run(s)`,
+    `3 held back by the daily rate limit`, exit 0 (reproduced, ADR 0141).
+    """
+    _bootstrapped(tmp_path / "corpus", 12, at=NOW)
+    for i in range(3):
+        _record(tmp_path / "runs", f"real-{i}", fail=True)
+
+    outcome = _harvest(tmp_path, daily_limit=5)
+
+    assert len(outcome.promoted) == 3, outcome.lines
+    assert outcome.skipped_rate_limited == ()
+
+
+def test_harvests_own_promotions_still_spend_it(tmp_path: Path) -> None:
+    """The narrowing must not have removed the limit. One bad deploy is still
+    one bad deploy."""
+    _bootstrapped(tmp_path / "corpus", 12, at=NOW)
+    for i in range(6):
+        _record(tmp_path / "runs", f"real-{i}", fail=True)
+
+    outcome = _harvest(tmp_path, daily_limit=2)
+
+    assert len(outcome.promoted) == 2
+    assert len(outcome.skipped_rate_limited) == 4
+
+
+def test_the_held_back_line_says_what_spent_the_budget(tmp_path: Path) -> None:
+    """ "held back by the daily rate limit" named a rule and no arithmetic, so
+    a run held back by a budget something else had consumed read exactly like
+    one held back by harvest's own volume (ADR 0141)."""
+    _bootstrapped(tmp_path / "corpus", 4, at=NOW)
+    for i in range(4):
+        _record(tmp_path / "runs", f"real-{i}", fail=True)
+
+    outcome = _harvest(tmp_path, daily_limit=2)
+    text = "\n".join(outcome.lines)
+
+    assert "held back by the daily rate limit" in text
+    assert "the limit is 2 HARVESTED scenario(s) per 24h" in text
+    assert "0 had been harvested before this run and 2 were promoted by it" in text
+    assert "4 from bootstrap" in text
+    assert "do NOT count against it" in text
+
+
+def test_a_harvested_scenario_records_that_harvest_wrote_it(tmp_path: Path) -> None:
+    _record(tmp_path / "runs", "r1", fail=True)
+    _harvest(tmp_path)
+    (scenario,) = load_corpus(tmp_path / "corpus").scenarios
+    assert scenario.source is Source.HARVEST
 
 
 def test_the_outcome_reports_every_category(tmp_path: Path) -> None:
