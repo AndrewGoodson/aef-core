@@ -21,7 +21,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from aef.harness.checks import TaskCheck
-from aef.harness.corpus import Expected, Split, load_corpus
+from aef.harness.corpus import (
+    CorpusError,
+    CorpusShrankError,
+    Expected,
+    Split,
+    check_never_shrinks,
+    load_corpus,
+    load_manifest,
+)
 from aef.harness.git import GitRepo
 from aef.harness.loop import (
     EXIT_HALTED,
@@ -43,6 +51,10 @@ from aef.harness.monitoring import LoopHaltedError
 from aef.harness.recorder import record_to_corpus
 from aef.harness.zones import DEFAULT_AGENT_ROOT, ZonePolicy
 from aef.providers.base import ModelProvider
+
+# One string, four flags. It was repeated at each `--agent-path` and read by
+# `_warn_unmet_obligations` too, which is five places for one default.
+DEFAULT_AGENT_PATH = "agents/demo/graph.py"
 
 
 def _build_commands(args: argparse.Namespace) -> tuple[tuple[str, ...], ...] | None:
@@ -108,8 +120,54 @@ def _config(args: argparse.Namespace) -> LoopConfig:
     )
 
 
+def _warn_unmet_obligations(args: argparse.Namespace, config: LoopConfig) -> None:
+    """Print the obligations `aef loop doctor` would flag, before running.
+
+    ADR 0137 §2 said "`Preflight.ready` is false while it stands, so the gates
+    refuse", and `Preflight.render()` said the same. Neither was true: nothing
+    outside `aef loop doctor` had ever read `ready`, so a repo whose model
+    calls are invisible went straight from `doctor` exit 1 to `cycle`
+    proposing and gating (reproduced, ADR 0141).
+
+    A WARNING and not a refusal, decided rather than defaulted. Obligation 4
+    is only knowable at this boundary — the halt webhook is read from the
+    environment here on purpose, never inside the harness — so a refusal could
+    live only in the CLI, and `harness.loop.cycle()` is importable, so the
+    claim would still have been false for the API `aef loop run` uses. Three
+    of the six enforce themselves later anyway (G2/G3 on an empty corpus, G5
+    on a missing baseline, and no reflect route means no failure memory so the
+    proposer never proposes), and turning five long-advisory obligations into
+    blockers breaks the documented first-day sequence, in which observations
+    do not exist yet. Strengthening a control is an owner's decision, not a
+    fix wave's side effect. So: say it, loudly, at the moment it matters.
+    """
+    from aef.harness.preflight import preflight
+
+    corpus_root = Path(args.corpus) if getattr(args, "corpus", None) else None
+    if corpus_root is None:
+        return  # nothing to preflight against; `loop doctor` is the place to ask
+    result = preflight(
+        repo_root=Path(args.repo),
+        state_root=config.paths.root,
+        corpus_root=corpus_root,
+        agent_path=getattr(args, "agent_path", None) or DEFAULT_AGENT_PATH,
+        graph_id=args.graph_id,
+        halt_channel_configured=bool(getattr(_halt_notifier(), "configured", False)),
+        observations=config.paths.observations,
+    )
+    if result.ready:
+        return
+    names = ", ".join(o.name for o in result.unmet)
+    print(
+        f"  preflight: {len(result.unmet)} of {len(result.obligations)} obligation(s) unmet "
+        f"({names}). ADVISORY — this command does not refuse on them; run "
+        f"`aef loop doctor` for each fix."
+    )
+
+
 def cmd_gate(args: argparse.Namespace) -> int:
     config = _config(args)
+    _warn_unmet_obligations(args, config)
     try:
         run = loop_gate(
             config,
@@ -285,9 +343,27 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
     # Bootstrap writes to corpus/, which IS the evidence every behavioural
     # gate is measured against, so it honours the same halt `harvest` does
     # (ADR 0069): a halted loop must not have its gate evidence changed
-    # underneath it. `--state` is OPTIONAL here and required there, because
-    # this is the day-one command and a loop state dir does not exist yet —
-    # with no state dir there is no loop to have halted.
+    # underneath it.
+    #
+    # This used to read `if getattr(args, "state", None):` — a guard whose
+    # enforcement was opt-in by the caller, on a flag ADR 0138 made optional
+    # and ADR 0138's OWN Evidence block then omitted. So the documented
+    # invocation grew a halted loop's corpus and exited 0, while the same
+    # command with `--state` exited 2 (reproduced, ADR 0141). A control that
+    # only binds when you ask for it is not a control. One of the two flags is
+    # now required, and `--no-loop-state` makes "there is no loop yet" a thing
+    # the owner SAYS rather than something silence is read as.
+    if not getattr(args, "state", None) and not getattr(args, "no_loop_state", False):
+        print(
+            "error: bootstrap writes to corpus/, which is the evidence every behavioural "
+            "gate is measured against, so it must be able to see the kill switch (ADR 0069). "
+            "Pass --state <dir> — the same directory every other loop subcommand takes — or "
+            "--no-loop-state if there is genuinely no loop yet. Neither was given, and "
+            "silence used to mean 'do not check', which grew the corpus of a HALTED loop "
+            "(ADR 0141).",
+            file=sys.stderr,
+        )
+        return EXIT_REJECTED
     if getattr(args, "state", None):
         try:
             LoopPaths(root=Path(args.state)).kill_switch.check()
@@ -333,7 +409,14 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
             now=datetime.now(UTC),
             agent_id=args.agent_id,
         )
-    except (BootstrapError, RecorderError) as exc:
+    except (BootstrapError, RecorderError, CorpusError) as exc:
+        # `CorpusError` too: `refuse_existing_ids` calls `load_corpus`, so ONE
+        # malformed file anywhere in the corpus makes bootstrap fail. It
+        # landed in `main()`'s catch-all, which prints the message but returns
+        # 1 rather than this command's own EXIT_REJECTED, and the message
+        # named no file. Both fixed here and in `corpus.load_scenario`
+        # (ADR 0141's suspected item, confirmed as a naming defect rather than
+        # the traceback it was reported as).
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_REJECTED
 
@@ -377,6 +460,20 @@ def cmd_score(args: argparse.Namespace) -> int:
     from aef.harness.scenario_runner import load_graph, run_scenario
 
     corpus = load_corpus(Path(args.corpus))
+    # A metric read over a corpus that lost its failing cases is not the same
+    # metric. Reproduced: delete the two scenarios the agent fails and this
+    # command reports 0.6667 -> 1.0000, exit 0, with nothing complaining
+    # (ADR 0141). `corpus.check_never_shrinks` had no production caller at
+    # all; the gates now run it too, in `harness/loop.py::_preflight`.
+    #
+    # Retiring a scenario deliberately means editing `corpus/manifest.json`,
+    # which is a visible, reviewable act in git — not something a deletion
+    # can do silently.
+    try:
+        check_never_shrinks(corpus, load_manifest(Path(args.corpus)))
+    except CorpusShrankError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
     graph = load_graph(args.entrypoint)
     splits = [Split(s) for s in args.splits.split(",")]
     if Split.HOLDOUT in splits and not args.i_am_spending_the_holdout:
@@ -545,6 +642,7 @@ def cmd_cycle(args: argparse.Namespace) -> int:
     from aef.harness.memory_store import FileMemoryStore
 
     config = _config(args)
+    _warn_unmet_obligations(args, config)
     graph = load_graph_module(args.module) if args.module else None
     try:
         run = loop_cycle(
@@ -782,6 +880,13 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     )
     _cassette_miss(p_gate)
     p_gate.add_argument(
+        "--agent-path",
+        default=DEFAULT_AGENT_PATH,
+        help="the module that builds your graph, repo-relative. Read only to report "
+        "unmet preflight obligations before gating (ADR 0141); the gates themselves "
+        "take --entrypoint.",
+    )
+    p_gate.add_argument(
         "--network-isolated",
         action="store_true",
         help="attest that the caller (a CI container) provides network isolation. "
@@ -930,10 +1035,19 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_bootstrap.add_argument(
         "--state",
         default=None,
-        help="loop state dir, if one exists. Optional, unlike every other loop "
-        "subcommand: this is the day-one command and there may be no loop yet. Given "
-        "one, an engaged kill switch stops the run — corpus/ is gate evidence, and a "
-        "halted loop must not have it changed underneath it (ADR 0069).",
+        help="loop state dir. Not `required=True` as on every other loop subcommand, "
+        "because this is the day-one command and there may be no loop yet — but one of "
+        "--state and --no-loop-state MUST be given. An engaged kill switch stops the "
+        "run: corpus/ is gate evidence and a halted loop must not have it changed "
+        "underneath it (ADR 0069).",
+    )
+    p_bootstrap.add_argument(
+        "--no-loop-state",
+        action="store_true",
+        help="assert that no loop state directory exists yet, so there is no kill switch "
+        "to consult. An assertion, not a default: omitting --state used to mean this "
+        "silently, and a halted loop's corpus grew from the documented invocation "
+        "(ADR 0141). If a loop does exist, pass --state instead.",
     )
     p_bootstrap.add_argument(
         "--config",
@@ -1040,7 +1154,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         help="module:factory that builds your graph; G2/G3 refuse without it",
     )
     _cassette_miss(p_cycle)
-    p_cycle.add_argument("--agent-path", default="agents/demo/graph.py")
+    p_cycle.add_argument("--agent-path", default=DEFAULT_AGENT_PATH)
     p_cycle.add_argument(
         "--memory",
         default=None,
@@ -1071,7 +1185,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_run.add_argument("--entrypoint", default=None, help="module:factory; G2/G3 refuse without it")
     _cassette_miss(p_run)
     p_run.add_argument("--memory", default=None, help="durable memory store the proposer reads")
-    p_run.add_argument("--agent-path", default="agents/demo/graph.py")
+    p_run.add_argument("--agent-path", default=DEFAULT_AGENT_PATH)
     p_run.add_argument("--turns", type=int, default=10)
     p_run.add_argument("--budget-minutes", type=float, default=60.0)
     p_run.add_argument(
@@ -1086,7 +1200,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "bless", help="archive the current Zone A state as the owner-blessed baseline"
     )
     _common(p_bless)
-    p_bless.add_argument("--agent-path", default="agents/demo/graph.py")
+    p_bless.add_argument("--agent-path", default=DEFAULT_AGENT_PATH)
     p_bless.add_argument("--note", default="", help="why this state is the baseline")
     p_bless.set_defaults(handler=cmd_bless)
 
@@ -1095,6 +1209,6 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     )
     _common(p_doctor)
     p_doctor.add_argument("--corpus", default="corpus")
-    p_doctor.add_argument("--agent-path", default="agents/demo/graph.py")
+    p_doctor.add_argument("--agent-path", default=DEFAULT_AGENT_PATH)
     p_doctor.add_argument("--observations", default=None)
     p_doctor.set_defaults(handler=cmd_doctor)

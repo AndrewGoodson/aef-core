@@ -47,7 +47,7 @@ def _cmd_adopt(args: argparse.Namespace) -> int:
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
-    checks = run_doctor(Path(args.dir))
+    checks = run_doctor(Path(args.dir), agent_path=args.agent_path)
     ok = True
     for check in checks:
         if check.ok:
@@ -168,6 +168,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_doctor = subparsers.add_parser("doctor", help="sanity-check an AEF setup")
     p_doctor.add_argument("--dir", default=".")
+    p_doctor.add_argument(
+        "--agent-path",
+        default=None,
+        help=(
+            "the module that builds your graph, repo-relative — the same flag "
+            "`aef loop doctor` takes. Without it, doctor scans every entry the adoption "
+            "contract names that exists (aef_adapter.py, aef_migrated.py, "
+            "agents/*/graph.py) for model calls the harness cannot see."
+        ),
+    )
     p_doctor.set_defaults(handler=_cmd_doctor)
 
     p_run = subparsers.add_parser("run", help="run a graph module's build_graph()")

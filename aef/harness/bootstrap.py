@@ -50,7 +50,7 @@ from pathlib import Path
 from typing import Any
 
 from aef.harness.checks import CheckError, TaskCheck
-from aef.harness.corpus import Expected, Scenario, Split
+from aef.harness.corpus import Expected, Scenario, Source, Split
 from aef.harness.outcome import classify
 from aef.harness.recorder import RecorderError, record_to_corpus, refuse_existing_ids
 from aef.kernel import Services
@@ -318,6 +318,11 @@ def bootstrap(
                 expected=Expected.UNSPECIFIED,
                 checks=item.checks,
                 budget_ms=item.budget_ms,
+                # So `harvest`'s daily rate limit does not charge this
+                # command's scenarios against it. A 12-input bootstrap used
+                # to exhaust a limit of 5 and drop every real production
+                # failure harvested in the next 24h (ADR 0141).
+                source=Source.BOOTSTRAP,
             )
         except RecorderError:
             # The overwrite refusal and the empty-trace refusal are both

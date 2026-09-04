@@ -23,7 +23,14 @@ from datetime import datetime
 from pathlib import Path
 
 from aef.harness.checks import TaskCheck
-from aef.harness.corpus import Expected, Scenario, Split, load_corpus, save_scenario
+from aef.harness.corpus import (
+    Expected,
+    Scenario,
+    Source,
+    Split,
+    load_corpus,
+    save_scenario,
+)
 from aef.harness.outcome import classify
 from aef.kernel import GraphExecutor, Services
 from aef.kernel.graph import Graph
@@ -91,6 +98,7 @@ def record_run(
     expected: Expected = Expected.UNSPECIFIED,
     checks: tuple[TaskCheck, ...] = (),
     budget_ms: float | None = None,
+    source: Source = Source.RECORD,
 ) -> Scenario:
     """Execute `graph` and capture the run as a `Scenario`.
 
@@ -154,6 +162,10 @@ def record_run(
         checks=checks,
         budget_ms=budget_ms,
         model_calls=recording.recorded,
+        # Which command admitted it (ADR 0141). RECORD by default because
+        # this function IS `aef loop record`; `bootstrap` and `harvest` say
+        # so, and `harvest`'s daily limit charges only its own.
+        source=source,
     )
 
 
@@ -171,6 +183,7 @@ def record_to_corpus(
     expected: Expected = Expected.UNSPECIFIED,
     checks: tuple[TaskCheck, ...] = (),
     budget_ms: float | None = None,
+    source: Source = Source.RECORD,
 ) -> RecordedScenario:
     """Record and persist, refusing to overwrite an existing scenario —
     see `refuse_existing_ids`, which is that rule."""
@@ -188,5 +201,6 @@ def record_to_corpus(
         expected=expected,
         checks=checks,
         budget_ms=budget_ms,
+        source=source,
     )
     return RecordedScenario(scenario=scenario, path=save_scenario(root, scenario))

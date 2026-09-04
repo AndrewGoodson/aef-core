@@ -39,7 +39,14 @@ from aef.config.loader import AgentConfigError, load_agent_config_text
 from aef.config.schema import AgentConfig
 from aef.harness import archive, ledger
 from aef.harness.candidate import CandidateVerdict, inspect_candidate
-from aef.harness.corpus import Corpus, Scenario
+from aef.harness.corpus import (
+    MANIFEST_FILENAME,
+    Corpus,
+    CorpusManifest,
+    Scenario,
+    check_never_shrinks,
+    load_manifest,
+)
 from aef.harness.gates.base import Gate, GateContext, PipelineResult, run_pipeline
 from aef.harness.gates.g0_static_safety import G0StaticSafety
 from aef.harness.gates.g1_builds import G1Builds
@@ -47,7 +54,7 @@ from aef.harness.gates.g2_outcome import GATED_SPLITS, G2OutcomeNonRegression
 from aef.harness.gates.g3_improvement import DEFAULT_MIN_COHORT_SIZE, G3Improvement
 from aef.harness.gates.g4_separation import G4SeparationOfPowers
 from aef.harness.gates.g5_rate_drift import DRIFT_EXHAUSTED, AcceptedChange, G5RateAndDrift
-from aef.harness.git import GitRepo
+from aef.harness.git import GitError, GitRepo
 from aef.harness.monitoring import (
     Action,
     Digest,
@@ -252,8 +259,34 @@ def _check_state_is_outside_the_repo(config: LoopConfig) -> None:
         )
 
 
+def _corpus_baseline_manifest(config: LoopConfig, corpus: Corpus) -> CorpusManifest:
+    """The never-shrinks baseline: from the BASE REF where that is possible.
+
+    Reading it from the working tree lets a candidate delete a scenario and
+    its manifest entry in one commit and pass. Reading it from the base ref
+    does not, which is why the base ref is tried first and the working tree is
+    a documented fallback for a corpus that lives outside the repository or is
+    untracked (ADR 0141).
+    """
+    root = corpus.root.resolve()
+    try:
+        rel = root.relative_to(config.repo.root.resolve())
+    except ValueError:
+        return load_manifest(root)  # corpus outside the repo; nothing to read from git
+    ref = f"{config.base_ref}:{rel.as_posix()}/{MANIFEST_FILENAME}"
+    try:
+        raw = config.repo.run_bytes("show", ref)
+    except GitError:  # untracked, or no such ref — neither is a shrink
+        return load_manifest(root)
+    try:
+        return CorpusManifest.from_payload(json.loads(raw.decode("utf-8")))
+    except (UnicodeDecodeError, ValueError):
+        return load_manifest(root)
+
+
 def _preflight(config: LoopConfig) -> tuple[ledger.LedgerEntry, ...]:
-    """State location, kill switch, then ledger integrity. In that order.
+    """State location, kill switch, then ledger, archive and corpus integrity.
+    In that order.
 
     The kill switch check comes before any work, but after the location
     check: a state directory in the wrong place means the kill switch itself
@@ -271,6 +304,14 @@ def _preflight(config: LoopConfig) -> tuple[ledger.LedgerEntry, ...]:
         config.graph_id,
         tuple(v for _, v in ledger.merged_versions(config.paths.ledger_dir)),
     )
+    # And the CORPUS's, which had the same shape of hole for longer:
+    # `corpus.check_never_shrinks` had no production caller at all, so
+    # deleting the two scenarios an agent fails raised `aef loop score` from
+    # 0.6667 to 1.0000 with nothing complaining, while
+    # `recorder.refuse_existing_ids` cited this guard as its justification
+    # (ADR 0141). It is the same audit-trail argument as the two above.
+    if config.corpus is not None:
+        check_never_shrinks(config.corpus, _corpus_baseline_manifest(config, config.corpus))
     return entries
 
 

@@ -309,3 +309,50 @@ can under-report, which is the safer failure for a check that gates.
 **Not measured:** any repo but the toy. The scanner has never run against a
 codebase nobody wrote to be scanned, which is the same gap
 `READY_LOOP.md` K5 names for the whole loop.
+
+
+## Erratum, 2026-09-04 (ADR 0141, fix wave D)
+
+Three statements above are false as written. They are left in place — this is a
+dated record — and corrected here.
+
+**1. "It over-reports nothing (a false positive requires a real vendor import in
+a real reachable file)" (Confidence, on the reachability walk).** False for 14
+of the 19 names. §1 says the obligation reuses the lifted scanner, and the
+scanner's default list is `VENDOR_TOP_LEVEL_MODULES` — the constraint #3
+question — not `MODEL_SDK_ROOTS`, which is the question the obligation is
+about. So `import psycopg2` in a reachable module was an unmet obligation, and
+the printed fix told the adopter to route a Postgres connection through
+`services.require_model_provider().complete(...)`. Reproduced:
+
+```
+>>> model_calls_are_visible(Path("repo"), "mygraph.py")   # db.py: import psycopg2
+(False, 'db.py:1 imports psycopg2 (+2 more) — the harness cannot see it')
+```
+
+`scan_*` now takes `roots`; the obligation passes `MODEL_SDK_ROOTS`;
+constraint #3 keeps the full list. `google` remains in `MODEL_SDK_ROOTS` and
+remains blocking, which is the trade `vendor_scan.py` already documented.
+
+**2. "`Preflight.ready` is false while it stands, so the gates refuse" (§2).**
+False. `Preflight.ready` had exactly one reader in `aef/`: `cmd_doctor`.
+Reproduced — `aef loop doctor` exit 1 with obligation 6 red, then `aef loop
+cycle` on the same repo proposed and gated. ADR 0141 decided the obligations
+are **advisory**, with the reasoning stated there (a refusal could live only in
+the CLI, so the importable `harness.loop.cycle()` would stay unguarded and this
+sentence would still be false), corrected `Preflight.render()`'s matching claim,
+and made `cycle`/`gate` print the unmet obligations before running.
+
+**3. "`aef doctor` gains the same finding as an advisory when `aef_migrated.py`
+exists" (§2) — accurate as a description, and the design was wrong.** That is
+the artefact of a different command. A repo that followed the documented
+adoption path (`aef adopt`, wire `aef_adapter.py`, nodes under `agents/**`) has
+no `aef_migrated.py`, so the advisory could not fire for the only path the docs
+describe; reproduced with `agents/mine/vendor_helper.py` importing `anthropic`
+and `aef doctor` saying nothing. The advisory is now keyed on the configured
+graph, with `--agent-path` on `aef doctor`.
+
+Also corrected there: the obligation's `fix:` string was `aef migrate --dir .
+--force` for every unmet case, including the unroutable population §4's
+falsification clause deliberately creates — running it regenerates the identical
+wrapper and leaves the obligation byte-identically red.

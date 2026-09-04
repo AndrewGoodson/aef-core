@@ -14,8 +14,21 @@ fails loudly rather than quietly joining a different split.
 **The corpus never shrinks.** A gate suite that can be made to pass by
 deleting the scenario that fails is not a gate suite. `CorpusManifest`
 records every id ever admitted; `check_never_shrinks` fails if one goes
-missing. This is checked in CI, from the base ref, so a candidate cannot
-retire its own counterexample.
+missing.
+
+That paragraph used to end "This is checked in CI, from the base ref, so a
+candidate cannot retire its own counterexample", and **none of it was true**:
+`check_never_shrinks` had no caller outside its own tests, `save_manifest` had
+none at all, and no CI job read either. Reproduced — delete the two scenarios
+the agent fails, `aef loop score` rises 0.6667 to 1.0000, exit 0, nothing
+complains — while `recorder.refuse_existing_ids` justified its own rule by
+citing this guard (ADR 0141). Now: `save_scenario` records the id as it admits
+it, and `harness/loop.py`'s `_preflight` calls `check_never_shrinks` on every
+`cycle`, `gate` and `run`, beside the archive check that was already there.
+The baseline is read from the base ref when the corpus is tracked in the repo
+and from the working tree otherwise — the second is weaker (a candidate that
+deletes the scenario *and* its manifest entry in one commit passes it) and is
+the fallback, not the design.
 
 **Re-execution is deterministic.** A scenario pins the clock values its
 original run observed (`fixed_clock`). Without that, re-executing produces
@@ -72,6 +85,32 @@ class Split(StrEnum):
     HOLDOUT = "holdout"  # the owner's; never shown to the proposer
 
 
+class Source(StrEnum):
+    """Which command admitted this scenario.
+
+    Added because `harvest`'s daily rate limit counted **every** scenario
+    recorded in the last 24 hours, and `bootstrap` stamps `recorded_at = now`
+    on every one it writes. So the K5 pilot sequence — adopt, bootstrap,
+    run for real, harvest — silently dropped every real production failure:
+    a 12-input bootstrap exhausted a limit of 5 and `harvest` reported
+    `promoted 0, 3 held back by the daily rate limit`, exit 0 (reproduced,
+    ADR 0141).
+
+    The limit exists so that one bad deploy cannot fill the corpus with a
+    single incident. That is a statement about *harvest's own* promotions, so
+    only `HARVEST` counts against it.
+
+    `UNSPECIFIED` is what every scenario written before this field existed
+    loads as, and it carries no claim — exactly like `Expected.UNSPECIFIED`
+    one enum up.
+    """
+
+    UNSPECIFIED = "unspecified"  # legacy; recorded before provenance existed
+    BOOTSTRAP = "bootstrap"  # aef loop bootstrap
+    HARVEST = "harvest"  # aef loop harvest, from a real run
+    RECORD = "record"  # aef loop record, one deliberate owner act
+
+
 class CorpusError(RuntimeError):
     pass
 
@@ -109,6 +148,9 @@ class Scenario:
     # credential. Empty for a legacy scenario and for any graph that never
     # asked a model anything — the pinned clock's rule, one layer up.
     model_calls: tuple[RecordedCall, ...] = ()
+    # Which command admitted it (ADR 0141). Not a claim about the run — a fact
+    # about how it got here, read only by harvest's rate limit.
+    source: Source = Source.UNSPECIFIED
 
     @property
     def clock_values(self) -> tuple[datetime, ...]:
@@ -130,6 +172,7 @@ class Scenario:
             "checks": [check.to_payload() for check in self.checks],
             "budget_ms": self.budget_ms,
             "model_calls": [call.to_payload() for call in self.model_calls],
+            "source": self.source.value,
         }
 
     @classmethod
@@ -154,6 +197,9 @@ class Scenario:
                 model_calls=tuple(
                     RecordedCall.from_payload(c) for c in payload.get("model_calls", ())
                 ),
+                # Absent in every scenario recorded before ADR 0141, which is
+                # exactly what UNSPECIFIED means: nobody recorded who wrote it.
+                source=Source(payload.get("source", Source.UNSPECIFIED.value)),
             )
         except (KeyError, ValueError) as exc:
             raise CorpusError(f"malformed scenario payload: {exc}") from exc
@@ -227,13 +273,42 @@ def save_scenario(root: Path, scenario: Scenario) -> Path:
     path = scenario_path(root, scenario)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(dumps(scenario.to_payload()))
+    _record_in_manifest(root, scenario)
     return path
+
+
+def _record_in_manifest(root: Path, scenario: Scenario) -> None:
+    """Add this id to the never-shrinks ledger, as it is admitted.
+
+    `CorpusManifest` and `check_never_shrinks` existed from the start and
+    **nothing ever wrote a manifest** — so the ledger was empty everywhere and
+    the check, wherever it ran, passed vacuously. Writing it here rather than
+    from a separate command is the point: the manifest has to be updated by
+    the same act that admits the scenario, or the two describe different
+    corpora (ADR 0141).
+
+    A union, never a rewrite. Regenerating the manifest from the corpus on
+    disk would forget precisely the scenario that had just been deleted, which
+    is the deletion this ledger exists to notice.
+    """
+    manifest = load_manifest(root)
+    if manifest.ids.get(scenario.id) is scenario.split:
+        return
+    save_manifest(root, CorpusManifest(ids={**manifest.ids, scenario.id: scenario.split}))
 
 
 def load_scenario(path: Path) -> Scenario:
     try:
         scenario = Scenario.from_payload(loads(path.read_text()))
     except TraceCodecError as exc:
+        raise CorpusError(f"{path}: {exc}") from exc
+    except CorpusShrankError:  # pragma: no cover - not raised by from_payload
+        raise
+    except CorpusError as exc:
+        # `from_payload` names the missing key and nothing else, so an adopter
+        # with forty scenarios read `malformed scenario payload: 'graph_id'`
+        # and had no way to tell which file. Every other refusal in this
+        # module leads with the path; this one now does too (ADR 0141).
         raise CorpusError(f"{path}: {exc}") from exc
 
     # The directory is a claim; the file is the record. A scenario moved

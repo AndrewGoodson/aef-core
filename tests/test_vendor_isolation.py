@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from aef.harness import preflight
 from aef.harness.vendor_scan import (
     MODEL_SDK_ROOTS,
     VENDOR_TOP_LEVEL_MODULES,
@@ -144,3 +145,58 @@ def test_scan_source_takes_text_so_generated_code_can_be_checked() -> None:
     file."""
     assert scan_source("import anthropic\n", path=Path("<generated>")) != []
     assert scan_source("from aef.kernel import END\n", path=Path("<generated>")) == []
+
+
+# --------------------------------------------------------------------------
+# Which caller asks which question (ADR 0141)
+# --------------------------------------------------------------------------
+
+
+def test_the_two_lists_answer_different_questions_and_differ_by_fourteen() -> None:
+    """The subset test above says they cannot separate. This one says they
+    are not the same list either — the failure mode ADR 0141 fixed was a
+    caller silently getting the wider one."""
+    assert len(VENDOR_TOP_LEVEL_MODULES) == 19
+    assert len(MODEL_SDK_ROOTS) == 5
+    assert len(VENDOR_TOP_LEVEL_MODULES - MODEL_SDK_ROOTS) == 14
+
+
+def test_the_preflight_obligation_scans_model_sdks_and_nothing_wider() -> None:
+    """A source assertion, and deliberately: the property IS the wiring.
+
+    `model_calls_are_visible` called `scan_file` with no `roots`, so it
+    inherited the constraint #3 default and answered the wrong question —
+    `import psycopg2` in a reachable module blocked the adopter forever with
+    a fix about routing a Postgres connection through a model provider. No
+    behavioural test of either component can see which list was passed; a
+    behavioural test of the composition can, and there is one in
+    `tests/harness/test_preflight.py`, but this pins the wire so the two
+    cannot be swapped back by a refactor that keeps every test green.
+    """
+    import ast
+
+    tree = ast.parse(Path(preflight.__file__).read_text())
+    fn = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.FunctionDef) and n.name == "model_calls_are_visible"
+    )
+    calls = [
+        c
+        for c in ast.walk(fn)
+        if isinstance(c, ast.Call) and getattr(c.func, "id", None) == "scan_file"
+    ]
+    assert calls, "the obligation no longer scans at all"
+    for call in calls:
+        roots = {k.arg: k.value for k in call.keywords}.get("roots")
+        assert isinstance(roots, ast.Name), "scan_file called with the DEFAULT root list"
+        assert roots.id == "MODEL_SDK_ROOTS", roots.id
+
+
+def test_constraint_three_still_scans_the_whole_vendor_list() -> None:
+    """The narrowing must not have reached this repo's own rule. Constraint #3
+    is about `import psycopg2` in `aef/kernel/` as much as `import anthropic`,
+    and `scan_*`'s default is what enforces it."""
+    for vendor in ("psycopg2", "opentelemetry", "neo4j", "temporalio"):
+        assert scan_source(f"import {vendor}\n", path=Path("<x>")), vendor
+        assert not scan_source(f"import {vendor}\n", path=Path("<x>"), roots=MODEL_SDK_ROOTS)
