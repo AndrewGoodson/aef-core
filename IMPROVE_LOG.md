@@ -966,7 +966,8 @@ mutations (production value perturbed, test run, reverted):
   M5 zero-failure warning removed      1 failed
   M6 one shared Services per batch     1 failed
   M7 a refused key is ignored          2 failed
-pytest -q          1845 passed, 1 skipped (from 1820; +25, none removed)
+  M8 the halt check removed            1 failed
+pytest -q          1847 passed, 1 skipped (from 1820; +27, none removed)
 mypy aef examples  128 files clean
 ruff check / format   clean
 ```
@@ -984,6 +985,12 @@ where everything passes cannot demonstrate an improvement"* — when nothing
 had passed and nothing had run. A green light for something that did not
 hold, written by the increment whose subject is that shape. Fixed, and the
 test asserts the everything-passed sentence is absent.
+
+**One NEW defect, found by seam-hunting this diff before it shipped.**
+`cmd_harvest` checks the kill switch before writing to `corpus/` (ADR 0069);
+`cmd_bootstrap`, writing to the same directory for the same consumers, did
+not. Fixed in the same increment, with an optional `--state` (day one has no
+loop state dir yet) and mutation M8.
 
 **Deliberately left.** No `aef loop label` command: marking an existing
 scenario `must_fail` in place would be a second way to write an owner claim,

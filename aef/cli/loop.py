@@ -282,6 +282,19 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
     from aef.services.memory.in_memory import InMemoryMemoryStore
     from aef.services.runtime import agent_services
 
+    # Bootstrap writes to corpus/, which IS the evidence every behavioural
+    # gate is measured against, so it honours the same halt `harvest` does
+    # (ADR 0069): a halted loop must not have its gate evidence changed
+    # underneath it. `--state` is OPTIONAL here and required there, because
+    # this is the day-one command and a loop state dir does not exist yet —
+    # with no state dir there is no loop to have halted.
+    if getattr(args, "state", None):
+        try:
+            LoopPaths(root=Path(args.state)).kill_switch.check()
+        except LoopHaltedError as exc:
+            print(f"HALTED: {exc}")
+            return EXIT_HALTED
+
     graph = load_graph_module(args.module)
 
     # The provider `aef run` would use, from the same config, so what gets
@@ -914,6 +927,14 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "overwriting what it recorded.",
     )
     p_bootstrap.add_argument("--agent-id", default="bootstrap")
+    p_bootstrap.add_argument(
+        "--state",
+        default=None,
+        help="loop state dir, if one exists. Optional, unlike every other loop "
+        "subcommand: this is the day-one command and there may be no loop yet. Given "
+        "one, an engaged kill switch stops the run — corpus/ is gate evidence, and a "
+        "halted loop must not have it changed underneath it (ADR 0069).",
+    )
     p_bootstrap.add_argument(
         "--config",
         default=None,

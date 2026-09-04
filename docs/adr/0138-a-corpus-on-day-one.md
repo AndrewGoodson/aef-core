@@ -94,6 +94,14 @@ to do, which is why `record_run` refuses the label when the agent completes
 the task. Accepting the first two removes a second CLI pass; accepting the
 third would let the system set its own tripwire.
 
+**A halted loop stops it.** Found by seam-hunting this diff before it
+shipped: `cmd_harvest` checks the kill switch before writing to `corpus/`
+(ADR 0069 — a halted loop must not have its gate evidence changed underneath
+it) and `cmd_bootstrap`, which writes to exactly the same directory for
+exactly the same consumers, did not. It does now. `--state` is *optional*
+here and required on every other loop subcommand, because this is the
+day-one command: with no state dir there is no loop to have halted.
+
 **Exit code.** A bootstrap that recorded nothing exits non-zero. A workflow
 keying off exit 0 would otherwise believe a corpus had been seeded — the
 ready loop's rule is that the tooling does not report green for something
@@ -173,13 +181,17 @@ M4 failure count not reported                    2 failed, 23 passed
 M5 zero-failure warning removed                  1 failed, 24 passed
 M6 one shared Services for every input           1 failed, 24 passed
 M7 a refused key is ignored                      2 failed, 23 passed
-REVERTED                                        25 passed
+M8 the halt check removed                        1 failed, 26 passed
+REVERTED                                        27 passed
 ```
+
+(M1-M7 ran against 25 tests, M8 against 27 — the halt check and its two
+tests were added after the first mutation round, by the seam hunt.)
 
 Green bar:
 
 ```
-pytest -q          1845 passed, 1 skipped (from 1820; +25, none removed)
+pytest -q          1847 passed, 1 skipped (from 1820; +27, none removed)
 mypy aef examples  128 files clean
 ruff check .       clean
 ruff format --check aef tests examples   238 files already formatted
