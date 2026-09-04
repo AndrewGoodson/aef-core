@@ -1,0 +1,351 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Varley blight"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Pellham orchard"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "copper"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "^(?:\\s*\\S+){1,40}\\s*$"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-02-orchard-blight",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-02-orchard-blight in at most 40 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-02-orchard-blight",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 40,
+      "must_mention": [
+        "Varley blight",
+        "Pellham orchard",
+        "copper"
+      ],
+      "text": "Growers at the Pellham orchard have confirmed an outbreak of Varley blight on roughly a third of their older pear trees. The fungus spreads in wet springs and shows first as dark rings on new leaves. The orchard has begun a copper spray programme and has pulled affected fruit from its farm shop as a precaution. Neighbouring farms have been asked to inspect their own trees weekly until midsummer. The orchard expects a smaller harvest but says the younger plantings on the south slope are so far unaffected."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "3936454717a88d2e75f21e12f268db8b5cebc19603cf2febb1e31fc5ea92b299",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Varley blight, Pellham orchard, copper.\n\nPassage:\nGrowers at the Pellham orchard have confirmed an outbreak of Varley blight on roughly a third of their older pear trees. The fungus spreads in wet springs and shows first as dark rings on new leaves. The orchard has begun a copper spray programme and has pulled affected fruit from its farm shop as a precaution. Neighbouring farms have been asked to inspect their own trees weekly until midsummer. The orchard expects a smaller harvest but says the younger plantings on the south slope are so far unaffected.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Pellham orchard confirmed Varley blight on about a third of older pear trees, started a copper spray programme, pulled affected fruit from its shop, asked neighbours to inspect weekly, and expects a smaller harvest with younger plantings unaffected.",
+        "input_tokens": 2,
+        "model": "claude-fable-5-1",
+        "output_tokens": 86,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:48:35.179468+00:00",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-02-orchard-blight:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-04T01:48:35.180401+00:00",
+        "run_id": "sum-02-orchard-blight",
+        "trace_id": "sum-02-orchard-blight"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-02-orchard-blight in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-02-orchard-blight",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Varley blight",
+            "Pellham orchard",
+            "copper"
+          ],
+          "text": "Growers at the Pellham orchard have confirmed an outbreak of Varley blight on roughly a third of their older pear trees. The fungus spreads in wet springs and shows first as dark rings on new leaves. The orchard has begun a copper spray programme and has pulled affected fruit from its farm shop as a precaution. Neighbouring farms have been asked to inspect their own trees weekly until midsummer. The orchard expects a smaller harvest but says the younger plantings on the south slope are so far unaffected."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-02-orchard-blight:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-04T01:48:35.180454+00:00",
+        "run_id": "sum-02-orchard-blight",
+        "trace_id": "sum-02-orchard-blight"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-02-orchard-blight in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 88,
+            "trace_id": "sum-02-orchard-blight",
+            "ts": "2026-09-04T01:48:35.180454Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Pellham orchard confirmed Varley blight on about a third of older pear trees, started a copper spray programme, pulled affected fruit from its shop, asked neighbours to inspect weekly, and expects a smaller harvest with younger plantings unaffected."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-02-orchard-blight in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-02-orchard-blight",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Varley blight",
+            "Pellham orchard",
+            "copper"
+          ],
+          "text": "Growers at the Pellham orchard have confirmed an outbreak of Varley blight on roughly a third of their older pear trees. The fungus spreads in wet springs and shows first as dark rings on new leaves. The orchard has begun a copper spray programme and has pulled affected fruit from its farm shop as a precaution. Neighbouring farms have been asked to inspect their own trees weekly until midsummer. The orchard expects a smaller harvest but says the younger plantings on the south slope are so far unaffected."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-02-orchard-blight:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-04T01:48:41.229696+00:00",
+        "run_id": "sum-02-orchard-blight",
+        "trace_id": "sum-02-orchard-blight"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-02-orchard-blight in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-02-orchard-blight in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 88,
+            "trace_id": "sum-02-orchard-blight",
+            "ts": "2026-09-04T01:48:35.180454Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-02-orchard-blight",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Varley blight",
+            "Pellham orchard",
+            "copper"
+          ],
+          "summary": "Pellham orchard confirmed Varley blight on about a third of older pear trees, started a copper spray programme, pulled affected fruit from its shop, asked neighbours to inspect weekly, and expects a smaller harvest with younger plantings unaffected.",
+          "text": "Growers at the Pellham orchard have confirmed an outbreak of Varley blight on roughly a third of their older pear trees. The fungus spreads in wet springs and shows first as dark rings on new leaves. The orchard has begun a copper spray programme and has pulled affected fruit from its farm shop as a precaution. Neighbouring farms have been asked to inspect their own trees weekly until midsummer. The orchard expects a smaller harvest but says the younger plantings on the south slope are so far unaffected."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-02-orchard-blight:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-04T01:48:41.229915+00:00",
+        "run_id": "sum-02-orchard-blight",
+        "trace_id": "sum-02-orchard-blight"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-02-orchard-blight in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-02-orchard-blight in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 88,
+            "trace_id": "sum-02-orchard-blight",
+            "ts": "2026-09-04T01:48:35.180454Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-02-orchard-blight",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Varley blight",
+            "Pellham orchard",
+            "copper"
+          ],
+          "summary": "Pellham orchard confirmed Varley blight on about a third of older pear trees, started a copper spray programme, pulled affected fruit from its shop, asked neighbours to inspect weekly, and expects a smaller harvest with younger plantings unaffected.",
+          "text": "Growers at the Pellham orchard have confirmed an outbreak of Varley blight on roughly a third of their older pear trees. The fungus spreads in wet springs and shows first as dark rings on new leaves. The orchard has begun a copper spray programme and has pulled affected fruit from its farm shop as a precaution. Neighbouring farms have been asked to inspect their own trees weekly until midsummer. The orchard expects a smaller harvest but says the younger plantings on the south slope are so far unaffected."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

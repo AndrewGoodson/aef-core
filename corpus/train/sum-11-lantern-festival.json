@@ -1,0 +1,351 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Ottery lantern walk"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "willow"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "harbour"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "^(?:\\s*\\S+){1,35}\\s*$"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-11-lantern-festival",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-11-lantern-festival in at most 35 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-11-lantern-festival",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 35,
+      "must_mention": [
+        "Ottery lantern walk",
+        "willow",
+        "harbour"
+      ],
+      "text": "The Ottery lantern walk returns in November with lanterns made from willow and tissue paper at free workshops during half term. The procession leaves the school field at dusk, follows the river path and finishes at the harbour, where a brass band plays and hot chocolate is sold from the lifeboat station. Organisers expect about four hundred walkers and have asked drivers to avoid the harbour road for two hours. Last year's rain kept numbers low, so the date has been moved a week earlier."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "ce1762982a6b689d33c2d7827339fa9725a0b64061cf28dbd7a0ea4fa36bd3a4",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 35 words.\nThe summary must mention each of these terms, spelled exactly as given: Ottery lantern walk, willow, harbour.\n\nPassage:\nThe Ottery lantern walk returns in November with lanterns made from willow and tissue paper at free workshops during half term. The procession leaves the school field at dusk, follows the river path and finishes at the harbour, where a brass band plays and hot chocolate is sold from the lifeboat station. Organisers expect about four hundred walkers and have asked drivers to avoid the harbour road for two hours. Last year's rain kept numbers low, so the date has been moved a week earlier.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Ottery lantern walk returns in November with willow-and-tissue lanterns from free half-term workshops; dusk procession follows river path to harbour for brass band and hot chocolate, expecting four hundred walkers.",
+        "input_tokens": 2,
+        "model": "claude-fable-5-1",
+        "output_tokens": 73,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:49:29.232681+00:00",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-11-lantern-festival:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-04T01:49:29.234493+00:00",
+        "run_id": "sum-11-lantern-festival",
+        "trace_id": "sum-11-lantern-festival"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-11-lantern-festival in at most 35 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-11-lantern-festival",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Ottery lantern walk",
+            "willow",
+            "harbour"
+          ],
+          "text": "The Ottery lantern walk returns in November with lanterns made from willow and tissue paper at free workshops during half term. The procession leaves the school field at dusk, follows the river path and finishes at the harbour, where a brass band plays and hot chocolate is sold from the lifeboat station. Organisers expect about four hundred walkers and have asked drivers to avoid the harbour road for two hours. Last year's rain kept numbers low, so the date has been moved a week earlier."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-11-lantern-festival:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-04T01:49:29.234540+00:00",
+        "run_id": "sum-11-lantern-festival",
+        "trace_id": "sum-11-lantern-festival"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-11-lantern-festival in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 75,
+            "trace_id": "sum-11-lantern-festival",
+            "ts": "2026-09-04T01:49:29.234540Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Ottery lantern walk returns in November with willow-and-tissue lanterns from free half-term workshops; dusk procession follows river path to harbour for brass band and hot chocolate, expecting four hundred walkers."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-11-lantern-festival in at most 35 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-11-lantern-festival",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Ottery lantern walk",
+            "willow",
+            "harbour"
+          ],
+          "text": "The Ottery lantern walk returns in November with lanterns made from willow and tissue paper at free workshops during half term. The procession leaves the school field at dusk, follows the river path and finishes at the harbour, where a brass band plays and hot chocolate is sold from the lifeboat station. Organisers expect about four hundred walkers and have asked drivers to avoid the harbour road for two hours. Last year's rain kept numbers low, so the date has been moved a week earlier."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-11-lantern-festival:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-04T01:49:34.594164+00:00",
+        "run_id": "sum-11-lantern-festival",
+        "trace_id": "sum-11-lantern-festival"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-11-lantern-festival in at most 35 words",
+        "plan": {
+          "goal": "summarise sum-11-lantern-festival in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 75,
+            "trace_id": "sum-11-lantern-festival",
+            "ts": "2026-09-04T01:49:29.234540Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-11-lantern-festival",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Ottery lantern walk",
+            "willow",
+            "harbour"
+          ],
+          "summary": "Ottery lantern walk returns in November with willow-and-tissue lanterns from free half-term workshops; dusk procession follows river path to harbour for brass band and hot chocolate, expecting four hundred walkers.",
+          "text": "The Ottery lantern walk returns in November with lanterns made from willow and tissue paper at free workshops during half term. The procession leaves the school field at dusk, follows the river path and finishes at the harbour, where a brass band plays and hot chocolate is sold from the lifeboat station. Organisers expect about four hundred walkers and have asked drivers to avoid the harbour road for two hours. Last year's rain kept numbers low, so the date has been moved a week earlier."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-11-lantern-festival:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-04T01:49:34.594329+00:00",
+        "run_id": "sum-11-lantern-festival",
+        "trace_id": "sum-11-lantern-festival"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-11-lantern-festival in at most 35 words",
+        "plan": {
+          "goal": "summarise sum-11-lantern-festival in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 75,
+            "trace_id": "sum-11-lantern-festival",
+            "ts": "2026-09-04T01:49:29.234540Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-11-lantern-festival",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Ottery lantern walk",
+            "willow",
+            "harbour"
+          ],
+          "summary": "Ottery lantern walk returns in November with willow-and-tissue lanterns from free half-term workshops; dusk procession follows river path to harbour for brass band and hot chocolate, expecting four hundred walkers.",
+          "text": "The Ottery lantern walk returns in November with lanterns made from willow and tissue paper at free workshops during half term. The procession leaves the school field at dusk, follows the river path and finishes at the harbour, where a brass band plays and hot chocolate is sold from the lifeboat station. Organisers expect about four hundred walkers and have asked drivers to avoid the harbour road for two hours. Last year's rain kept numbers low, so the date has been moved a week earlier."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

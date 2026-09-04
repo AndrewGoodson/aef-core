@@ -1,0 +1,351 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Kestrel"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Marrow Sound"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Tuesday"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "^(?:\\s*\\S+){1,35}\\s*$"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-01-kestrel-ferry",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-01-kestrel-ferry in at most 35 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-01-kestrel-ferry",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 35,
+      "must_mention": [
+        "Kestrel",
+        "Marrow Sound",
+        "Tuesday"
+      ],
+      "text": "The Kestrel, a small passenger ferry that has crossed Marrow Sound since 1998, will not sail on Tuesday because its port engine is being replaced. The operator says the work should finish by the weekend, and tickets bought for Tuesday will be honoured on any crossing during the following fortnight. A replacement service by road bus will leave the quay every two hours, taking roughly fifty minutes longer than the boat. Regular commuters have been told to expect crowding on the first two departures."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "d4fc36cc22498a925d83e666c4ade19e4e5de2ed80681527257745d1dd8e5117",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 35 words.\nThe summary must mention each of these terms, spelled exactly as given: Kestrel, Marrow Sound, Tuesday.\n\nPassage:\nThe Kestrel, a small passenger ferry that has crossed Marrow Sound since 1998, will not sail on Tuesday because its port engine is being replaced. The operator says the work should finish by the weekend, and tickets bought for Tuesday will be honoured on any crossing during the following fortnight. A replacement service by road bus will leave the quay every two hours, taking roughly fifty minutes longer than the boat. Regular commuters have been told to expect crowding on the first two departures.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "The Kestrel ferry, crossing Marrow Sound since 1998, won't sail Tuesday due to port engine replacement; Tuesday tickets stay valid for a fortnight, and slower road buses will run every two hours meanwhile.",
+        "input_tokens": 2,
+        "model": "claude-fable-5-1",
+        "output_tokens": 82,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:48:23.619570+00:00",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-01-kestrel-ferry:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-04T01:48:23.620406+00:00",
+        "run_id": "sum-01-kestrel-ferry",
+        "trace_id": "sum-01-kestrel-ferry"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-01-kestrel-ferry in at most 35 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-01-kestrel-ferry",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Kestrel",
+            "Marrow Sound",
+            "Tuesday"
+          ],
+          "text": "The Kestrel, a small passenger ferry that has crossed Marrow Sound since 1998, will not sail on Tuesday because its port engine is being replaced. The operator says the work should finish by the weekend, and tickets bought for Tuesday will be honoured on any crossing during the following fortnight. A replacement service by road bus will leave the quay every two hours, taking roughly fifty minutes longer than the boat. Regular commuters have been told to expect crowding on the first two departures."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-01-kestrel-ferry:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-04T01:48:23.620463+00:00",
+        "run_id": "sum-01-kestrel-ferry",
+        "trace_id": "sum-01-kestrel-ferry"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-01-kestrel-ferry in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 84,
+            "trace_id": "sum-01-kestrel-ferry",
+            "ts": "2026-09-04T01:48:23.620463Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "The Kestrel ferry, crossing Marrow Sound since 1998, won't sail Tuesday due to port engine replacement; Tuesday tickets stay valid for a fortnight, and slower road buses will run every two hours meanwhile."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-01-kestrel-ferry in at most 35 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-01-kestrel-ferry",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Kestrel",
+            "Marrow Sound",
+            "Tuesday"
+          ],
+          "text": "The Kestrel, a small passenger ferry that has crossed Marrow Sound since 1998, will not sail on Tuesday because its port engine is being replaced. The operator says the work should finish by the weekend, and tickets bought for Tuesday will be honoured on any crossing during the following fortnight. A replacement service by road bus will leave the quay every two hours, taking roughly fifty minutes longer than the boat. Regular commuters have been told to expect crowding on the first two departures."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-01-kestrel-ferry:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-04T01:48:29.278053+00:00",
+        "run_id": "sum-01-kestrel-ferry",
+        "trace_id": "sum-01-kestrel-ferry"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-01-kestrel-ferry in at most 35 words",
+        "plan": {
+          "goal": "summarise sum-01-kestrel-ferry in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 84,
+            "trace_id": "sum-01-kestrel-ferry",
+            "ts": "2026-09-04T01:48:23.620463Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-01-kestrel-ferry",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Kestrel",
+            "Marrow Sound",
+            "Tuesday"
+          ],
+          "summary": "The Kestrel ferry, crossing Marrow Sound since 1998, won't sail Tuesday due to port engine replacement; Tuesday tickets stay valid for a fortnight, and slower road buses will run every two hours meanwhile.",
+          "text": "The Kestrel, a small passenger ferry that has crossed Marrow Sound since 1998, will not sail on Tuesday because its port engine is being replaced. The operator says the work should finish by the weekend, and tickets bought for Tuesday will be honoured on any crossing during the following fortnight. A replacement service by road bus will leave the quay every two hours, taking roughly fifty minutes longer than the boat. Regular commuters have been told to expect crowding on the first two departures."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-01-kestrel-ferry:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-04T01:48:29.278263+00:00",
+        "run_id": "sum-01-kestrel-ferry",
+        "trace_id": "sum-01-kestrel-ferry"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-01-kestrel-ferry in at most 35 words",
+        "plan": {
+          "goal": "summarise sum-01-kestrel-ferry in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 84,
+            "trace_id": "sum-01-kestrel-ferry",
+            "ts": "2026-09-04T01:48:23.620463Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-01-kestrel-ferry",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Kestrel",
+            "Marrow Sound",
+            "Tuesday"
+          ],
+          "summary": "The Kestrel ferry, crossing Marrow Sound since 1998, won't sail Tuesday due to port engine replacement; Tuesday tickets stay valid for a fortnight, and slower road buses will run every two hours meanwhile.",
+          "text": "The Kestrel, a small passenger ferry that has crossed Marrow Sound since 1998, will not sail on Tuesday because its port engine is being replaced. The operator says the work should finish by the weekend, and tickets bought for Tuesday will be honoured on any crossing during the following fortnight. A replacement service by road bus will leave the quay every two hours, taking roughly fifty minutes longer than the boat. Regular commuters have been told to expect crowding on the first two departures."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

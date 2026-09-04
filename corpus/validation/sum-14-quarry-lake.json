@@ -1,0 +1,351 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Ketley quarry lake"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "swimming"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "lifeguards"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "^(?:\\s*\\S+){1,40}\\s*$"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-14-quarry-lake",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-14-quarry-lake in at most 40 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-14-quarry-lake",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 40,
+      "must_mention": [
+        "Ketley quarry lake",
+        "swimming",
+        "lifeguards"
+      ],
+      "text": "Swimming will be allowed at Ketley quarry lake this summer for the first time, with lifeguards on duty between ten and six from June to September. The lake, which flooded when the quarry closed, is cold and deep, and the council has roped off a shallow area near the beach for swimmers and set a buoyed course for those who want to swim further. Entry is free but swimmers must register once at the kiosk. Parking on the quarry road will be limited to sixty cars."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "a7f0e7323e4cf452839f419f15603733bb411421be734b7d20f4ebc7f5f24fc5",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Ketley quarry lake, swimming, lifeguards.\n\nPassage:\nSwimming will be allowed at Ketley quarry lake this summer for the first time, with lifeguards on duty between ten and six from June to September. The lake, which flooded when the quarry closed, is cold and deep, and the council has roped off a shallow area near the beach for swimmers and set a buoyed course for those who want to swim further. Entry is free but swimmers must register once at the kiosk. Parking on the quarry road will be limited to sixty cars.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Swimming will be permitted at Ketley quarry lake this summer for the first time, with lifeguards on duty 10–6 from June to September, a roped shallow zone, a buoyed distance course, free registration, and parking capped at sixty cars.",
+        "input_tokens": 2,
+        "model": "claude-fable-5-1",
+        "output_tokens": 82,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:49:49.925126+00:00",
+  "split": "validation",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-14-quarry-lake:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-04T01:49:49.927580+00:00",
+        "run_id": "sum-14-quarry-lake",
+        "trace_id": "sum-14-quarry-lake"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-14-quarry-lake in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-14-quarry-lake",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Ketley quarry lake",
+            "swimming",
+            "lifeguards"
+          ],
+          "text": "Swimming will be allowed at Ketley quarry lake this summer for the first time, with lifeguards on duty between ten and six from June to September. The lake, which flooded when the quarry closed, is cold and deep, and the council has roped off a shallow area near the beach for swimmers and set a buoyed course for those who want to swim further. Entry is free but swimmers must register once at the kiosk. Parking on the quarry road will be limited to sixty cars."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-14-quarry-lake:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-04T01:49:49.927634+00:00",
+        "run_id": "sum-14-quarry-lake",
+        "trace_id": "sum-14-quarry-lake"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-14-quarry-lake in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 84,
+            "trace_id": "sum-14-quarry-lake",
+            "ts": "2026-09-04T01:49:49.927634Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Swimming will be permitted at Ketley quarry lake this summer for the first time, with lifeguards on duty 10–6 from June to September, a roped shallow zone, a buoyed distance course, free registration, and parking capped at sixty cars."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-14-quarry-lake in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-14-quarry-lake",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Ketley quarry lake",
+            "swimming",
+            "lifeguards"
+          ],
+          "text": "Swimming will be allowed at Ketley quarry lake this summer for the first time, with lifeguards on duty between ten and six from June to September. The lake, which flooded when the quarry closed, is cold and deep, and the council has roped off a shallow area near the beach for swimmers and set a buoyed course for those who want to swim further. Entry is free but swimmers must register once at the kiosk. Parking on the quarry road will be limited to sixty cars."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-14-quarry-lake:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-04T01:49:55.188392+00:00",
+        "run_id": "sum-14-quarry-lake",
+        "trace_id": "sum-14-quarry-lake"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-14-quarry-lake in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-14-quarry-lake in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 84,
+            "trace_id": "sum-14-quarry-lake",
+            "ts": "2026-09-04T01:49:49.927634Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-14-quarry-lake",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Ketley quarry lake",
+            "swimming",
+            "lifeguards"
+          ],
+          "summary": "Swimming will be permitted at Ketley quarry lake this summer for the first time, with lifeguards on duty 10–6 from June to September, a roped shallow zone, a buoyed distance course, free registration, and parking capped at sixty cars.",
+          "text": "Swimming will be allowed at Ketley quarry lake this summer for the first time, with lifeguards on duty between ten and six from June to September. The lake, which flooded when the quarry closed, is cold and deep, and the council has roped off a shallow area near the beach for swimmers and set a buoyed course for those who want to swim further. Entry is free but swimmers must register once at the kiosk. Parking on the quarry road will be limited to sixty cars."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-14-quarry-lake:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-04T01:49:55.188563+00:00",
+        "run_id": "sum-14-quarry-lake",
+        "trace_id": "sum-14-quarry-lake"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-14-quarry-lake in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-14-quarry-lake in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 84,
+            "trace_id": "sum-14-quarry-lake",
+            "ts": "2026-09-04T01:49:49.927634Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-14-quarry-lake",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Ketley quarry lake",
+            "swimming",
+            "lifeguards"
+          ],
+          "summary": "Swimming will be permitted at Ketley quarry lake this summer for the first time, with lifeguards on duty 10–6 from June to September, a roped shallow zone, a buoyed distance course, free registration, and parking capped at sixty cars.",
+          "text": "Swimming will be allowed at Ketley quarry lake this summer for the first time, with lifeguards on duty between ten and six from June to September. The lake, which flooded when the quarry closed, is cold and deep, and the council has roped off a shallow area near the beach for swimmers and set a buoyed course for those who want to swim further. Entry is free but swimmers must register once at the kiosk. Parking on the quarry road will be limited to sixty cars."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

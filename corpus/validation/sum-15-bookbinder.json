@@ -1,0 +1,351 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Marisa Venn"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "bookbinder"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "apprentice"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "^(?:\\s*\\S+){1,30}\\s*$"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-15-bookbinder",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-15-bookbinder in at most 30 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-15-bookbinder",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 30,
+      "must_mention": [
+        "Marisa Venn",
+        "bookbinder",
+        "apprentice"
+      ],
+      "text": "Marisa Venn, the last working bookbinder in the county, has taken on an apprentice for the first time in her thirty-year career. The apprentice will spend two years learning to sew text blocks, pare leather and tool lettering by hand before being allowed to take customer work. Venn's shop repairs family bibles and rebinds worn library books, and she says demand has risen as people bring in books that cannot be replaced. The apprenticeship is funded partly by a heritage crafts grant."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "c49ed751fbf3a26f0f88826d78519a28b8b6ae336dcd4c84ee818aee32805c17",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Marisa Venn, bookbinder, apprentice.\n\nPassage:\nMarisa Venn, the last working bookbinder in the county, has taken on an apprentice for the first time in her thirty-year career. The apprentice will spend two years learning to sew text blocks, pare leather and tool lettering by hand before being allowed to take customer work. Venn's shop repairs family bibles and rebinds worn library books, and she says demand has risen as people bring in books that cannot be replaced. The apprenticeship is funded partly by a heritage crafts grant.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Marisa Venn, the county's last working bookbinder, has taken her first apprentice in thirty years; the two-year, grant-funded apprenticeship teaches hand-binding as demand for irreplaceable-book repairs rises.",
+        "input_tokens": 2,
+        "model": "claude-fable-5-1",
+        "output_tokens": 78,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:49:55.191575+00:00",
+  "split": "validation",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-15-bookbinder:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-04T01:49:55.193914+00:00",
+        "run_id": "sum-15-bookbinder",
+        "trace_id": "sum-15-bookbinder"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-15-bookbinder in at most 30 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-15-bookbinder",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Marisa Venn",
+            "bookbinder",
+            "apprentice"
+          ],
+          "text": "Marisa Venn, the last working bookbinder in the county, has taken on an apprentice for the first time in her thirty-year career. The apprentice will spend two years learning to sew text blocks, pare leather and tool lettering by hand before being allowed to take customer work. Venn's shop repairs family bibles and rebinds worn library books, and she says demand has risen as people bring in books that cannot be replaced. The apprenticeship is funded partly by a heritage crafts grant."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-15-bookbinder:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-04T01:49:55.193969+00:00",
+        "run_id": "sum-15-bookbinder",
+        "trace_id": "sum-15-bookbinder"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-15-bookbinder in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 80,
+            "trace_id": "sum-15-bookbinder",
+            "ts": "2026-09-04T01:49:55.193969Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Marisa Venn, the county's last working bookbinder, has taken her first apprentice in thirty years; the two-year, grant-funded apprenticeship teaches hand-binding as demand for irreplaceable-book repairs rises."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-15-bookbinder in at most 30 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-15-bookbinder",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Marisa Venn",
+            "bookbinder",
+            "apprentice"
+          ],
+          "text": "Marisa Venn, the last working bookbinder in the county, has taken on an apprentice for the first time in her thirty-year career. The apprentice will spend two years learning to sew text blocks, pare leather and tool lettering by hand before being allowed to take customer work. Venn's shop repairs family bibles and rebinds worn library books, and she says demand has risen as people bring in books that cannot be replaced. The apprenticeship is funded partly by a heritage crafts grant."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-15-bookbinder:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-04T01:50:00.591673+00:00",
+        "run_id": "sum-15-bookbinder",
+        "trace_id": "sum-15-bookbinder"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-15-bookbinder in at most 30 words",
+        "plan": {
+          "goal": "summarise sum-15-bookbinder in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 80,
+            "trace_id": "sum-15-bookbinder",
+            "ts": "2026-09-04T01:49:55.193969Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-15-bookbinder",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Marisa Venn",
+            "bookbinder",
+            "apprentice"
+          ],
+          "summary": "Marisa Venn, the county's last working bookbinder, has taken her first apprentice in thirty years; the two-year, grant-funded apprenticeship teaches hand-binding as demand for irreplaceable-book repairs rises.",
+          "text": "Marisa Venn, the last working bookbinder in the county, has taken on an apprentice for the first time in her thirty-year career. The apprentice will spend two years learning to sew text blocks, pare leather and tool lettering by hand before being allowed to take customer work. Venn's shop repairs family bibles and rebinds worn library books, and she says demand has risen as people bring in books that cannot be replaced. The apprenticeship is funded partly by a heritage crafts grant."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-15-bookbinder:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-04T01:50:00.591845+00:00",
+        "run_id": "sum-15-bookbinder",
+        "trace_id": "sum-15-bookbinder"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-15-bookbinder in at most 30 words",
+        "plan": {
+          "goal": "summarise sum-15-bookbinder in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 80,
+            "trace_id": "sum-15-bookbinder",
+            "ts": "2026-09-04T01:49:55.193969Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-15-bookbinder",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Marisa Venn",
+            "bookbinder",
+            "apprentice"
+          ],
+          "summary": "Marisa Venn, the county's last working bookbinder, has taken her first apprentice in thirty years; the two-year, grant-funded apprenticeship teaches hand-binding as demand for irreplaceable-book repairs rises.",
+          "text": "Marisa Venn, the last working bookbinder in the county, has taken on an apprentice for the first time in her thirty-year career. The apprentice will spend two years learning to sew text blocks, pare leather and tool lettering by hand before being allowed to take customer work. Venn's shop repairs family bibles and rebinds worn library books, and she says demand has risen as people bring in books that cannot be replaced. The apprenticeship is funded partly by a heritage crafts grant."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

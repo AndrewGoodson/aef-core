@@ -1,0 +1,351 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "Corran tram depot"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "mural"
+    },
+    {
+      "op": "contains",
+      "path": "working_memory.summary",
+      "value": "1930s"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "^(?:\\s*\\S+){1,35}\\s*$"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-19-tram-depot",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-19-tram-depot in at most 35 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-19-tram-depot",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 35,
+      "must_mention": [
+        "Corran tram depot",
+        "mural",
+        "1930s"
+      ],
+      "text": "The disused Corran tram depot is to become a covered market, with the 1930s tiled mural of the tram route on the end wall kept and restored as its centrepiece. The building has stood empty since the last tram ran in 1954, apart from a spell as a bus garage. Traders will rent stalls by the day, and a bakery and a fishmonger have already signed up. The roof will be replaced with glass to bring light into the hall. Work starts in the new year."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "89bfa0052ef0e7514b7ebe3db13a71c9b26e50f9d3ee91f21cbf754912039c47",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 35 words.\nThe summary must mention each of these terms, spelled exactly as given: Corran tram depot, mural, 1930s.\n\nPassage:\nThe disused Corran tram depot is to become a covered market, with the 1930s tiled mural of the tram route on the end wall kept and restored as its centrepiece. The building has stood empty since the last tram ran in 1954, apart from a spell as a bus garage. Traders will rent stalls by the day, and a bakery and a fishmonger have already signed up. The roof will be replaced with glass to bring light into the hall. Work starts in the new year.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Disused Corran tram depot, empty since 1954, becomes covered market; 1930s tiled mural of tram route restored as centrepiece, glass roof added, day-rented stalls with bakery and fishmonger signed, work starts new year.",
+        "input_tokens": 2,
+        "model": "claude-fable-5-1",
+        "output_tokens": 81,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:50:16.480595+00:00",
+  "split": "holdout",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-19-tram-depot:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-04T01:50:16.483176+00:00",
+        "run_id": "sum-19-tram-depot",
+        "trace_id": "sum-19-tram-depot"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-19-tram-depot in at most 35 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-19-tram-depot",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Corran tram depot",
+            "mural",
+            "1930s"
+          ],
+          "text": "The disused Corran tram depot is to become a covered market, with the 1930s tiled mural of the tram route on the end wall kept and restored as its centrepiece. The building has stood empty since the last tram ran in 1954, apart from a spell as a bus garage. Traders will rent stalls by the day, and a bakery and a fishmonger have already signed up. The roof will be replaced with glass to bring light into the hall. Work starts in the new year."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-19-tram-depot:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-04T01:50:16.483222+00:00",
+        "run_id": "sum-19-tram-depot",
+        "trace_id": "sum-19-tram-depot"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-19-tram-depot in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 83,
+            "trace_id": "sum-19-tram-depot",
+            "ts": "2026-09-04T01:50:16.483222Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Disused Corran tram depot, empty since 1954, becomes covered market; 1930s tiled mural of tram route restored as centrepiece, glass roof added, day-rented stalls with bakery and fishmonger signed, work starts new year."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-19-tram-depot in at most 35 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-19-tram-depot",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Corran tram depot",
+            "mural",
+            "1930s"
+          ],
+          "text": "The disused Corran tram depot is to become a covered market, with the 1930s tiled mural of the tram route on the end wall kept and restored as its centrepiece. The building has stood empty since the last tram ran in 1954, apart from a spell as a bus garage. Traders will rent stalls by the day, and a bakery and a fishmonger have already signed up. The roof will be replaced with glass to bring light into the hall. Work starts in the new year."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-19-tram-depot:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-04T01:50:22.467829+00:00",
+        "run_id": "sum-19-tram-depot",
+        "trace_id": "sum-19-tram-depot"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-19-tram-depot in at most 35 words",
+        "plan": {
+          "goal": "summarise sum-19-tram-depot in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 83,
+            "trace_id": "sum-19-tram-depot",
+            "ts": "2026-09-04T01:50:16.483222Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-19-tram-depot",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Corran tram depot",
+            "mural",
+            "1930s"
+          ],
+          "summary": "Disused Corran tram depot, empty since 1954, becomes covered market; 1930s tiled mural of tram route restored as centrepiece, glass roof added, day-rented stalls with bakery and fishmonger signed, work starts new year.",
+          "text": "The disused Corran tram depot is to become a covered market, with the 1930s tiled mural of the tram route on the end wall kept and restored as its centrepiece. The building has stood empty since the last tram ran in 1954, apart from a spell as a bus garage. Traders will rent stalls by the day, and a bakery and a fishmonger have already signed up. The roof will be replaced with glass to bring light into the hall. Work starts in the new year."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-19-tram-depot:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-04T01:50:22.468012+00:00",
+        "run_id": "sum-19-tram-depot",
+        "trace_id": "sum-19-tram-depot"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-19-tram-depot in at most 35 words",
+        "plan": {
+          "goal": "summarise sum-19-tram-depot in at most 35 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-fable-5-1",
+            "node_id": "draft",
+            "token_cost": 83,
+            "trace_id": "sum-19-tram-depot",
+            "ts": "2026-09-04T01:50:16.483222Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-19-tram-depot",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 35,
+          "must_mention": [
+            "Corran tram depot",
+            "mural",
+            "1930s"
+          ],
+          "summary": "Disused Corran tram depot, empty since 1954, becomes covered market; 1930s tiled mural of tram route restored as centrepiece, glass roof added, day-rented stalls with bakery and fishmonger signed, work starts new year.",
+          "text": "The disused Corran tram depot is to become a covered market, with the 1930s tiled mural of the tram route on the end wall kept and restored as its centrepiece. The building has stood empty since the last tram ran in 1954, apart from a spell as a bus garage. Traders will rent stalls by the day, and a bakery and a fishmonger have already signed up. The roof will be replaced with glass to bring light into the hall. Work starts in the new year."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}
