@@ -1108,3 +1108,142 @@ advisory and only fires when `aef_migrated.py` exists; a hand-written graph
 that builds its own client is caught by `aef loop doctor` and not by
 `aef doctor`. And nothing here has run against a repo nobody wrote to be
 scanned, which is K5's whole point.
+
+---
+
+## K3 — Prove an adopted repo can gate a candidate (2026-09-04)
+
+**Branch:** `improve/k3-adopted-gate`, off `c2d14b1` (K1 + K2 merged).
+**Rubric claim: none.** `READY_LOOP.md`'s definition of done is four
+command-backed statements. K3 makes statement **1** answerable — and the
+answer is *"not yet, and here is exactly what is missing"* — and sharpens
+statement **3**: every obligation green is **necessary and not sufficient**
+for a candidate, because the proposer's own inputs (a tunable constant,
+durable failure memory) are not obligations at all.
+
+**Reproduce (RUN).** `tests/cli/test_adoption_sequence.py` drove a fresh
+adopted repo to five green obligations and a blessed baseline and stopped.
+Its one `aef loop cycle` asserted `"ledger verified" in cycle.stdout` — which
+the cycle prints *before* it has done anything — and passed no `--entrypoint`,
+so G2/G3 would have refused for lack of evidence even had a candidate
+existed. `grep -rn "run.proposed" tests/` finds four call sites and all of
+them are in-process `cycle()` runs against `agents/flaky` and `agents/demo`,
+fixtures this repo wrote. Running the whole documented sequence on a real
+adopted+migrated raw-SDK repo:
+
+```
+aef migrate --dir .            1 routed through Services.model_provider
+aef loop bootstrap aef_migrated   -> ModelProviderError: cassette miss ...
+                                     no live provider to fall through to   exit=1
+aef loop bless --agent-path aef_migrated.py   -> "blessed aef_migrated.py"  exit=0
+aef loop cycle ... --entrypoint aef_migrated:build_graph
+    ledger verified: 1 entr(ies)
+    no admissible failure memory: no candidate this cycle                  exit=0
+```
+
+**Exit 0, having done nothing** — READY_LOOP's "if the cycle cannot produce a
+candidate, that is the finding" clause, confirmed.
+
+**The minimum, measured by removal.** One thing taken out of a working
+sequence at a time, each run, each quoted:
+
+```
+no module-level numeric constant  the proposer produced nothing from the
+                                  available evidence                        exit=0
+no route to reflect (returns END) no admissible failure memory              exit=0
+no failing aef run --memory       no admissible failure memory              exit=0
+graph at the repo root            gated: reject — G0 rejected it: candidate
+                                  touches paths outside Zone A              exit=1
+```
+
+Plus: **a model-calling graph cannot get a first corpus without a
+credential.** The cassette the gates replay from does not exist until
+something makes the call once, so bootstrap on K1's routed node exits 1.
+That is a cost, not a gap to document around.
+
+**Expectation, and it was wrong.** I expected the blocker to be recorded
+failure memory — READY_LOOP's guess and mine. Necessary, not sufficient:
+**Zone A placement** mattered equally and was on nobody's list. `aef migrate`
+writes `aef_migrated.py` to the repo root, which is the one place in an
+adopted repo the loop is structurally forbidden to operate, and nothing says
+so. Two of the four blockers are properties of *where and how the code is
+written*, not of what the adopter has recorded.
+
+**Change.** `tests/cli/test_adoption_sequence.py`:
+`test_an_adopted_repo_gates_a_candidate_end_to_end` (slow — 35 scenario
+executions; **no credential, zero model calls**) runs adopt → migrate →
+*bootstrap the migrated graph and watch it refuse* → the minimum, hand-written
+with the four measured refusals in its comment → bootstrap → **the tripwire
+line bootstrap printed, `shlex.split` and run verbatim** → a failing
+`aef run --memory` → bless → doctor → cycle. It asserts against
+`ledger.jsonl`, not the CLI's summary: a printed string proves a string was
+printed. `aef/cli/adopt_loop.py`: the measured minimum now **leads** the
+generated `LOOP.md`, because each item's failure mode is exit 0, which reads
+as success — an obligation whose failure mode is a green light cannot live in
+step five. A second test pins that ordering.
+
+**Measurement.**
+
+```
+ledger.jsonl, gated entry:
+  evidence  7 corpus pass(es) (35 scenario execution(s)): 1 candidate +
+            1 incumbent + 5 random control(s); gating all 5 gated scenario(s)
+  G0 pass   1 file(s), 2 line(s), all Zone A
+  G1 pass   1 build command(s) succeeded against the merged workspace
+  G4 pass   no owner-only safety metadata declared by the candidate
+  G5 pass   drift 0.024/0.500 from the blessed baseline
+  G2 pass   5 scenario(s) re-executed; every previously-passing one still passes
+  G3 fail   candidate does not beat the p95 of the random control cohort
+  grounded_in  <record id> (memory): 1 error(s) recorded; errors[0]: gave up
+
+mutations (production value perturbed, run, reverted; per-file
+`git diff --exit-code` clean; 6 tests in the file):
+  M1 the proposer returns nothing                  1 failed
+  M2 G3 built with verdict=None (no-cohort)        1 failed
+  M3 the cohort build raises                       1 failed
+  M4 aef run --memory uses an in-memory store      1 failed
+  M5 migrate never emits the routed form           1 failed
+  M6 the LOOP.md minimum moved below the six       1 failed
+  M7 the printed tripwire line drops --expected    1 failed
+
+pytest -q          1877 passed, 1 skipped (collected 1876 -> 1878; +2, none removed)
+mypy aef examples  129 files clean
+ruff check .       clean
+ruff format --check aef tests examples   239 files already formatted
+calls made: 0
+```
+
+**Verdict.** An adopted repo *can* gate a candidate, and the verdict is a
+**rejection** — G3 on a real cohort comparison, which is the gate working.
+The test pins the *absence* of G3's `no null-hypothesis control cohort`
+refusal rather than pinning `pass`, because a test that demanded an
+acceptance could be satisfied by weakening G3.
+
+**Two defects found, REPORTED not fixed** (both outside K3's file scope):
+
+1. **`aef loop bless` names a file it did not archive.** `bless ...
+   --agent-path aef_migrated.py` printed `blessed aef_migrated.py as baseline
+   v1` and the archive held exactly one file: `agents/README.md`. It checks
+   `path_exists_at(ref, agent_path)`, then archives the Zone A tree — two
+   different questions, and the message names the first while doing the
+   second. The `blessed baseline` obligation goes green on evidence unrelated
+   to the agent. (`aef/harness/preflight.py:bless`, `aef/cli/loop.py:cmd_bless`.)
+2. **`aef adopt` writes no `.gitignore`, and committed bytecode is charged as
+   drift.** An ordinary `git add -A` commits `agents/**/__pycache__/*.pyc`
+   into **Zone A**; those files did not exist when the baseline was blessed,
+   so G5 charges them — measured **0.4675 of a 0.500 budget** for a one-line
+   candidate against **0.0238** without them, a 20x over-report that would
+   reject the adopter's second candidate for drift it did not cause. ADR
+   0074 made both sides read from git; nothing stops an adopting repo from
+   having the bytecode *in* git. The new fixture writes the `.gitignore`
+   itself, with the numbers in a comment, and `LOOP.md` now says to add one
+   before blessing. (`aef/cli/adopt.py`.)
+
+**Deliberately left.** The measured minimum is the minimum for **one agent
+shape** — one work node, two integer constants, a reflect node. A graph that
+fails by raising lands in `errored` rather than `failed` (ADR 0138 already
+flags it) and would need `add_bounded_retry` to apply; a graph with one small
+integer constant may not yield five distinct control mutations and would fail
+cohort generation with a message none of this quotes. Neither was run. And
+the adoptee is still a fixture this repo authored — smaller and less helpful
+than before, but authored. K5 is the only thing that closes that.
