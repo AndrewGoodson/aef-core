@@ -1827,3 +1827,89 @@ exception. The generated `LOOP.md` and ADR 0139 still say bootstrap cannot
 supply the failing run's memory; that sentence is now false and belongs to
 L6's first-day document, not to this file. And nothing here ran against a repo
 nobody wrote to be scanned.
+
+---
+
+## L6 — the first-day document, written from a terminal (ADR 0148)
+
+**Planted.** `FIRST_DAY.md`, shipped by `aef adopt` under the never-overwrite
+rule and added to `tests/test_prompt_surface.py`'s surface. It is the only
+document in the kit that answers **when**: `CLAUDE.md`, `AGENT_INTEGRATION.md`,
+`LOOP.md` and `AUTONOMY.md` each describe a part, and none of them said "today,
+in this order, and here is what each step costs". Seven sections — what `adopt`
+gives and explicitly does not; `migrate`'s two forms and **if your function
+keeps its own client, the gates cannot replay it**; `bootstrap` with `--memory`
+and `--config`; the owner's tripwire line; `bless` + `doctor` and that the six
+obligations are **advisory, not gating**; `cycle` and the one requirement still
+the adopter's; what still needs a person.
+
+**The rule, and why.** Every command in it was **RUN in a scratch repo and its
+real output pasted**. Three documents in this scaffold have told adopters
+things that were false, and every one was written from the source: `LOOP.md`
+said adopt writes no `.gitignore` five hours after it did; ADR 0139 concluded a
+model-calling graph "cannot get its first corpus" while `--config` sat in the
+parser; the obligation's fix string sent adopters round a loop.
+
+**Nine already-false claims, each closed by running the command.**
+
+| Where | Ran |
+|---|---|
+| root `AGENT_INTEGRATION.md`: adopt "writes six never-overwrite files" | it wrote **16** (17 now) |
+| generated `AGENT_INTEGRATION.md`: "the loop to **five** green", `model calls visible` missing from the list | `Loop readiness — 6 things you must supply` |
+| same: "with obligations unmet the gates refuse for lack of evidence" | `ADVISORY — this command does not refuse on them`, and the cycle gated a candidate |
+| `LOOP.md` item 4: "`aef loop bootstrap` cannot do this for you" | `bootstrap --memory` wrote 4 records; without it, no file and `no admissible failure memory`, **exit 0** |
+| `LOOP.md`'s sequence: `aef loop bootstrap <m> --corpus corpus --inputs inputs.json` | **exit 1** — one of `--state`/`--no-loop-state` is required |
+| `LOOP.md`: the model-calling paragraph never named `--config` | the command's own error names it; the document did not |
+| `LOOP.md`: "work down its output until every line is OK" | two obligations cannot be green on day one |
+| `aef.yaml` + `AGENT_INTEGRATION.md`: `--config` reaches run/gate/cycle | and `bootstrap`, since ADR 0145 |
+| generated `aef_adapter.py`: `services or Services()` | `ServiceNotConfiguredError: service 'critic'` on the documented path |
+
+The last is the seam this wave opened and nobody closed: L2 wired
+`reflect -> consolidate` into the graph the checklist tells the adopter to
+point the shim at, and the shim was the only bare `Services()` that ships.
+Fixed to `agent_services()`; the regression test **executes** the shim, because
+an assertion that the source names `agent_services` passes on a shim that
+imports it and never calls it.
+
+**Measured, and it changes what the minimum means.** ADR 0139 measured
+requirement 2 (a module-level numeric constant) on a hand-written agent and got
+`the proposer produced nothing from the available evidence`. Re-run on
+**migrate's own generated graph** — the shape adopters now have — a candidate
+**is** proposed (`add_bounded_retry` applies to the failing node's body and
+writes its own `RETRY_ATTEMPTS = 3`), and the **control cohort** is what
+collapses: `cannot build a control cohort ...: no module-level numeric
+constants to mutate, so there is no null hypothesis to draw from`. Same
+requirement, different reason, different message. So `FIRST_DAY.md` says the
+constant is needed by the cohort at least as much as by the proposer, and that
+whether `--proposer llm` needs one is **unmeasured and blocked on quota** (L4)
+— because whatever proposes the candidate, the thing that judges it is built by
+mutating constants.
+
+**Mutation. 10 planted, 10 caught — after three MISSED on the first pass.**
+M4, M6 and M7 each perturbed a heading while the asserted token survived
+elsewhere in the document (`--config` in another paragraph, "the gates cannot
+replay it" in prose, "unmeasured" in the preamble). Three tests were pinning
+**tokens rather than claims** — the exact way a documentation test goes green
+on a document that no longer says the thing. Strengthened to the load-bearing
+sentence; then 10/10. Every restore was from a byte-identical backup with its
+SHA-1 checked before and after.
+
+**Green bar.** `pytest -q` **1985 passed, 1 skipped** (collected 1976 → 1986;
+**+10, none removed**). `mypy aef examples` 129 files clean. `ruff check .`
+clean. `ruff format --check aef tests examples` 239 formatted. **No rubric
+dimension moves — the score stays 86. Zero model calls.**
+`tests/cli/test_adopt.py`'s pinned written-file set and idempotency counts went
+16 → 17 **deliberately**, with the reason beside them.
+
+**A defect found and not fixed** (`aef/harness/loop.py`, outside this
+increment's files): when the control cohort cannot be built, the cycle's
+summary line reads `G2 rejected it: gate raised TrustBoundaryError: scratch
+destination .../workspace must be empty` — a scratch-directory red herring for
+a missing constant. The real reason is in the ledger's `evidence` note.
+Reproduced twice, on a copied repo and on one built from `git init` upward.
+
+**Deliberately left.** The live `--config` recording pass has still never been
+executed by anyone — no quota — and `FIRST_DAY.md` says that in those words
+rather than implying otherwise. Definition-of-done statement 1 is false by
+exactly one item, the module-level constant, which is a node's semantics and
+not plumbing. And nothing here ran against a repo this project did not write.

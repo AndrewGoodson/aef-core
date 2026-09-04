@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from aef.cli.adopt import render_autonomy_md, render_claude_md
+from aef.cli.adopt_loop import render_first_day_md
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -68,6 +69,12 @@ def _surface() -> dict[str, str]:
     files = {name: (REPO / name).read_text() for name in PROMPT_SURFACE}
     files["<adopt: CLAUDE.md>"] = render_claude_md("none", "repo")
     files["<adopt: AUTONOMY.md>"] = render_autonomy_md("repo")
+    # FIRST_DAY.md (ADR 0148) exists only in adopted repos, so it enters the
+    # surface as its renderer rather than as a path — the same way the two
+    # above do. It is a prompt surface and not merely a document: an adopting
+    # coding agent is handed it as the task, so text the model guide says to
+    # remove is as costly here as in CLAUDE.md.
+    files["<adopt: FIRST_DAY.md>"] = render_first_day_md("repo")
     return files
 
 
@@ -150,7 +157,10 @@ def test_no_prompt_surface_carries_text_the_guide_removed(name: str) -> None:
         assert not hits, f"{name}: {label} text is back: {hits[:2]}"
 
 
-@pytest.mark.parametrize("name", ["CLAUDE.md", "<adopt: CLAUDE.md>", "<adopt: AUTONOMY.md>"])
+@pytest.mark.parametrize(
+    "name",
+    ["CLAUDE.md", "<adopt: CLAUDE.md>", "<adopt: AUTONOMY.md>", "<adopt: FIRST_DAY.md>"],
+)
 def test_verification_instructions_were_kept(name: str) -> None:
     text = _surface()[name].lower()
     for keep in KEEP:

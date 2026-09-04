@@ -16,6 +16,7 @@ from pathlib import Path
 from aef.cli.adopt_loop import (
     render_agents_zone_readme,
     render_corpus_readme,
+    render_first_day_md,
     render_loop_gate_workflow,
     render_loop_md,
     render_loop_monitor_workflow,
@@ -202,7 +203,9 @@ See the `aef-core` package's `aef/kernel/contracts.py` for the exact types.
 ## Migration checklist
 
 See `AEF_MIGRATION_CHECKLIST.md` (generated alongside this file) for the
-prioritized, ordered list of concrete next steps.
+prioritized, ordered list of concrete next steps, and **`FIRST_DAY.md`** for
+the command sequence that follows it — `aef migrate` through `aef loop cycle`,
+in order, with the real output of every step and what each one costs you.
 
 ## Config
 
@@ -357,6 +360,14 @@ def render_migration_checklist(framework: Framework) -> list[str]:
     tail = [
         "Add an Evaluator (start with aef.services.eval.rule_based.RuleBasedEvaluator).",
         "Run `aef doctor` to confirm the config and imports are wired correctly.",
+        # The checklist used to end here, at a repo that can run one agent and
+        # nothing else. FIRST_DAY.md is the rest of the day, in order, with
+        # the real output of every command in it (ADR 0148).
+        "Then read `FIRST_DAY.md` and run the sequence it documents: `aef migrate` -> "
+        "`aef loop bootstrap --state <dir> --memory <file>` -> the tripwire line "
+        "bootstrap prints -> `aef loop bless` -> `aef loop doctor` -> `aef loop cycle`. "
+        "It is the only document that says what each step costs you and which failures "
+        "exit 0 having done nothing.",
     ]
     return common + by_framework[framework] + tail
 
@@ -370,6 +381,7 @@ requiring a rewrite. Replace the TODOs below with your actual entrypoint.
 from __future__ import annotations
 
 from aef.kernel import END, Context, Graph, GraphExecutor, Node, Route, Services
+from aef.services.runtime import agent_services
 from aef.state import AEFState, StateDelta
 
 
@@ -405,7 +417,18 @@ def run_via_aef(objective: str, *, services: Services | None = None) -> AEFState
     import uuid
 
     state = AEFState(run_id=str(uuid.uuid4()), agent_id="{repo_name}", objective=objective)
-    executor = GraphExecutor(build_graph().compile(), services or Services())
+    # `agent_services()`, NOT a bare `Services()`. A bare container configures
+    # nothing, so the first node that calls `services.require_critic()` raises
+    # `ServiceNotConfiguredError` — and the graph `aef migrate` generates is
+    # wired `<call site> -> reflect -> consolidate -> END`, whose reflect node
+    # requires critic/judge/memory and whose consolidate node requires
+    # knowledge. So the documented next step (point this shim at your migrated
+    # graph) raised on a bare container. `agent_services()` supplies working
+    # defaults for all of them and is the same factory `aef run`, `aef loop
+    # bootstrap` and every gate re-execution use, so this path and those
+    # cannot silently diverge. `model_provider` stays None by default: pass
+    # `services=` when your nodes call a model.
+    executor = GraphExecutor(build_graph().compile(), services or agent_services())
     result = executor.run(state)
     return result.final_state
 '''
@@ -427,7 +450,9 @@ def render_aef_yaml(repo_name: str) -> str:
 #     authorise anything. Names are the DENY axis: `policies.forbid`.
 #   - Empty `tools.allow` allows nothing. That is deny-by-default, on purpose.
 #   - Pass `--config aef.yaml` to `aef run`, and `--config` to `aef loop
-#     gate`/`cycle`, or the engine falls back to its own deny-by-default.
+#     gate`/`cycle`/`bootstrap`, or the engine falls back to its own
+#     deny-by-default. On `bootstrap` it is also what lets a model-calling
+#     graph record its first corpus (aef-core ADR 0145).
 #     The gate reads this file FROM THE BASE REF, so editing it on a
 #     candidate branch cannot widen the rules that candidate is judged by.
 #   - `objectives` is the default objective for `aef run --config`; an
@@ -478,6 +503,12 @@ in a repo adopting **aef-core**, a repo-agnostic Agent Operating System
 scaffold. This file is self-contained:
 read it top to bottom and you can install aef-core, wire your first node, and
 safely run the self-improving loop with no other context.
+
+**If you want the sequence rather than the reference, read `FIRST_DAY.md`
+first** (generated alongside this file). It runs `adopt` -> `migrate` ->
+`bootstrap` -> `bless` -> `doctor` -> `cycle` in order, with the real output
+of every command, and it names the two `aef loop bootstrap` flags nothing
+else here mentions.
 
 ## What you inherit (and what you don't)
 aef-core gives every agent, for free: a deterministic graph kernel, shared
@@ -560,13 +591,21 @@ gated by design and stays off.
   writes are atomic and resume recovers past a torn checkpoint; HITL pauses
   are always resumable.
 
-## Getting the loop to five green — run this as your task
+## Getting the loop's obligations green — run this as your task
 
-This is the whole job, in order. `aef loop doctor` reports five obligations
-and prints the exact command that fixes each; work down its output until
-every line is OK. Do not skip ahead to running the loop — with obligations
-unmet the gates refuse for lack of evidence, which is correct behaviour and
-reads as "broken".
+`aef loop doctor` reports **six** obligations and prints the exact command
+that fixes each. Work down its output.
+
+**They are ADVISORY, not gating** (aef-core ADR 0141), and an earlier version
+of this text said otherwise. `aef loop doctor` is the only thing that reads
+them: `aef loop cycle` and `aef loop gate` run whatever it says, printing the
+unmet ones first. Three enforce themselves later and correctly — G2/G3 refuse
+an empty corpus, G5 refuses without a blessed baseline, and a graph nothing
+routes to reflect records no failure memory, so the proposer never proposes —
+and the other three (observations, halt channel, model calls visible) stop
+nothing at all, which is exactly why they are listed. Obligation 3 cannot be
+green on day one: it needs production runs you have not made yet. Do not wait
+for six before running a cycle.
 
 ```
 aef loop doctor --repo . --state ~/.aef-loop-state --corpus corpus \\
@@ -612,6 +651,20 @@ aef loop doctor --repo . --state ~/.aef-loop-state --corpus corpus \\
    aef loop bless --repo . --state ~/.aef-loop-state \\
                   --agent-path agents/<yours>/graph.py
    ```
+   A baseline is the whole Zone A tree as committed, and `bless` refuses when
+   `--agent-path` is not inside it rather than reporting a baseline that does
+   not contain your agent (aef-core ADR 0147).
+
+6. **MODEL CALLS VISIBLE.** The only obligation you cannot discover by being
+   stuck: a node that builds its own `anthropic.Anthropic()` runs fine and
+   `aef doctor` is green, and the bill arrives at gate time. A call the
+   harness never saw is not policy-checked, not covered by the fallback
+   chain, and captures no `RecordedCall` — so the gates replay nothing and
+   either reach your vendor live or score the candidate 0. `aef migrate`
+   routes what it can route losslessly; where it refuses, `aef loop doctor`
+   names the two hand edits (route the body, AND delete the import that keeps
+   your module in the reachable set). `aef migrate --force` does not fix it
+   and loops. See `FIRST_DAY.md` section 2.
 
 ### Then verify by RUNNING, not by reading
 
@@ -640,8 +693,11 @@ Finally, edit `.github/workflows/loop-gate.yml` and set `AEF_ENTRYPOINT` and
 ### Know what is and is not wired
 `model_provider`, `policies` and `tools.allow` reach a run — but only when you
 pass `--config aef.yaml` to `aef run`, and `--config` to `aef loop
-gate`/`cycle`. Without the flag the engine falls back to its own
-deny-by-default, which denies every tool call.
+gate`/`cycle`/`bootstrap`. Without the flag the engine falls back to its own
+deny-by-default, which denies every tool call. On `bootstrap` it is also the
+only way a model-calling graph can record its first corpus at all: the
+cassette the gates replay from does not exist until something makes the call
+once (aef-core ADR 0145).
 
 `tools.allow` is a list of **scopes**, not tool names; `policies.forbid` is
 the name-based deny axis. An empty `tools.allow` allows nothing, on purpose.
@@ -940,6 +996,11 @@ def run_adopt(target_dir: Path) -> AdoptResult:
     # empty corpus sees every one rejected, and that reads as "the loop is
     # broken" rather than "the loop has nothing to judge against".
     _write_if_absent("LOOP.md", render_loop_md(repo_name))
+    # The sequence, in the order an adopter meets it (ADR 0148). Separate from
+    # LOOP.md deliberately: LOOP.md says what the loop NEEDS, and needed a
+    # reader who already knew when to run each command. Every command in it
+    # was executed against a fresh adoption and its real output pasted.
+    _write_if_absent("FIRST_DAY.md", render_first_day_md(repo_name))
     _write_if_absent("agents/README.md", render_agents_zone_readme(repo_name))
     _write_if_absent("corpus/README.md", render_corpus_readme(repo_name))
     _write_if_absent(".github/workflows/loop-gate.yml", render_loop_gate_workflow(repo_name))
