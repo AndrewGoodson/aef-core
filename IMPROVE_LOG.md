@@ -309,3 +309,47 @@ Also closes MERGE_READY_LOOP Track A1.
 
 **Deliberately left.** Ranking on helpful/harmful — needs a rig where a lesson
 is harmful and NOT live. `examples/hello_agent` has no retrieve node yet.
+
+---
+
+## I5 — Redact the input, then re-execute (2026-09-03)
+
+**Branch:** `improve/i5-redaction`, off `main` (`1b74c65`).
+**Rubric claim:** dimension 7, up to +5. Total before: 72.
+
+**Reproduce (RUN).** `harvest` wrote a real run's objective and working memory
+into a corpus that lives in git, verbatim. The control test
+(`test_redaction_off_is_explicit_and_writes_the_raw_run`) shows a planted
+email reaching disk with the policy off.
+
+**Expectation.** `RedactionPolicy` (emails, API keys, bearer, AWS keys, long
+opaque strings; secret-shaped working-memory keys dropped); harvest redacts
+the INPUT, re-executes, admits only if node path / failing nodes / plan status
+are unchanged, scans the output scenario before writing; on by default.
+
+**Measurement.**
+
+```
+planted email in objective + token in working_memory -> promoted; neither in any corpus file;
+  stored trace is the re-executed one; notes: "2 redaction(s) applied"
+graph that fails only when the token is present -> rejected_redaction_changed_behaviour, nothing written
+graph that emits the token from its own code   -> rejected_unredactable (output scan), nothing written
+redaction=None                                  -> email reaches disk (the control for the scan)
+every default pattern matched by a sample; ordinary text untouched
+
+mutations (each -> tests fail, reverted):
+  M29 no output scan                 1 failed
+  M30 behaviour change not checked   1 failed
+  M31 secret keys not dropped        2 failed
+  M32 keep the unredacted trace      1 failed
+
+pytest -q          1701 passed (from 1691; +10, none removed)
+mypy aef examples  125 files clean
+ruff check / format   clean
+```
+
+**Verdict.** Real-signal ingestion is safe to point at a tenant. It has not
+been pointed at one. Dimension 7: 2 → **5**. Total: **72 → 75**.
+
+**Deliberately left.** The remaining five points of dimension 7 are the
+owner decision the trust case names (live traffic, a real tenant), not code.
