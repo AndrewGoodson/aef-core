@@ -4526,3 +4526,137 @@ suite-fatal).
   two other workers this wave.
 - `harness/loop.py`'s cohort path builds `precomputed` outcomes and drops the
   failure strings again, so a cohort-run rejection still cannot say why.
+
+
+---
+
+## Fix wave J3 — a provider property is not the agent's failure (ADR 0179)
+
+**Branch:** `fix/j3-provider-fact-not-failure`, off `db2987a`.
+**Scope:** findings R3, R4, R6, R7 of the third seam hunt.
+**Rubric claim: none. No dimension moves.** Zero live model calls; no arm was
+scored. What R6 changes about dim 2's wording is at the end.
+
+### Expectation, stated before the work
+
+Four findings were handed over as suspected. The expectation was that all four
+would reproduce, that R3 and R4 would turn out to be one fix in two files, and
+that R6 would be the ADR 0155 shape one level out — a wire closed in this
+repo's own fixture and open on every repo the scaffold generates. Three of
+those held; the fourth (R7) was smaller and more embarrassing than expected,
+because the test named for the property could not see the property.
+
+### Reproduced, each by RUNNING
+
+**R3.** A synthetic adopter repo, the real `run_migrate`, an `aef.yaml` with
+`impl: command` and no `{system}` slot (≡ ADR 0169's `codex` row), a stub CLI
+that answers correctly, three `run_graph_module` calls against one durable
+memory file:
+
+```
+  answer          : PARIS
+  containment     : {'provider': 'command', 'isolation': ['user_turn_persona'],
+                     'persona_role': 'user'}
+  errors          : ['prompt_agent.persona_in_user_turn']
+  task_completion : 0.0          (x3)
+failure records in memory: 3
+```
+
+then `RuleBasedPromptProposer`:
+
+```
+reason: appended a bullet for 'failure:prompt_agent'
+- <!-- aef sig=failure:prompt_agent runs=3 --> 1 error(s) recorded; 0/0 tool
+  call(s) failed. errors[0]: {'node_id': 'prompt_agent', 'type':
+  'prompt_agent.persona_in_user_turn', 'provider': 'command', …
+```
+
+**R4.** Real `ClaudeCodeProvider` + `CodexProvider`, no calls:
+`fallback role=unknown isolation=[]`; through the node with the backup
+answering, `errors: NONE`.
+
+**R7.** Identical payloads through both real adapters:
+`ClaudeCodeProvider -> usage_match`, `GrokProvider -> heuristic`.
+
+**R6.** Real `run_migrate` then three real runs: `generated graph nodes:
+['consolidate', 'prompt_agent', 'reflect']`, `retrieved_context=[]` on all
+three, `retrieved_signatures: []` on every record, and
+`entry sig=failure:prompt_agent occurrences=3 helpful=0 harmful=0` — a lesson
+formed and seen by nothing.
+
+### What was done
+
+- The containment fact moved out of `state.errors` into a `warning` key inside
+  the containment record the node already writes, with
+  `containment_warnings(state)` as THE reader. `state.warnings` was considered
+  and rejected on `AEFState`'s own docstring. `make_reflect_node`'s failure
+  classification is **deliberately unchanged** — a filter there would be a
+  second answer to "what counts as a failure".
+- `RuleBasedPromptProposer` drops any record whose text names a
+  `prompt_agent.*` type and counts it in the reason. Matched on text, not
+  signature: the reproduced signature is `failure:prompt_agent`, a NODE id.
+- `FallbackProvider.isolation` splits: claims intersect, the channel marker
+  resolves hazard-wins, `system_role` only when every member declares it.
+  Conservative rather than exact, and affordable only because R3 made the note
+  cost attention instead of the task metric.
+- `GrokProvider` passes `usage` to `answering_model`, and a new test reaches
+  rule 4 (`model=""`, two-key map, first key writing more output).
+- The migrate template becomes `retrieve → prompt_agent → reflect →
+  consolidate → END`, and `PromptAgentNode` renders retrieved lessons into the
+  USER turn after the objective — not the system prompt, for three reasons in
+  ADR 0179. Byte-identical request when nothing was retrieved.
+
+### Measured after
+
+```
+--- run 1 -----------------------------------------
+  errors          : []
+  task_completion : 1.0          (x3)
+failure records in memory: 0
+proposals: 0
+```
+
+```
+fallback role=user    isolation=['user_turn_persona']
+GrokProvider       -> model=big-answerer   attribution=usage_match
+```
+
+```
+retrieved chunks: 3
+--- the USER turn the provider actually received -------------
+What is the capital of France? Answer in one word.
+
+Lessons from this agent's earlier runs (most relevant first):
+- [failure:prompt_agent] ALWAYS-NAME-THE-COUNTRY-TOO
+--------------------------------------------------------------
+reflection record retrieved_signatures: ['failure:prompt_agent']
+```
+
+### Green bar
+
+`pytest -q` **2520 passed, 6 skipped** (2526 collected, from 2516 at
+`db2987a`: **+10, none removed**). `mypy aef examples` clean, 134 files.
+`ruff check .` clean. `ruff format --check aef tests examples` clean.
+`tests/test_vendor_isolation.py`, `tests/test_prompt_surface.py` and S1's
+golden green.
+
+Two tests deliberately rewritten, not worked around: one pinned the warning as
+`delta.errors[0]`, one pinned the three-node generated graph.
+
+### Mutations
+
+Seven, six detected and the control correctly not; every restore verified
+against a `shasum -a 256` byte backup, `python -B` with `__pycache__` purged.
+M1 was additionally run as the finding words it — mutate, then re-execute the
+original three-run reproduction — which showed the second line of defence
+holding alone (`proposals: 0`); M1+M2 together put the bullet back verbatim.
+
+### Verdict
+
+Four findings closed, no rubric movement claimed. Dim 2's open clause "no
+prompt reads it" is now false on the generated path as well as the fixture;
+what replaces it is "no measurement shows reading it helps", which is ADR
+0155's standing result and is untouched here. **Undone and named:** surfacing
+the containment warning in `aef loop doctor` / the cycle summary —
+`containment_warnings()` is written and tested, `aef/cli/loop.py` and
+`preflight.py` belong to J2 in this wave and were not touched.

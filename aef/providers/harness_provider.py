@@ -829,8 +829,17 @@ class GrokProvider(ModelProvider):
         usage = payload.get("usage") or {}
         model_usage = payload.get("modelUsage") or {}
         requested = request.model or self._default_model
-        # NOT the first key of the map — see `answering_model`.
-        answered_by, attribution = answering_model(model_usage, requested)
+        # NOT the first key of the map — see `answering_model`. `usage` is
+        # passed for rule 4 (`usage_match`), which ADR 0169's addendum wired
+        # into `ClaudeCodeProvider` and, until ADR 0179's R7, not into this
+        # one: the same payload shape produced `usage_match` there and
+        # `heuristic` here, and `heuristic` is the rule measured wrong 1 time
+        # in 36. The caveat is stated rather than implied — the only Grok
+        # payload ever observed has a SINGLE-key `modelUsage`, which rule 3
+        # answers as `sole` before rule 4 is consulted, so this fixes a
+        # divergence that is currently unreachable on measured traffic and
+        # would be reachable the first time Grok bills a helper model.
+        answered_by, attribution = answering_model(model_usage, requested, usage)
         return CompletionResult(
             content=str(payload.get("text", "")),
             model=answered_by or requested or "",

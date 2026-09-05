@@ -167,12 +167,18 @@ def test_the_generated_graph_builds_and_is_wired_to_reflect(tmp_path: Path) -> N
     graph = module.build_graph()
 
     assert graph.id == "marlin-accela"
-    assert graph.entry_node == "prompt_agent"
-    assert set(graph.nodes) == {"prompt_agent", "reflect", "consolidate"}
+    # `retrieve`, not `prompt_agent`. The head is what makes the repo USE what
+    # it learned (ADR 0179, R6): without it `state.retrieved_context` is empty
+    # on every adopter run, so no lesson is ever in front of the model and
+    # `retrieved_signatures` is `[]` on every record forever — the tally ADR
+    # 0118 records becomes a constant.
+    assert graph.entry_node == "retrieve"
+    assert set(graph.nodes) == {"retrieve", "prompt_agent", "reflect", "consolidate"}
     # The tail is what makes the repo learn (ADR 0139/0143): route the first
     # node to END instead and `aef loop cycle` exits 0 forever with
     # `no admissible failure memory`.
     assert {(e.from_node, e.to_node) for e in graph.edges} == {
+        ("retrieve", "prompt_agent"),
         ("prompt_agent", "reflect"),
         ("reflect", "consolidate"),
     }
@@ -613,3 +619,78 @@ def test_a_non_importable_root_is_named_in_the_report(tmp_path: Path) -> None:
     text = report(result)
     assert f"aef run {site.out_relative} " in text
     assert "a file path, not '.claude.agents.migrated.pilot_accela.graph'" in text
+
+
+# ---------------------------------------------------------------------------
+# R6 — the retrieval wire reaches the generated graph (ADR 0179)
+# ---------------------------------------------------------------------------
+def test_a_consolidated_lesson_reaches_the_generated_graphs_user_turn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The reproduction, end to end, through the REAL `run_migrate` and the
+    REAL runner. `render_retrieved_context` had exactly one caller —
+    `agents/summary/graph.py`, this repo's own fixture, which ships in no
+    adopted repo — and the generated template was `prompt_agent -> reflect ->
+    consolidate -> END` with no retrieve node. So on every adopter run
+    `state.retrieved_context` was `[]`, `retrieved_signatures` was `[]` on
+    every reflection record, and ADR 0157's rationale printed `helpful 0 /
+    harmful 0` as a constant. Reproduced: three runs, `retrieved_context=[]`
+    each time, one entry formed, tallies 0/0.
+
+    `/bin/echo {prompt}` makes the answer the user turn verbatim, so this
+    reads the actual request rather than a proxy for it."""
+    from datetime import UTC, datetime
+
+    from aef.cli.run import run_graph_module
+    from aef.harness.memory_store import FileMemoryStore
+    from aef.services.memory.base import MemoryRecord
+
+    root = _prompt_repo(tmp_path, names=("pilot-accela",), skills=0)
+    (root / "aef.yaml").write_text(COMMAND_PROVIDER_CONFIG, encoding="utf-8")
+    (site,) = run_migrate(root, agent_root=".claude/agents").prompt_agents
+
+    # Two distinct runs under one signature: ADR 0110's threshold for a lesson.
+    memory_path = root / "memory.jsonl"
+    store = FileMemoryStore(path=memory_path)
+    for i in range(2):
+        store.write(
+            MemoryRecord(
+                kind="failure",
+                content={
+                    "verbal_feedback": "ALWAYS-CITE-THE-PERMIT-ID",
+                    "failing_nodes": ["prompt_agent"],
+                    "objective": "an earlier question",
+                },
+                run_id=f"planted-{i}",
+                agent_id="a1",
+                created_at=datetime(2026, 9, 4, 12, i, tzinfo=UTC),
+            )
+        )
+
+    monkeypatch.chdir(root)
+    state = run_graph_module(
+        site.out_relative,
+        agent_id="a1",
+        objective="what are the preconditions?",
+        config_path=root / "aef.yaml",
+        memory_path=memory_path,
+    )
+
+    # This config declares no `{system}` slot, so `CommandProvider`
+    # concatenates: persona, then the user turn. Which makes the ordering
+    # inside the user turn readable here — objective first, lessons after.
+    echoed = str(state.working_memory["prompt_agent"])
+    assert "ALWAYS-CITE-THE-PERMIT-ID" in echoed, echoed
+    assert echoed.index("what are the preconditions?") < echoed.index("ALWAYS-CITE")
+    assert state.retrieved_context, "the retrieve node wrote nothing"
+    # And that slotless provider did NOT cost the run its score (R3).
+    assert state.errors == []
+
+    # And the outcome signal ADR 0118 records now has something to record.
+    written = [
+        r
+        for r in FileMemoryStore(path=memory_path).query("success", agent_id="a1", limit=20)
+        if not r.run_id.startswith("planted-")
+    ]
+    assert written, "reflection wrote no record for this run"
+    assert written[0].content["retrieved_signatures"] == ["failure:prompt_agent"]

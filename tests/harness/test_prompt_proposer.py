@@ -390,3 +390,88 @@ def test_a_run_the_corpus_never_heard_of_is_production_experience() -> None:
 def test_a_meaningless_configuration_is_refused_at_construction(kwargs: dict) -> None:
     with pytest.raises(ValueError):
         make(**kwargs)
+
+
+# -- a provider fact is not a lesson (ADR 0179, R3) -------------------------
+
+# What `RuleBasedCritic` wrote when the containment note was an `errors` entry,
+# copied from a real `aef run` through a `command` provider with no `{system}`
+# slot. Planted here because the node no longer produces it — which is the
+# point: this filter defends a memory file written by an older `aef`, and it
+# has to be verified against a planted fault or it is not a detector.
+PROVIDER_FACT_FEEDBACK = (
+    "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: {'node_id': 'prompt_agent', "
+    "'type': 'prompt_agent.persona_in_user_turn', 'provider': 'command', "
+    "'isolation': ['user_turn_persona'], 'message': \"provider 'command' declares no "
+    "system channel, so persona 'marlin-accela' was prepended to the USER turn.\"}"
+)
+
+
+def test_a_containment_note_never_becomes_a_bullet_in_the_persona() -> None:
+    """Reproduced before the fix: three runs of an agent that ANSWERED
+    CORRECTLY through a slotless `command` provider wrote three failure
+    records, cleared ADR 0110's two-run threshold, and the next cycle
+    proposed
+
+        - <!-- aef sig=failure:prompt_agent runs=3 --> 1 error(s) recorded …
+          'type': 'prompt_agent.persona_in_user_turn' …
+
+    A property of the CLI the owner installed, occupying one of five bullet
+    slots in the agent's own prompt, forever — its `runs_since_last_seen`
+    never grows while the provider is unchanged. No sentence a persona can
+    contain will give a CLI a `--system-prompt` flag."""
+    ev = evidence(
+        record(run_id="run-1", record_id="a", feedback=PROVIDER_FACT_FEEDBACK),
+        record(run_id="run-2", record_id="b", feedback=PROVIDER_FACT_FEEDBACK, minutes=5),
+        record(run_id="run-3", record_id="c", feedback=PROVIDER_FACT_FEEDBACK, minutes=9),
+    )
+    proposer = make()
+    assert propose(proposer, ev) == ()
+    reason = proposer.no_proposal_reason(ev, path=PERSONA, source=BODY)
+    assert "3 record(s) dropped as a provider fact" in reason
+
+    # The control: the SAME three runs, same signature, same everything but a
+    # feedback string that names a real failure, do produce a bullet. So what
+    # changed the answer is the filter, not the shape of the evidence.
+    real = evidence(
+        record(run_id="run-1", record_id="a"),
+        record(run_id="run-2", record_id="b", minutes=5),
+        record(run_id="run-3", record_id="c", minutes=9),
+    )
+    assert propose(make(), real) != ()
+
+
+def test_the_filter_reads_every_string_in_the_record_not_one_field() -> None:
+    """`content` is `dict[str, Any]` and nothing constrains it. A filter that
+    reads only `verbal_feedback` is one refactor away from reading none of the
+    right fields, so `rationale`, `grounded_in` and anything else stringy is
+    scanned too."""
+    planted = MemoryRecord(
+        kind="failure",
+        content={
+            "verbal_feedback": "the run went badly",
+            "rationale": "prompt_agent.persona_in_user_turn on every call",
+            "failing_nodes": ["prompt_agent"],
+        },
+        run_id="run-1",
+        agent_id="marlin-accela",
+        id="a",
+        created_at=_T0,
+    )
+    in_a_list = MemoryRecord(
+        kind="failure",
+        content={
+            "verbal_feedback": "the run went badly",
+            "grounded_in": ["errors[0]", "prompt_agent.persona_in_user_turn"],
+            "failing_nodes": ["prompt_agent"],
+        },
+        run_id="run-2",
+        agent_id="marlin-accela",
+        id="b",
+        created_at=_T0 + timedelta(minutes=5),
+    )
+    proposer = make()
+    assert propose(proposer, evidence(planted, in_a_list)) == ()
+    assert "2 record(s) dropped as a provider fact" in proposer.no_proposal_reason(
+        evidence(planted, in_a_list), path=PERSONA, source=BODY
+    )

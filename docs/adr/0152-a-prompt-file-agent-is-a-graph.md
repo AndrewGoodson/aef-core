@@ -408,3 +408,24 @@ Fixed in ADR 0168: `aef run` (and `aef loop record`, which shares the loader)
 accept a file path as well as a dotted name, and `migrate` prints whichever form
 is runnable for the root the adopter chose. Refusing the root was rejected —
 `.claude/agents` is this ADR's whole opt-in.
+
+
+## Erratum (fix wave J3, ADR 0179): the generated template had no retrieve node
+
+This ADR's template is `prompt_agent → reflect → consolidate → END`, and the
+tail is defended at length as what makes an adopted repo learn. It is — and
+nothing in it made an adopted repo USE what it learned. With no retrieve node,
+`state.retrieved_context` is `[]` on every run an adopter ever makes, so
+`retrieved_signatures` is `[]` on every reflection record and ADR 0118's
+helpful/harmful tally is a constant. Reproduced: three real runs through the
+real generated graph, one knowledge entry formed at `helpful=0 harmful=0`,
+seen by nothing.
+
+The template is now `retrieve → prompt_agent → reflect → consolidate → END`
+with `entry_node="retrieve"`, and `PromptAgentNode` renders the retrieved
+lessons into the USER turn after the objective. **This ADR's safety story is
+unchanged and is the reason for that placement**: the persona is the system
+message and is never modified at runtime, so a lesson — which is derived from
+model output — travels in the turn data travels in rather than being spliced
+into the operator's channel. The request is byte-identical when nothing was
+retrieved. ADR 0179, R6.

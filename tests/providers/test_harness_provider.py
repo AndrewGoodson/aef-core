@@ -24,6 +24,7 @@ from aef.providers.harness_provider import (
     CodexProvider,
     GrokProvider,
     HarnessRun,
+    answering_model,
 )
 
 # Verbatim fields from `claude -p --output-format json` on a logged-in box.
@@ -534,6 +535,47 @@ def test_grok_uses_the_same_rule_so_the_two_adapters_cannot_drift() -> None:
     # calls the model that answered.
     assert result.model == "grok-4.6-build"
     assert result.model_attribution == "alias"
+
+
+def test_grok_reaches_attribution_rule_4_the_same_way_claude_does() -> None:
+    """The test above is named for a property it could not see (ADR 0179, R7).
+
+    It requests `model="grok-4.6"`, so **rule 2 answers before rule 4 is ever
+    consulted** — and rule 4, `usage_match`, was passed to `answering_model`
+    by `ClaudeCodeProvider` and not by `GrokProvider`. The adapters had
+    drifted, under a test whose whole job was to notice.
+
+    This is the request that reaches rule 4: nothing requested, a two-key map,
+    and the map's FIRST key writing MORE output than the answering model —
+    which is exactly the shape ADR 0169's D1 measured the heuristic getting
+    wrong (a judge whose whole reply is a small JSON object). Rule 4 is
+    deterministic where the heuristic guesses: the payload's top-level `usage`
+    IS the answering call's usage.
+
+    Caveat, stated rather than implied: the only Grok payload ever observed
+    has a SINGLE-key `modelUsage` (ADR 0154), which rule 3 answers as `sole`.
+    This two-key trigger is constructed, so what it pins is that the two
+    adapters cannot diverge — not that Grok has been seen billing a helper."""
+    usage = {"input_tokens": 2, "output_tokens": 69}
+    model_usage = {
+        "grok-code-fast-helper": {"inputTokens": 900, "outputTokens": 400},
+        "grok-4.6-build": {"inputTokens": 2, "outputTokens": 69},
+    }
+    grok = GrokProvider(
+        runner=_Recorder(_ok({**_GROK_OK, "usage": usage, "modelUsage": model_usage}))
+    ).complete(_request(model=""))
+    assert (grok.model, grok.model_attribution) == ("grok-4.6-build", "usage_match")
+
+    # The heuristic — what this adapter returned before the fix — picks the
+    # helper, because the helper wrote more.
+    assert answering_model(model_usage, None) == ("grok-code-fast-helper", "heuristic")
+
+    # And Claude Code, on the identical shape, answers identically. That is
+    # the anti-drift claim, now actually exercised.
+    claude = ClaudeCodeProvider(
+        runner=_Recorder(_ok({**_CLAUDE_OK, "usage": usage, "modelUsage": model_usage}))
+    ).complete(_request(model=""))
+    assert (claude.model, claude.model_attribution) == (grok.model, grok.model_attribution)
 
 
 def test_codex_and_command_report_the_requested_model_and_have_no_such_map() -> None:
