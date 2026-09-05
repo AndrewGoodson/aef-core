@@ -44,8 +44,10 @@ the persona in the system channel. `--cassette-miss fail` therefore makes the
 verdict G2-reject — a changed prompt is a changed cassette key — and, exactly
 as in M5, this file asserts a verdict was **reached**, never which one.
 
-The three strict xfails at the bottom are the defects this run found, each
-reproduced on a scratch repo carrying only the shape under test.
+The three tests at the bottom were strict xfails when this file landed: the
+defects ADR 0187 found, each reproduced on a scratch repo carrying only the
+shape under test. ADR 0189's fix wave turned all three into passing regression
+tests, and added a fourth beside F-M8-3 for the ordinary two-entry-file repo.
 """
 
 from __future__ import annotations
@@ -661,27 +663,24 @@ def _minimal_prompt_repo(root: Path, *, branch: str, skills: int = 1) -> None:
     _git(root, "commit", "-qm", "initial")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "F-M8-1: on a repo whose default branch is not `main` — datamining's is "
-        "`azure-agent/uptime-monitoring`, and it has no `main` at all — every step of the "
-        "documented sequence succeeds and `aef loop cycle` then exits 0 having done "
-        "nothing, reporting `no agent source at <persona> in main: no candidate`. "
-        "`Repo.path_exists_at` cannot distinguish an absent FILE from an absent REF, so "
-        "the message blames the persona, which is present; nothing in `loop doctor`'s six "
-        "obligations covers the base ref; and exit 0 with 'no candidate' is also what an "
-        "empty proposal legitimately prints. ADR 0149 fixed this exact exit-0 shape for "
-        "the default agent path and left it open for the default base ref"
-    ),
-)
 @pytest.mark.slow
 def test_a_repo_whose_default_branch_is_not_main_does_not_no_op_silently(
     tmp_path: Path,
 ) -> None:
-    """Reproduced (ADR 0187): the ONLY difference from the passing case is the
-    branch name. `git init -b trunk`, then adopt → migrate → bootstrap →
-    bless → doctor → cycle with `--base` left at its default."""
+    """F-M8-1, reproduced in ADR 0187 and closed in ADR 0189.
+
+    The ONLY difference from the passing case is the branch name. `git init -b
+    trunk`, then adopt → migrate → bootstrap → bless → doctor → cycle with
+    `--base` left at its default. It used to print `no agent source at
+    .claude/agents/one-agent.md in main: no candidate` and exit **0** — blaming
+    a persona that is present, in a sentence a legitimate empty proposal also
+    prints, on the exit code that means nothing was wrong.
+
+    Two assertions, because the fix has two halves. The default must RESOLVE to
+    the repository's own default branch, so the documented sequence reaches a
+    verdict on a repo with no `main` at all; and a base ref that does not exist
+    must be REFUSED by name on `EXIT_ERROR`, never reported as a missing file.
+    """
     repo = tmp_path / "trunk-repo"
     _minimal_prompt_repo(repo, branch="trunk")
     state = tmp_path / "loop-state"
@@ -788,33 +787,61 @@ def test_a_repo_whose_default_branch_is_not_main_does_not_no_op_silently(
         "--build-command",
         BUILD_COMMAND,
     )
-    # What the fix must produce: a refusal that NAMES the missing ref, on the
-    # usage exit code, rather than exit 0 and a sentence about the persona.
-    from aef.cli.loop import EXIT_USAGE
-
-    assert cycle.returncode == EXIT_USAGE, (cycle.returncode, cycle.stdout, cycle.stderr)
-    assert "main" in (cycle.stdout + cycle.stderr)
+    # HALF ONE: the default resolved to `trunk`, so the turn actually ran.
+    # Not which verdict — under `--cassette-miss fail` a changed prompt is a
+    # changed cassette key and G2 rejects, which is the replay-artefact rule
+    # and not a judgement (ADR 0187). That it REACHED one is the assertion.
     assert "no agent source" not in cycle.stdout, cycle.stdout
+    assert "no candidate" not in cycle.stdout, cycle.stdout
+    assert cycle.returncode != 0, (cycle.returncode, cycle.stdout, cycle.stderr)
+    kinds = [
+        json.loads(line)["kind"]
+        for line in (state / "ledger.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert "proposed" in kinds and "gated" in kinds, kinds
+
+    # HALF TWO: `main` named explicitly is a configuration error, refused by
+    # name on EXIT_ERROR, listing the branches that do exist.
+    from aef.harness.loop import EXIT_ERROR
+
+    refused = _aef(
+        repo,
+        "loop",
+        "doctor",
+        "--repo",
+        ".",
+        "--state",
+        str(state),
+        "--corpus",
+        "corpus",
+        "--agent-root",
+        AGENT_ROOT,
+        "--agent-path",
+        ".claude/agents/one-agent.md",
+        "--graph-id",
+        "one-agent",
+        "--base",
+        "main",
+    )
+    both = refused.stdout + refused.stderr
+    assert refused.returncode == EXIT_ERROR, (refused.returncode, both)
+    assert "base ref 'main' does not exist" in both, both
+    assert "trunk" in both, "the refusal must list the branches that DO exist"
+    assert "no agent source" not in both, both
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "F-M8-2: `aef migrate` prints `found N skill(s) and did NOT migrate any of them:` "
-        "and then lists N+1 rows. The header is `discover_adopter_skills` (the adopter's "
-        "own, aef's excluded) and the list is `discover_skills` (the raw listing, aef's "
-        "included and labelled). Both are deliberate on their own — ADR 0172's D4 made "
-        "the COUNT exclude aef's output so it stops changing on every run — but a header "
-        "that does not count the list under it makes the report wrong about itself. "
-        "Observed on both real repos: keystone `found 4` over 5 rows, datamining "
-        "`found 6` over 7"
-    ),
-)
 @pytest.mark.slow
 def test_migrates_skill_header_count_matches_its_own_listing(tmp_path: Path) -> None:
-    """Reproduced (ADR 0187): two skills of the adopter's, then `adopt` writes
-    its own `new-model-check/SKILL.md` as a third, and `migrate` says 2 over a
-    three-row list."""
+    """F-M8-2, reproduced in ADR 0187 and closed in ADR 0189.
+
+    Two skills of the adopter's, then `adopt` writes its own
+    `new-model-check/SKILL.md` as a third: `migrate` used to say `found 2
+    skill(s)` over a three-row list, which is keystone's `found 4` over 5 and
+    datamining's `found 6` over 7 in miniature. The header now counts the rows
+    it heads and says how they split; ADR 0172's D4 subtotal survives inside
+    the parenthetical, which is the number that does not move when adoption
+    runs."""
     repo = tmp_path / "skills-repo"
     _minimal_prompt_repo(repo, branch="main", skills=2)
     assert _aef(repo, "adopt", "--dir", ".").returncode == 0
@@ -824,24 +851,19 @@ def test_migrates_skill_header_count_matches_its_own_listing(tmp_path: Path) -> 
     declared = int(header.strip().split()[1])
     listed = [line for line in out.splitlines() if line.strip().startswith("SKILL ")]
     assert declared == len(listed), f"header {header.strip()!r} over {len(listed)} rows"
+    assert "(2 yours + 1 aef's own)" in header, header
+    assert sum("(aef's own — not yours)" in line for line in listed) == 1, listed
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "F-M8-3: when `adopt` SKIPS `CLAUDE.md` — because it is a symlink, which is "
-        "datamining's shape and the right call — the migration checklist it prints in the "
-        "same breath still opens with `1. Read the generated CLAUDE.md in full before "
-        "writing any code.` On datamining the link happens to point at `AGENTS.md`, which "
-        "did get the block, so the instruction accidentally works; point it anywhere else "
-        "and step 1 sends the adopter to a file with no aef content at all. The checklist "
-        "is not conditioned on what adopt actually wrote"
-    ),
-)
 @pytest.mark.slow
 def test_the_checklist_does_not_point_at_a_claude_md_adopt_skipped(tmp_path: Path) -> None:
-    """Reproduced (ADR 0187): `CLAUDE.md` is a symlink to `README.md`, so adopt
-    skips it and it carries no aef block — and step 1 still names it."""
+    """F-M8-3, reproduced in ADR 0187 and closed in ADR 0189.
+
+    `CLAUDE.md` is a symlink to `README.md`, so adopt skips it and it carries
+    no aef block — and step 1 still said `Read the generated CLAUDE.md in full
+    before writing any code.` On datamining the link points at `AGENTS.md`,
+    which did get the block, so it accidentally worked; here it does not.
+    Step 1 now names the file adopt actually appended to."""
     repo = tmp_path / "symlink-repo"
     _minimal_prompt_repo(repo, branch="main")
     (repo / "CLAUDE.md").symlink_to("README.md")
@@ -855,3 +877,33 @@ def test_the_checklist_does_not_point_at_a_claude_md_adopt_skipped(tmp_path: Pat
 
     step_one = next(line for line in adopt.stdout.splitlines() if line.strip().startswith("1. "))
     assert "CLAUDE.md" not in step_one, step_one
+    # Not merely silent about the skipped file — it names the one that DID get
+    # the block, and that file really carries it.
+    assert "AGENTS.md" in step_one, step_one
+    assert "aef:begin" in (repo / "AGENTS.md").read_text()
+    assert step_one.strip() == "1. Read the generated AGENTS.md in full before writing any code."
+
+
+@pytest.mark.slow
+def test_the_checklist_names_both_entry_files_when_adopt_wrote_both(tmp_path: Path) -> None:
+    """The other half of F-M8-3's fix: on the ordinary repo, where `CLAUDE.md`
+    is absent and `AGENTS.md` is present, adopt writes one and appends to the
+    other and step 1 names both. A step that named only `CLAUDE.md` was right
+    here by luck; this pins that it is right by derivation."""
+    repo = tmp_path / "normal-repo"
+    _minimal_prompt_repo(repo, branch="main")
+
+    adopt = _aef(repo, "adopt", "--dir", ".")
+    assert adopt.returncode == 0, adopt.stderr
+    step_one = next(line for line in adopt.stdout.splitlines() if line.strip().startswith("1. "))
+    assert "CLAUDE.md" in step_one and "AGENTS.md" in step_one, step_one
+    for name in ("CLAUDE.md", "AGENTS.md"):
+        assert "aef:begin" in (repo / name).read_text(), name
+
+    # And a SECOND adopt, where both are skipped as `already carries the
+    # current aef block`: the files still carry the contract, so step 1 must
+    # still name them rather than fall through to the no-entry-file wording.
+    again = _aef(repo, "adopt", "--dir", ".")
+    assert again.returncode == 0, again.stderr
+    step_one = next(line for line in again.stdout.splitlines() if line.strip().startswith("1. "))
+    assert "CLAUDE.md" in step_one and "AGENTS.md" in step_one, step_one

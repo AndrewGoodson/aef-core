@@ -613,3 +613,30 @@ Discovery is now one function (`aef.harness.zones.discover_graph_files`) and the
 invariant is enforced behaviourally, by running the real `run_migrate` into the
 real `_graph_entries` and asserting doctor's list contains every graph migrate
 reported writing.
+
+---
+
+## Errata — 2026-09-05, fix wave L1 (ADR 0189)
+
+**The default base REF was the same shape as the default agent PATH this ADR
+fixed, and it was left behind.** `LoopConfig.base_ref = "main"` sat three
+fields away from the constant this ADR moved into `aef/harness/zones.py`, and
+the comment written above `DEFAULT_AGENT_PATH` — *"`aef loop cycle` exited **0**
+with `no agent source at agents/demo/graph.py`: ADR 0139's signature 'silently
+inert' failure, reached from the documented defaults"* — described it word for
+word. On a real repository whose default branch is `azure-agent/uptime-monitoring`,
+with no `main` in it at all, every step of the documented sequence succeeded and
+`aef loop cycle` then printed `no agent source at .claude/agents/dev-agent.md in
+main: no candidate` and exited **0** (ADR 0187's F-M8-1, reproduced; fixed in
+ADR 0189). The literal survived thirty-eight ADRs after its twin was removed.
+
+`FALLBACK_BASE_REF` now sits beside `LoopConfig.base_ref` for exactly the reason
+`DEFAULT_AGENT_PATH` sits beside `DEFAULT_AGENT_ROOT`, and
+`resolve_default_base_ref` is the single derivation the CLI imports.
+
+**The generalisation worth carrying forward is that this ADR's rule is about a
+class, not a constant.** Any default in `aef/` that names a *repository's*
+branch, path or layout is a guess about someone else's repo. Each one should be
+derived from that repo or refused by name — never spelled — and finding one of
+them does not mean the others were looked for.
+

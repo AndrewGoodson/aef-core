@@ -430,3 +430,39 @@ blessing, the six obligations and a real gate verdict hold on all three.
 pinning the findings). `mypy aef examples`: 135 files, clean. `ruff check .`:
 clean. `ruff format --check aef tests examples`: 281 files, clean.
 No file under `aef/` was modified.
+
+---
+
+## Errata — 2026-09-05, fix wave L1 (ADR 0189)
+
+**All three findings are closed.** F-M8-1, F-M8-2 and F-M8-3 are fixed and each
+strict xfail in `tests/cli/test_second_repo_acceptance.py` is now a passing
+regression test; a fourth test was added beside F-M8-3 for the ordinary
+two-entry-file repo, and nine more in `tests/harness/test_base_ref.py`.
+
+Three statements above are superseded rather than wrong:
+
+- F-M8-1's "Whether the fix should also *default* the base ref to the repo's
+  own HEAD branch rather than the literal `main` is a design question for the
+  fix wave" is **answered: yes.** `resolve_default_base_ref` derives it —
+  `origin/HEAD`, else the branch HEAD is on unless it is a `loop/` branch, else
+  a named fallback constant. The middle term this ADR sketched, "the branch
+  HEAD was on when the state dir was created", was dropped: it needs new
+  persisted state under `--state` to settle one case the loop-branch exclusion
+  settles from what already exists.
+- F-M8-1's xfail expected **`EXIT_USAGE`**; the shipped refusal is
+  **`EXIT_ERROR`** (3). 2 is also `EXIT_HALTED`'s number and means "do not
+  retry", while 3's own comment already names "a configuration error that stops
+  the turn before it starts". ADR 0167's nightly rule fails the job on `>= 2`
+  either way.
+- "**Non-`main` default branches**, until F-M8-1 is fixed: `datamining` needed
+  `--base` passed by hand" no longer holds — a repo with that shape now reaches
+  a verdict from the documented defaults. What is still true, and still
+  unclaimed, is that the survey's other five repos were never checked for the
+  same shape.
+
+F-M8-2's "The cheap fix is to say `found 2 of your skill(s) (3 including aef's
+own)`; the choice is the fix wave's" was taken the other way round, so that the
+leading number is the row count: `found 3 skill(s) and did NOT migrate any of
+them (2 yours + 1 aef's own):`. ADR 0172's D4 subtotal is the parenthetical, and
+is still the number that does not change when adoption runs.

@@ -95,6 +95,28 @@ PROPOSERS: tuple[str, ...] = ("rule_based", "rule_based_prompt", "llm")
 
 OBSERVATIONS_FILENAME = "observations.jsonl"
 
+# Branches `cycle` and `run_loop` create for their own candidates. Named once
+# so `resolve_default_base_ref` below can refuse to *inherit* one: a candidate
+# proposed from an un-gated candidate would have its diff, its G0 budget and
+# its G5 drift all measured against a baseline nothing blessed.
+LOOP_BRANCH_PREFIX = "loop/"
+
+# THE last-resort base ref, and the only place in `aef/` allowed to name a
+# branch. It is a fallback, not the default: `resolve_default_base_ref` asks
+# the repository first and reaches this only when the repository has no answer
+# (a detached HEAD with no remote, or a repo with no commits at all).
+#
+# It is here for the reason `zones.DEFAULT_AGENT_PATH` is where it is — beside
+# the thing it is a default *for*, which is `LoopConfig.base_ref` below, so the
+# CLI's `--base` default and the dataclass default cannot drift apart. And it
+# is a *fallback* for the reason ADR 0149 gave for that neighbour: a default
+# naming a layout the adopting repo does not have makes the documented
+# sequence exit 0 having done nothing. `agents/demo/graph.py` was that for the
+# agent PATH; the literal `main` was the same shape for the base REF, and a
+# real repo whose default branch is `azure-agent/uptime-monitoring` reached it
+# from the documented defaults (ADR 0187's F-M8-1, reproduced; ADR 0189).
+FALLBACK_BASE_REF = "main"
+
 EXIT_OK = 0
 EXIT_REJECTED = 1
 EXIT_HALTED = 2
@@ -151,7 +173,11 @@ class LoopPaths:
 class LoopConfig:
     repo: GitRepo
     paths: LoopPaths
-    base_ref: str = "main"
+    # A FALLBACK, not the answer. Every CLI path resolves this from the
+    # repository itself (`resolve_default_base_ref`); this default exists for
+    # the API caller who constructs a `LoopConfig` by hand, and `_preflight`
+    # refuses it by name rather than no-opping if the repo has no such ref.
+    base_ref: str = FALLBACK_BASE_REF
     graph_id: str = "default"
     zone_policy: ZonePolicy = field(default_factory=ZonePolicy)
     corpus: Corpus | None = None
@@ -286,6 +312,92 @@ class GateRun:
     # cheap gate rejected first and nothing was scored.
     candidate_score: float | None = None
     incumbent_score: float | None = None
+
+
+class BaseRefError(RuntimeError):
+    """The base ref does not exist in this repository.
+
+    A **configuration error**, in `EXIT_ERROR`'s sense of "stops the turn
+    before it starts", and deliberately not a verdict: every gate reads the
+    base ref, the candidate branch is cut from it and the diff is taken
+    against it, so there is nothing to judge and nothing was judged.
+    """
+
+
+def resolve_default_base_ref(repo: GitRepo) -> str:
+    """What `--base` means when the owner did not say — asked of the
+    repository, once, in one function the CLI imports (ADR 0149's rule).
+
+    The order, and why it is this order:
+
+    1. **`refs/remotes/origin/HEAD`**, when it is a symbolic ref. This is the
+       repository's own published answer to "what is the default branch", it
+       is what a candidate would eventually target, and — unlike anything
+       derived from HEAD — it does not change when the operator checks
+       something else out. A nightly cycle and an interactive one must resolve
+       the same base or the two runs are not comparable.
+    2. **The branch HEAD is on**, when it is not one of the loop's own
+       (`LOOP_BRANCH_PREFIX`). A fresh `git init -b trunk` has no remote at
+       all, so nothing above can answer; the branch the operator is working on
+       is then the only statement the repository makes about which line of
+       development is current. The loop-branch exclusion is what keeps this
+       from being circular: a cycle run while an un-gated candidate is checked
+       out must not base the next candidate on it.
+    3. **`FALLBACK_BASE_REF`**, for a detached HEAD with no remote and a repo
+       with no commits — the cases where the repository has no answer at all.
+       Nothing that works today changes, because a repo with `origin/HEAD` or
+       a `main` checkout resolves to `main` at step 1 or 2.
+
+    **The term that is deliberately absent**: ADR 0187's F-M8-1 sketched
+    "the branch HEAD was on when the state dir was created" between 1 and 2.
+    It would need a new persisted file under `--state`, i.e. new Zone B state
+    and a new format, to disambiguate exactly one case — the operator sitting
+    on a `loop/` branch — which step 2's exclusion handles directly from what
+    already exists. A default that has to invent state to be derivable is the
+    shape ADR 0139 argues against.
+
+    Never raises: a repository that cannot answer any of these returns the
+    fallback, and `require_base_ref` is what refuses.
+    """
+    origin_head = repo.symbolic_ref("refs/remotes/origin/HEAD")
+    if origin_head:
+        # `--short` renders it `origin/main`; the branch it names is the tail.
+        branch = origin_head.split("/", 1)[1] if "/" in origin_head else origin_head
+        if branch and repo.ref_exists(origin_head):
+            return branch if repo.ref_exists(branch) else origin_head
+    current = repo.symbolic_ref("HEAD")
+    if current and not current.startswith(LOOP_BRANCH_PREFIX) and repo.ref_exists(current):
+        return current
+    return FALLBACK_BASE_REF
+
+
+def require_base_ref(repo: GitRepo, ref: str) -> None:
+    """Refuse, by name, a base ref this repository does not have.
+
+    Before any other work: every "no candidate" sentence downstream describes
+    a file, and a missing REF is not a missing file. The refusal lists the
+    branches that do exist because a refusal naming only what is absent is not
+    actionable.
+    """
+    if repo.ref_exists(ref):
+        return
+    if not repo.is_repo():
+        # A plain directory has no refs to be right or wrong about, and this
+        # is not the mistake this function exists to catch. Every command that
+        # genuinely needs a repository fails on its own first call out to git
+        # with git's own message, which is the behaviour that was already
+        # there; `aef loop doctor` is a diagnostic and must still run and say
+        # what is missing rather than refuse to look.
+        return
+    branches = repo.branch_names()
+    have = ", ".join(branches) if branches else "(none)"
+    raise BaseRefError(
+        f"base ref {ref!r} does not exist in {repo.root.resolve()}. This repository's "
+        f"branches are: "
+        f"{have}. Pass --base <ref> naming one of them; the default is this repository's "
+        f"own default branch (origin/HEAD, else the branch you are on), not the literal "
+        f"{FALLBACK_BASE_REF!r}."
+    )
 
 
 class PolicyConfigError(RuntimeError):
@@ -835,6 +947,13 @@ def gate(
     proposal: Proposal | None = None,
 ) -> GateRun:
     """Evaluate one candidate branch end to end."""
+    # FIRST. Every gate below reads the base ref — the diff is taken against
+    # it, G5's baseline tree is listed at it, the policy is loaded from it —
+    # so a ref that does not exist makes each of them fail describing
+    # something else (ADR 0187 F-M8-1, closed in 0189). Not inside
+    # `_preflight`, deliberately: `monitor` shares it and reads no ref, and a
+    # readonly `aef loop monitor` must not start requiring one.
+    require_base_ref(config.repo, config.base_ref)
     _preflight(config)
 
     proposal_id = f"{head_ref}@{config.repo.rev_parse(head_ref)[:12]}"
@@ -1393,6 +1512,14 @@ def cycle(
     can exhaust the rate budget in a single run, and every candidate costs
     N+2 corpus passes to gate.
     """
+    # FIRST, for the reason ADR 0187's F-M8-1 records: `path_exists_at` cannot
+    # tell an absent FILE from an absent REF, so the "no agent source at
+    # <persona> in <ref>" line 60 lines down blamed a persona that was present
+    # and this function returned a `CycleRun` at exit 0 — on a real repo whose
+    # default branch is `azure-agent/uptime-monitoring`, reached from the
+    # documented defaults. Ahead of `_preflight` so that no message about the
+    # kill switch, the ledger or the corpus can arrive first and be believed.
+    require_base_ref(config.repo, config.base_ref)
     entries = _preflight(config)  # kill switch, then ledger chain — in that order
     lines: list[str] = [f"ledger verified: {len(entries)} entr(ies)"]
 
@@ -1429,8 +1556,15 @@ def cycle(
     # carried an `import os` nobody had reasoned about. Reading from the same
     # ref the diff is against makes the artefact judged the artefact proposed
     # (ADR 0078).
+    # `_preflight` has already established that the REF exists, so a False
+    # here can only mean the FILE is missing at it — which is what the
+    # sentence says. Asserted rather than assumed, because the two questions
+    # collapsing into this one line is exactly F-M8-1 (ADR 0187 / 0189).
     if not config.repo.path_exists_at(config.base_ref, agent_path):
-        lines.append(f"no agent source at {agent_path} in {config.base_ref}: no candidate")
+        lines.append(
+            f"no agent source at {agent_path} in {config.base_ref} "
+            f"(the ref exists; the file is not in it): no candidate"
+        )
         return CycleRun(harvested=harvested, lines=tuple(lines))
 
     source = config.repo.show(config.base_ref, agent_path)
@@ -1910,6 +2044,10 @@ def run_loop(
     _cycle = cycle if cycle_fn is None else cycle_fn
     started = clock()
     rng = random.Random(seed)
+    # Before `_ensure_branch` cuts anything from it: `rev_parse` two lines
+    # below would raise `GitError: git rev-parse ... failed (128)`, which
+    # names git's exit code and not the configuration mistake (ADR 0189).
+    require_base_ref(config.repo, config.base_ref)
     # BEFORE anything is created or gated: standing on the kept branch makes
     # every `update-ref` below leave a staged reversal behind (ADR 0125).
     _refuse_if_kept_branch_is_checked_out(config, kept_branch)

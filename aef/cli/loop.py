@@ -42,6 +42,7 @@ from aef.harness.loop import (
     EXIT_OK,
     EXIT_REJECTED,
     PROPOSERS,
+    BaseRefError,
     CorpusGraphMismatchError,
     KeptBranchCheckedOutError,
     LoopConfig,
@@ -51,6 +52,8 @@ from aef.harness.loop import (
     PolicyConfigError,
     _check_state_is_outside_the_repo,
     default_digest_window,
+    require_base_ref,
+    resolve_default_base_ref,
 )
 from aef.harness.loop import digest as loop_digest
 from aef.harness.loop import gate as loop_gate
@@ -361,6 +364,14 @@ def _build_commands(args: argparse.Namespace) -> tuple[tuple[str, ...], ...] | N
     return tuple(tuple(c.split()) for c in raw)
 
 
+_BASE_REF_HELP = (
+    "the ref a candidate is proposed FROM and diffed AGAINST. Default: this "
+    "repository's own default branch — origin/HEAD when there is a remote, else the "
+    "branch you are on (never a loop/ branch). A ref that does not exist is refused by "
+    "name, not reported as a missing agent file (ADR 0189)."
+)
+
+
 def _proposer(args: argparse.Namespace) -> tuple[str, ModelProvider | None, str | None]:
     """`--proposer llm` builds the harness provider (ADR 0112: the session's
     own login, no key) for the model `--proposer-model` names. The default
@@ -383,14 +394,20 @@ def _proposer(args: argparse.Namespace) -> tuple[str, ModelProvider | None, str 
 
 def _config(args: argparse.Namespace) -> LoopConfig:
     corpus_dir = Path(args.corpus) if getattr(args, "corpus", None) else None
+    repo = GitRepo(root=Path(args.repo))
     proposer, proposer_provider, proposer_model = _proposer(args)
     config = LoopConfig(
         proposer=proposer,
         proposer_provider=proposer_provider,
         proposer_model=proposer_model,
-        repo=GitRepo(root=Path(args.repo)),
+        repo=repo,
         paths=LoopPaths(root=Path(args.state)),
-        base_ref=getattr(args, "base", "main"),
+        # ONE derivation, here, for every subcommand that builds a config —
+        # ADR 0149's rule that a default derives from one place. `--base` is
+        # `None` unless the owner said, and `None` means "ask the repository"
+        # rather than "the literal main", which is what made a repo whose
+        # default branch is not `main` no-op at exit 0 (ADR 0187 / 0189).
+        base_ref=getattr(args, "base", None) or resolve_default_base_ref(repo),
         graph_id=graph_id(args),
         # Two fields, two namespaces (ADR 0125, split in ADR 0182). `None`
         # unless `resolve_graph_id_from_corpus` derived one, and `None` means
@@ -604,6 +621,9 @@ def _print_containment_summary(args: argparse.Namespace) -> None:
 
 def cmd_gate(args: argparse.Namespace) -> int:
     config = _config(args)
+    refusal = _refuse_missing_base_ref(config)
+    if refusal is not None:
+        return refusal
     _warn_unmet_obligations(args, config)
     try:
         run = loop_gate(
@@ -1724,6 +1744,24 @@ def cmd_skills(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _refuse_missing_base_ref(config: LoopConfig) -> int | None:
+    """`EXIT_ERROR` and a named refusal when `--base` names no ref here.
+
+    `cycle`, `gate`, `run` and `monitor` reach `harness.loop._preflight`,
+    which asks the same question of the same function. `bless` and `doctor`
+    do not reach it at all — and `doctor` is the readiness command, so a repo
+    whose base ref does not exist was reported READY and then no-opped at exit
+    0 on the next step (ADR 0187 F-M8-1, closed in 0189). Asking here as well
+    is the cheapest way for the answer to be the same in all six.
+    """
+    try:
+        require_base_ref(config.repo, config.base_ref)
+    except BaseRefError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    return None
+
+
 def cmd_bless(args: argparse.Namespace) -> int:
     from aef.harness.preflight import BlessError, bless
 
@@ -1731,6 +1769,9 @@ def cmd_bless(args: argparse.Namespace) -> int:
     if refusal is not None:
         return refusal
     config = _config(args)
+    refusal = _refuse_missing_base_ref(config)
+    if refusal is not None:
+        return refusal
     try:
         config.paths.kill_switch.check()
     except PolicyConfigError as exc:
@@ -1779,6 +1820,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     if refusal is not None:
         return refusal
     config = _config(args)
+    refusal = _refuse_missing_base_ref(config)
+    if refusal is not None:
+        return refusal
     try:
         result = preflight(
             repo_root=Path(args.repo),
@@ -2081,7 +2125,11 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
 
     p_gate = loop_subs.add_parser("gate", help="evaluate one candidate branch")
     _common(p_gate)
-    p_gate.add_argument("--base", default="main")
+    p_gate.add_argument(
+        "--base",
+        default=None,
+        help=_BASE_REF_HELP,
+    )
     p_gate.add_argument("--head", required=True)
     p_gate.add_argument("--workdir", required=True, help="scratch dir for gate execution")
     p_gate.add_argument("--corpus", default=None)
@@ -2394,7 +2442,11 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "cycle", help="one turn of the loop: harvest -> propose -> gate -> record"
     )
     _common(p_cycle)
-    p_cycle.add_argument("--base", default="main")
+    p_cycle.add_argument(
+        "--base",
+        default=None,
+        help=_BASE_REF_HELP,
+    )
     p_cycle.add_argument("--workdir", required=True)
     p_cycle.add_argument(
         "--module",
@@ -2449,7 +2501,11 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         help="N turns of propose -> gate -> keep-or-revert on a local kept branch (never main)",
     )
     _common(p_run)
-    p_run.add_argument("--base", default="main")
+    p_run.add_argument(
+        "--base",
+        default=None,
+        help=_BASE_REF_HELP,
+    )
     p_run.add_argument("--workdir", required=True)
     p_run.add_argument(
         "--module",
@@ -2531,6 +2587,11 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     )
     _common(p_bless)
     p_bless.add_argument("--agent-path", default=DEFAULT_AGENT_PATH, help=_AGENT_PATH_HELP)
+    p_bless.add_argument(
+        "--base",
+        default=None,
+        help=_BASE_REF_HELP,
+    )
     p_bless.add_argument("--note", default="", help="why this state is the baseline")
     p_bless.set_defaults(handler=cmd_bless)
 
@@ -2564,6 +2625,11 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     _common(p_doctor)
     p_doctor.add_argument("--corpus", default="corpus")
     p_doctor.add_argument("--agent-path", default=DEFAULT_AGENT_PATH, help=_AGENT_PATH_HELP)
+    p_doctor.add_argument(
+        "--base",
+        default=None,
+        help=_BASE_REF_HELP,
+    )
     p_doctor.add_argument("--observations", default=None)
     p_doctor.add_argument(
         "--runs",

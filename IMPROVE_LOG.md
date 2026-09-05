@@ -5864,3 +5864,135 @@ left for whoever re-opens it: **G3 rejected because a scenario the incumbent
 passed dropped below 0.5 with the lesson in the prompt** — a regression on the
 task metric from a rule-based lesson whose model excerpt ADR 0180 had already
 removed.
+
+## Fix wave L1 — the branch nobody named, and two reports wrong about themselves (ADR 0189)
+
+**Zero live model calls.** `model_provider.impl: command` with
+`argv: ["/bin/echo", "{system}", "{prompt}"]` throughout. **No rubric dimension
+moves.** All three of ADR 0187's strict xfails are now passing regression
+tests; each was reproduced by RUNNING it before a line was edited, and each fix
+was mutated and watched to fail its own control.
+
+**F-M8-1 (HIGH) — `git init -b trunk` and the documented sequence exits 0.**
+Reproduced verbatim: adopt 0, migrate 0, bootstrap 0, bless 0, doctor 1, then
+
+```
+  no agent source at .claude/agents/one-agent.md in main: no candidate
+cycle verdict: no agent source at .claude/agents/one-agent.md in main: no candidate
+EXIT=0        >>> ledger kinds: ['blessed']   >>> `main` exists: False
+```
+
+The persona is present and was blessed one step earlier; the ref is what is
+absent, and the sentence blames the file in the same words an empty proposal
+legitimately uses. Three parts, as 0187 asked:
+
+- **The default is derived**, in `resolve_default_base_ref(repo)` — one
+  function, the CLI imports it (ADR 0149's rule). Order: `origin/HEAD` first,
+  because it is the repository's own published answer and does not move when
+  the operator checks something else out, so a nightly cycle and an interactive
+  one resolve the same base; then the branch HEAD is on, **unless it is one of
+  the loop's own**, because otherwise a cycle run over an un-gated candidate
+  bases the next one on it and G0's budget and G5's drift are measured against
+  a baseline nothing blessed; then `FALLBACK_BASE_REF = "main"` for a detached
+  HEAD with no remote. 0187's middle term — "the branch at state-dir creation"
+  — was **dropped deliberately**: it needs a new persisted file under `--state`
+  to settle one case the loop-branch exclusion already settles from what
+  exists, and a default that has to invent state to be derivable is ADR 0139's
+  shape again.
+- **A missing ref is a configuration error**: `EXIT_ERROR` (3), naming the ref
+  and listing what exists, on `cycle` / `gate` / `run` / `bless` / `doctor`.
+
+  ```
+  error: base ref 'main' does not exist in <repo>. This repository's branches are:
+  loop/cycle-20260905T082344-prompt, trunk. Pass --base <ref> naming one of them; the
+  default is this repository's own default branch (origin/HEAD, else the branch you
+  are on), not the literal 'main'.
+  ```
+
+  Not in `_preflight`: `monitor` shares it and reads no ref, so putting it
+  there made a read-only command start requiring a git repo — five tests went
+  red and said so, and the answer to a control firing on the wrong command is
+  to move it, not to weaken it. `require_base_ref` also returns silently on a
+  directory that is not a repository at all: `doctor` is a diagnostic and must
+  still say what is missing rather than refuse to look.
+- **`GitRepo.ref_exists`** splits the question `path_exists_at` could not
+  answer, and the surviving message says which one it answered: `(the ref
+  exists; the file is not in it)`.
+
+Same repo, same commands, after: `proposed … gated: reject — G2 rejected it`,
+`EXIT=1`, ledger `['blessed', 'proposed', 'gated', 'rejected']` — the same
+replay-artefact rejection keystone reached, on a repository with no `main`.
+
+**F-M8-2 (LOW) — the header did not count its own rows.** `found 2 skill(s)`
+over three, reproduced; keystone's `found 4` over 5 and datamining's `found 6`
+over 7 in miniature. Now `found 3 skill(s) and did NOT migrate any of them
+(2 yours + 1 aef's own):`, and with no aef skill present the parenthetical is
+absent. ADR 0172's D4 subtotal survives *as the parenthetical* — it is still
+the number that does not move when adoption runs — and `discover_skills` still
+names every declined file. What did not survive is a leading number that was
+not the number of rows beneath it. `test_the_report_counts_two_and_still_names_the_third_marked`
+pinned the old header and was updated deliberately, reason in its docstring.
+
+**F-M8-3 (MEDIUM) — step 1 named a file adopt had just skipped.** With
+`CLAUDE.md` a symlink to `README.md`, adopt printed `skipped … (a symlink …)`
+and then `1. Read the generated CLAUDE.md in full before writing any code.`
+over a file containing `# scratch\n`. Step 1 is now derived from the same
+`written`/`appended`/`skipped` result the report prints — verbatim, all four
+shapes:
+
+```
+ordinary repo   1. Read the generated CLAUDE.md and AGENTS.md (they are byte-identical) in full before writing any code.
+second adopt    (identical — a file skipped as `already carries the current aef block` DOES carry it)
+CLAUDE.md link  1. Read the generated AGENTS.md in full before writing any code.
+both links      1. aef adopt could put its contract in NO entry file (CLAUDE.md: a symlink …; AGENTS.md: a symlink …) — so nothing below reached a file your coding agent reads. Fix that first: …
+```
+
+Two supporting moves: the checklist is rendered **after** both entry files are
+handled (the `.gitignore` note three lines below it already worked that way),
+and `already carries the current aef block` became a named constant because the
+checklist reads it back.
+
+**Mutations** — perturb, watch the control FAIL, restore from a byte backup and
+verify by sha256; never `git checkout --`:
+
+| mutation | control | result |
+|---|---|---|
+| restore the literal `main` default | `…default_branch_is_not_main_does_not_no_op_silently` | FAILED |
+| drop the refusal, keep the derivation | `…refused_by_name_and_lists_what_exists` | FAILED |
+| let a `loop/` branch be inherited | `…a_loop_branch_is_never_inherited_as_the_base` | FAILED |
+| restore the adopter-only subtotal | `…skill_header_count_matches_its_own_listing` | FAILED |
+| restore the literal step 1 | `…does_not_point_at_a_claude_md_adopt_skipped` | FAILED |
+
+All four touched files restored byte-identically (`a79f5b1bb2277fa8`,
+`e5ca0ff59f066ea2`, `680566dd0c084933`, `bd5f6f90787a7a08`).
+
+**Green bar.** `pytest -q`: 2825 passed, 7 skipped, 1 xfailed, **1 failed**;
+2822 → **2834 collected (+12, none removed)** — 9 in the new
+`tests/harness/test_base_ref.py`, 1 in `test_migrate_prompt_agents.py`, 2 in
+the acceptance file. Three xfails became passes, which is the whole of the 4→1
+xfail drop. `mypy aef examples` 135 files clean; `ruff check .` clean;
+`ruff format --check aef tests examples` 285 files clean.
+
+**The one red is inherited and outside this wave's files.**
+`tests/test_prompt_surface.py::test_the_corpus_readme_records_which_model_wrote_what`
+asserts 20 `claude-fable-5-1` and 19 `claude-opus-5[1m]` scenarios over
+`corpus/*/*.json`; the corpus holds
+`Counter({('claude-opus-5[1m]',): 37, (): 11, ('claude-fable-5-1',): 2})`. It
+was already red at `18051c0` before this wave began — ADR 0186 (S3c) re-recorded
+the corpus onto one model and this pinned count, plus the `6/17` fraction beside
+it in `corpus/README.md`, was not moved with it. `corpus/` and the rubric are
+outside this worker's files, and the number is a claim about S3c's measurement
+rather than a test to be edited into green, so it is reported rather than
+touched.
+
+**Errata.** ADR 0187: all three findings closed; its open design question about
+defaulting the base ref is answered above; its xfail expected `EXIT_USAGE` and
+the shipped refusal is `EXIT_ERROR`; and its "non-`main` default branches …
+until F-M8-1 is fixed" caveat no longer holds (the other five surveyed repos
+were still never checked for the shape). ADR 0149: the literal `base_ref =
+"main"` was the same defect its own comment in `aef/harness/zones.py` describes
+for `agents/demo/graph.py`, three fields away in the same dataclass, and it
+survived thirty-eight ADRs after its twin was removed — the rule is about a
+*class*, not a constant: any default in `aef/` naming a repository's branch,
+path or layout is a guess about someone else's repo and should be derived or
+refused rather than spelled.

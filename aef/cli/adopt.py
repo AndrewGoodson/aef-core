@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
@@ -955,11 +956,51 @@ def prompt_agent_checklist_item(agents: int) -> str:
     )
 
 
+#: What step 1 says when adopt could put its block in NO entry file at all.
+#: There is nothing to read, so the step is the fix rather than an instruction
+#: to open a file that does not carry the contract.
+_NO_ENTRY_FILE_STEP = (
+    "aef adopt could put its contract in NO entry file ({reason}) — so nothing below "
+    "reached a file your coding agent reads. Fix that first: clear the obstruction and "
+    "re-run `aef adopt`, or copy the `aef:begin`/`aef:end` block out of "
+    "`.github/copilot-instructions.md`, which did get one, into a real CLAUDE.md or "
+    "AGENTS.md by hand."
+)
+
+
+def entry_file_checklist_item(entry_files: Sequence[str], reason: str = "") -> str:
+    """Step 1, named from the file(s) adopt ACTUALLY wrote or appended to.
+
+    It used to be the literal `Read the generated CLAUDE.md`, unconditionally.
+    `aef adopt` skips `CLAUDE.md` whenever it is a symlink — datamining's
+    shape, and the right call, because `CLAUDE.md` and `AGENTS.md` there
+    resolve to one inode and appending to both would put two blocks in one
+    file. On datamining the link happens to point at `AGENTS.md`, which did
+    get the block, so step 1 accidentally worked; pointed at `README.md` it
+    sends the adopter to a file with no aef content at all (reproduced,
+    F-M8-3, ADR 0187). `CLAUDE.md`'s own promise — "self-contained: a fresh
+    coding-agent session in that other repo can pick up the migration from it
+    alone" — is false for a file adopt never touched.
+
+    So it is derived from the same `written`/`appended`/`skipped` result the
+    report prints, at the one place that knows all three.
+    """
+    if not entry_files:
+        return _NO_ENTRY_FILE_STEP.format(reason=reason or "every candidate was skipped")
+    named = entry_files[0] if len(entry_files) == 1 else " and ".join(entry_files)
+    plural = "" if len(entry_files) == 1 else " (they are byte-identical)"
+    return f"Read the generated {named}{plural} in full before writing any code."
+
+
 def render_migration_checklist(
-    framework: Framework, surface: PromptSurface | None = None
+    framework: Framework,
+    surface: PromptSurface | None = None,
+    *,
+    entry_files: Sequence[str] = ("CLAUDE.md",),
+    entry_skip_reason: str = "",
 ) -> list[str]:
     common = [
-        "Read the generated CLAUDE.md in full before writing any code.",
+        entry_file_checklist_item(entry_files, entry_skip_reason),
         "Fill in aef.yaml: objectives, tools.allow, policies, evaluator.suites.",
         "Identify your current entrypoint(s) — the function(s) that start an agent run.",
         # Derived from DEFAULT_AGENT_ROOT rather than spelled out, so a repo
@@ -1636,6 +1677,11 @@ def render_new_model_check_skill() -> str:
     )
 
 
+#: Why an entry file is skipped when its block is already the current one.
+#: Named once because the checklist reads it back: a file skipped for THIS
+#: reason does carry the contract, and step 1 must still name it (F-M8-3).
+_BLOCK_ALREADY_CURRENT = "already carries the current aef block"
+
 #: The five entry files ADR 0153 allows a block in, and the marker pair each
 #: one uses. Named once so the pre-pass below cannot drift from the writes.
 _BLOCK_FILES: tuple[tuple[str, tuple[str, str]], ...] = (
@@ -1749,7 +1795,7 @@ def run_adopt(target_dir: Path) -> AdoptResult:
             )
             return
         if outcome.data == existing:
-            _skip(path, "already carries the current aef block")
+            _skip(path, _BLOCK_ALREADY_CURRENT)
             return
         path.write_bytes(outcome.data)
         appended.append(path)
@@ -1792,21 +1838,6 @@ def run_adopt(target_dir: Path) -> AdoptResult:
         markers=GITIGNORE_MARKERS,
     )
 
-    checklist = render_migration_checklist(framework, surface)
-    if legacy_blocks:
-        checklist.append(legacy_block_upgraded_note(legacy_blocks))
-    if gitignore in appended:
-        checklist.append(gitignore_appended_note())
-    elif gitignore in skipped and not covered:
-        # Unreadable, a symlink, a directory, or markers we refuse to resolve:
-        # the patterns cannot be shown to be there and could not be added, and
-        # claiming otherwise is the one answer that costs a drift budget.
-        checklist.extend(gitignore_gaps(existing_gitignore))
-    _write_if_absent(
-        "AEF_MIGRATION_CHECKLIST.md",
-        "# AEF migration checklist\n\n" + "\n".join(f"- [ ] {item}" for item in checklist),
-    )
-
     # Onboarding kit: the ingest-and-start guide plus the inlined autonomy
     # safety contract, so a new repo agent inherits both (see docs/adr/0034).
     _write_if_absent("AGENT_INTEGRATION.md", render_agent_integration_md(repo_name))
@@ -1832,6 +1863,45 @@ def run_adopt(target_dir: Path) -> AdoptResult:
         ".cursor/rules/aef.mdc",
         render_cursor_rule(repo_name, framework, surface),
         block=entry_block,
+    )
+
+    # HERE, and not before `CLAUDE.md`/`AGENTS.md` were handled, because step 1
+    # of the checklist names the entry file adopt ACTUALLY wrote or appended to
+    # — and until it moved, `CLAUDE.md` skipped as a symlink still produced
+    # `1. Read the generated CLAUDE.md in full before writing any code.` as the
+    # first thing a fresh session in that repo reads (F-M8-3, ADR 0187). The
+    # `.gitignore` note two lines down already worked this way, for the same
+    # reason spelled out above it: what the checklist says depends on what
+    # happened. Nothing between here and there reads the checklist.
+    entry_paths = [target_dir / name for name in ("CLAUDE.md", "AGENTS.md")]
+
+    def _carries_contract(path: Path) -> bool:
+        # Written, appended to, or skipped BECAUSE the block is already there
+        # — a second `adopt` skips every entry file with that reason, and the
+        # file it skipped is exactly the file the adopter should read.
+        return path in written or path in appended or reasons.get(path) == _BLOCK_ALREADY_CURRENT
+
+    entry_files = [p.name for p in entry_paths if _carries_contract(p)]
+    entry_skip_reason = "; ".join(
+        f"{p.name}: {reasons.get(p, 'already exists')}"
+        for p in entry_paths
+        if p in skipped and not _carries_contract(p)
+    )
+    checklist = render_migration_checklist(
+        framework, surface, entry_files=tuple(entry_files), entry_skip_reason=entry_skip_reason
+    )
+    if legacy_blocks:
+        checklist.append(legacy_block_upgraded_note(legacy_blocks))
+    if gitignore in appended:
+        checklist.append(gitignore_appended_note())
+    elif gitignore in skipped and not covered:
+        # Unreadable, a symlink, a directory, or markers we refuse to resolve:
+        # the patterns cannot be shown to be there and could not be added, and
+        # claiming otherwise is the one answer that costs a drift budget.
+        checklist.extend(gitignore_gaps(existing_gitignore))
+    _write_if_absent(
+        "AEF_MIGRATION_CHECKLIST.md",
+        "# AEF migration checklist\n\n" + "\n".join(f"- [ ] {item}" for item in checklist),
     )
 
     # The self-rewiring loop kit (ADR 0057/0058). LOOP.md leads with what does
