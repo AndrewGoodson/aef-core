@@ -4985,3 +4985,100 @@ moves** — this is apparatus.
 every-graph scan, unreachable under a widened root), which belongs to another
 worker; and the generated `FIRST_DAY.md`/`aef.yaml` templates say nothing about
 the new opt-in — the exact paragraph M7 should place is in ADR 0181.
+
+## M8 — two more repos, and the one that exited 0 having done nothing (ADR 0187)
+
+**Zero live model calls.** `model_provider.impl: command` with
+`argv: ["/bin/echo", "{system}", "{prompt}"]` throughout — M5's offline form
+(ADR 0158). `aef/` untouched: every defect is a finding with a reproduction,
+pinned as a strict xfail, handed to the fix wave.
+
+ADR 0158 proved the documented sequence on a clone of `marlin`. One repo is one
+repo — every assertion in that test could be true because marlin happens to be
+shaped that way. So the same sequence, unchanged, on clones of the other two
+prompt-file repos in `UPGRADE_LOOP.md`'s survey.
+
+**Both completed and reached a gate verdict.**
+
+| | `keystone` | `datamining` |
+|---|---|---|
+| detection | `prompt_files (7 agents, 4 skills, AGENTS.md, .codex)` | `prompt_files (13 agents, 6 skills, AGENTS.md)` |
+| personas found / on disk | 7 / 7 | 13 / 13 |
+| skipped · refused · collided | 0 · 0 · 0 | 0 · 0 · 0 |
+| `AGENTS.md` bytes | verbatim prefix, `36 0` numstat | verbatim prefix, `36 0` numstat |
+| tracked files | 192 | 1109 |
+| gate pass | 17.4 s, `G2 fail`, drift 0.008/0.500 | 63.2 s, `G2 fail`, drift 0.004/0.500 |
+
+The `G2 fail` is expected and is the proof the gates ran: `--cassette-miss fail`
+plus a changed prompt is a changed cassette key, so every recorded call misses.
+Behind each one is a real cohort — `1 candidate + 1 incumbent + 5 random
+control(s)`, 21 scenario executions of a real graph (ADR 0170). Both candidate
+diffs are exactly the persona; both repos stayed on their own branch.
+
+**Four shapes no fixture in this repo had.** A persona whose `name:` is not its
+filename (`source-agent.md` carries `name: marlin-source`, so the module, the
+graph id and the file are three different strings). Five persona-shaped `.md`
+files under directories literally named `agents/`, inside keystone's
+`verify-and-ship` lint corpus, plus two nested `SKILL.md` — `find` says 6
+`SKILL.md`, `discover_skills`'s one-level glob says 4, and it is right; none of
+the five was migrated. `model:` frontmatter on 12 of datamining's 13, reported
+per persona (`model, tools` for `publisher`, `tools` alone for
+`data-floor-lead`), read and never obeyed. And a `CLAUDE.md` **tracked as a
+symlink to `AGENTS.md`**, which adoption refuses by name — load-bearing, because
+both names are one inode and appending to both would put two signed blocks in
+one file. Measured after: `<!-- aef:begin sha256=` appears once, `CLAUDE.md` is
+still a symlink.
+
+**F-M8-1 (HIGH) — a non-`main` default branch no-ops, and exits 0.**
+`datamining`'s default branch is `azure-agent/uptime-monitoring`; there is no
+`main` in the repository at all. adopt, migrate, bootstrap, bless and doctor all
+succeeded and said nothing about it, then:
+
+```
+  no agent source at .claude/agents/dev-agent.md in main: no candidate
+EXIT=0
+```
+
+The persona is present, committed, and was blessed one step earlier; what is
+absent is the ref. `path_exists_at` cannot distinguish an absent FILE from an
+absent REF, so the message blames the file — and `no candidate` at exit 0 is
+also what a legitimate empty proposal prints twelve lines above, so an operator
+who has learned that `no candidate` is normal cannot see that this one is not.
+No `doctor` obligation covers the base ref. `aef/harness/zones.py` already names
+this exact shape in a comment, for the default agent PATH that ADR 0149 fixed;
+the default base REF was left behind. Reproduced on a scratch repo whose only
+difference from the passing case is `git init -b trunk`. Workaround used:
+`--base azure-agent/uptime-monitoring`, after which the cycle reaches a verdict
+identically to keystone's.
+
+**F-M8-2 (LOW)** — `migrate` prints `found N skill(s)` over N+1 rows, on both
+repos (4/5 and 6/7): the header is the adopter's count with aef's own skill
+excluded (ADR 0172 D4, so it stops changing every run) and the list is the raw
+listing with aef's included and labelled. Each half deliberate; the composition
+is a report wrong about itself.
+
+**F-M8-3 (MEDIUM)** — when `adopt` SKIPS `CLAUDE.md`, the checklist it prints in
+the same output still opens `1. Read the generated CLAUDE.md in full before
+writing any code.` On datamining the link points at `AGENTS.md`, which did get
+the block, so it accidentally works; reproduced with the link pointing at
+`README.md`, step 1 names a file containing `# scratch\n`.
+
+**The test.** `tests/cli/test_second_repo_acceptance.py` — a synthetic fixture
+built from the shapes above (7 flat personas with `name:` != filename, no
+`tools:` key, the lint-corpus noise, the `CLAUDE.md` symlink, `.codex/`, hooks),
+driven through the same sequence and asserted against `ledger.jsonl`: a verdict
+was **reached**, never which one. Plus an explicit assertion that `no candidate`
+is not in the cycle's output — F-M8-1's shape.
+
+**What "works on a repo nobody wrote to pass" now covers**: three repos, one
+owner. **What it does not**: a third party. All three share one house style and
+one author of both the personas and this scaffold's expectations of them, so the
+correlated failure — a convention all three happen to share — is exactly what
+three repos from one owner cannot detect. S7's last +3 stays unclaimed.
+
+Green bar: `pytest -q` **2722 passed, 7 skipped, 4 xfailed**, 2728 -> **2733
+collected** (+5, none removed). `mypy aef examples` 135 files clean.
+`ruff check .` clean. `ruff format --check aef tests examples` 281 files clean.
+Artefacts in `docs/research/second-repo/` (both transcripts + the
+reproductions), scanned with `aef/harness/redaction.py` — clean.
+**No rubric dimension moves** (adoption claims no point).
