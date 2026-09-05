@@ -4815,3 +4815,97 @@ is the root of F2 and the reason its fix needs a warning branch at all;
 its owner makes it an alias; one flaky container-sandbox test; and the fact that
 the suite fails 28 tests with `[Errno 2] No such file or directory: 'python'`
 when the venv is not on `PATH`, which looks exactly like a regression and is not.
+
+## M7 — the documents say what is now true (ADR 0183)
+
+Wave 3 of `UPGRADE_LOOP.md`. Six documents audited against ADRs 0151–0180
+under ADR 0148's rule — *every claim from a command that was RUN*. Model
+`claude-opus-5[1m]`; **zero live model calls** (a copy of the marlin pilot
+clone, `model_provider.impl: command` with `/bin/echo`). No rubric dimension
+moves.
+
+**Fourteen sentences were false or stale, and none of them made a test fail.**
+That is the finding. A document is the one artifact here with no green bar of
+its own.
+
+### The nine in the three hand-written documents
+
+| document | the claim | the fact |
+|---|---|---|
+| `CLAUDE.md`, `docs/roadmap.md` | "LLM-backed reflection … typed interfaces raising `NotImplementedError`" | `llm_reflection.py` has had a body since ADR 0115; it is off by **four measurements** (0115, 0155, 0171, 0175), which is a much stronger sentence than "stubbed" |
+| `CLAUDE.md` | migrate wires `prompt_agent -> reflect -> consolidate -> END` | four nodes, `retrieve` first (0179) — read off the generated module, not off the report, which still says the old thing |
+| `CLAUDE.md`, `AGENT_INTEGRATION.md`, the kit | "the prompt runs; the agent's tools do not" | per-provider. `grok`'s identical `--tools ""` **suppresses nothing** on 1.0.5 (0169) |
+| `CLAUDE.md` | "real for **three** backends" | five (0154) |
+| `CLAUDE.md`, `docs/roadmap.md` | ADR 0110's `knowledge_boost` sweep — "changed no coverage number anywhere, so the benefit is consolidation, not ranking" | S1b: the knob **does** change ranking (0/17 vs 10/17 in prompt) and does not change the task metric; and the coverage proxy is disproved for this corpus (0175) |
+| `CLAUDE.md` | "**50 → 79**" | a self-score. J0 re-scored the same code at 68; the rubric's heading is `grep`ed instead — **72 / 100** (0151) |
+| `CLAUDE.md` | "without ever **overwriting** an existing file" | never-**destroy**, five signed blocks, enforced by `_verify_preserved` (0153/0172) |
+| `CLAUDE.md` | "reads none of your existing code" | it import-scans to label it |
+| `AGENT_INTEGRATION.md`, `docs/roadmap.md` | knowledge is "**not reachable from an `aef.yaml`** — `MERGE_READY_LOOP.md` A1" | `build_retriever(knowledge=...)` exists; closed by ADR 0118 and the sentence outlived it by a release |
+
+### The one that mattered most
+
+**The generated prompt-file sequence could not propose a candidate on any
+repo.** Three independent reasons, each found by running it:
+
+1. no `--agent-root`, so the persona is Zone C and G0 rejects any edit to it;
+2. no `--proposer rule_based_prompt`, so the numeric proposer ran against a
+   file with no constants;
+3. no `--graph-id`, so ADR 0176's warning fires and every failure record is
+   dropped as another graph's — **exit 0, having done nothing**, which is the
+   exact shape `LOOP.md`'s own opening paragraph exists to prevent.
+
+It had been through three ADRs and a parser-level test, because every command
+in it *parsed*. That is the case that shows parsing is not running.
+
+Rewritten and RUN end to end on the pilot copy: proposed a 4-line `.md`
+candidate, `G0/G1/G4/G5 pass` at drift **0.003/0.500**, G2 verdict, exit 1 —
+ADR 0158's shape on a repo aef-core did not write, at zero model cost.
+
+### Also added, each traceable to a command
+
+The four exit codes and what each means (`3` = the command could not do its
+job; fail CI on `>= 2`); the required `--memory`/`--no-memory` with its real
+refusal text; the file-path graph reference (there is no dotted module under a
+widened root) and the persona `--agent-path` form with its real `doctor`
+output; check-derived failure memory and the measured cost of redacting the
+check's value; and the sentence that says a prompt candidate **cannot yet be
+accepted** on live evidence — the gates' worker has no login and the
+credential-free provider cannot cross the worker boundary (0158). K1 has not
+landed, so that sentence is M5's honest one rather than a `gates.live_model_calls`
+description.
+
+`corpus/README.md` gains the provenance table S6 asked for, derived from
+`model_calls[].result.model` — which was on disk the whole time and nothing
+read it: **20 scenarios recorded on `claude-fable-5-1` that cannot be
+re-recorded**, 6 of them 6/17 of the validation split, 19 on Opus, 11 with no
+model call at all.
+
+### Pins
+
+Four load-bearing sentences in `tests/test_prompt_surface.py` — live gating
+blocked, exit code 3, containment per-provider, the Fable recordings —
+whitespace-collapsed so a reflow does not break them, controlled against a
+surface that legitimately says none of them, with the corpus table
+**re-derived from the scenario files inside the test** so the document cannot
+drift from the data. 4 mutations, 4 caught, byte backups sha256-verified.
+
+One pin moved deliberately: `test_the_kit_names_every_wired_harness_and_guesses_at_none`
+pinned the literal `not** reproduced`, which pins markdown rather than a fact.
+
+### Green bar
+
+```
+pytest -q            2692 passed, 7 skipped, 3 xfailed   (from 2679; +13 pin cases)
+mypy aef examples    Success: no issues found in 135 source files
+ruff check .         All checks passed!
+ruff format --check  279 files already formatted
+```
+
+Every emitted `aef` command still parses: **55 checked, 0 failed** (up from
+the 50 floor).
+
+### Reported, not fixed
+
+`aef migrate`'s report prints `wired prompt_agent -> reflect -> consolidate ->
+END` while the module it writes in the same run has four nodes — one fact, two
+owners, kept correct in one (`aef/cli/migrate.py` is another worker's file).
