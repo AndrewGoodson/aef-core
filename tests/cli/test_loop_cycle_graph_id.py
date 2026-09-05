@@ -355,14 +355,16 @@ def test_an_empty_corpus_derives_nothing(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_ambiguous_corpus_refusal_is_a_rejection_and_is_journalled(  # type: ignore[no-untyped-def]
+def test_the_ambiguous_corpus_refusal_is_an_error_not_a_rejection_and_is_journalled(  # type: ignore[no-untyped-def]
     repo: Path, tmp_path: Path, capsys
 ) -> None:
     corpus = _corpus_of(tmp_path / "corpus", "demo_agent", "summary_agent")
 
     code = _cycle(repo, tmp_path, corpus, tmp_path / "memory.jsonl")
 
-    assert code == 1, "a configuration refusal, not a halt"
+    # Was pinned as exit 1 (a rejection) until ADR 0188: the nightly workflow
+    # reads 1 as the loop working, and this is the loop misconfigured.
+    assert code == 3, "a configuration refusal is an ERROR: not a halt, not a verdict"
     assert "records 2 graphs" in capsys.readouterr().err
     journal = tmp_path / "state" / "cycles.jsonl"
     assert journal.is_file(), "the turn must still be journalled (ADR 0167)"

@@ -213,3 +213,18 @@ def test_the_workflows_still_fail_the_job_on_every_code_at_or_above_two(name: st
         assert "aef loop gate" in text
         return
     assert EXIT_HALTED >= 2 and EXIT_ERROR >= 2
+
+
+def test_this_repos_nightly_cycle_names_its_graph_id() -> None:
+    """This repo's corpus holds two graphs (demo_agent, summary_agent), so a
+    cycle without --graph-id refuses — and until ADR 0188 refused with exit
+    1, which the workflow's own case statement reads as "the system
+    working". The second blind re-score reproduced it. Pin the flag."""
+    from pathlib import Path
+
+    text = (
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "loop-monitor.yml"
+    ).read_text()
+    cycle = text[text.index("aef loop cycle") :]
+    cycle = cycle[: cycle.index("tee")]
+    assert "--graph-id demo_agent" in cycle, cycle

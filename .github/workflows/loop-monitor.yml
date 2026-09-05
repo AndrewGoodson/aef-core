@@ -80,6 +80,7 @@ jobs:
           set +e
           aef loop cycle --repo . --state ~/.aef-loop-state \
             --workdir "$RUNNER_TEMP/cycle" --module agents.demo.graph \
+            --graph-id demo_agent \
             --runs ~/.aef-loop-state/runs --corpus corpus \
             --memory ~/.aef-loop-state/memory.jsonl \
             | tee -a "$GITHUB_STEP_SUMMARY"
