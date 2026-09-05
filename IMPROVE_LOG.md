@@ -5996,3 +5996,114 @@ survived thirty-eight ADRs after its twin was removed — the rule is about a
 *class*, not a constant: any default in `aef/` naming a repository's branch,
 path or layout is a guess about someone else's repo and should be derived or
 refused rather than spelled.
+
+## Fix wave L2 — the ingestion path opens (ADR 0190)
+
+**All three of ADR 0163's findings closed. Zero live model calls.** Every one
+was reproduced by running a command before anything was edited, and every fix
+has a mutation that turns its test red and a sha256-verified byte restore.
+
+**The sentence that stops being true:** *"No run of any `aef migrate`-generated
+prompt-agent graph has ever been harvestable, on any repo, by any invocation"*
+(ADR 0163 §6). `adopt -> migrate -> aef run --record-runs -> aef loop harvest`
+now ends in `promoted 1 run(s) to the train split`, offline, through the real
+CLI, and M6's strict xfail
+(`test_a_recorded_production_run_can_be_harvested_into_the_corpus`) is the
+assertion rather than the pin.
+
+**F-M6-1 — the recorder did not record.** `aef run --record-runs` built
+`RecordedRun(...)` with no `model_calls=`, so harvest's determinism re-check
+replayed every real run against an empty cassette, the call failed, and the run
+was rejected as non-deterministic — exactly the outcome
+`RecordedRun.model_calls`' own docstring had predicted, *"a correct-looking
+rejection for the wrong reason"*. It was the one recording path that skipped
+`recorder.py`'s wrapper, and the only one `harvest`, `cycle --runs` and the
+generated nightly workflow are fed from. Fixed by using the same recording
+`CassetteProvider` those two use — one recorder, ADR 0149's rule — wrapped only
+when the run is being recorded, so a plain `aef run` still refuses with
+`ServiceNotConfiguredError` rather than a cassette miss.
+
+**F-M6-2 — the re-check could not reproduce a containment fact.** With the
+cassette supplied the run was still rejected, on one field:
+`_reexecution_services` built `CassetteProvider(None, …)`, so ADR 0169's
+`prompt_agent__containment` re-executed as `isolation: [], persona_role:
+'unknown'` against a recorded four-element set, and `_reexecutes_identically`
+compares the encoded trace byte for byte.
+
+M6 offered two ways out and this wave took **(a)**: the recorded run carries the
+provider's own declaration — `provider_isolation`, `provider_name`, captured at
+recording time from the object that answered — and the replay reproduces it.
+**(b), ignoring `*__containment` keys in the comparison, was rejected as
+unsound**: it deletes a recorded fact from the definition of *"behaviour
+unchanged"*, so a run recorded under `no_tools` would be admitted on the
+strength of a re-execution that never checked — ADR 0169's stamped claim, one
+layer down, in the place that is supposed to be checking. The objection to (a)
+is 0169's own words about not inventing an absent provider's properties, and it
+does not land: the set is *observed* at capture time and stored as data, and
+replaying an observation is the opposite of manufacturing one. Nothing live is
+reachable — `_RecordedIsolation` declares and its `complete` raises.
+
+Three arms, offline, and after the fix **with no monkeypatching left** (arm 2 in
+ADR 0163 had to patch `_reexecution_services` in-process; the missing piece is
+now data):
+
+```
+arm 0  the run the OLD recorder wrote      -> 1 REJECTED, did not re-execute deterministically
+arm 1  + the cassette never written        -> 1 REJECTED, did not re-execute deterministically
+arm 2  + the provider declaration          -> promoted 1 run(s) to the train split
+```
+
+**The control is exactly as strict as before.** Change only the declaration on a
+recorded run — a persona that went out in the system turn, replayed as one that
+went out in the user turn — and it is still rejected. That is the case (b) would
+have admitted silently.
+
+**F-M6-3 — `cycle --runs` was a silent no-op without `--module`.** Reproduced on
+two `--no-memory` invocations one flag apart: arm A printed no harvest line and
+exited 0 with a runs directory in hand; arm B, plus `--module`, harvested and
+reported. Now refused with `EXIT_ERROR`, naming both flags and what the missing
+one is for. `EXIT_ERROR` rather than `EXIT_USAGE` because under the loop's exit
+vocabulary 2 reads as a halt and 3 is the code the nightly workflow summarises
+as *"fix the invocation"* — and the two sibling refusals in the same function
+still return 2, which is ADR 0182's open item 3 and an owner's decision.
+
+**Two of the pilot's observations, acted on.** `harvest` now filters runs by
+`graph_id` and says so (`N recorded from another graph, not re-executed here`) —
+it had been re-executing another graph's run against this one's entrypoint and
+stamping the promoted scenario with the run's own id, masked only by F-M6-1, and
+the masking would have lifted in the same commit that fixed it. And `digest`
+draws the line the pilot found missing between `Production runs recorded: 5` and
+`Scenarios added to the corpus: 0`.
+
+**M6's five real runs, through the fixed leg: 5 of 5 promoted.** Not the stub
+— the pilot's own recorded runs, three marlin personas, answered live by
+`claude_code`, re-recorded through the fixed recorder from *their own* recorded
+declaration (`['no_mcp','no_project_context','no_tools','single_turn',
+'system_role']`, read out of each run's containment block) and *their own*
+recorded answers (read out of each run's trace). Zero live calls: nothing was
+re-requested. The honest other half is that the five files **as the old recorder
+wrote them** still reject, five for five — the fix does not retro-repair an
+artefact, and getting the pilot's files into a corpus means re-running `aef run
+--record-runs`, which costs live calls.
+
+**The rubric is not edited and no row is added.** What changed is that ADR
+0164's pre-registered branch — *"if `harvest` refuses every run, claim +0 and
+quote why"* — quoted F-M6-1 and F-M6-2 as the why, and both are closed. **S7's
++2 is re-measurable and M6's five real runs are the artifact**, already
+recorded and redacted in `docs/research/pilot-marlin/`. Re-measuring is J0's,
+not a fix worker's. Clause (b) of that pre-registration — a candidate proposed
+*from harvested* evidence — is not claimed here, and the last +3 stays unclaimed
+for the reason it always did: marlin is the owner's own repo.
+
+**A near-miss worth recording**, because it is the reason the method counts
+tests. The script that removed M6's strict xfail sliced from the *first*
+`@pytest.mark.xfail(strict=True,` in the file, and there were two — it deleted
+three unrelated tests, and **the suite went green**, because a deleted test
+fails nothing. Caught by counting `^def test_` per file before and after, and
+restored byte-identically. A test count that only ever goes up is not
+paperwork.
+
+**Green bar:** `pytest -q` 2856 passed, 7 skipped, 4 xfailed (2867 collected,
+from 2850 — +17 tests, none removed, and one strict xfail became a pass);
+`mypy aef examples` clean on 135 files; `ruff check .` clean; `ruff format
+--check` clean on 287 files.

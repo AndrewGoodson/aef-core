@@ -725,31 +725,31 @@ def test_the_sandbox_env_allowlist_carries_what_the_harness_login_needs() -> Non
 
 # M6 (ADR 0163) extends the sequence past `cycle` to the leg the trust case's
 # criterion 1 actually names: a run recorded from production, harvested into
-# the corpus. On the marlin pilot that leg promoted 0 of 5 real runs. Both
-# causes are pinned here, offline, against the same synthetic repo and the same
-# `command` stub — no credential, no model, and they fail loudly the day either
-# is fixed.
+# the corpus. On the marlin pilot that leg promoted 0 of 5 real runs, for two
+# reasons in series, and both were pinned here as one strict xfail. ADR 0190
+# closed both, so the pin is now an assertion: this is the whole ingestion path
+# end to end, offline, against the same synthetic repo and the same `command`
+# stub — no credential, no model.
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "F-M6-1 and F-M6-2, in series. (1) `aef run --record-runs` constructs "
-        "`RecordedRun(...)` with no `model_calls=`, so the field defaults to `()` and "
-        "harvest's determinism re-check replays against an empty cassette — the exact "
-        "failure `RecordedRun.model_calls`' own docstring calls 'a correct-looking "
-        "rejection for the wrong reason'. (2) Even with the cassette supplied, "
-        "`harvest._reexecution_services` builds `CassetteProvider(None, ...)` with no "
-        "inner provider, so ADR 0169's `prompt_agent__containment` re-executes as "
-        "`isolation: [], persona_role: 'unknown'` against the recorded values, and "
-        "`_reexecutes_identically` compares the encoded trace byte for byte. So NO run "
-        "of any `aef migrate`-generated prompt-agent graph is harvestable, on any repo"
-    ),
-)
 @pytest.mark.slow
 def test_a_recorded_production_run_can_be_harvested_into_the_corpus(
     prompt_repo: tuple[Path, Path],
 ) -> None:
+    """THE regression test for ADR 0163's F-M6-1 and F-M6-2, in series.
+
+    It was a strict xfail from M6 until ADR 0190, and the reason it was one
+    xfail for two defects is that the three-arm isolation showed either fix
+    alone changes nothing: as shipped, rejected; plus the cassette the
+    recorder never wrote, rejected; plus the provider declaration the
+    re-check never had, promoted.
+
+    What it asserts is the whole ingestion path an owner is documented to
+    run — `adopt` -> `migrate` -> `aef run --record-runs` -> `aef loop
+    harvest` — ending in `promoted 1 run(s)`. Before ADR 0190 no run of any
+    `aef migrate`-generated prompt-agent graph had ever been harvested, on
+    any repo, by any invocation.
+    """
     repo, tmp_path = prompt_repo
     runs = tmp_path / "runs"
     assert _aef(repo, "adopt", "--dir", ".").returncode == 0
@@ -790,18 +790,20 @@ def test_a_recorded_production_run_can_be_harvested_into_the_corpus(
     assert "promoted 1 run(s)" in harvest.stdout, harvest.stdout
 
 
-def test_the_recorder_pins_the_cassette_the_determinism_check_needs() -> None:
-    """F-M6-1, narrowed to the one line that causes it.
+def test_every_recording_path_goes_through_one_recorder() -> None:
+    """F-M6-1's cause, now its pin: ONE recorder (ADR 0149's rule).
 
     `aef loop record` and `aef loop bootstrap` both go through `recorder.py`,
     which wraps the provider in a `CassetteProvider` and stores
-    `recording.recorded` on the scenario. `aef run --record-runs` is the one
-    recording path that does not — and it is the only one `harvest`, `cycle
-    --runs` and the generated nightly workflow are fed from.
+    `recording.recorded`. `aef run --record-runs` was the one recording path
+    that did not — and it is the only one `harvest`, `cycle --runs` and the
+    generated nightly workflow are fed from, so every real run reached the
+    determinism re-check with an empty cassette.
 
-    This asserts what is TRUE TODAY, so it is a description rather than a pin,
-    and the xfail above is what turns red when the defect is fixed. Its job is
-    to make the cause greppable from the test suite.
+    This was a *description* of the defect until ADR 0190, asserting the
+    absence so the cause was greppable from the suite. It asserts the fix
+    now: a third recording path that forgets the wrapper fails here rather
+    than in a pilot.
     """
     import inspect
 
@@ -810,9 +812,14 @@ def test_the_recorder_pins_the_cassette_the_determinism_check_needs() -> None:
 
     source = inspect.getsource(run_cli.run_graph_module)
     assert "RecordedRun(" in source
-    assert "model_calls=" not in source, (
-        "aef/cli/run.py now passes model_calls to RecordedRun — F-M6-1 may be fixed; "
-        "check the strict xfail above."
+    assert 'CassetteProvider(model_provider, on_miss="live")' in source, (
+        "aef run --record-runs must capture model calls through the same recording "
+        "wrapper record/bootstrap use (ADR 0149's one recorder, ADR 0190)"
+    )
+    assert "model_calls=recording.recorded" in source
+    assert "provider_isolation=" in source, (
+        "the recorded run must also carry the provider's own containment declaration, "
+        "or harvest's re-check cannot reproduce ADR 0169's containment record"
     )
     assert "model_calls=recording.recorded" in inspect.getsource(recorder)
 

@@ -51,6 +51,7 @@ from aef.kernel import (
     InMemoryDurabilityBackend,
 )
 from aef.providers.base import ModelProvider
+from aef.providers.cassette_provider import CassetteProvider
 from aef.security.tool import FileAuditLogWriter, PolicyConfig
 from aef.services.knowledge.consolidate import RuleBasedConsolidator
 from aef.services.knowledge.in_memory import InMemoryKnowledgeStore
@@ -224,6 +225,29 @@ def run_graph_module(
     reflection = run_config.reflection
     reflection_model = run_config.reflection_model
 
+    # ONE recorder, and this is the command that did not use it (ADR 0149's
+    # rule, ADR 0190's finding). `aef loop record` and `aef loop bootstrap`
+    # both wrap the configured provider in a recording `CassetteProvider` and
+    # carry `recording.recorded` onto what they write; `aef run --record-runs`
+    # built its `RecordedRun` with no `model_calls=` at all — and it is the
+    # ONLY recording path `harvest`, `cycle --runs` and the generated nightly
+    # workflow are fed from. So harvest's determinism re-check replayed every
+    # real run against an EMPTY cassette, the call failed, and the run was
+    # rejected as non-deterministic: `RecordedRun.model_calls`' own docstring
+    # named that outcome — "a correct-looking rejection for the wrong reason"
+    # — before anything had been observed doing it. Reproduced on five real
+    # runs of a real repo (ADR 0163 §6) and offline for free (ADR 0190).
+    #
+    # Wrapped ONLY when the run is being recorded, unlike `recorder.py` which
+    # wraps always: with no `--config` there is no provider, and this module's
+    # contract is that `require_model_provider()` then raises
+    # `ServiceNotConfiguredError` rather than a cassette miss. A plain
+    # `aef run` is byte-for-byte the run it was.
+    recording: CassetteProvider | None = None
+    if record_runs_dir is not None and model_provider is not None:
+        recording = CassetteProvider(model_provider, on_miss="live")
+        model_provider = recording
+
     durability: DurabilityBackend = (
         FileDurabilityBackend(Path(checkpoints_dir))
         if checkpoints_dir is not None
@@ -312,6 +336,24 @@ def run_graph_module(
                 initial_state=state,
                 trace=result.trace,
                 at=datetime.now(UTC),
+                model_calls=recording.recorded if recording is not None else (),
+                # The provider's own containment declaration, read from the
+                # object that answered rather than from config, so the
+                # determinism re-check can reproduce ADR 0169's containment
+                # record instead of writing `isolation: []` against it
+                # (ADR 0163's F-M6-2, closed in ADR 0190).
+                provider_isolation=(
+                    tuple(sorted(recording.isolation)) if recording is not None else ()
+                ),
+                # The wrapped provider's name, not the wrapper's — see
+                # `RecordedRun.provider_name` for why it is kept even though
+                # the containment record currently says 'cassette' on both
+                # sides (ADR 0182's open item 1).
+                provider_name=(
+                    recording.inner.name
+                    if recording is not None and recording.inner is not None
+                    else ""
+                ),
             ),
         )
 

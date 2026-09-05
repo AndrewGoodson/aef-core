@@ -398,6 +398,25 @@ class Digest:
                 "gates keep measuring what the agent used to do. Pass `--record-runs` "
                 "from your deployment.",
             ]
+        elif self.scenarios_added == 0:
+            # The line nobody drew. `Production runs recorded: 5` and
+            # `Scenarios added to the corpus: 0` sat in one report with
+            # nothing between them, and the warning above fires only on a
+            # ZERO — so an owner who had followed its advice five times read
+            # a digest that said nothing at all about the corpus not growing
+            # (ADR 0163 §10, closed in ADR 0190).
+            lines += [
+                "",
+                f"**{self.runs_recorded} recorded, 0 admitted to the corpus.** Recording "
+                f"is not harvesting: a run becomes a scenario only if `aef loop harvest` "
+                f"re-executes it identically and its behaviour survives redaction. Which "
+                f"of those it was is in that command's own report line — run `aef loop "
+                f"harvest <graph> --runs <dir> --corpus <dir>` and read it. Two answers "
+                f"are ordinary — every run passed (harvest promotes failures unless "
+                f"`--include-successes`), or the daily limit held them back — and one is "
+                f"not: `REJECTED, did not re-execute deterministically` on every run "
+                f"means the ingestion path is broken, not quiet.",
+            ]
         # Two different things wearing one sentence. `security_event: True` was
         # rendered as "a proposal reached for the harness" whatever wrote it,
         # so an uncontained shadow — a runner with no Docker, or an owner who

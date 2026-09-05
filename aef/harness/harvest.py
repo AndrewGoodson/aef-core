@@ -33,10 +33,28 @@ silently dropped every real production failure: bootstrap 12 inputs, harvest 3
 real runs, `promoted 0 run(s)`, `3 held back by the daily rate limit`, exit 0
 (reproduced, ADR 0141). `Scenario.source` now says who wrote each one and only
 `Source.HARVEST` is charged.
+
+**One graph per invocation.** A run whose `graph_id` is not the id of the graph
+on the command line is skipped and reported, not re-executed against it. There
+was no such filter: every run in the directory was re-executed against whatever
+entrypoint was passed and, if it reproduced, promoted with its OWN `graph_id`
+stamped on it — a scenario whose label and whose trace describe two different
+graphs. On the ADR 0163 pilot this was invisible because a foreign run missed
+the cassette and was reported as non-deterministic instead (ADR 0190).
+
+**Re-execution replays the recorded provider's containment declaration.** The
+clock is pinned (ADR 0048) and the model is pinned (ADR 0126), and a third
+input was not: `PromptAgentNode` writes `provider.isolation` into
+`working_memory` on every run (ADR 0169) and the re-check compares the encoded
+trace byte for byte, so a replay-only cassette — which declares nothing,
+correctly — made every prompt-agent run look non-deterministic. The
+declaration recorded at capture time now travels on the `RecordedRun` and is
+replayed; nothing live is ever reached (ADR 0190).
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -57,6 +75,12 @@ from aef.harness.trace_codec import decode_trace, dumps, encode_trace, loads
 from aef.kernel import GraphExecutor, Services
 from aef.kernel.executor import NodeExecutionRecord
 from aef.kernel.graph import Graph
+from aef.providers.base import (
+    CompletionRequest,
+    CompletionResult,
+    ModelProvider,
+    ModelProviderError,
+)
 from aef.providers.cassette_provider import CassetteProvider, RecordedCall
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.services.runtime import agent_services
@@ -88,6 +112,43 @@ class RecordedRun:
     # for the wrong reason. Empty for a legacy recorded run and for any graph
     # that never asked a model anything, exactly as `Scenario.model_calls` is.
     model_calls: tuple[RecordedCall, ...] = ()
+    # What the provider that answered those calls DECLARED about its own
+    # containment, sorted, captured at recording time (ADR 0169's `isolation`
+    # set; ADR 0190 records it here).
+    #
+    # This is data, not a derivation: `PromptAgentNode` writes
+    # `working_memory["<node>__containment"]` from `provider.isolation` on
+    # every run, and the determinism re-check compares the encoded trace byte
+    # for byte. A replay-only cassette has no inner provider and therefore
+    # declares nothing, so without this field the re-execution wrote
+    # `isolation: [], persona_role: 'unknown'` against a recorded
+    # `['no_mcp', ..., 'system_role'], 'system'` and EVERY run of every
+    # `aef migrate`-generated prompt-agent graph was rejected as
+    # non-deterministic (ADR 0163's F-M6-2, reproduced offline).
+    #
+    # `persona_role` is deliberately NOT stored beside it: it is
+    # `persona_role(isolation)` and nothing else, and a second copy of a
+    # derived value is a second thing that can disagree.
+    #
+    # Empty for a legacy recorded run and for a provider that declared
+    # nothing, in which case the replay declares nothing either — which is
+    # exactly what it did before, so no legacy run's verdict moves.
+    provider_isolation: tuple[str, ...] = ()
+    # The name of the provider the recording wrapper wrapped — `command`,
+    # `claude_code`, `codex`, … — kept beside its isolation set for one
+    # reason, which is forward-compatibility rather than display.
+    #
+    # `containment["provider"]` is `provider.name`, and today that is the
+    # recording wrapper's own `'cassette'` on BOTH sides of the comparison
+    # (ADR 0182's open item 1: the wrapper masks the provider name in the
+    # containment record, on `bootstrap`'s path and now on this one). It
+    # therefore matches by accident. The day that open item is closed —
+    # `CassetteProvider.name` forwarding its inner provider's — recording
+    # would say `'command'` and a replay whose shim named itself would say
+    # something else, and F-M6-2 would reopen in a new spelling. Recorded
+    # here, the replay shim answers with the same name the recording had,
+    # whichever of the two `CassetteProvider` decides to report.
+    provider_name: str = ""
 
     @property
     def failed(self) -> bool:
@@ -113,6 +174,8 @@ class RecordedRun:
             "trace": encode_trace(self.trace),
             "at": self.at.isoformat(),
             "model_calls": [call.to_payload() for call in self.model_calls],
+            "provider_isolation": list(self.provider_isolation),
+            "provider_name": self.provider_name,
         }
 
     @classmethod
@@ -130,6 +193,14 @@ class RecordedRun:
                 model_calls=tuple(
                     RecordedCall.from_payload(c) for c in payload.get("model_calls", ())
                 ),
+                # Sorted on load as well as on capture: the containment record
+                # the node writes is `sorted(isolation)`, and a payload someone
+                # hand-edited into another order would replay a set that
+                # encodes differently from the one that was recorded.
+                provider_isolation=tuple(
+                    sorted(str(s) for s in payload.get("provider_isolation", ()))
+                ),
+                provider_name=str(payload.get("provider_name", "")),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise HarvestError(f"malformed recorded run: {exc}") from exc
@@ -155,6 +226,16 @@ class HarvestOutcome:
     promoted: tuple[str, ...] = ()
     skipped_passing: tuple[str, ...] = ()
     skipped_existing: tuple[str, ...] = ()
+    # Runs of a DIFFERENT graph than the one named on the command line.
+    # `harvest()` iterated the runs directory with no filter and stamped each
+    # promoted scenario with the run's own `graph_id` while having re-executed
+    # it against the graph it was handed — so a scenario could enter the
+    # corpus labelled 'graph-a' carrying the trace of 'graph-b's entrypoint.
+    # On the pilot this was masked: a run from another persona missed the
+    # cassette and was rejected as non-deterministic instead. The masking was
+    # F-M6-1's doing, and it stops the moment F-M6-1 is fixed (ADR 0163 §6,
+    # third observation; ADR 0190).
+    skipped_other_graph: tuple[str, ...] = ()
     rejected_nondeterministic: tuple[str, ...] = ()
     skipped_rate_limited: tuple[str, ...] = ()
     # Redaction (ADR 0119): the run's behaviour depended on something the
@@ -176,6 +257,7 @@ class HarvestOutcome:
         out: list[str] = [f"promoted {len(self.promoted)} run(s) to the train split"]
         for label, items in (
             ("already in the corpus", self.skipped_existing),
+            ("recorded from another graph, not re-executed here", self.skipped_other_graph),
             ("passed, not promoted", self.skipped_passing),
             ("REJECTED, did not re-execute deterministically", self.rejected_nondeterministic),
             ("held back by the daily rate limit", self.skipped_rate_limited),
@@ -206,7 +288,55 @@ class HarvestOutcome:
         return tuple(out)
 
 
-def _reexecution_services(scenario: Scenario) -> Services:
+class _RecordedIsolation(ModelProvider):
+    """The recording provider's own `isolation` declaration, replayed.
+
+    Not a provider: it answers nothing and cannot. It exists so the replay
+    cassette has something to forward an `isolation` set from, because
+    `CassetteProvider.isolation` forwards its inner provider's declaration
+    and reports nothing when there is none — which is right, and which made
+    ADR 0169's containment record unreproducible (ADR 0163's F-M6-2).
+
+    **Why this is not "inventing the provider's properties", which is the
+    failure mode ADR 0169 exists to close.** 0169's rule is that a claim about
+    containment must never be *inherited unverified*: a replay must not assert
+    isolation it did not observe. The set here was observed — by the recorder,
+    at capture time, from the provider that actually answered — and stored on
+    the run. Replaying a recorded fact is the opposite of manufacturing one.
+    What would be unsound is `CassetteProvider` reporting a set of its own, or
+    a set defaulted from config; neither happens. The alternative considered
+    and rejected was to exclude `*__containment` keys from the trace
+    comparison, which would delete a recorded fact from the definition of
+    "behaviour unchanged" and let a run recorded under `no_tools` be admitted
+    on the strength of a re-execution that never checked (ADR 0190).
+
+    `complete` raises rather than returning: nothing may reach a live model to
+    decide whether a run was deterministic, and a shim that answered would be
+    a way for that to happen quietly.
+    """
+
+    #: Used only when the run recorded no provider name (a legacy run).
+    DEFAULT_NAME = "recorded-isolation"
+
+    def __init__(self, isolation: Iterable[str], name: str = "") -> None:
+        self._isolation = frozenset(isolation)
+        self.name = name or self.DEFAULT_NAME
+
+    @property
+    def isolation(self) -> frozenset[str]:
+        return self._isolation
+
+    def complete(self, request: CompletionRequest) -> CompletionResult:
+        raise ModelProviderError(
+            "the determinism re-check has no live provider by design: this object carries "
+            "the recorded provider's isolation declaration and answers nothing. A request "
+            "reaching it means the cassette missed, which is a behavioural difference."
+        )
+
+
+def _reexecution_services(
+    scenario: Scenario, isolation: tuple[str, ...] = (), provider_name: str = ""
+) -> Services:
     """Mirrors `scenario_runner.run_scenario` — harvest asks the same
     question the gates do, so it has to ask it of the same environment.
 
@@ -217,8 +347,18 @@ def _reexecution_services(scenario: Scenario) -> Services:
     perfectly reproducible. `on_miss="fail"` and no live provider, because a
     harvest that reaches the network to decide whether a run is deterministic
     has already lost the property it is checking.
+
+    And it includes the recorded provider's `isolation` declaration (ADR
+    0190): pinning the clock and the model still left one input to the run
+    unpinned, and a prompt-agent node reads it on every execution. Still no
+    live provider — `_RecordedIsolation` answers nothing — so the property
+    this function is checking is intact.
     """
-    cassette = CassetteProvider(None, scenario.model_calls, on_miss="fail")
+    cassette = CassetteProvider(
+        _RecordedIsolation(isolation, provider_name) if (isolation or provider_name) else None,
+        scenario.model_calls,
+        on_miss="fail",
+    )
     return agent_services(
         clock=_fixed_clock(scenario),
         memory=InMemoryMemoryStore(),
@@ -248,9 +388,10 @@ def _reexecutes_identically(run: RecordedRun, graph: Graph) -> bool:
         # here made every reflect-node or policy-gated agent fail the
         # determinism re-check for a missing service rather than for
         # non-determinism, so harvest silently promoted nothing (ADR 0079).
-        result = GraphExecutor(graph.compile(), _reexecution_services(scenario)).run(
-            run.initial_state, record_trace=True
-        )
+        result = GraphExecutor(
+            graph.compile(),
+            _reexecution_services(scenario, run.provider_isolation, run.provider_name),
+        ).run(run.initial_state, record_trace=True)
     except Exception:  # noqa: BLE001 - any failure to reproduce is a rejection
         return False
     if result.trace is None:
@@ -274,9 +415,10 @@ def _reexecute(
         model_calls=run.model_calls,
     )
     try:
-        result = GraphExecutor(graph.compile(), _reexecution_services(scenario)).run(
-            state, record_trace=True
-        )
+        result = GraphExecutor(
+            graph.compile(),
+            _reexecution_services(scenario, run.provider_isolation, run.provider_name),
+        ).run(state, record_trace=True)
     except Exception:  # noqa: BLE001 - any failure to reproduce is a rejection
         return None
     return result.trace
@@ -351,11 +493,21 @@ def harvest(
     limited: list[str] = []
     changed: list[str] = []
     unredactable: list[str] = []
+    other_graph: list[str] = []
     substitutions = 0
 
     for run in load_runs(runs_dir):
         if run.run_id in existing:
             duplicate.append(run.run_id)
+            continue
+        # BEFORE the determinism re-check, because re-executing another
+        # graph's run against this entrypoint is the thing being prevented,
+        # not a cheaper way of detecting it: a run that happens to reproduce
+        # would be promoted, stamped with its own `graph_id`, and the corpus
+        # would hold a scenario whose recorded graph and re-executed graph
+        # are two different graphs (ADR 0190).
+        if run.graph_id != graph.id:
+            other_graph.append(run.run_id)
             continue
         if not run.failed and not include_successes:
             passing.append(run.run_id)
@@ -421,6 +573,7 @@ def harvest(
         promoted=tuple(promoted),
         skipped_passing=tuple(passing),
         skipped_existing=tuple(duplicate),
+        skipped_other_graph=tuple(other_graph),
         rejected_nondeterministic=tuple(flaky),
         skipped_rate_limited=tuple(limited),
         rejected_redaction_changed_behaviour=tuple(changed),
