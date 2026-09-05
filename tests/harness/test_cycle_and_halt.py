@@ -202,9 +202,38 @@ def test_the_digest_warns_when_no_production_runs_were_recorded() -> None:
 
 
 def test_the_digest_reports_both_counts() -> None:
-    rendered = Digest(since=NOW, until=NOW, runs_recorded=12, halt_channel_configured=True).render()
+    rendered = Digest(
+        since=NOW,
+        until=NOW,
+        runs_recorded=12,
+        scenarios_added=3,
+        halt_channel_configured=True,
+    ).render()
     assert "Production runs recorded: 12" in rendered
     assert "Halt channel configured: yes" in rendered
+
+
+def test_the_digest_draws_the_line_between_recorded_and_admitted() -> None:
+    """ADR 0163 §10: the pilot's digest printed `Production runs recorded: 5`
+    and `Scenarios added to the corpus: 0` side by side with nothing between
+    them, and the warning above fires only on a ZERO — so an owner who had
+    followed its advice five times read a report that said nothing at all
+    about the corpus not growing."""
+    rendered = Digest(
+        since=NOW, until=NOW, runs_recorded=5, scenarios_added=0, halt_channel_configured=True
+    ).render()
+
+    assert "5 recorded, 0 admitted to the corpus" in rendered
+    assert "aef loop harvest" in rendered
+    # And it does not repeat the zero-runs advice the pilot had already taken.
+    assert "No production runs were recorded" not in rendered
+
+
+def test_the_digest_is_quiet_when_the_corpus_did_grow() -> None:
+    rendered = Digest(
+        since=NOW, until=NOW, runs_recorded=5, scenarios_added=2, halt_channel_configured=True
+    ).render()
+    assert "admitted to the corpus" not in rendered
 
 
 # --------------------------------------------------------------------------

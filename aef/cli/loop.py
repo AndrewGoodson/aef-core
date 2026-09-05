@@ -1384,6 +1384,54 @@ def _require_agent_path_under_root(args: argparse.Namespace, command: str) -> in
     return EXIT_USAGE
 
 
+def _require_module_for_runs(args: argparse.Namespace, command: str = "cycle") -> int | None:
+    """`--runs` needs `--module`, or refuse. `None` means proceed.
+
+    The harvest leg of a turn runs only when a graph OBJECT was built, and
+    `cmd_cycle` builds one from `--module` alone:
+
+        graph = load_graph_reference(args.module) if args.module else None
+
+    while `harness/loop.py::cycle` gates its harvest on `runs_dir is not None
+    and corpus_root is not None and graph is not None`. So `--runs` given with
+    `--entrypoint` and no `--module` — the spelling a widened-root prompt repo
+    uses, and the spelling ADR 0163's pilot and ADR 0181 both used — is
+    ACCEPTED, its path is validated, and nothing happens. Reproduced on two
+    invocations one flag apart, both `--no-memory`: arm A printed no harvest
+    line and exited 0 with five recorded runs sitting at the path it was
+    given; arm B, plus `--module`, printed `promoted 0 run(s) to the train
+    split` and listed them (ADR 0163's F-M6-3, closed in ADR 0190).
+
+    That is ADR 0139's shape — exit 0 having done nothing — and ADR 0176's
+    "two spellings of which graph" in a fourth place. Refusing is the fix
+    rather than silently deriving a module from `--entrypoint`, because the
+    two flags do not have to name the same graph and guessing which one the
+    owner meant is how a run gets harvested against the wrong entrypoint.
+
+    **`EXIT_ERROR`, not `EXIT_USAGE`.** Under the loop's exit vocabulary (0
+    verdict / 1 REJECTED / 2 HALTED / 3 ERROR, ADR 0182's K3-1), 2 is what the
+    rendered nightly workflow reads as a halt and 3 is what it summarises as
+    "fix the invocation" — which is exactly this. The two refusals above it in
+    `cmd_cycle` return `EXIT_USAGE`; unifying the three is ADR 0182's own open
+    item 3 and an owner's decision, not this fix's.
+    """
+    if not getattr(args, "runs", None) or getattr(args, "module", None):
+        return None
+    print(
+        f"error: `loop {command}` was given --runs but no --module, and --runs does "
+        f"nothing without it. The harvest leg needs a graph OBJECT to re-execute each "
+        f"recorded run against, and this command builds one from --module only — "
+        f"--entrypoint is read by the gates' scenario runner, in a subprocess, and "
+        f"never becomes the graph the harvest leg is handed. Without --module the path "
+        f"is validated, the runs are never read, and the turn exits 0 having silently "
+        f"skipped the step it was asked to perform (ADR 0139's shape; reproduced in ADR "
+        f"0163's F-M6-3). Pass --module <the same graph>, or drop --runs to say you did "
+        f"not want the harvest leg.",
+        file=sys.stderr,
+    )
+    return EXIT_ERROR
+
+
 def _journal_turn(
     state_root: Path, *, at: datetime, proposed: bool, verdict: str, command: str
 ) -> None:
@@ -1405,6 +1453,9 @@ def cmd_cycle(args: argparse.Namespace) -> int:
     if refusal is not None:
         return refusal
     refusal = _require_agent_path_under_root(args, "cycle")
+    if refusal is not None:
+        return refusal
+    refusal = _require_module_for_runs(args, "cycle")
     if refusal is not None:
         return refusal
 

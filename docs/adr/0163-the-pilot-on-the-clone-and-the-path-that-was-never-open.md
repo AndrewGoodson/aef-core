@@ -683,3 +683,37 @@ neither is:
   failed once on a loaded box, mid-pilot, and passed in isolation (25 passed) and
   on the clean re-run above. A timing assertion about killing a container, under
   contention. Named rather than left in the scrollback.
+
+
+## Erratum (2026-09-05, ADR 0190)
+
+**F-M6-1, F-M6-2 and F-M6-3: all CLOSED** by fix worker L2, each reproduced
+independently before being fixed and mutation-checked after.
+
+- §6's sentence *"No run of any `aef migrate`-generated prompt-agent graph has
+  ever been harvestable, on any repo, by any invocation"* was true when written
+  and is false now. `test_a_recorded_production_run_can_be_harvested_into_the_corpus`
+  — the strict xfail this ADR left behind — is a passing test asserting the
+  opposite, and `test_the_recorder_pins_the_cassette_the_determinism_check_needs`
+  is now `test_every_recording_path_goes_through_one_recorder`, asserting the fix
+  rather than describing the defect.
+- §6's third observation (harvest does not filter `--runs` by `graph_id`) is
+  fixed and reported in the outcome's own lines. Its prediction was right: the
+  masking was F-M6-1's doing and would have lifted the moment F-M6-1 was fixed.
+- §10's *"`Production runs recorded: 5` and `Scenarios added to the corpus: 0`,
+  side by side, with no line drawn between them"* — the line is drawn.
+- "What still requires a person" item **3 is discharged**. Items 1 (a real
+  checkout), 2 (a third party) and 4 (marlin's UUID-shaped secrets, which the
+  default pattern list does not match) stand untouched.
+
+**The five runs of §4, through the fixed leg: 5 of 5 promoted** — re-recorded
+through the fixed recorder from *their own* recorded declaration (the five-element
+`claude_code` set in each run's containment block) and *their own* recorded
+answers (the text in each run's trace), so nothing was re-requested and no live
+call was spent. The honest other half: the five run **files** in
+`<scratchpad>/w/m6/runs` still reject, five for five, because they were written
+by the old recorder and carry no cassette and no declaration. A fix does not
+retro-repair an artefact; putting these five into a corpus means re-running `aef
+run --record-runs`, which costs live calls and is M-series work. So *"re-run this
+pilot today and it harvests"* remains an inference — from a mechanism now
+measured on this provider's real declaration rather than on a stub's.

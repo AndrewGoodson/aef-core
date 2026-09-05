@@ -433,3 +433,166 @@ def test_a_dotted_name_is_never_retried_as_a_file(
     with pytest.raises(RuntimeError, match="the real reason"):
         import_graph_module("boom_mod")
     sys.modules.pop("boom_mod", None)
+
+
+# --------------------------------------------------------------------------
+# `--record-runs` records the cassette (ADR 0190, closing ADR 0163's F-M6-1)
+# --------------------------------------------------------------------------
+
+# A graph whose node asks the model and records what the provider declares,
+# which is what every `aef migrate`-generated graph does.
+ASKING_MODULE = """
+from aef.kernel import END, Context, Graph, Node, Route, Services
+from aef.providers.base import CompletionRequest, ProviderMessage
+from aef.state import AEFState, StateDelta
+
+
+def ask(state, ctx, services):
+    provider = services.require_model_provider()
+    reply = provider.complete(
+        CompletionRequest(
+            messages=(ProviderMessage(role="user", content=state.objective),),
+            model="",
+        )
+    )
+    return StateDelta(
+        working_memory={
+            "answer": reply.content,
+            "ask__containment": {
+                "provider": provider.name,
+                "isolation": sorted(provider.isolation),
+            },
+        }
+    ), END
+
+
+def build_graph() -> Graph:
+    from aef.kernel.contracts import SideEffect
+    node = Node(id="ask", version="0.1.0", fn=ask, deterministic=False,
+                side_effects=SideEffect.EXTERNAL_CALL,
+                idempotency_key_fn=lambda state: state.run_id)
+    return Graph(id="asker", version="0.1.0", nodes={"ask": node}, edges=[], entry_node="ask")
+"""
+
+
+@pytest.fixture
+def asking_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
+    """A graph that calls a model, plus an `aef.yaml` whose provider is a
+    local echo command — offline, no credential, and with an `isolation:`
+    list so the run has a declaration to record."""
+    (tmp_path / "asking_mod.py").write_text(ASKING_MODULE)
+    (tmp_path / "aef.yaml").write_text(
+        "model_provider:\n"
+        "  impl: command\n"
+        "  model: stub-echo\n"
+        "  command:\n"
+        '    argv: ["/bin/echo", "{prompt}"]\n'
+        "    isolation: [no_tools, single_turn]\n"
+        "memory:\n  impl: in_memory\n"
+        "objectives: test\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    yield tmp_path
+    sys.modules.pop("asking_mod", None)
+
+
+def test_record_runs_writes_the_model_calls_the_run_made(asking_repo: Path) -> None:
+    """F-M6-1: `RecordedRun(...)` was built with no `model_calls=`, so the
+    field defaulted to `()` and harvest's determinism re-check replayed every
+    real run against an empty cassette — the rejection `RecordedRun`'s own
+    docstring had predicted."""
+    from aef.harness.harvest import load_runs
+
+    runs = asking_repo / "runs"
+    run_graph_module(
+        "asking_mod",
+        agent_id="a1",
+        objective="what is the rule?",
+        config_path=asking_repo / "aef.yaml",
+        record_runs_dir=runs,
+    )
+    (recorded,) = load_runs(runs)
+    assert len(recorded.model_calls) == 1
+    assert recorded.model_calls[0].messages[0].content == "what is the rule?"
+    assert "what is the rule?" in recorded.model_calls[0].result.content
+
+
+def test_record_runs_writes_the_providers_own_declaration(asking_repo: Path) -> None:
+    """F-M6-2's half of the fix: the containment record is derived from the
+    provider object, so the re-check needs the declaration as data."""
+    from aef.harness.harvest import load_runs
+
+    runs = asking_repo / "runs"
+    run_graph_module(
+        "asking_mod",
+        agent_id="a1",
+        objective="what is the rule?",
+        config_path=asking_repo / "aef.yaml",
+        record_runs_dir=runs,
+    )
+    (recorded,) = load_runs(runs)
+    # The owner's two, plus the one the provider derives from its own argv:
+    # this template has no `{system}` slot, so the persona travels in the user
+    # turn and `CommandProvider` says so (ADR 0169).
+    assert recorded.provider_isolation == ("no_tools", "single_turn", "user_turn_persona")
+    # The wrapped provider's name, not the wrapper's: the containment record
+    # says 'cassette' today (ADR 0182's open item 1) and this is what would
+    # let a replay keep matching it if that were fixed.
+    assert recorded.provider_name == "command"
+
+
+def test_a_recorded_run_re_executes_identically_and_is_harvested(asking_repo: Path) -> None:
+    """The two halves joined, which is the property that was missing: a run
+    `aef run --record-runs` wrote is admitted by `aef loop harvest`. No run of
+    a model-calling graph had ever been, on any repo (ADR 0163)."""
+    import importlib
+    from datetime import UTC, datetime
+
+    from aef.harness.harvest import harvest
+
+    runs = asking_repo / "runs"
+    run_graph_module(
+        "asking_mod",
+        agent_id="a1",
+        objective="what is the rule?",
+        config_path=asking_repo / "aef.yaml",
+        record_runs_dir=runs,
+    )
+    graph = importlib.import_module("asking_mod").build_graph()
+    outcome = harvest(
+        runs,
+        asking_repo / "corpus",
+        graph,
+        now=datetime.now(UTC),
+        include_successes=True,
+    )
+    assert outcome.rejected_nondeterministic == ()
+    assert len(outcome.promoted) == 1
+
+
+def test_a_plain_run_is_unwrapped_and_unconfigured_runs_still_refuse(
+    asking_repo: Path,
+) -> None:
+    """The recorder wraps only when the run is being RECORDED. Without
+    `--config` there is no provider to wrap and this module's contract stands:
+    `require_model_provider()` refuses rather than reporting a cassette miss.
+    """
+    from aef.kernel.contracts import ServiceNotConfiguredError
+
+    with pytest.raises(ServiceNotConfiguredError):
+        run_graph_module(
+            "asking_mod",
+            agent_id="a1",
+            objective="x",
+            record_runs_dir=asking_repo / "runs",
+        )
+    # And a configured run with no recording still sees the raw provider.
+    final = run_graph_module(
+        "asking_mod",
+        agent_id="a1",
+        objective="x",
+        config_path=asking_repo / "aef.yaml",
+    )
+    containment = final.working_memory["ask__containment"]
+    assert isinstance(containment, dict)
+    assert containment["provider"] == "command"

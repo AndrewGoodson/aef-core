@@ -45,7 +45,16 @@ def repo(tmp_path: Path) -> Path:
 
 
 def _argv(repo: Path, tmp_path: Path, *extra: str) -> list[str]:
-    """The workflow's own invocation, verbatim in shape."""
+    """The workflow's own invocation, in shape, minus its `--runs`.
+
+    `--runs` was here because the nightly workflow passes it, and it did
+    nothing in these tests — no `--corpus` and no `--module`, so the harvest
+    leg could never run. Since ADR 0190 it does not do nothing quietly: a
+    `--runs` with no `--module` is refused by name, because that silence was
+    itself a finding (ADR 0163's F-M6-3). Dropped rather than paired with a
+    `--module`, because every test below is about the memory flag and the
+    workflow's graph reference is `test_loop_cycle_runs_flag.py`'s subject.
+    """
     return [
         "loop",
         "cycle",
@@ -55,8 +64,6 @@ def _argv(repo: Path, tmp_path: Path, *extra: str) -> list[str]:
         str(tmp_path / "state"),
         "--workdir",
         str(tmp_path / "work"),
-        "--runs",
-        str(tmp_path / "state" / "runs"),
         *extra,
     ]
 

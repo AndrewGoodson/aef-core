@@ -245,3 +245,22 @@ argv after the fix has not been through a live call, and `--safe-mode`'s
 effect is documented rather than observed. F8 is a disclosure with numbers
 and no code, so there is nothing to be confident about except that the
 numbers reproduce.
+
+
+## Erratum (2026-09-05, ADR 0190)
+
+**F12's cassette was wired into `record`/`bootstrap` and into the determinism
+re-check, and NOT into `aef run --record-runs`** — the one recording path the
+harvest pipeline is documented to be fed from (`--runs`, in `harvest`, in
+`cycle`, and in the generated nightly workflow). `RecordedRun(...)` was built
+there with no `model_calls=`, so the claim that "the cassette carries the model
+calls so re-execution needs no credential" was true of the cassette and vacuous
+for that path: there was no cassette to carry. Reproduced on five real runs of a
+real repo (ADR 0163 §6) and offline at zero cost (ADR 0190), and fixed by
+sending that path through the same recording wrapper.
+
+A second, smaller correction to the same fix: it pinned the clock and the model
+and left a third input to a prompt-agent run unpinned — the provider's own
+`isolation` declaration, which ADR 0169 writes into `working_memory` on every
+run and which the byte-for-byte trace comparison therefore reads. That is ADR
+0163's F-M6-2, closed in ADR 0190 by recording the declaration and replaying it.

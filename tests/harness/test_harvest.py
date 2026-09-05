@@ -9,6 +9,8 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from aef.harness.corpus import (
     Expected,
     Scenario,
@@ -19,6 +21,7 @@ from aef.harness.corpus import (
 )
 from aef.harness.harvest import (
     RecordedRun,
+    _RecordedIsolation,
     harvest,
     load_runs,
     save_run,
@@ -28,9 +31,15 @@ from aef.providers.base import (
     CompletionRequest,
     CompletionResult,
     ModelProvider,
+    ModelProviderError,
     ProviderMessage,
 )
 from aef.providers.cassette_provider import CassetteProvider
+from aef.reasoning.prompt_agent import (
+    CONTAINMENT_SUFFIX,
+    PromptAgentDefinition,
+    make_prompt_agent_node,
+)
 from aef.state import AEFState, Plan, StateDelta
 
 NOW = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
@@ -457,3 +466,197 @@ def test_a_run_recorded_before_the_cassette_loads_with_none(tmp_path: Path) -> N
     assert payload.pop("model_calls") == []
     path.write_text(json.dumps(payload))
     assert load_runs(runs)[0].model_calls == ()
+
+
+# --------------------------------------------------------------------------
+# The containment declaration the re-check could not reproduce (ADR 0190,
+# closing ADR 0163's F-M6-2)
+# --------------------------------------------------------------------------
+
+
+class _IsolatedProvider(_OneShotProvider):
+    """A provider that DECLARES containment, the way every real one does
+    (ADR 0169). `command`'s declaration is the owner's `isolation:` list;
+    `claude_code`'s is derived from the argv it actually builds."""
+
+    name = "isolated"
+
+    @property
+    def isolation(self) -> frozenset[str]:
+        return frozenset({"no_tools", "single_turn", "system_role"})
+
+
+def _prompt_agent_graph() -> Graph:
+    """The real node `aef migrate` generates, built from a definition rather
+    than a file — the thing under test is harvest's re-execution, and a
+    hand-written stand-in would not write the containment record the way the
+    node does."""
+    node = make_prompt_agent_node(
+        definition=PromptAgentDefinition(name="answerer", description="d", body="You answer."),
+        agent_name="answerer",
+        route=END,
+    )
+    return Graph(id="pa", version="0.1.0", nodes={node.id: node}, edges=[], entry_node=node.id)
+
+
+def _record_prompt_agent_run(runs: Path, run_id: str, *, isolation: bool = True) -> RecordedRun:
+    """What `aef run --record-runs` does since ADR 0190: wrap the configured
+    provider in a recording cassette, and carry BOTH what the model said and
+    what the provider declared onto the run."""
+    graph = _prompt_agent_graph()
+    state = AEFState(run_id=run_id, agent_id="demo", objective="task", working_memory={})
+    ticks = iter([NOW + timedelta(seconds=i) for i in range(20)])
+    live: ModelProvider = _IsolatedProvider() if isolation else _OneShotProvider()
+    recording = CassetteProvider(live, on_miss="live")
+    result = GraphExecutor(
+        graph.compile(), Services(clock=lambda: next(ticks), model_provider=recording)
+    ).run(state, record_trace=True)
+    assert result.trace is not None
+    run = RecordedRun(
+        run_id=run_id,
+        graph_id=graph.id,
+        graph_version=graph.version,
+        initial_state=state,
+        trace=result.trace,
+        at=NOW,
+        model_calls=recording.recorded,
+        provider_isolation=tuple(sorted(recording.isolation)),
+        provider_name=live.name,
+    )
+    save_run(runs, run)
+    return run
+
+
+def _containment(run: RecordedRun) -> object:
+    for record in run.trace:
+        for key, value in (record.delta.working_memory or {}).items():
+            if key.endswith(CONTAINMENT_SUFFIX):
+                return value
+    raise AssertionError("the run recorded no containment block")
+
+
+def test_a_prompt_agent_run_carries_the_providers_declaration(tmp_path: Path) -> None:
+    run = _record_prompt_agent_run(tmp_path / "runs", "pa-1")
+    assert run.provider_isolation == ("no_tools", "single_turn", "system_role")
+    assert _containment(run) == {
+        "provider": "cassette",
+        "isolation": ["no_tools", "single_turn", "system_role"],
+        "persona_role": "system",
+    }
+
+
+def test_a_prompt_agent_run_is_harvested_into_the_corpus(tmp_path: Path) -> None:
+    """ADR 0163's F-M6-2: with the cassette supplied and no declaration
+    replayed, the re-execution wrote `isolation: [], persona_role: 'unknown'`
+    against the recorded values, and the byte-for-byte trace comparison
+    rejected every run of every `aef migrate`-generated graph, on any repo."""
+    _record_prompt_agent_run(tmp_path / "runs", "pa-1")
+    outcome = harvest(
+        tmp_path / "runs",
+        tmp_path / "corpus",
+        _prompt_agent_graph(),
+        now=NOW + timedelta(hours=1),
+        include_successes=True,
+    )
+    assert outcome.rejected_nondeterministic == ()
+    assert outcome.promoted == ("pa-1",)
+
+
+def test_a_run_that_recorded_no_declaration_still_replays_as_no_claim(tmp_path: Path) -> None:
+    """The empty set is *no claim*, not "nothing is enforced" (ADR 0169), and
+    a run recorded under a provider that declared nothing must still harvest:
+    both sides say nothing, so both sides agree."""
+    run = _record_prompt_agent_run(tmp_path / "runs", "pa-2", isolation=False)
+    assert run.provider_isolation == ()
+    outcome = harvest(
+        tmp_path / "runs",
+        tmp_path / "corpus",
+        _prompt_agent_graph(),
+        now=NOW + timedelta(hours=1),
+        include_successes=True,
+    )
+    assert outcome.promoted == ("pa-2",)
+
+
+def test_a_declaration_the_replay_cannot_reproduce_is_still_rejected(tmp_path: Path) -> None:
+    """THE control, and it must be exactly as strict as it was before.
+
+    The fix replays a RECORDED fact; it does not stop comparing the fact. A
+    run whose recorded containment disagrees with what its own declaration
+    reproduces is a run whose behaviour changed, and it is rejected — this is
+    the case that would be silently admitted if the comparison had instead
+    been taught to ignore `*__containment` keys (option (b), ADR 0190).
+    """
+    runs = tmp_path / "runs"
+    _record_prompt_agent_run(runs, "pa-3")
+    path = next(runs.glob("*.json"))
+    payload = json.loads(path.read_text())
+    assert payload["provider_isolation"] == ["no_tools", "single_turn", "system_role"]
+    # A persona that went out in the SYSTEM turn, replayed as one that went
+    # out in the user turn: the same run, a different containment fact.
+    payload["provider_isolation"] = ["single_turn", "user_turn_persona"]
+    path.write_text(json.dumps(payload))
+
+    outcome = harvest(
+        runs,
+        tmp_path / "corpus",
+        _prompt_agent_graph(),
+        now=NOW + timedelta(hours=1),
+        include_successes=True,
+    )
+    assert outcome.promoted == ()
+    assert outcome.rejected_nondeterministic == ("pa-3",)
+
+
+def test_the_re_execution_never_reaches_a_live_provider() -> None:
+    """`_RecordedIsolation` carries a declaration and answers nothing: a
+    harvest that reached the network to decide whether a run is deterministic
+    has already lost the property it is checking."""
+    provider = _RecordedIsolation(("no_tools",), "command")
+    assert provider.isolation == frozenset({"no_tools"})
+    assert provider.name == "command"
+    with pytest.raises(ModelProviderError):
+        provider.complete(
+            CompletionRequest(messages=(ProviderMessage(role="user", content="x"),), model="m")
+        )
+
+
+def test_a_run_recorded_before_the_declaration_existed_loads_with_none(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    _record(runs, "r1", fail=True)
+    path = next(runs.glob("*.json"))
+    payload = json.loads(path.read_text())
+    assert payload.pop("provider_isolation") == []
+    assert payload.pop("provider_name") == ""
+    path.write_text(json.dumps(payload))
+    loaded = load_runs(runs)[0]
+    assert loaded.provider_isolation == ()
+    assert loaded.provider_name == ""
+
+
+# --------------------------------------------------------------------------
+# One graph per invocation (ADR 0190; ADR 0163 §6's third observation)
+# --------------------------------------------------------------------------
+
+
+def test_a_run_of_another_graph_is_not_re_executed_against_this_one(tmp_path: Path) -> None:
+    """`harvest()` iterated the runs directory with no `graph_id` filter and
+    stamped each promoted scenario with the RUN's graph id while having
+    re-executed it against the graph on the command line, so a run that
+    happened to reproduce would enter the corpus labelled one graph and
+    tracing another. It was masked only by F-M6-1: a foreign run missed the
+    cassette and was reported as flaky instead."""
+    runs = tmp_path / "runs"
+    _record(runs, "mine-1", fail=True)
+    other = _record(runs, "theirs-1", fail=True)
+    path = runs / f"{other.run_id}.json"
+    payload = json.loads(path.read_text())
+    payload["graph_id"] = "some-other-graph"
+    path.write_text(json.dumps(payload))
+
+    outcome = _harvest(tmp_path)
+    assert outcome.promoted == ("mine-1",)
+    assert outcome.skipped_other_graph == ("theirs-1",)
+    assert outcome.rejected_nondeterministic == ()
+    assert "recorded from another graph, not re-executed here" in " ".join(outcome.lines)
+    assert {s.graph_id for s in load_corpus(tmp_path / "corpus").scenarios} == {"g"}

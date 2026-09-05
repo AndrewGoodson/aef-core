@@ -71,3 +71,22 @@ trace) each failed tests.
 High on the mechanism. The pattern list is a floor: an owner with a
 different secret shape extends it, and the output scan catches what the
 input pass misses only when the secret has a recognisable shape.
+
+
+## Erratum (2026-09-05, ADR 0190)
+
+**The redaction step was never reached on a model-calling run**, and had not
+been on any repo. This ADR's rule — redact the input, re-execute, admit only if
+behaviour is unchanged — sits *after* the determinism re-check, and that check
+rejected every run whose graph asked a model, for two reasons ADR 0163's pilot
+reproduced and ADR 0190 closed: the recorder wrote no cassette, and the replay
+could not reproduce the containment fact ADR 0169 records. So the pilot's
+redaction counts had to be produced by running `RedactionPolicy` directly rather
+than through `harvest` (ADR 0163 §5), and the control described here was, for
+model-calling graphs, unreachable rather than wrong.
+
+Nothing in the rule changed. What changed is that there is now a path to it, and
+that the containment fact is explicitly part of what *"behaviour is unchanged"*
+compares — ADR 0190 rejected the alternative of excluding `*__containment` keys
+from the comparison, on the grounds that it would weaken this control rather
+than fix the defect in front of it.
