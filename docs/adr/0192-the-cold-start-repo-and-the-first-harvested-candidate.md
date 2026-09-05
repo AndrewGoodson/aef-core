@@ -1009,3 +1009,7 @@ Lower, and named: the +2 rests on one persona, one failure family and five
 scenarios; the two grounding records share a signature; and the cycle's live
 call count (30) is an inference from the cohort's construction rather than a
 number the ledger carries.
+
+## Addendum (orchestrator): F-N7-4 closed
+
+The run id is not only the scenario`s `id` and `initial_state.run_id` — the harness threads it through every trace record`s `input_state.run_id` and its `context.run_id`, `trace_id` and `idempotency_key`. A path list naming each would grow silently the next time a field carries it, so `harvest._scannable` holds out the harness`s own identifiers **by value**, and `RedactionPolicy.redact_state` holds `run_id`/`agent_id` out by field path. A UUID from anywhere else is a different string and still rejects the run. Mutation-checked both ways; the corpus can be rebuilt on the trunk.

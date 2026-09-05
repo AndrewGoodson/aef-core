@@ -234,3 +234,39 @@ def test_a_long_mixed_token_is_still_a_secret() -> None:
     # Base64 payloads keep matching too.
     b64 = "aGVsbG8gd29ybGQgdGhpcyBpcyBhIHNlY3JldCB0b2tlbjEyMw=="
     assert RedactionPolicy().find({"objective": b64}) == ("opaque_secret",)
+
+
+def test_the_harness_own_run_id_survives_redaction() -> None:
+    """ADR 0192's F-N7-4, reproduced: ADR 0197 gave the policy a `uuid`
+    pattern, and a run id IS a uuid4 the harness assigned — so the input
+    redaction rewrote `AEFState.run_id` to `[REDACTED:uuid]`, which is the key
+    the grounding chain joins a harvested scenario to the failure record that
+    justified a candidate. Held out by exact field path, the same rule
+    `harvest._scannable` applies to the output scan."""
+    from aef.harness.redaction import RedactionPolicy
+    from aef.state.schema import AEFState
+
+    run_id = "7e16b0bb-b75a-4a16-9765-839cf1b96755"
+    state = AEFState(agent_id="a1", run_id=run_id, objective="review the price rows")
+    redacted, _ = RedactionPolicy().redact_state(state)
+    assert redacted.run_id == run_id
+    assert redacted.agent_id == "a1"
+
+
+def test_a_tenant_uuid_is_still_redacted() -> None:
+    """The other side of the hold-out: only the harness's own identifier
+    fields are exempt, never the `uuid` pattern itself."""
+    from aef.harness.redaction import RedactionPolicy
+    from aef.state.schema import AEFState
+
+    tenant = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
+    state = AEFState(
+        agent_id="a1",
+        run_id="7e16b0bb-b75a-4a16-9765-839cf1b96755",
+        objective=f"reconcile the account {tenant}",
+        working_memory={"customer": tenant},
+    )
+    redacted, count = RedactionPolicy().redact_state(state)
+    assert tenant not in redacted.objective
+    assert tenant not in str(redacted.working_memory)
+    assert count >= 2
