@@ -250,17 +250,28 @@ def run_arm(
     budget_seconds: float,
     counter: CallCounter,
     model: str,
+    resume: bool = False,
 ) -> dict[str, Any]:
     from aef.config.factory import build_model_provider
     from aef.config.schema import ModelProviderConfig
     from aef.harness.corpus import load_corpus
 
     arm_root = workroot / arm
-    repo_dir = prepare_arm(arm_root, scenarios)
     state_root = arm_root / "state"
     memory_path = arm_root / "memory.jsonl"
-    write_memory(memory_path, scenarios)
-    bless_baseline(repo_dir, state_root)
+    if resume:
+        # The point of the persistence this increment built, exercised live:
+        # a second invocation against the SAME state directory resumes the
+        # lineage rather than starting a fresh search. Nothing is re-cloned,
+        # nothing is re-blessed (`bless` refuses a second baseline anyway,
+        # and rightly — it would reset the drift budget).
+        repo_dir = arm_root / "repo"
+        if not repo_dir.is_dir():
+            raise SystemExit(f"--resume: no arm at {arm_root}")
+    else:
+        repo_dir = prepare_arm(arm_root, scenarios)
+        write_memory(memory_path, scenarios)
+        bless_baseline(repo_dir, state_root)
 
     repo = GitRepo(root=repo_dir)
     config = LoopConfig(
@@ -315,7 +326,7 @@ def run_arm(
         run = run_loop(
             config,
             now=datetime.now(UTC),
-            workdir=arm_root / "work",
+            workdir=arm_root / f"work-{int(time.time())}",
             turns=turns,
             budget_seconds=budget_seconds,
             cycle_fn=logging_cycle,
@@ -389,34 +400,70 @@ def dry_run(turns: int, scenarios: tuple[str, ...], max_calls: int) -> None:
 
 
 def report(out: Path) -> None:
+    """Aggregate the JSONL into the two tables the ADR carries.
+
+    An arm may span several invocations — the wall clock, not the call
+    budget, is what ends one here — so per-arm counts are SUMMED across a
+    arm's invocations, while `distinct_gated_trees` and `archive_members`
+    are taken from the LAST invocation, which is already cumulative because
+    it resumed the earlier one's lineage.
+    """
     if not out.is_file():
         raise SystemExit(f"no results at {out}")
     rows = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
-    summaries = {r["arm"]: r for r in rows if r.get("kind") == "summary"}
     turns = [r for r in rows if r.get("kind") != "summary"]
+    summaries = [r for r in rows if r.get("kind") == "summary"]
 
-    print("Per turn\n")
-    print("| arm | turn | proposed | disposition | score | calls | s |")
-    print("|---|---|---|---|---|---|---|")
+    seen: dict[str, int] = {}
+    print("Per turn (invocation.turn)\n")
+    print("| arm | inv | turn | disposition | score | parent | calls | s |")
+    print("|---|---|---|---|---|---|---|---|")
+    counted: dict[str, int] = {}
+    parents: dict[tuple[str, int, int], str] = {}
+    for row in summaries:
+        arm = row["arm"]
+        seen[arm] = seen.get(arm, 0) + 1
+        for point in row.get("trajectory", ()):
+            parents[(arm, seen[arm], point["turn"])] = point["parent"]
+    seen.clear()
+    last_turn: dict[str, int] = {}
     for row in turns:
+        arm = row["arm"]
+        if row["turn"] <= last_turn.get(arm, 0):
+            counted[arm] = counted.get(arm, 0) + 1
+        last_turn[arm] = row["turn"]
+        inv = counted.setdefault(arm, 1)
+        parent = parents.get((arm, inv, row["turn"]), "?")
         print(
-            f"| {row['arm']} | {row['turn']} | {row['proposed']} | {row['disposition']} "
-            f"| {row['score']} | {row['calls']} | {row['seconds']} |"
+            f"| {arm} | {inv} | {row['turn']} | {row['disposition']} | {row['score']} "
+            f"| {parent} | {row['calls']} | {row['seconds']} |"
         )
-    print("\nPer arm\n")
+
+    print("\nPer arm (summed over invocations)\n")
+    # `distinct parents` is the column that discriminates here, and it is the
+    # one BEYOND_90 did not ask for: with nothing kept in either arm,
+    # distinct-KEPT-trees is 0 on both sides and can say nothing. Distinct
+    # parents is what `sample_parents` directly controls.
     print(
-        "| arm | kept | reverted | distinct kept trees | distinct gated trees | calls | stopped |"
+        "| arm | turns | kept | reverted | distinct parents | distinct kept trees "
+        "| distinct gated trees | calls | stopped |"
     )
-    print("|---|---|---|---|---|---|---|")
+    print("|---|---|---|---|---|---|---|---|---|")
     for arm in ARMS:
-        row = summaries.get(arm)
-        if not row:
-            print(f"| {arm} | — | — | — | — | — | NOT RUN |")
+        mine = [r for r in summaries if r["arm"] == arm]
+        if not mine:
+            print(f"| {arm} | — | — | — | — | — | — | — | NOT RUN |")
             continue
+        used = {p["parent"] for r in mine for p in r.get("trajectory", ())}
         print(
-            f"| {arm} | {row.get('kept')} | {row.get('reverted')} "
-            f"| {row.get('distinct_kept_trees')} | {row.get('distinct_gated_trees')} "
-            f"| {row.get('calls_total')} | {row.get('stopped_because')} |"
+            f"| {arm} | {sum(r.get('turns_logged', 0) for r in mine)} "
+            f"| {sum(r.get('kept', 0) for r in mine)} "
+            f"| {sum(r.get('reverted', 0) for r in mine)} "
+            f"| {len(used)} "
+            f"| {mine[-1].get('distinct_kept_trees')} "
+            f"| {mine[-1].get('distinct_gated_trees')} "
+            f"| {sum(r.get('calls_total', 0) for r in mine)} "
+            f"| {mine[-1].get('stopped_because')} |"
         )
 
 
@@ -424,6 +471,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--live", action="store_true")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="continue an arm already prepared: same repo, same state, same lineage. "
+        "The wall clock, not the call budget, is what stops an arm here — this is how "
+        "an 8-turn arm is run as two invocations, and it only works because the "
+        "lineage persists (ADR 0160).",
+    )
     parser.add_argument("--report", action="store_true")
     parser.add_argument("--arm", choices=ARMS)
     parser.add_argument("--turns", type=int, default=8)
@@ -460,6 +515,7 @@ def main(argv: list[str] | None = None) -> int:
         budget_seconds=args.budget_seconds,
         counter=counter,
         model=args.model,
+        resume=args.resume,
     )
     print(json.dumps(result, indent=2)[:4000])
     return 0
