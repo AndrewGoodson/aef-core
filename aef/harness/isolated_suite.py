@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +26,7 @@ from aef.harness.evaluation import score_of, score_scenario
 from aef.harness.isolated import IsolationError, NodeWorkerSession, graph_from
 from aef.harness.outcome import Outcome, classify
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
-from aef.harness.scenario_runner import policy_payload
+from aef.harness.scenario_runner import is_dead_call, policy_payload
 from aef.kernel import GraphExecutor
 from aef.security.tool import PolicyConfig
 from aef.services.runtime import agent_services
@@ -40,6 +40,15 @@ class ScenarioResult:
     score: float
     cost_tokens: int
     failure: str | None = None
+    # The model call RAISED rather than answering. A dead call is not a
+    # wrong answer: the prompt under test was never evaluated on this
+    # scenario, so scoring it 0.0 records evidence that was never collected
+    # (ADR 0185). Only ever true on the live path — see `is_dead_call`.
+    dead_call: bool = False
+    # This scenario was run a second time because the first attempt died.
+    # Recorded so the bounded retry is visible in the gate's evidence rather
+    # than being a silent extra call against the operator's quota.
+    retried: bool = False
 
 
 def _worker_env(workspace: Path) -> dict[str, str]:
@@ -127,6 +136,25 @@ def run_corpus_isolated(
                 cassette_miss=cassette_miss,
                 live_provider=live_provider,
             )
+            if results[scenario.id].dead_call and not _worker_is_dead(session):
+                # ONE retry, and only for a call that DIED. ADR 0156 measured
+                # a third of the live floor's spread as exactly this: a
+                # provider that raised produced `score 0.0000, cost_tokens 0`,
+                # indistinguishable from an empty answer. A transient failure
+                # usually does not repeat; a candidate that deterministically
+                # kills the provider does, and gets excluded rather than
+                # retried forever. Bounded at one because an unbounded retry
+                # is an unbounded bill on somebody's quota, and because the
+                # second death is itself the signal.
+                retry = _run_one(
+                    compiled,
+                    scenario,
+                    policy,
+                    session=session,
+                    cassette_miss=cassette_miss,
+                    live_provider=live_provider,
+                )
+                results[scenario.id] = replace(retry, retried=True)
             if results[scenario.id].failure and _worker_is_dead(session):
                 # The worker died. Every remaining scenario is unrun, and
                 # unrun is not passed — recorded explicitly rather than left
@@ -178,7 +206,7 @@ def _run_one(
             }
         )
     except IsolationError as exc:
-        return _failed(f"{type(exc).__name__}: {exc}")
+        return _failed(f"{type(exc).__name__}: {exc}", cassette_miss=cassette_miss)
 
     services = agent_services(
         clock=fixed_clock(scenario), policy=policy, agent_id=scenario.initial_state.agent_id
@@ -187,7 +215,7 @@ def _run_one(
     try:
         result = GraphExecutor(compiled, services).run(scenario.initial_state, record_trace=True)
     except Exception as exc:  # noqa: BLE001 - any failure is an outcome, not a crash
-        return _failed(f"{type(exc).__name__}: {exc}")
+        return _failed(f"{type(exc).__name__}: {exc}", cassette_miss=cassette_miss)
 
     outcome = classify(result.final_state, result.trace, terminated=True)
     # Same function as the in-process runner (ADR 0113): two scorers drift.
@@ -212,7 +240,16 @@ def _run_one(
     )
 
 
-def _failed(reason: str) -> ScenarioResult:
+def _failed(reason: str, *, cassette_miss: str = "fail") -> ScenarioResult:
+    """A scenario that produced nothing, classified.
+
+    `cassette_miss` defaults to `"fail"` — the replay-only configuration —
+    so the two callers that report a worker's death rather than a model's
+    (`run_corpus_isolated`'s startup failure and its mid-corpus abort) never
+    mark a dead call. A worker a candidate killed is the candidate's
+    behaviour; excluding those scenarios would hand `os._exit` the acquittal
+    ADR 0094 took away from it.
+    """
     return ScenarioResult(
         outcome=Outcome(
             terminated=False,
@@ -224,4 +261,5 @@ def _failed(reason: str) -> ScenarioResult:
         score=0.0,
         cost_tokens=0,
         failure=reason,
+        dead_call=is_dead_call(reason, cassette_miss=cassette_miss),
     )

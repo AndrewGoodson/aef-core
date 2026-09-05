@@ -5432,3 +5432,159 @@ collected** (+5, none removed). `mypy aef examples` 135 files clean.
 Artefacts in `docs/research/second-repo/` (both transcripts + the
 reproductions), scanned with `aef/harness/redaction.py` — clean.
 **No rubric dimension moves** (adoption claims no point).
+
+
+## S2b — a dead call is not a wrong answer, and the pairing the mean cannot do (ADR 0185)
+
+Two increments against G3, both "strengthen or report". **No threshold moved.**
+The p95 rule, `DEFAULT_MIN_COHORT_SIZE`, `PASS_THRESHOLD`, `DEFAULT_MAX_COST_RATIO`
+and every constant ADR 0170 froze are byte-for-byte what they were, and
+`tests/harness/test_g3_improvement.py` and `tests/harness/test_promotion_safety.py`
+were not touched. **Zero live model calls**: every number here is either ADR
+0156's committed output or a stub `impl: command` provider — a shell script
+that exits non-zero on chosen invocations, a real subprocess through the real
+`CommandProvider`.
+
+### A — the failure string that nothing read
+
+ADR 0156 measured the live floor on Opus at **mean 0.7639, spread 0.1666**, and
+attributed ~a third of that spread to one transient call failure. Its evidence
+for that attribution was *token accounting across repeats*, because a provider
+that raises and a provider that returns `""` both produce exactly
+`score=0.0000, cost_tokens=0`.
+
+Reproduced before anything changed — four scenarios, `--cassette-miss live`, a
+provider that exits 7 on its third call:
+
+```
+s3: score=0.0000 cost_tokens=0
+    failure='NodeEvaluationError: ModelProviderError: flaky.sh exited 7: provider fell over'
+
+G3 fail: 1 previously-passing scenario(s) now score below 0.5
+         (zero tolerance, regardless of the aggregate)   evidence: s3
+```
+
+`run_corpus_isolated` computed that string, `VariantRun` carried it, and
+**nothing read it**. G3 rejected a candidate for a scenario it was never asked.
+
+**The rule now.** A scenario whose failure chain names a `ModelProviderError`
+**on a live run** is a dead call. The live condition is the whole safety of it:
+under the default `on_miss="fail"` no call is attempted, so a `ModelProviderError`
+there is `CassetteProvider` reporting a **miss** — a *behavioural* difference,
+and the strongest signal the gates have, since ADR 0123 caught the very
+regression ADR 0156 could not see live by scoring it **0.0000 with 36 misses**.
+Excusing that as a dead call would have thrown the best evidence in the repo
+away. Every replayed pass is therefore unchanged, and the mutation that removes
+the condition fails a test.
+
+A dead call is **retried once** — bounded because an unbounded retry is an
+unbounded bill, and because the second death is itself the signal — and if it
+dies again G3 **excludes it symmetrically**: from the candidate, the incumbent
+and every control, named in the evidence with the surviving `n=`.
+
+**Excluding is a strengthening, and that is measured rather than argued.** The
+threshold G3 gates on is p95 of the *cohort's* means, and a cohort has five
+members to the candidate's one — so most dead calls land in a control, where a
+0.0 drags that member's mean down, drags p95 down, and **lowers** the bar.
+`test_excluding_a_dead_call_in_a_control_RAISES_the_bar` runs the same candidate
+both ways: counted it passes, excluded it does not.
+
+**The floor that stops the obvious attack.** `is_dead_call` reads a string, and
+a candidate under `--cassette-miss live` can raise `ModelProviderError` itself.
+Nothing reading a string can tell that apart. So past **25% dead** G3 stops
+judging: `could not judge: 4 dead call(s) of 6 scenario(s) (67%), over the 25%
+ceiling` — a FAIL, therefore an escalation, and a candidate that makes the
+provider die is not thereby cleared. End to end against the stub provider:
+
+```
+(a) dies on call 3         -> retried, rescued.   "retried once and answered on the second attempt: s3"
+(b) dies on calls 3 and 4  -> excluded, n=6 -> 5. "excluded 1 of 6 scenario(s) from BOTH arms …"
+(c) dies on nearly all     -> "could not judge: 4 dead call(s) of 6 scenario(s) (67%)"
+```
+
+The residual is stated rather than hidden: a candidate can still kill up to a
+quarter of the corpus and have those scenarios excluded rather than counted.
+On six scenarios that quarter is one. More scenarios is the fix — the same fix
+ADR 0156 named for the floor — not a tighter fraction, which on six scenarios
+would mean refusing every live pass.
+
+### B — the paired line, beside p95 and gating nothing
+
+ADR 0156 offered this with the data and did not make it: *"a sign test over
+paired scenarios would have flagged the regression where the mean could not."*
+Built now from its own committed per-scenario JSON, and **read by no branch in
+`g3_improvement.py`** — `test_the_paired_direction_changes_no_verdict` gives two
+candidates the same mean and opposite paired directions and asserts the same
+outcome and the same reason string.
+
+Pooled over all 18 (scenario, repeat) observations of the floor arm vs the
+planted-regression arm:
+
+```
+paired: 7 down / 3 up / 8 same (sign test p=0.3438)
+```
+
+against a mean-of-means fall of **0.0278** on a floor spread of **0.1666** —
+0.17× of it, invisible, which is why dimension 1 correctly did not move in S2.
+`sum-17-clockmaker` and `sum-18-heron-rookery` are down in **3 of 3** repeats
+each.
+
+**And the honest half, pinned in tests so nobody reads the line as a verdict:**
+p = 0.3438 does not reach significance, and per repeat — six pairs, which is
+what one real G3 pass sees — the same data gives p = 0.625, 1.0, 1.0.
+
+**Where the two increments join.** `sum-13` repeat 3 scored 0.00 because its
+call died; paired against the regression arm's 1.00 that reads as the planted
+regression *improving* a scenario. Excluding it removes a wrong-signed
+observation: 7/3 (p=0.3438) becomes **7/2 (p=0.1797)**. A dead call is not just
+noise in the mean.
+
+**Should it ever gate? Argued, not implemented.** For: it sees what the mean
+provably cannot, and removing between-scenario variance is the standard answer
+to G3's own stated problem. Against, and stronger today: six pairs cannot reach
+p<0.05 by a sign test even unanimously; one scenario flips the verdict and
+magnitude counts for nothing; and a paired candidate-vs-incumbent test
+reintroduces exactly the "beats the incumbent" comparison ADR 0051 built the
+cohort to refuse. What would settle it: ≈40 scenarios (ADR 0156 consequence 2's
+number), a true-null arm, every p95/paired disagreement recorded, **run twice**,
+and a measured false-positive rate before any threshold is proposed.
+
+### Erratum on ADR 0156
+
+**Its floor includes a dead call.** ADR 0156 identified repeat 3's `sum-13: 0.00`
+as a harness/model failure and deliberately kept it — *"a property of live
+scoring, not an artefact to be excluded — a gate pass will meet it too."* Right
+about the world, wrong about the gate: a gate pass now retries it and, if it
+repeats, declines to score it. Re-aggregated from ADR 0156's own data under this
+rule (symmetric, so the regression arm moves too, 0.7361 → 0.7194):
+
+| | floor repeats | mean | spread | the planted regression's fall |
+|---|---|---|---|---|
+| as published | 0.8333 / 0.7917 / 0.6667 | 0.7639 | 0.1667 | 0.0278 = 0.17× the spread |
+| dead call excluded | 0.8333 / 0.7917 / 0.8000 | **0.8083** | **0.0417** | 0.0889 = **2.13×** the spread |
+
+> **The bar a future S2c should clear: 0.8083, spread 0.0417.**
+
+And under it ADR 0156's planted regression *would* have been detectable by the
+mean — 4.0 standard deviations of the means. That is arithmetic on three
+repeats with one exclusion, **not a re-run**; removing the worst score of the
+worst repeat mechanically raises the floor and shrinks the spread. Nothing in
+the rubric moves on a re-aggregation. S2c should measure it.
+
+### Verification
+
+Six mutations planted, six caught; byte backups, sha256 verified before and
+after, nothing restored with `git checkout --`.
+
+| mutation | detected by |
+|---|---|
+| M1 score the dead call 0 again (drop the exclusion) | 2 failed |
+| M2 drop the refusal floor | 2 failed |
+| M3 drop the bounded retry | 2 failed |
+| M4 classify a replayed cassette MISS as a dead call | 2 failed |
+| M5 make the paired line always report all-same | 5 failed |
+| M6 exclude from the candidate only (drop the symmetry) | 4 failed |
+
+Green bar: `pytest -q` **2746 passed, 7 skipped, 1 xfailed** (2720 before,
++26); `mypy aef examples` clean on 135 files; `ruff check .` clean;
+`ruff format --check aef tests examples` clean on 282 files.
