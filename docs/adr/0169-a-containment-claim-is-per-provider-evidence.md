@@ -351,3 +351,26 @@ Low, and unchanged, on anything about Copilot's CLI or any other harness an
 owner wires through `impl: command`: this ADR's whole position on those is
 that the repo does not know, records the owner's word for it, and says which
 it is.
+
+## Addendum (orchestrator, 2026-09-04): the Claude canary, and rule 4
+
+**`claude --tools ""` DOES suppress tools — measured.** The undone item
+above ("never canary-tested") is closed: a directory holding one file with
+a sentinel line, the adapter's own argv, a prompt that needs a tool. The
+reply narrates a tool call in prose and *invents* an `ls -la` listing
+(`config.yaml`, `notes.txt`, `readme.md` — none exist; the real directory
+holds three entries), `num_turns` 1, one iteration, the sentinel never
+read. Pinned as `test_tools_empty_string_actually_suppresses_tools` in
+`tests/providers/test_harness_live.py` (opt-in, like the rest). `no_tools`
+on `claude_code` is now evidence, not `--help`.
+
+**Attribution rule 4, `usage_match`.** S1 observed on a live call that the
+payload's top-level `usage` equalled the answering model's `modelUsage` row
+exactly (in 2 / out 69) while the map's first key was the Haiku helper.
+That is deterministic: the top-level usage *is* the answering call's usage.
+`answering_model` now takes the payload's `usage` and returns
+`("<key>", "usage_match")` when exactly one row equals it, before any
+heuristic. And the root cause named above is fixed: `agent_services` passes
+the provider's `default_model` to the judge when no reflection model is
+named, so judge calls take the `requested` rule. Both mutation-checked.
+
