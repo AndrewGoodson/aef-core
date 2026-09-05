@@ -1,0 +1,23 @@
+J2 — the archive A/B (ADR 0160)
+
+arms          : greedy, sampling (identical but for `sample_parents`)
+turns per arm : 8
+agent         : agents/summary/graph.py  entrypoint agents.summary.graph:build_graph
+graph id      : summary_agent
+config        : docs/research/j2/aef.measurement.yaml (read from the base ref)
+cassette      : miss -> live
+gated corpus  : 2 scenario(s)
+                sum-01-kestrel-ferry  [train]
+                sum-02-orchard-blight  [train]
+
+calls, per turn:
+  1  the LLM proposer's request
+  0  if a CHEAP gate (G0/G1/G4/G5) rejects — no corpus pass happens
+  ~14  if the candidate reaches G3: (candidate + incumbent + cohort of 5) x 2 scenario(s)
+
+HARD CAP      : 50 live calls; the wrapper raises rather than exceed it
+The expected shape, from I10 (ADR 0122): the LLM proposer's ~28-line diff
+exhausts G5's 0.5 drift budget, so most turns cost one call and two
+consecutive drift rejections halt the arm. If that happens it is a finding
+about the drift budget under an LLM proposer, NOT a failed measurement, and
+the budget is not raised to make the run complete.

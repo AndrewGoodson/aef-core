@@ -10,6 +10,7 @@ rejected tree. The gates themselves have their own tests."""
 from __future__ import annotations
 
 import subprocess
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -378,3 +379,312 @@ def test_a_non_default_kept_branch_name_is_the_one_refused(repo: GitRepo, tmp_pa
             _FakeCycle([Disposition.ESCALATE]),
             kept_branch="review/mine",
         )
+
+
+# ---------------------------------------------------------------------------
+# The archive is durable, and rejects are in it (ADR 0160)
+#
+# J0 (ADR 0151) scored dimension 6 at 5/10 on four clauses: the lineage
+# archive is in-memory inside one `run_loop` call, has no CLI flag, only kept
+# candidates enter it, and nothing persists across invocations. The CLI flag
+# is `tests/cli/test_loop_run_archive_flags.py`; the other three are here.
+# ---------------------------------------------------------------------------
+
+
+def _lineage(config: LoopConfig) -> tuple[Any, ...]:
+    from aef.harness import archive as archive_module
+
+    return archive_module.read_lineage(config.paths.lineage_dir, config.graph_id)
+
+
+def test_every_gated_candidate_is_written_to_the_lineage_file(
+    repo: GitRepo, tmp_path: Path
+) -> None:
+    """Clause 3, first half: rejects are members. Before ADR 0160 the archive
+    held kept candidates only, so a turn the gates refused left nothing at
+    all — the loop's record of where it had already been was a record of
+    where it had succeeded."""
+    config = _config(repo, tmp_path)
+    fake = _ScoredCycle([Disposition.ESCALATE, Disposition.REJECT], [0.7, 0.4])
+    run = _run(config, tmp_path, fake)
+
+    kept = [m for m in run.archive if m.parent_ref is not None and m.kept]
+    rejected = [m for m in run.archive if not m.kept]
+    assert [m.score for m in kept] == [0.7]
+    assert [m.score for m in rejected] == [0.4]
+    assert [m.disposition for m in rejected] == ["reject"]
+    # ...and the same two are on disk, with their verdicts.
+    records = _lineage(config)
+    assert {(r.kept, r.disposition, r.score) for r in records} >= {
+        (True, "escalate", 0.7),
+        (False, "reject", 0.4),
+    }
+    # The kept count is unmoved: an archived reject is not a kept candidate.
+    assert run.kept_count == 1 and run.reverted_count == 1
+    assert run.distinct_kept_trees == 1 and run.distinct_gated_trees == 2
+
+
+def test_greedy_never_proposes_from_a_rejected_member(repo: GitRepo, tmp_path: Path) -> None:
+    """The control on clause 3. Rejects entering the archive must not change
+    what greedy does: `archive[-1]` after a rejection IS the rejected
+    candidate, so the naive version silently starts proposing from content
+    every gate refused."""
+    fake = _ScoredCycle(
+        [Disposition.ESCALATE, Disposition.REJECT, Disposition.ESCALATE], [0.7, 0.4, 0.8]
+    )
+    run = _run(_config(repo, tmp_path), tmp_path, fake)
+    # Turn 1 keeps 4; turn 2 proposes 5 from it and is rejected; turn 3 must
+    # propose from 4 again, NOT from the rejected 5.
+    assert fake.bases_seen == ["RETRY_BUDGET = 3", "RETRY_BUDGET = 4", "RETRY_BUDGET = 4"]
+    assert run.kept_count == 2
+    assert repo.show("loop/kept", AGENT) == "RETRY_BUDGET = 5\n"
+
+
+def test_a_rejected_member_that_reached_a_score_can_be_sampled_as_a_parent(
+    repo: GitRepo, tmp_path: Path
+) -> None:
+    """Clause 3, the point of it. DGM's stepping stone: turn 1 is REJECTED
+    but G3 measured it at 0.95, so it is a real, measured position in the
+    search space and a later turn builds on it. Greedy cannot do this — the
+    control below is that the same schedule with sampling off never leaves
+    the kept branch."""
+    config = _config(repo, tmp_path)
+    fake = _ScoredCycle([Disposition.REJECT] + [Disposition.ESCALATE] * 3, [0.95, 0.55, 0.55, 0.55])
+    run = _run(config, tmp_path, fake, sample_parents=True, seed=0)
+
+    stepping_stones = {m.ref for m in run.archive if not m.kept and m.score is not None}
+    assert stepping_stones, "the rejected candidate must be in the archive"
+    assert any(t.parent_ref in stepping_stones for t in run.turns), [
+        (t.turn, t.parent_ref[:8], t.kept) for t in run.turns
+    ]
+
+    greedy = _ScoredCycle(
+        [Disposition.REJECT] + [Disposition.ESCALATE] * 3, [0.95, 0.55, 0.55, 0.55]
+    )
+    control = _run(_config(repo, tmp_path / "greedy"), tmp_path / "greedy", greedy)
+    stones = {m.ref for m in control.archive if not m.kept}
+    assert not any(t.parent_ref in stones for t in control.turns)
+
+
+def test_a_candidate_rejected_before_scoring_is_archived_but_never_sampled(
+    repo: GitRepo, tmp_path: Path
+) -> None:
+    """Clause 3's exclusion, on the weight function directly. A candidate a
+    CHEAP gate refused (G0's zone, G1's build, G5's drift) has no task
+    metric. Giving it the root's 0.5 fallback would let an unbuildable tree
+    outbid a measured one on a number nothing measured, so its weight is
+    zero — and it is still recorded, because where the loop could not stand
+    is part of the account of where it went."""
+    from aef.harness.loop import ArchiveMember, _parent_weight
+
+    unscored_reject = ArchiveMember(ref="a", score=None, parent_ref="p", kept=False)
+    scored_reject = ArchiveMember(ref="b", score=0.7, parent_ref="p", kept=False)
+    root = ArchiveMember(ref="c", score=None, parent_ref=None, kept=True)
+
+    assert _parent_weight(unscored_reject) == 0.0
+    assert _parent_weight(scored_reject) > 0.0
+    assert _parent_weight(root) == pytest.approx(0.5)
+
+
+def test_an_unscored_reject_is_recorded_and_the_run_continues(
+    repo: GitRepo, tmp_path: Path
+) -> None:
+    """The other half of the same clause, through the driver: a rejection
+    with `score=None` (what a cheap gate produces) is archived, is never a
+    parent, and does not stop the loop."""
+    config = _config(repo, tmp_path)
+    fake = _ScoredCycle(
+        [Disposition.REJECT, Disposition.ESCALATE],
+        [None, 0.6],  # type: ignore[list-item]
+    )
+    run = _run(config, tmp_path, fake, sample_parents=True, seed=0)
+    unscored = [m for m in run.archive if not m.kept]
+    assert [m.score for m in unscored] == [None]
+    assert all(t.parent_ref != unscored[0].ref for t in run.turns)
+    assert any(r.kept is False and r.score is None for r in _lineage(config))
+
+
+def test_the_lineage_persists_and_a_second_run_samples_a_parent_the_first_kept(
+    repo: GitRepo, tmp_path: Path
+) -> None:
+    """Clause 2, the whole of it. Run 1 keeps two candidates and stops. Run 2
+    is a separate `run_loop` call with no memory of run 1 except the state
+    directory — and it proposes from a member run 1 kept that is NOT the
+    kept-branch head, which is exactly the thing an in-memory archive cannot
+    do."""
+    config = _config(repo, tmp_path)
+    run1 = _run(
+        config,
+        tmp_path,
+        _ScoredCycle([Disposition.ESCALATE] * 2, [0.9, 0.55]),
+        sample_parents=True,
+        seed=0,
+    )
+    assert run1.kept_count == 2
+    assert len(_lineage(config)) >= 2
+
+    run2 = _run(
+        config,
+        tmp_path / "second",
+        _ScoredCycle([Disposition.ESCALATE] * 2, [0.6, 0.6]),
+        sample_parents=True,
+        seed=0,
+    )
+    resumed = {m.ref for m in run2.archive if m.resumed}
+    assert run2.resumed_members >= 1, [m.ref[:8] for m in run2.archive]
+    assert any(t.parent_ref in resumed for t in run2.turns), [
+        (t.turn, t.parent_ref[:8]) for t in run2.turns
+    ]
+    assert "lineage: resumed" in "\n".join(run2.lines)
+
+
+def test_no_lineage_makes_a_run_self_contained(repo: GitRepo, tmp_path: Path) -> None:
+    """The control for clause 2: with persistence off, run 2 inherits
+    nothing and the file is never written."""
+    config = _config(repo, tmp_path)
+    _run(
+        config,
+        tmp_path,
+        _ScoredCycle([Disposition.ESCALATE] * 2, [0.9, 0.55]),
+        sample_parents=True,
+        seed=0,
+        persist_lineage=False,
+    )
+    assert _lineage(config) == ()
+    run2 = _run(
+        config,
+        tmp_path / "second",
+        _ScoredCycle([Disposition.ESCALATE], [0.6]),
+        sample_parents=True,
+        seed=0,
+        persist_lineage=False,
+    )
+    assert run2.resumed_members == 0
+
+
+def test_the_novelty_term_survives_the_invocation_boundary(repo: GitRepo, tmp_path: Path) -> None:
+    """Children counts only exist once a run is over, so `run_loop` appends a
+    closing record per member and `_resume_lineage` folds by ref taking the
+    last. Without the fold the count resumes as zero every night and the term
+    that pushes the sampler off an over-explored parent never accumulates —
+    the knob quietly not working rather than the knob being off."""
+    config = _config(repo, tmp_path)
+    # Greedy, so the counts are arithmetic rather than a draw: turn 1 proposes
+    # from the root, turn 2 from the candidate turn 1 kept. Each ends with one
+    # child.
+    run1 = _run(config, tmp_path, _ScoredCycle([Disposition.ESCALATE] * 2, [0.9, 0.55]))
+    assert [m.children for m in run1.archive] == [1, 1, 0]
+    assert any(r.children > 0 for r in _lineage(config)), [
+        (r.ref[:8], r.children) for r in _lineage(config)
+    ]
+
+    # Run 2 starts a fresh kept branch, so its root is the SAME commit run 1
+    # started from — a member run 1 left with one child. One more turn must
+    # leave it at TWO. Without the closing records, or without the fold that
+    # prefers them, it reads back as zero and comes out at one.
+    run2 = _run(
+        config,
+        tmp_path / "second",
+        _ScoredCycle([Disposition.ESCALATE], [0.6]),
+        kept_branch="loop/b",
+    )
+    assert run2.archive[0].ref == run1.archive[0].ref
+    assert run2.archive[0].children == 2, [(m.ref[:8], m.children) for m in run2.archive]
+
+
+class _FixedTreeCycle(_ScoredCycle):
+    """Always proposes from `main`, so every turn produces the SAME tree
+    whatever parent the driver chose."""
+
+    def __call__(self, config: LoopConfig, **kw: Any) -> CycleRun:  # type: ignore[override]
+        from dataclasses import replace as _replace
+
+        return super().__call__(_replace(config, base_ref="main"), **kw)
+
+
+def test_duplicate_detection_spans_invocations(repo: GitRepo, tmp_path: Path) -> None:
+    """Clause 4. Run 1 keeps tree T. Run 2 proposes T again — with only the
+    in-memory archive it is new, gets kept, and the loop pays N+2 corpus
+    passes to re-learn what it already knew. Against the persisted set it is
+    a duplicate."""
+    # The second run gets its OWN kept branch, starting at main. Without
+    # that, run 2's root is already tree T and the duplicate would be caught
+    # by the root member whether or not anything persisted — the assertion
+    # would be true for the wrong reason.
+    config = _config(repo, tmp_path)
+    run1 = _run(
+        config, tmp_path, _FixedTreeCycle([Disposition.ESCALATE], [0.7]), kept_branch="loop/a"
+    )
+    assert run1.kept_count == 1
+
+    run2 = _run(
+        config,
+        tmp_path / "second",
+        _FixedTreeCycle([Disposition.ESCALATE], [0.7]),
+        kept_branch="loop/b",
+    )
+    assert run2.kept_count == 0
+    assert sum(t.duplicate for t in run2.turns) == 1
+
+    # The control: the same second run with persistence off keeps it, which
+    # is what makes the assertion above about the persisted set and not about
+    # something else.
+    control = _run(
+        config,
+        tmp_path / "third",
+        _FixedTreeCycle([Disposition.ESCALATE], [0.7]),
+        kept_branch="loop/c",
+        persist_lineage=False,
+    )
+    assert sum(t.duplicate for t in control.turns) == 0
+    assert control.kept_count == 1
+
+
+def test_a_tree_rejected_in_an_earlier_run_stops_the_next_one(
+    repo: GitRepo, tmp_path: Path
+) -> None:
+    """The rejected-tree stop, extended over the persisted set. ADR 0114's
+    reason for it — "the proposer is deterministic from its evidence, so
+    re-gating the same rejected diff would spend N+2 corpus passes to learn
+    nothing" — does not become false overnight."""
+    config = _config(repo, tmp_path)
+    _run(config, tmp_path, _FixedTreeCycle([Disposition.REJECT], [0.3]))
+    run2 = _run(config, tmp_path / "second", _FixedTreeCycle([Disposition.REJECT] * 2, [0.3, 0.3]))
+    assert "already rejected" in run2.stopped_because
+    assert len(run2.turns) == 1, "it must stop on the FIRST re-proposal, not the second"
+
+
+def test_a_lineage_member_whose_ref_is_gone_is_history_not_a_parent(
+    repo: GitRepo, tmp_path: Path
+) -> None:
+    """The lineage archive stores refs, not bytes — deliberately, since it is
+    resume state and not the content archive. So it must say what it loses
+    when a candidate branch is deleted: the member cannot be proposed from,
+    its TREE still guards the duplicate check, and the run says so in a line
+    rather than failing a turn on an unknown revision."""
+    config = _config(repo, tmp_path)
+    _run(config, tmp_path, _FixedTreeCycle([Disposition.ESCALATE], [0.7]), kept_branch="loop/a")
+    records = _lineage(config)
+    assert records
+    # Rewrite the lineage with a ref that does not exist in this repository.
+    from aef.harness import archive as archive_module
+
+    path = archive_module.lineage_path(config.paths.lineage_dir, config.graph_id)
+    path.unlink()
+    for record in records:
+        archive_module.append_lineage(
+            config.paths.lineage_dir,
+            config.graph_id,
+            replace(record, ref="0" * 40),
+        )
+
+    run2 = _run(
+        config,
+        tmp_path / "second",
+        _FixedTreeCycle([Disposition.ESCALATE], [0.7]),
+        kept_branch="loop/b",
+    )
+    assert run2.resumed_members == 0
+    assert "no longer resolves" in "\n".join(run2.lines)
+    # ...and the tree it recorded still catches the duplicate.
+    assert sum(t.duplicate for t in run2.turns) == 1

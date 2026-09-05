@@ -131,6 +131,14 @@ class LoopPaths:
         return self.root / "archive"
 
     @property
+    def lineage_dir(self) -> Path:
+        """The DGM lineage archive (ADR 0160) — every candidate `run_loop`
+        produced, kept and rejected. Beside `archive/`, never inside it: see
+        the comment above `archive.LINEAGE_DIRNAME` for why the accepted-content
+        store must not learn to hold un-gated content."""
+        return self.root / archive.LINEAGE_DIRNAME
+
+    @property
     def observations(self) -> Path:
         return self.root / OBSERVATIONS_FILENAME
 
@@ -1464,16 +1472,29 @@ class LoopTurn:
 
 @dataclass
 class ArchiveMember:
-    """One kept candidate, DGM-style (ADR 0121): its score, its parent, and
-    how many children have been proposed from it. Children count is the
-    novelty term — a member that has spawned many attempts is less worth
-    sampling again than one that has spawned none."""
+    """One candidate, DGM-style (ADR 0121): its score, its parent, and how
+    many children have been proposed from it. Children count is the novelty
+    term — a member that has spawned many attempts is less worth sampling
+    again than one that has spawned none.
+
+    Since ADR 0160 a REJECTED candidate is a member too (`kept=False`, with
+    the gate verdict in `disposition`). DGM's archive keeps stepping stones,
+    and a candidate the gates turned down is the canonical stepping stone: it
+    is a place in the search space that was reached and measured. What it is
+    not is a place the kept branch may point at, or a duplicate — see
+    `_latest_kept` and the duplicate check in `run_loop`.
+    """
 
     ref: str
     score: float | None
     parent_ref: str | None
     children: int = 0
     tree: str = ""
+    kept: bool = True
+    disposition: str | None = None
+    # True when this member was loaded from a previous invocation's lineage
+    # file rather than produced by this run. Reported, not acted on.
+    resumed: bool = False
 
 
 @dataclass(frozen=True)
@@ -1489,6 +1510,11 @@ class LoopRun:
     archive: tuple[ArchiveMember, ...] = ()
 
     @property
+    def resumed_members(self) -> int:
+        """Members this run inherited from a previous invocation's lineage."""
+        return sum(1 for m in self.archive if m.resumed)
+
+    @property
     def kept_count(self) -> int:
         return sum(1 for t in self.turns if t.kept)
 
@@ -1500,6 +1526,16 @@ class LoopRun:
 
     @property
     def distinct_kept_trees(self) -> int:
+        """Distinct trees among the KEPT non-root members. `m.kept` is not
+        redundant since ADR 0160 put rejected candidates in the archive: drop
+        it and every rejection inflates the diversity number this A/B is
+        decided on."""
+        return len({m.tree for m in self.archive if m.parent_ref is not None and m.kept})
+
+    @property
+    def distinct_gated_trees(self) -> int:
+        """Distinct trees among everything gated, kept or not — the size of
+        the search actually explored, which is not the same number."""
         return len({m.tree for m in self.archive if m.parent_ref is not None})
 
 
@@ -1547,7 +1583,22 @@ def _tree_of(config: LoopConfig, ref: str) -> str:
 def _parent_weight(member: ArchiveMember) -> float:
     """DGM's sampling rule in miniature: a sigmoid of the score, scaled by
     1/(1+children). A member with no score yet (the root, before anything
-    was gated against it) weighs as a 0.5."""
+    was gated against it) weighs as a 0.5.
+
+    **A rejected member with no score weighs zero** (ADR 0160). Rejected
+    candidates are in the archive as stepping stones, and a stepping stone
+    that reached G3 has a measured task metric — it is a real position in the
+    search space and competes for parenthood on that number, which is the
+    whole DGM claim. A candidate rejected by a CHEAP gate has no number:
+    G0 refused its zone, G1 could not build it, G5 said it drifted too far.
+    Giving it the root's 0.5 would let an unbuildable or out-of-zone tree
+    outbid a measured one, and the fallback score would be a fabrication
+    about a candidate nothing ever measured. So it is recorded and not
+    sampleable, and the recording is the point: the run's account of where it
+    went includes the places it could not stand.
+    """
+    if member.score is None and not member.kept:
+        return 0.0
     score = 0.5 if member.score is None else member.score
     fitness = 1.0 / (1.0 + math.exp(-10.0 * (score - 0.5)))
     return fitness / (1.0 + member.children)
@@ -1555,7 +1606,133 @@ def _parent_weight(member: ArchiveMember) -> float:
 
 def _choose_parent(archive: list[ArchiveMember], rng: random.Random) -> ArchiveMember:
     weights = [_parent_weight(m) for m in archive]
+    if not any(weights):  # pragma: no cover - the root always weighs > 0
+        return [m for m in archive if m.kept][0]
     return rng.choices(archive, weights=weights, k=1)[0]
+
+
+def _ref_resolves(config: LoopConfig, ref: str) -> bool:
+    try:
+        config.repo.rev_parse(ref)
+    except Exception:  # noqa: BLE001 - "unknown revision" is the only thing we act on
+        return False
+    return True
+
+
+def _resume_lineage(
+    config: LoopConfig, members: list[ArchiveMember], root: ArchiveMember
+) -> tuple[int, int, set[str], set[str]]:
+    """Seed this run's archive from the persisted lineage (ADR 0160).
+
+    Returns (members added, records whose ref no longer resolves, trees
+    rejected in an earlier invocation, trees kept in an earlier invocation).
+
+    A member is added — and so becomes proposable-from — only if its ref
+    still resolves in this repository. A candidate branch can be deleted or
+    garbage-collected between invocations, and `replace(config, base_ref=...)`
+    on a dead ref would fail the turn rather than skip the member. A record
+    whose ref is gone still contributes its TREE, so duplicate detection and
+    the rejected-tree stop keep working on history the repo can no longer
+    check out. This is the same distinction `archive.py`'s header draws: the
+    content archive stores bytes so it survives `git gc`; the lineage archive
+    stores references and says out loud what it loses when they die.
+    """
+    records = archive.read_lineage(config.paths.lineage_dir, config.graph_id)
+    rejected = {r.tree for r in records if not r.kept}
+    kept_trees = {r.tree for r in records if r.kept}
+    # Fold by ref, LAST record wins. `run_loop` appends a closing record for
+    # every member it proposed from, carrying the children count the novelty
+    # term needs; without the fold, resuming would read the count as it stood
+    # at the moment the member was created — always zero — and the term that
+    # pushes the sampler away from over-explored parents would reset itself
+    # every invocation, which is the knob quietly not working rather than the
+    # knob being off.
+    folded: dict[str, archive.LineageRecord] = {}
+    for record in records:
+        folded[record.ref] = record
+    added = 0
+    gone = 0
+    seen = {root.ref}
+    for record in folded.values():
+        if record.ref == root.ref:
+            # The previous run's kept head IS this run's root. One member —
+            # but the root inherits what was measured about it, or the loop
+            # would re-weight last night's best candidate as an unscored 0.5
+            # and forget how many children it has already spawned.
+            if root.score is None:
+                root.score = record.score
+            root.children = max(root.children, record.children)
+            continue
+        if record.ref in seen:
+            continue
+        if not _ref_resolves(config, record.ref):
+            gone += 1
+            continue
+        seen.add(record.ref)
+        members.append(
+            ArchiveMember(
+                ref=record.ref,
+                score=record.score,
+                parent_ref=record.parent_ref,
+                children=record.children,
+                tree=record.tree,
+                kept=record.kept,
+                disposition=record.disposition,
+                resumed=True,
+            )
+        )
+        added += 1
+    return added, gone, rejected, kept_trees
+
+
+def _persist_member(
+    config: LoopConfig,
+    member: ArchiveMember,
+    *,
+    run_id: str,
+    turn: int,
+    at: datetime,
+    enabled: bool,
+) -> None:
+    if not enabled:
+        return
+    archive.append_lineage(
+        config.paths.lineage_dir,
+        config.graph_id,
+        archive.LineageRecord(
+            run_id=run_id,
+            turn=turn,
+            ref=member.ref,
+            tree=member.tree,
+            parent_ref=member.parent_ref,
+            score=member.score,
+            kept=member.kept,
+            disposition=member.disposition,
+            recorded_at=at + timedelta(seconds=turn),
+            children=member.children,
+        ),
+    )
+
+
+def _greedy_parent(archive: list[ArchiveMember], kept_ref: str) -> ArchiveMember:
+    """Greedy's parent: the member the kept branch currently points at.
+
+    This was `archive[-1]`, and ADR 0160 broke that identity twice. Rejected
+    candidates are members now, so `archive[-1]` after a rejection is the
+    rejected candidate and greedy would silently propose from un-gated
+    content. And resumed members are appended after the root in *file* order,
+    not in the order the kept branch moved, so on a second invocation
+    `archive[-1]` was an ancestor — the loop proposed the same change it had
+    already kept, and `test_a_second_run_resumes_from_the_existing_kept_branch`
+    caught it. Both mutations are under test.
+
+    Naming the ref rather than a position makes the greedy contract explicit:
+    the latest kept state is wherever the kept branch is.
+    """
+    for member in reversed(archive):
+        if member.ref == kept_ref and member.kept:
+            return member
+    return [m for m in archive if m.kept][0]  # pragma: no cover - root always matches
 
 
 def run_loop(
@@ -1570,6 +1747,7 @@ def run_loop(
     cycle_fn: Callable[..., CycleRun] | None = None,
     sample_parents: bool = False,
     seed: int = 0,
+    persist_lineage: bool = True,
     **cycle_kwargs: Any,
 ) -> LoopRun:
     """Keep/revert on the metric, inside the gates (ADR 0114).
@@ -1586,10 +1764,26 @@ def run_loop(
     re-proposing from the same base.
 
     With `sample_parents` (ADR 0121) the next proposal is made from a parent
-    SAMPLED from the archive of everything kept so far — weighted by score
+    SAMPLED from the archive of everything gated so far — weighted by score
     and against how many children it already has — rather than always from
     the latest kept. Stepping stones survive; the kept branch points at the
-    best-scoring member. Off by default: measured, not assumed.
+    best-scoring KEPT member. Off by default: measured, not assumed.
+
+    Since ADR 0160 the archive is durable and complete rather than in-memory
+    and kept-only:
+
+    - every gated candidate is written to `paths.lineage_dir` with its gate
+      verdict and score, **rejects included** — they are the stepping stones
+      DGM's archive exists to keep, and `_parent_weight` makes a rejected
+      member sampleable exactly when G3 gave it a number;
+    - the next invocation loads that file and resumes from it, so a parent
+      kept last night can be proposed from tonight;
+    - duplicate detection runs over the loaded set as well as this run's, so
+      a second invocation cannot spend N+2 corpus passes re-gating a tree the
+      first one already kept or already rejected.
+
+    `persist_lineage=False` turns all of that off for a caller that wants a
+    self-contained run (the A/B rig runs each arm on fresh state instead).
 
     Stops on: the turn count, the wall-clock budget, a halt, a turn that
     produced no candidate, or a candidate whose tree matches one already
@@ -1608,9 +1802,26 @@ def run_loop(
     kept_ref = _ensure_branch(config, kept_branch)
     main_before = config.repo.rev_parse(config.base_ref)
     root = ArchiveMember(ref=kept_ref, score=None, parent_ref=None, tree=_tree_of(config, kept_ref))
-    archive: list[ArchiveMember] = [root]
+    members: list[ArchiveMember] = [root]
     lines: list[str] = [f"kept branch {kept_branch} at {kept_ref[:12]} (from {config.base_ref})"]
     rejected_trees: set[str] = set()
+    # Every tree this loop has ever kept, in this run or a previous one. A set
+    # rather than a scan of `members` because a persisted member whose ref has
+    # been deleted or garbage-collected is not a member — it cannot be a
+    # parent — but its tree must still be recognised as one the loop already
+    # kept, or the deletion of a candidate branch would silently re-open a
+    # search the loop had closed.
+    kept_trees: set[str] = {root.tree}
+    run_id = f"{now:%Y%m%dT%H%M%S}"
+    if persist_lineage:
+        resumed, gone, seeded_rejects, seeded_kept = _resume_lineage(config, members, root)
+        rejected_trees |= seeded_rejects
+        kept_trees |= seeded_kept
+        lines.append(
+            f"lineage: resumed {resumed} member(s) from "
+            f"{archive.lineage_path(config.paths.lineage_dir, config.graph_id)}"
+            + (f"; {gone} whose ref no longer resolves are history only" if gone else "")
+        )
     done: list[LoopTurn] = []
     stopped_because = f"turn budget of {turns} exhausted"
     for turn in range(1, turns + 1):
@@ -1620,7 +1831,9 @@ def run_loop(
                 f"wall-clock budget of {budget_seconds:.0f}s exceeded after {turn - 1} turn(s)"
             )
             break
-        parent = _choose_parent(archive, rng) if sample_parents else archive[-1]
+        parent = (
+            _choose_parent(members, rng) if sample_parents else _greedy_parent(members, kept_ref)
+        )
         parent.children += 1
         turn_config = replace(config, base_ref=parent.ref)
         # A scratch dir PER TURN. G1 materialises the candidate into
@@ -1645,7 +1858,13 @@ def run_loop(
         disposition = run.decision.disposition if run.decision else None
         passed = disposition in (Disposition.ESCALATE, Disposition.AUTO_MERGE)
         tree = _tree_of(config, candidate_branch)
-        if any(m.tree == tree for m in archive):
+        candidate_ref = config.repo.rev_parse(candidate_branch)
+        # Kept members only. Since rejected candidates joined the archive
+        # (ADR 0160), matching against every member would turn the loop's
+        # "re-proposed a tree already rejected — the proposer has nothing new"
+        # stop into a `continue`, and the loop would spin on the same rejected
+        # diff for the whole turn budget.
+        if tree in kept_trees:
             done.append(
                 LoopTurn(
                     turn, run.proposed, disposition, False, kept_ref, parent.ref, run.score, True
@@ -1654,17 +1873,25 @@ def run_loop(
             lines.append(f"turn {turn}: duplicate of a kept tree from {parent.ref[:12]}; skipped")
             continue
         if passed and run.exit_code != EXIT_HALTED:
-            candidate_ref = config.repo.rev_parse(candidate_branch)
             if root.score is None and run.incumbent_score is not None:
                 root.score = run.incumbent_score
             member = ArchiveMember(
-                ref=candidate_ref, score=run.score, parent_ref=parent.ref, tree=tree
+                ref=candidate_ref,
+                score=run.score,
+                parent_ref=parent.ref,
+                tree=tree,
+                kept=True,
+                disposition=disposition.value if disposition else None,
             )
-            archive.append(member)
-            # The kept branch points at the best-scoring member (greedy mode:
-            # always the newest, since each is proposed from the last).
+            members.append(member)
+            kept_trees.add(tree)
+            _persist_member(
+                config, member, run_id=run_id, turn=turn, at=now, enabled=persist_lineage
+            )
+            # The kept branch points at the best-scoring KEPT member (greedy
+            # mode: always the newest, since each is proposed from the last).
             best = max(
-                (m for m in archive if m.parent_ref is not None),
+                (m for m in members if m.parent_ref is not None and m.kept),
                 key=lambda m: (m.score if m.score is not None else -1.0, m.ref),
             )
             if sample_parents:
@@ -1697,24 +1924,52 @@ def run_loop(
                 LoopTurn(turn, run.proposed, disposition, True, kept_ref, parent.ref, run.score)
             )
         else:
+            # A rejected candidate is an archive member too (ADR 0160): the
+            # gates measured a position in the search space and refused to
+            # stand on it, which is information. `_parent_weight` decides
+            # whether it can be proposed from — it can, iff G3 gave it a
+            # score.
+            member = ArchiveMember(
+                ref=candidate_ref,
+                score=run.score,
+                parent_ref=parent.ref,
+                tree=tree,
+                kept=False,
+                disposition=disposition.value if disposition else None,
+            )
+            members.append(member)
+            _persist_member(
+                config, member, run_id=run_id, turn=turn, at=now, enabled=persist_lineage
+            )
             done.append(
                 LoopTurn(turn, run.proposed, disposition, False, kept_ref, parent.ref, run.score)
             )
             lines.append(
                 f"turn {turn}: reverted ({disposition.value if disposition else 'halted'})"
+                + (
+                    f", archived as a stepping stone (score {run.score})"
+                    if run.score is not None
+                    else ", no score: archived but not sampleable"
+                )
             )
             if run.exit_code == EXIT_HALTED:
                 stopped_because = f"halted at turn {turn}"
                 break
             if tree in rejected_trees:
                 stopped_because = (
-                    f"turn {turn} re-proposed a tree already rejected in this run; "
-                    "the proposer has nothing new"
+                    f"turn {turn} re-proposed a tree already rejected; the proposer has nothing new"
                 )
                 break
             rejected_trees.add(tree)
     if config.repo.rev_parse(config.base_ref) != main_before:  # pragma: no cover - invariant
         raise RuntimeError(f"{config.base_ref} moved during run_loop; this must never happen")
+    # Closing records: the children counts, which only exist once the run is
+    # over. `_resume_lineage` folds by ref and takes the last, so these
+    # supersede the at-creation records without rewriting a byte of them —
+    # append-only, and the history of what was tried stays legible.
+    for member in members:
+        if member.children:
+            _persist_member(config, member, run_id=run_id, turn=0, at=now, enabled=persist_lineage)
     lines.append(f"stopped: {stopped_because}")
     return LoopRun(
         turns=tuple(done),
@@ -1722,7 +1977,7 @@ def run_loop(
         kept_ref=kept_ref,
         stopped_because=stopped_because,
         lines=tuple(lines),
-        archive=tuple(archive),
+        archive=tuple(members),
     )
 
 

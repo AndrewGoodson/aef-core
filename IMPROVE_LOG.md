@@ -3884,3 +3884,106 @@ G2/G3 defects reproduce unchanged; `loop score` wants `module:factory` where
 `loop bootstrap` wants `module`; and a copied corpus's stale `manifest.json`
 makes the next cycle refuse with `corpus shrank`, with no command to reconcile
 it.
+## S4 / J2 — the archive is real and persistent, and has not yet bought anything (ADR 0160)
+
+Worker S4 of `UPGRADE_LOOP.md` (= BEYOND_90's J2), on `claude-opus-5`
+(`claude-opus-5[1m]`). Quota preflight `is_error: false`, `result: "OK"`,
+`input_tokens: 2` — `docs/research/j2/preflight.json`.
+
+**J0's four dim-6 clauses, each on an artifact.**
+
+1. `aef loop run --sample-parents`, `--seed`, `--no-lineage`, wired to
+   `run_loop` and tested at both levels — the parser
+   (`test_the_parser_accepts_the_flags_and_defaults_to_greedy_and_persistent`)
+   and the handler with the parser bypassed
+   (`test_the_handler_reads_the_flag_rather_than_the_parser_defaulting_it`),
+   because either alone is a hole this repo has fallen into.
+2. The lineage archive persists: `<state>/lineage/<graph-id>.jsonl`, one
+   digest-carrying record per member, append + flush + fsync like the
+   ledger; a second invocation resumes it and proposes from a parent the
+   first kept (`test_the_lineage_persists_and_a_second_run_samples_a_parent_the_first_kept`).
+   Deliberately BESIDE `archive.py`'s version store rather than inside it:
+   rejects are members now, and un-gated content must never be reachable by
+   `rollback` or appear in `versions()`, whose first element is the baseline
+   G5 measures drift against.
+3. Rejected candidates are members with their verdict and score
+   (`test_every_gated_candidate_is_written_to_the_lineage_file`), sampleable
+   iff G3 gave them a number
+   (`test_a_rejected_member_that_reached_a_score_can_be_sampled_as_a_parent`).
+   A cheap-gate reject weighs zero
+   (`test_a_candidate_rejected_before_scoring_is_archived_but_never_sampled`):
+   the root's 0.5 fallback would be a fabrication about a candidate nothing
+   measured.
+4. Duplicate detection and the rejected-tree stop run over the persisted set
+   (`test_duplicate_detection_spans_invocations`,
+   `test_a_tree_rejected_in_an_earlier_run_stops_the_next_one`), each with a
+   `persist_lineage=False` control.
+
+**Two seams the change opened, both caught by tests.** Greedy's parent was
+`archive[-1]`, which after a rejection is the rejected candidate and after a
+resume is an ancestor — the pre-existing
+`test_a_second_run_resumes_from_the_existing_kept_branch` failed first, and
+`_greedy_parent` names the kept ref now. And `distinct_kept_trees` had no
+`kept` filter, which would have inflated the number the whole A/B is decided
+on.
+
+**Found by RUNNING the measurement.** `aef loop run` had no
+`--build-command` while `gate` and `cycle` do, and `_build_commands` reads it
+with `getattr`, so every `run` candidate was built with G1's default
+`python -m pytest -q` — this repo's whole suite, per candidate, per turn. The
+first live turn's only measurement was `G1 rejected it: build command failed
+(timed out)`. Fixed; G1a reported the same gap independently.
+
+**The live A/B — 18 live calls of a 100 budget.** 8 turns per arm, summary
+corpus (gated on 2 train scenarios so a G3 pass costs ~14 calls rather than
+~84; both arms see the identical corpus), fresh clone and state per arm,
+`--cassette-miss live`, LLM proposer on Opus. Each arm ran as two
+invocations because the wall clock, not the call budget, ends one at ~115
+s/turn — and the second invocation of each printed `lineage: resumed 4
+member(s)`, which is clause 2 in the live rig.
+
+| arm | turns | kept | reverted | distinct parents | distinct kept trees | calls | stopped |
+|---|---|---|---|---|---|---|---|
+| greedy | 8 | 0 | 8 | **1** | 0 | 8 | turn budget exhausted |
+| sampling | 7 | 0 | 7 | **5** | 0 | 7 | **halted** — two consecutive G5 drift rejections |
+
+Task metric flat at 0.5 in both arms on every turn that reached G3.
+
+**The falsification fired.** Dim 6 was to move 5 → 7 only on distinct kept
+trees > 1 in the sampling arm with greedy at 1. It is **0 in both**, because
+neither arm kept anything — G2's zero-tolerance rule rejected every scored
+candidate regardless of parent. So: **the archive is now real and
+persistent; it has not yet been shown to buy anything.** +1, not +2.
+
+Three things that "no gain" hides. (a) The A/B as specified *could not*
+discriminate with a kept count of 0; the statistic `sample_parents` controls
+is distinct parents, 5 against 1. (b) ADR 0121's model is wrong for a
+stochastic proposer — greedy explored 8 distinct trees from ONE parent, so
+sampling's contribution is diversity of starting points, which only matters
+once something is kept. (c) Every G5 drift rejection (0.511, 0.515, 0.547
+against a 0.500 budget) was in the sampling arm, because drift is cumulative
+against the blessed baseline and a rejected stepping stone is already
+drifted. **The budget was not raised.** An archive that keeps stepping stones
+spends a cumulative drift budget faster than a ladder does — a design tension
+between DGM's open-endedness and this repo's containment.
+
+**Should `sample_parents` be deleted? No**, and on evidence that differs from
+ADR 0121's: in I6 the knob produced no different behaviour at all (it redrew
+the root and the deterministic proposer re-emitted the same tree). Here it
+demonstrably does — five parents, two of them rejects, with a visible
+consequence. It is a working mechanism with a measured null result and a
+named reason the measurement could not have come out otherwise, not an unkept
+promise. The run that should delete it is one with a non-zero kept count in
+which sampling still buys nothing; this one cannot be that run.
+
+7 mutations, 7 caught, every restore sha256-verified. Rig, raw `results.jsonl`,
+`--dry-run` output, report and preflight committed under `docs/research/j2/`.
+
+**Rubric: dim 6 5 → 6**; `tests/test_rubric_arithmetic.py` recomputes the
+heading, which lands at 71 after this row merged alongside S3b's dim-3 row.
+
+**Reported, not fixed** (outside this worker's files): `aef loop run` prints
+no cassette hit/miss count, so "scored live" and "replayed" are
+indistinguishable from its output — the same reporting gap ADR 0156 named for
+`aef loop score`; and `run_loop`'s wall-clock stop ends an arm mid-experiment
+with no signal beyond `stopped_because`.
