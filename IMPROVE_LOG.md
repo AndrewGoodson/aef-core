@@ -2007,3 +2007,9 @@ generated graph does not have, and it is not claimed as closed. Whether any
 existing baseline anywhere already holds a link target, or any existing corpus
 holds a policy-denied recording, is **not measured** and nothing detects
 either retroactively. Every fixture here was authored by this programme.
+
+---
+
+## S0 / J0 — the independent score is the score (ADR 0151)
+
+86 → **68**. Blind re-score verified on every dimension; the lower number stands per BEYOND_90's rule. Two findings became fixes tonight (no-op scheduled cycle; retrieval→prompt link). Report: `docs/research/j0-independent-score-2026-09-04.md`.

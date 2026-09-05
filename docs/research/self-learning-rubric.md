@@ -19,7 +19,7 @@ A self-graded number is exactly the failure the trust case warns about.
 | 7 | Real-signal ingestion | 10 | Learns from live runs and real tenants, not a synthetic corpus; telemetry closes the loop | Arize "closing the loop"; Live-SWE-agent (on-the-fly) |
 | 8 | Adoptability / harness-native | 5 | Drops into a repo whose agents are coding-agent sessions; no key; cross-tool | — |
 
-## Current — 2026-09-04 after I15 — **86 / 100**
+## Current — 2026-09-04 after J0 — **68 / 100**
 
 *Corrected 2026-09-04 (ADR 0127): every total in this file up to and
 including this one was carried forward by hand as `previous + delta` and
@@ -30,6 +30,13 @@ from the rows, so a total nobody checked cannot recur.*
 
 | # | Score | What moved and the artifact |
 |---|---|---|
+| 1 | 15/20 | J0 (ADR 0151): the repo's own scheduled `aef loop cycle` passes no `--memory` and exits 0 every night with `no memory store configured … no candidate`; the adopter's rendered workflow has no cycle step. Verified. "Automatically" is unmet |
+| 2 | 12/20 | J0 (ADR 0151): `make_retrieve_node` writes `retrieved_context` and no prompt reads it — `draft_node` builds from `working_memory` alone; the knowledge A/B measures a retrieval-coverage proxy, never a task score. Verified. I12 as designed would have measured four identical arms |
+| 3 | 6/10 | J0 (ADR 0151): the 3/18 vs 9/18 judge A/B exists as a docstring citing an ADR — no test, script or committed data; no judge scored against a real model in-repo; no self-preference control. Verified |
+| 5 | 8/10 | J0 (ADR 0151): archive sampling, `reflection.impl: llm` and `proposer: llm` are "off by measurement" with the measurement in prose only — no runnable script, no committed data; nothing measures end-to-end benefit. Verified |
+| 6 | 5/10 | J0 (ADR 0151): lineage archive is in-memory per `run_loop` call, no CLI flag (`grep sample_parents aef/cli/` empty), only kept candidates enter it, nothing persists across invocations. Verified |
+| 7 | 4/10 | J0 (ADR 0151): no live signal has ever entered harvest; the cron's `--runs` is populated by no step; corpus is self-generated. Verified — one point below our own row |
+| 8 | 4/5 | J0 (ADR 0151): the Codex path's live test is a skip from code alone; six manual obligations remain. J0 scored 4.5; rows are integers; the lower integer |
 | 8 | 5/5 | I15 (ADR 0131): the Codex CLI was 18 versions behind and could not parse its own server's catalogue; upgraded, `CodexProvider` answered UNMODIFIED on the first live attempt (argv, `--output-last-message` reply, `turn.completed` usage in 19,975 / out 26). `tests/providers/test_codex_live.py` keeps it runnable, opt-in. Two backends measured, none assumed |
 | 1 | 19/20 | I11 (ADR 0123): a content task a model can fail — `agents/summary`, 20 recorded scenarios with owner checks (12/6/2), `CassetteProvider` replays every pinned model call with no credential, miss FAILS by default; cassette score train 0.9792 / validation 0.9167, repeat spread 0; three real content failures (0.75); planted prompt regression → 0.0000 under the default with no live call. Remaining: the live noise floor did not get measured (three attempts past a ten-minute wall); no turn kept/reverted on this suite yet (I12) |
 | 1 (I10) | 18/20 | I10 (ADR 0122): `run_loop` gave every turn one workdir and G1 refuses a non-empty one, so no real loop had ever gated a second candidate behaviourally — fixed per turn, asserted in the acceptance test (M48); on `agents/demo` the loop now keeps a coherent two-constant change the rule-based proposer could not make. Remaining: a corpus of real tasks (I11) |
