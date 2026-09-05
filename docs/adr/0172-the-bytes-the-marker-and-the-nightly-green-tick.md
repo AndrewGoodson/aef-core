@@ -264,6 +264,24 @@ applied **on top**: the `/new-model-check` skill it writes is removed by path.
 No cycle is introduced — `aef/cli/adopt.py` already imported
 `DEFAULT_MIGRATED_OUT` from migrate, and migrate imports nothing from adopt.
 
+> **ERRATUM (ADR 0176, fix worker I1): the finding below is CLOSED, and its
+> prediction held exactly.** `aef/cli/migrate.py` now has
+> `discover_adopter_skills`, which applies the same exclusion, and the two
+> report the same number on the same tree (5 and 5 on the pilot clone, measured).
+> The raw `discover_skills` is unchanged and the report still NAMES aef's own
+> skill, marked `(aef's own — not yours)` — a migrate that goes silent about a
+> file it declined to migrate is the one thing that block exists not to be; only
+> the COUNT excludes it. `test_adopt_still_does_not_count_its_own_skill_after_reusing_migrates_discovery`
+> did say so on that change, and was updated to assert the two AGREE rather than
+> silently re-pinned.
+>
+> One correction to the paragraph below: "mirroring the exclusion is a change to
+> `aef/cli/migrate.py`" was not sufficient. Migrate importing the constant from
+> adopt is a **hard circular import**, reproduced both directions in ADR 0176 by
+> patching it into the real file. The string now lives in `aef/harness/zones.py`
+> — which both CLI modules already import and which imports neither — beside
+> `DEFAULT_AGENT_PATH`, for the reason that constant's own comment gives.
+
 **Reported for migrate's owner, not fixed here:** `discover_skills` has no such
 exclusion, so on an adopted tree it counts the `SKILL.md` that `aef adopt`
 itself wrote — measured 5 from adopt against 6 from migrate on the same repo.

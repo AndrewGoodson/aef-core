@@ -119,6 +119,7 @@ from pathlib import Path
 
 from aef.harness.vendor_scan import MODEL_SDK_ROOTS, SKIP_DIRS
 from aef.harness.zones import (
+    ADOPT_SKILL_PATH,
     DEFAULT_AGENT_PATH,
     DEFAULT_AGENT_ROOT,
     LEGACY_AGENT_PATH,
@@ -275,6 +276,11 @@ class MigrateResult:
     # `SKILL.md` files seen and deliberately not migrated — see
     # `discover_skills` for why. Reported, never silently dropped.
     skills_seen: list[str] = field(default_factory=list)
+    # The subset of `skills_seen` that `aef adopt` ITSELF wrote. Named as a
+    # field rather than recomputed in `report()` because the answer depends on
+    # the repo root, and a report is rendered from the result alone. Empty by
+    # default, so a hand-built result counts exactly what it used to.
+    skills_own: list[str] = field(default_factory=list)
     # The Zone A root the prompt graphs were written under, and the directory
     # the personas were read from. Both are reported, because together they
     # decide whether the loop may propose a change to the persona itself.
@@ -915,6 +921,11 @@ def discover_skills(root: Path, *, skills_dir: str = DEFAULT_SKILLS_DIR) -> list
     So they are *counted and named* in the report rather than skipped
     silently, which is the same rule the call-site scanner follows for the
     functions it declines to wrap.
+
+    **`aef adopt`'s own `SKILL.md` is still returned here and is NOT the
+    adopter's** — see `discover_adopter_skills`, which is the count the report
+    prints. This function stays the raw listing because `aef migrate`'s job is
+    to name every file it declined to migrate, including aef's own.
     """
     base = root / Path(skills_dir)
     if not base.is_dir():
@@ -924,6 +935,31 @@ def discover_skills(root: Path, *, skills_dir: str = DEFAULT_SKILLS_DIR) -> list
     # a skill's own test corpus. Counting those would have made the report's
     # first number wrong about the repo it was describing.
     return sorted(p.relative_to(root).as_posix() for p in base.glob("*/SKILL.md"))
+
+
+def is_adopt_skill(root: Path, relative_path: str) -> bool:
+    """Is this the `SKILL.md` `aef adopt` wrote, rather than the adopter's?
+
+    THE RULE, and it is `aef/cli/adopt.py`'s, derived from the one string in
+    `aef.harness.zones` rather than re-spelled here (ADR 0149). Resolved on
+    both sides so a symlinked skills directory answers the same way adopt's
+    own exclusion does.
+    """
+    ours = (root / ADOPT_SKILL_PATH).resolve()
+    return (root / relative_path).resolve() == ours
+
+
+def discover_adopter_skills(root: Path, *, skills_dir: str = DEFAULT_SKILLS_DIR) -> list[str]:
+    """`discover_skills` minus aef's own output — the adopter's skill surface.
+
+    THE DEFECT (H1's finding 1, ADR 0172 D4; reproduced in ADR 0176). Adopt
+    applied this exclusion and migrate did not, so on the pilot clone the same
+    tree measured **5 from adopt and 6 from migrate** — and after `aef adopt`
+    the sixth was the `new-model-check/SKILL.md` adopt had just written. A
+    scaffold that counts its own output as the adopter's surface reports a
+    different number on every run.
+    """
+    return [p for p in discover_skills(root, skills_dir=skills_dir) if not is_adopt_skill(root, p)]
 
 
 _PROMPT_GRAPH = '''"""{headline}
@@ -1476,6 +1512,9 @@ def run_migrate(
         root, agents_dir=prompt_agents_dir, agent_root=agent_root
     )
     result.skills_seen = discover_skills(root)
+    # aef's own `new-model-check` skill is separated HERE, at the one place
+    # that knows the repo root, so the report can name it and not count it.
+    result.skills_own = [p for p in result.skills_seen if is_adopt_skill(root, p)]
     if not write:
         return result
 
@@ -1744,11 +1783,20 @@ def _prompt_agent_lines(result: MigrateResult) -> list[str]:
 def _skill_lines(result: MigrateResult) -> list[str]:
     if not result.skills_seen:
         return []
+    # The COUNT excludes aef's own `new-model-check` skill and the LISTING
+    # still names it, marked. Dropping it from the listing would make `aef
+    # migrate` silent about a file it declined to migrate, which is the one
+    # thing this block exists not to be; counting it made adopt say 5 and
+    # migrate say 6 about the same tree (ADR 0176).
+    ours = [p for p in result.skills_seen if p in set(result.skills_own)]
     lines = [
         "",
-        f"found {len(result.skills_seen)} skill(s) and did NOT migrate any of them:",
+        f"found {len(result.skills_seen) - len(ours)} skill(s) and did NOT migrate any of them:",
     ]
-    lines += [f"  SKILL    {p}" for p in result.skills_seen]
+    lines += [
+        f"  SKILL    {p}" + ("   (aef's own — not yours)" if p in ours else "")
+        for p in result.skills_seen
+    ]
     lines += [
         "  A skill is not an agent. Its body is instructions injected into a session",
         "  already in progress, it presumes that session's task and tools, and it",
