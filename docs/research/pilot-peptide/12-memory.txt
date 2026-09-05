@@ -1,0 +1,7 @@
+success | 7961a9cf-8ad | d676481a571b44a6a2f27859 | 
+success | 1ddcad17-d6f | e4398f81f8ef47f7a04f046c | 
+success | 33108d40-3e8 | 2d7513afcfc74a3683bd192e | 
+success | fef4beb1-021 | a26c602ce5f7435e88332fb0 | 
+success | 7e3962c3-940 | 65383a0fc4fe4e1daa9be361 | 
+failure | ddfe4cc1-47a | checkfail-aa86d9e4cf0cea | ['check:working_memory.prompt_agent:regex']
+failure | fd9c9064-003 | checkfail-d1fad4b45c0196 | ['check:working_memory.prompt_agent:regex']

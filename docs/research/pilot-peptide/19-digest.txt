@@ -1,0 +1,18 @@
+# Self-rewiring digest, 2026-08-29 to 2026-09-05
+
+- Proposed: 1
+- Merged: 0 (acceptance rate 0%)
+- Rolled back: 0 — net accepted 0
+- Rejected: 1
+- Escalated to you: 0
+- Security events: 0
+- Halts: 0
+- Scenarios added to the corpus: 0
+- Drift from the blessed baseline: 0.000
+- Out-performing you editing code directly: n/a — nothing to compare yet
+- Production runs recorded: 5
+- Halt channel configured: NO
+
+**No halt channel is configured.** If the loop halts, nothing will tell you — you will find out by noticing it stopped. Set the halt webhook.
+
+**5 recorded, 0 admitted to the corpus.** Recording is not harvesting: a run becomes a scenario only if `aef loop harvest` re-executes it identically and its behaviour survives redaction. Which of those it was is in that command's own report line — run `aef loop harvest <graph> --runs <dir> --corpus <dir>` and read it. Two answers are ordinary — every run passed (harvest promotes failures unless `--include-successes`), or the daily limit held them back — and one is not: `REJECTED, did not re-execute deterministically` on every run means the ingestion path is broken, not quiet.

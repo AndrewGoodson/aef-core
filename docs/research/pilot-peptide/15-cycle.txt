@@ -1,0 +1,11 @@
+EXIT=1
+  --graph-id not given; the evidence graph id is derived as 'price-freshness-reviewer' from the 5 scenario(s) in corpus, which record one graph. The archive key is unchanged ('default'), so a blessed baseline stays where it was blessed (ADR 0182)
+  preflight: 2 of 6 obligation(s) unmet (corpus + tripwire, halt channel). ADVISORY — this command does not refuse on them; run `aef loop doctor` for each fix.
+  ledger verified: 2 entr(ies)
+  promoted 0 run(s) to the train split
+    5 already in the corpus: 013c9044-4485-4625-ac7c-972260613e8f, 028299cf-31e8-4141-a152-1901cd8d0d6c, 7961a9cf-8ade-4ec1-83c9-2cb22f026426, ddfe4cc1-47a7-43f0-92a2-fcee28a8fd35, fd9c9064-0031-42ec-bc48-ef6a739eae32
+  proposed cycle-20260905T104502-prompt on local branch loop/cycle-20260905T104502-prompt (never pushed; proposer=rule_based_prompt)
+  gated: reject — G3 rejected it: 1 previously-passing scenario(s) now score below 0.5 (zero tolerance, regardless of the aggregate)
+cycle verdict: proposed cycle-20260905T104502-prompt — Decision(disposition=<Disposition.REJECT: 'reject'>, reason='G3 rejected it: 1 previously-passing scenario(s) now score below 0.5 (zero tolerance, regardless of the aggregate)', question='') [evidence graph id derived from --corpus: 'price-freshness-reviewer']
+
+[exited with code 0]

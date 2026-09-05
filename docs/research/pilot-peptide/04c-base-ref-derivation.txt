@@ -1,0 +1,16 @@
+FALLBACK_BASE_REF (the literal used when the repo has no answer) = 'main'
+
+== arm 1: the safety clone (origin removed)
+   remotes:              (none)
+   branches:             loop/cycle-20260905T104502-prompt
+master
+   origin/HEAD:          fatal: ref refs/remotes/origin/HEAD is not a symbolic ref
+   HEAD is on:           master
+   resolve_default_base_ref -> 'master'
+
+== arm 2: a clone of the clone (git writes origin/HEAD; origin is the CLONE, not the real repo)
+   origin url:           /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/n7/peptide
+   origin/HEAD:          refs/remotes/origin/master
+   resolve_default_base_ref -> 'master'
+
+both terms answer 'master', and neither is the fallback literal: True

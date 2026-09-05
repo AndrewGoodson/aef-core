@@ -1,0 +1,4 @@
+  preflight: 5 of 6 obligation(s) unmet (corpus + tripwire, reflect node routed to, observations, halt channel, blessed baseline). ADVISORY — this command does not refuse on them; run `aef loop doctor` for each fix.
+  ledger verified: 0 entr(ies)
+  no memory store configured: nothing to learn from, no candidate
+cycle verdict: no memory store configured: nothing to learn from, no candidate (--no-memory was passed: this cycle could not propose)

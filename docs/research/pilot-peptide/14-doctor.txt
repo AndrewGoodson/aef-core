@@ -1,0 +1,12 @@
+Loop readiness — 6 things you must supply
+
+  [--] corpus + tripwire       5 scenario(s), 0 tripwire(s)
+       fix: aef loop record <module> --corpus corpus --scenario-id tripwire-1 --objective '<a task beyond this agent>' --split validation --expected must_fail --working-memory '{"difficulty": 99}'. Without a tripwire the gates cannot detect reward hacking (ADR 0060).
+  [OK] reflect node routed to  agents/migrated/price_freshness_reviewer/graph.py: make_prompt_agent_node(route='reflect') builds a node that routes to it
+  [OK] observations            9 recorded run(s) at <W>/state/observations.jsonl
+  [--] halt channel            none — a halt would tell nobody
+       fix: set AEF_HALT_WEBHOOK in your environment (never in this repo)
+  [OK] blessed baseline        1 archived version(s) of '.claude/agents'
+  [OK] model calls visible     2 graphs scanned, none reaches a model SDK the harness cannot see
+
+These are ADVISORY and this command is the only thing that reads them: `aef loop cycle` and `aef loop gate` will still run, and will print the unmet ones. Some enforce themselves later — G2/G3 refuse an empty corpus and G5 refuses without a blessed baseline — but a missing halt channel or an invisible model call stops nothing, which is why they are listed here.

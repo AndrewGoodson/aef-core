@@ -1,0 +1,23 @@
+== BASE  (5 patterns, no uuid)
+   promoted 5 run(s) to the train split
+   redactions=0 unredactable=0 changed_behaviour=0
+
+== TRUNK (10 patterns, ADR 0197's uuid included)
+   promoted 0 run(s) to the train split
+     5 REJECTED, a secret survived redaction: 013c9044-4485-4625-ac7c-972260613e8f, 028299cf-31e8-4141-a152-1901cd8d0d6c, 7961a9cf-8ade-4ec1-83c9-2cb22f026426, ddfe4cc1-47a7-43f0-92a2-fcee28a8fd35, fd9c9064-0031-42ec-bc48-ef6a739eae32
+     5 substitution(s) made by the redaction policy
+   redactions=5 unredactable=5 changed_behaviour=0
+
+run_id = 7961a9cf-8ade-4ec1-83c9-2cb22f026426
+
+INITIAL STATE, before redaction — every field carrying a UUID:
+   run_id: ['7961a9cf-8ade-4ec1-83c9-2cb22f026426']
+
+redact_state made 1 substitution(s); after it:
+
+THE TRACE, which redact_state does not touch and the output scan does read:
+   1 distinct UUID(s) in the recorded trace: ['7961a9cf-8ade-4ec1-83c9-2cb22f026426']
+
+So the input redaction removes the state's copy and the scenario's own
+`id`/`trace` keep theirs — and `harvest` scans the scenario it is about
+to write, so the run is refused for carrying its own identifier.

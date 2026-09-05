@@ -1,0 +1,9 @@
+== /Users/raptor/peptideindex (the owner's checkout, read-only)
+   origin/HEAD                 : origin/master
+   HEAD is on                  : aef/adopt
+   FALLBACK_BASE_REF           : 'main'
+   resolve_default_base_ref -> : 'master'
+
+   term 1 answers, and it answers 'master' while HEAD is on 'aef/adopt' —
+   which is the property ADR 0189 gives as term 1's reason: the default
+   does not move when the operator checks something else out.

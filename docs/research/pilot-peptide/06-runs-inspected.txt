@@ -1,0 +1,41 @@
+O1-peptideplugs-tirzepatide-stale  run=7961a9cf  graph=price-freshness-reviewer
+   model_calls=1  provider_name='claude_code'
+   provider_isolation=['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role']
+   containment={'isolation': ['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role'], 'persona_role': 'system', 'provider': 'cassette'}
+   answer: 281 words, 1720 chars
+   first line: **Age:** 24 days, measured from `scrape_date` 2026-08-12 against today 2026-09-05 (UTC). That is at or past `STALE_AFTER_DAYS = 7`, so this pair is **stale**.
+   last  line: VERDICT: STALE — tirzepatide @ peptideplugs.com, as of 2026-08-12, 24 days old
+
+O2-evolvebiopep-tirzepatide-fresh  run=1ddcad17  graph=price-freshness-reviewer
+   model_calls=1  provider_name='claude_code'
+   provider_isolation=['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role']
+   containment={'isolation': ['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role'], 'persona_role': 'system', 'provider': 'cassette'}
+   answer: 256 words, 1506 chars
+   first line: ## Ruling
+   last  line: VERDICT: FRESH — tirzepatide @ evolvebiopep.com, as of 2026-08-12, 2 days old
+
+O3-bpc157-cap-boundary  run=33108d40  graph=price-freshness-reviewer
+   model_calls=1  provider_name='claude_code'
+   provider_isolation=['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role']
+   containment={'isolation': ['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role'], 'persona_role': 'system', 'provider': 'cassette'}
+   answer: 394 words, 2254 chars
+   first line: ## Ruling
+   last  line: VERDICT: STALE — bpc-157 @ unknown (vendor not present in price-index.json), as of unknown, unknown days old
+
+O4-peptaura-bpc157-multipack  run=fef4beb1  graph=price-freshness-reviewer
+   model_calls=1  provider_name='claude_code'
+   provider_isolation=['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role']
+   containment={'isolation': ['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role'], 'persona_role': 'system', 'provider': 'cassette'}
+   answer: 211 words, 1267 chars
+   first line: **Display $1.966/mg — the "10mg vial" row.**
+   last  line: VERDICT: STALE — bpc-157 @ peptaura.com, as of 2026-08-14, 22 days old
+
+O5-skyepeptides-bpc157-no-date  run=7e3962c3  graph=price-freshness-reviewer
+   model_calls=1  provider_name='claude_code'
+   provider_isolation=['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role']
+   containment={'isolation': ['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role'], 'persona_role': 'system', 'provider': 'cassette'}
+   answer: 288 words, 1822 chars
+   first line: **Ruling: display it, but with the "As of" chip in its unknown-date form — not as a current price.**
+   last  line: VERDICT: STALE — bpc-157 @ skyepeptides.us.com, as of unknown, unknown days old
+
+runs=5  with a cassette=5  with a declaration=5

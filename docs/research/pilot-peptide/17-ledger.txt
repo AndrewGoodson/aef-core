@@ -1,0 +1,52 @@
+kinds: ['blessed', 'blessed', 'proposed', 'gated', 'rejected']
+{
+  "at": "2026-09-05T10:45:02.253158+00:00",
+  "detail": {
+    "evidence": "7 corpus pass(es) (35 scenario execution(s)): 1 candidate + 1 incumbent + 5 random control(s); corpus records one graph ('price-freshness-reviewer'); gating all 5 gated scenario(s)",
+    "gates": [
+      {
+        "gate": "G0",
+        "outcome": "pass",
+        "reason": "1 file(s), 4 line(s), all Zone A; 0 Python file(s) statically scanned, no violations; 1 NOT statically scanned (not Python \u2014 an AST gate has nothing to say about them, and G1/G2/G5 judge them instead)"
+      },
+      {
+        "gate": "G1",
+        "outcome": "pass",
+        "reason": "1 build command(s) succeeded against the merged workspace"
+      },
+      {
+        "gate": "G4",
+        "outcome": "pass",
+        "reason": "no owner-only safety metadata declared by the candidate"
+      },
+      {
+        "gate": "G5",
+        "outcome": "pass",
+        "reason": "0/3 accepted in the last 7d; drift 0.057/0.500 from the blessed baseline"
+      },
+      {
+        "gate": "G2",
+        "outcome": "pass",
+        "reason": "5 scenario(s) re-executed; every previously-passing one still passes. 0 changed routing (reported, not rejected)."
+      },
+      {
+        "gate": "G3",
+        "outcome": "fail",
+        "reason": "1 previously-passing scenario(s) now score below 0.5 (zero tolerance, regardless of the aggregate)"
+      }
+    ],
+    "grounded_in": [
+      "checkfail-aa86d9e4cf0cea60604f7db8137d3755 (memory): failure:check:working_memory.prompt_agent:regex recurred",
+      "checkfail-d1fad4b45c0196ce84c478e7230be16f (memory): failure:check:working_memory.prompt_agent:regex recurred"
+    ],
+    "live_model_calls": true,
+    "proposer": "rule_based_prompt",
+    "security_gates": []
+  },
+  "entry_hash": "d9954c71d1a4499ea6e0a0b5330c774e06dfe4e8a0c75992a8dd235f6ef7d06a",
+  "kind": "gated",
+  "previous_hash": "f0ef91fabfb7988dfb1ec00d209042fa4e2ce1756b0ae8e44a46c9ae02166c12",
+  "proposal_id": "loop/cycle-20260905T104502-prompt@5b17115f7ed5",
+  "sequence": 4,
+  "summary": "ran G0, G1, G4, G5, G2, G3; passed=False"
+}

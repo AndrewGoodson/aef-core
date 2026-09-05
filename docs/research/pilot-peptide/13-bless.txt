@@ -1,0 +1,2 @@
+blessed .claude/agents/price-freshness-reviewer.md as baseline v1 for graph 'price-freshness-reviewer'
+  G5 now has a reference point to measure drift against.

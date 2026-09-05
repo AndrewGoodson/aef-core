@@ -1,0 +1,22 @@
+the gated event cites 2 record(s):
+
+  checkfail-aa86d9e4cf0cea60604f7db8137d3755
+    memory record kind   : failure
+    failed_checks        : ['check:working_memory.prompt_agent:regex']
+    its run_id           : ddfe4cc1-47a7-43f0-92a2-fcee28a8fd35
+    a corpus scenario?   : yes
+    that scenario source : harvest
+    its objective        : Today is 2026-08-14 (UTC). Reviewing peptaura.com / bpc-157. Two captured rows share the same vial d...
+
+  checkfail-d1fad4b45c0196ce84c478e7230be16f
+    memory record kind   : failure
+    failed_checks        : ['check:working_memory.prompt_agent:regex']
+    its run_id           : fd9c9064-0031-42ec-bc48-ef6a739eae32
+    a corpus scenario?   : yes
+    that scenario source : harvest
+    its objective        : Today is 2026-08-14 (UTC). site/assets/data/price-index.json, generated_at 2026-08-14T16:53:34Z, rep...
+
+every cited record's run is a corpus scenario whose source is `harvest`: True
+
+the corpus, by source:
+  {"harvest": 5}  (bootstrap: 0, record: 0)

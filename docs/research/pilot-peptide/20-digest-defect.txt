@@ -1,0 +1,16 @@
+the corpus in this repository: 5 scenario(s), by source {"harvest": 5}
+
+== arm 0 — can the command be TOLD which corpus to look at?
+   `aef loop digest ... --corpus corpus` -> EXIT=2
+   aef: error: unrecognized arguments: --corpus corpus
+
+== arm 1 — does anything compute the number?
+   'scenarios_added' appears in aef.harness.loop.digest's body : False
+   'corpus' appears in it                                      : False
+   build_digest's default for scenarios_added                  : 0
+
+== arm 2 — the same command, corpus present vs corpus emptied
+   5 harvested scenarios present : - Scenarios added to the corpus: 0   (ADR 0190 warning printed: True)
+   corpus emptied to 0           : - Scenarios added to the corpus: 0   (ADR 0190 warning printed: True)
+   identical                     : True
+   corpus restored               : 5 scenario(s), 5 from harvest
