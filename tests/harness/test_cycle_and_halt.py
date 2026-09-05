@@ -76,6 +76,18 @@ def test_a_broken_ledger_chain_stops_the_cycle(repo: GitRepo, tmp_path: Path) ->
 
 
 def test_no_memory_store_produces_no_candidate(repo: GitRepo, tmp_path: Path) -> None:
+    """The API still ACCEPTS `memory=None` — deliberately, and this is the
+    seam ADR 0165 is about.
+
+    `cycle()` is a library function and `memory=None` is a legitimate thing to
+    ask it for; what was wrong was that the CLI let an operator ask for it by
+    saying nothing, so this repo's nightly workflow requested a no-op every
+    night without anyone choosing to. The refusal therefore lives at the
+    boundary where the operator types, not here: see
+    `tests/cli/test_loop_cycle_memory_flag.py`. Two levels, and this test
+    pins which one is which — a control moved to the wrong level is how the
+    defect got in.
+    """
     run = _cycle(_config(repo, tmp_path), tmp_path)
     assert run.proposed is None
     assert any("nothing to learn from" in line for line in run.lines)

@@ -227,6 +227,27 @@ def cmd_monitor(args: argparse.Namespace) -> int:
         print(f"  {line}")
     for proposal_id in run.rolled_back:
         print(f"  ROLLED BACK: {proposal_id}")
+
+    # The metric that would have caught ADR 0165: a loop that runs on a timer
+    # and produces nothing. The monitor is the right place for it because the
+    # monitor is the thing that runs hourly whether or not anything happened,
+    # and "nothing happened" is the condition being reported.
+    from aef.harness import ledger as _ledger
+    from aef.harness.monitoring import assess_cycle_staleness, read_cycle_attempts
+
+    try:
+        entries = _ledger.read(config.paths.ledger_dir)
+    except _ledger.LedgerError as exc:
+        # A staleness report is not worth losing the rollback result over, and
+        # a broken chain is already `aef loop status`'s headline.
+        print(f"  cycle staleness unavailable: {exc}")
+    else:
+        staleness = assess_cycle_staleness(
+            entries, read_cycle_attempts(config.paths.root), now=datetime.now(UTC)
+        )
+        for line in staleness.lines():
+            print(f"  {line}")
+
     if run.halted:
         print("\nLOOP HALTED:")
         for reason in run.halt_reasons:
@@ -704,10 +725,58 @@ def _halt_notifier() -> object:
     return HaltNotifier(webhook_url=os.environ.get("AEF_HALT_WEBHOOK") or None)
 
 
+# argparse's own code for a usage error, and deliberately not `EXIT_REJECTED`.
+# `cmd_cycle`'s comment below already says why: a missing flag is a
+# configuration error, and reporting it as a verdict on a candidate makes CI
+# retry it forever (ADR 0075). It shares the number with `EXIT_HALTED`, which
+# is fine and was checked rather than assumed — every caller of exit 2 is told
+# "stop, do not retry, a human must look", and that is exactly the right
+# instruction for an invocation that cannot work. The two are distinguishable
+# in the output: a halt prints `HALTED:` on stdout, this prints `error:` on
+# stderr, as argparse's own usage errors do.
+EXIT_USAGE = 2
+
+
+def _require_memory_flag(args: argparse.Namespace) -> int | None:
+    """One of `--memory` / `--no-memory`, or refuse. `None` means proceed.
+
+    This is the `--state` / `--no-loop-state` pattern from ADR 0141, applied
+    to the flag whose absence made this repo's own nightly cycle a no-op.
+    `.github/workflows/loop-monitor.yml` ran `aef loop cycle` daily with no
+    `--memory`, so `cycle` took the `memory=None` branch, printed "no memory
+    store configured: nothing to learn from, no candidate", and **exited 0** —
+    every night since the workflow was written, with nothing saying so
+    (reproduced, ADR 0165). That is ADR 0139's failure shape, scheduled.
+
+    Enforced HERE and not only in the parser, deliberately: L6 found a
+    parser-level control that a handler-level caller walked straight past, and
+    `harness.loop.cycle()` is importable by anything. A guard that only binds
+    when the argument vector is the thing being checked is not a guard.
+    """
+    if getattr(args, "memory", None) or getattr(args, "no_memory", False):
+        return None
+    print(
+        "error: a cycle without memory cannot propose — with no recorded failures the "
+        "proposer has nothing to ground in, so the cycle prints 'no memory store "
+        "configured: nothing to learn from, no candidate' and exits 0, which reads as "
+        "success (ADR 0139). Pass --memory <file> — the SAME file `aef loop bootstrap "
+        "--memory` and the reflect node write — or pass --no-memory to say you mean "
+        "that. Neither was given, and silence used to mean --no-memory: this repo's own "
+        "scheduled cycle was a no-op every night (ADR 0165).",
+        file=sys.stderr,
+    )
+    return EXIT_USAGE
+
+
 def cmd_cycle(args: argparse.Namespace) -> int:
     from aef.cli.run import load_graph_module
     from aef.harness.loop import cycle as loop_cycle
     from aef.harness.memory_store import FileMemoryStore
+    from aef.harness.monitoring import record_cycle_attempt
+
+    refusal = _require_memory_flag(args)
+    if refusal is not None:
+        return refusal
 
     config = _config(args)
     _warn_unmet_obligations(args, config)
@@ -740,6 +809,30 @@ def cmd_cycle(args: argparse.Namespace) -> int:
 
     for line in run.lines:
         print(f"  {line}")
+
+    # One line saying what this turn actually produced, in words, because
+    # "  no memory store configured..." three lines up in a CI log is not a
+    # verdict anyone reads. This is the line the workflow tees into
+    # $GITHUB_STEP_SUMMARY.
+    verdict = (
+        f"proposed {run.proposed} — {run.decision or 'no decision recorded'}"
+        if run.proposed is not None
+        else (run.lines[-1] if run.lines else "nothing to report")
+    )
+    if not getattr(args, "memory", None):
+        verdict = f"{verdict} (--no-memory was passed: this cycle could not propose)"
+    print(f"cycle verdict: {verdict}")
+
+    # Journalled whatever happened, including the nothing. `cycle` writes a
+    # ledger entry only when it proposes, so a loop that produces nothing
+    # leaves a ledger indistinguishable from a loop nobody has ever run —
+    # which is precisely how a nightly no-op stayed invisible (ADR 0165).
+    record_cycle_attempt(
+        config.paths.root,
+        at=datetime.now(UTC),
+        proposed=run.proposed is not None,
+        verdict=verdict,
+    )
     return run.exit_code
 
 
@@ -1239,8 +1332,20 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_cycle.add_argument(
         "--memory",
         default=None,
-        help="path to the durable memory JSONL the reflect node writes. Without it the "
-        "proposer has no recorded failures to ground in and will never propose.",
+        help="path to the durable memory JSONL the reflect node writes — the SAME file "
+        "`aef loop bootstrap --memory` and `aef run --memory` write. Without it the "
+        "proposer has no recorded failures to ground in and will never propose, so one "
+        "of --memory and --no-memory MUST be given (ADR 0165).",
+    )
+    p_cycle.add_argument(
+        "--no-memory",
+        action="store_true",
+        help="assert that this cycle is deliberately running with no failure memory. An "
+        "assertion, not a default: omitting --memory used to mean this silently, and "
+        "this repo's own nightly `aef loop cycle` therefore printed `no memory store "
+        "configured: nothing to learn from, no candidate` and exited 0 every night for "
+        "as long as the workflow existed, which reads as success (ADR 0165). The cycle "
+        "still runs — harvest, ledger verification, preflight — it just cannot propose.",
     )
     p_cycle.add_argument(
         "--build-command",
