@@ -306,6 +306,29 @@ model calls made   0
      generated `LOOP.md` now says to add one before blessing.
      (`aef/cli/adopt.py`.)
 
+## Erratum (ADR 0170, 2026-09-04) — requirement 2 is a cohort property, and it now has a prose cohort
+
+Requirement 2 above ("at least one module-level numeric constant") was measured
+here on the **proposer**: remove the constants and `aef loop cycle` says *the
+proposer produced nothing from the available evidence*. ADR 0148 re-measured it
+on `migrate`'s generated graph and found the constant is needed by the
+**control cohort** at least as much — whatever proposes the candidate, the
+thing that judges it was built by mutating constants.
+
+That reading was right, and it is now only half true. `ProseControlCohortGenerator`
+(ADR 0170) gives G3 a real null hypothesis for a **prompt** candidate: N
+placebo bullets in the same `## Lessons (aef)` section, matched to the
+treatment's token count, carrying no content word of it. So requirement 2 reads,
+as of ADR 0170:
+
+> **2'. At least one module-level numeric constant — for a Python agent.** A
+> prompt-file agent (`.md`/`.markdown`/`.txt` in Zone A) needs none: it is
+> proposed against by `--proposer rule_based_prompt` and controlled by the prose
+> cohort. Every *other* file kind still has neither a proposer nor a cohort, and
+> G3 still refuses — by name, saying which.
+
+Requirements 1 and 3–6 stand unchanged. The rest of this ADR is unamended.
+
 ## Confidence
 
 High that an adopted repo can gate a candidate: the sequence runs from a

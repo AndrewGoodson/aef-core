@@ -263,8 +263,17 @@ def test_a_timed_out_container_is_actually_dead(tmp_path: Path) -> None:
     import subprocess
 
     def running() -> set[str]:
+        # Only THIS harness's containers. `docker ps --quiet` alone snapshots
+        # the whole daemon, and a concurrent test run on the same box reads
+        # as a leak: this assertion flaked on five parallel workers in one
+        # night before the filter existed. Every gate container is started
+        # with `--name aef-gate-<id>` (see `container_argv`), so the name
+        # prefix is the honest scope.
         out = subprocess.run(
-            [_RUNTIMES[0], "ps", "--quiet"], capture_output=True, text=True, check=False
+            [_RUNTIMES[0], "ps", "--quiet", "--filter", "name=aef-gate-"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         return set(out.stdout.split())
 

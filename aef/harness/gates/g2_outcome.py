@@ -107,8 +107,21 @@ class G2OutcomeNonRegression(Gate):
         if self.precomputed is not None:
             candidate_outcomes = self.precomputed
         else:
+            # `workspace-G2`, its own. G1 has already materialised a tree in
+            # this same `ctx.workdir` and RUN BUILD COMMANDS IN IT, and
+            # `trust._prepare_empty_destination` refuses a non-empty
+            # destination — so while both gates named `workspace`, every
+            # candidate that got past G1 without a precomputed cohort died
+            # here with `TrustBoundaryError: scratch destination ... must be
+            # empty`, which reads as a rejection and is a gate that could not
+            # judge (ADR 0170 defect 1, reported as ADR 0157 defect 1).
+            #
+            # Reusing G1's tree would have been the smaller diff and the wrong
+            # fix: the emptiness rule is what guarantees a gate runs against
+            # base-ref + Zone A overlay and nothing else, and G1's copy has
+            # had candidate-influenced build commands writing into it.
             workspace = build_candidate_workspace(
-                ctx.repo, ctx.verdict.diff, ctx.workdir / "workspace", ctx.zone_policy
+                ctx.repo, ctx.verdict.diff, ctx.workdir / f"workspace-{self.id}", ctx.zone_policy
             )
             candidate_outcomes = self._execute(ctx, workspace, scenarios)
 

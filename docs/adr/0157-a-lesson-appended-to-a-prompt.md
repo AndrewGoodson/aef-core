@@ -297,6 +297,38 @@ hash):
 | drop the provenance marker from the bullet | 10 |
 | learn from every graph's runs, not this one's | `test_another_graphs_scenario_is_not_this_prompts_evidence` |
 
+## Erratum (ADR 0170, 2026-09-04) — defects 1, 2 and 5 are closed
+
+Three of the five defects reported above were fixed by worker M4c, each
+reproduced first:
+
+- **Defect 1** (G2 re-materialises the workspace G1 built). Both gates named
+  `ctx.workdir / "workspace"`. Each now materialises into
+  `workspace-{gate id}` — a directory per gate rather than a shared tree,
+  because G1 has already run build commands in its copy and the emptiness rule
+  is what guarantees a gate runs against base-ref + Zone A overlay and nothing
+  else. **It was never prose-specific**: any candidate whose cohort could not
+  be built died the same way.
+- **Defect 2** (no null hypothesis for a prompt candidate). `aef/harness/prose_cohort.py`
+  builds one: length-matched placebo bullets in the same section, drawn from a
+  task-neutral vocabulary, refusing any placebo that shares a content word with
+  the treatment. The sentence above — *"a prompt candidate can therefore be
+  rejected but never accepted, and that is the load-bearing limit on M4's whole
+  increment"* — no longer holds: both verdicts are demonstrated offline in
+  `tests/harness/test_prose_gate_path.py`, with G3's p95 rule and every
+  threshold unchanged. This ADR's caveat about **teaching to the test** is what
+  made the word-shuffle placebo unusable, and is quoted in 0170 as the reason.
+- **Defect 5** (a live call the `llm` proposer spends is invisible when the
+  fallback proposes nothing). `ProposerSpend` counts attempts and carries the
+  rejection; the note is appended to the line `aef loop cycle` journals, so it
+  reaches `cycles.jsonl`.
+
+**Defects 3 and 4 are still open** (`aef migrate --agent-root .claude/agents`
+prints an unimportable run command; `bless` accepts a `--state` inside the
+repository that `cycle` refuses). The L4 table above is left exactly as
+measured — it is the record of what the gates did on 2026-09-04, and the ADR
+that changed the answer is 0170.
+
 ## Consequences
 
 - A prompt-file repo has a proposer that can write a candidate. Whether that
