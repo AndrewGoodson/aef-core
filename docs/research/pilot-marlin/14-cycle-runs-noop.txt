@@ -1,0 +1,52 @@
+F-M6-3 — `aef loop cycle --runs` is a no-op unless `--module` is also given.
+
+`cmd_cycle` (aef/cli/loop.py):
+
+    graph = load_graph_reference(args.module) if args.module else None
+
+and `harness/loop.py::cycle` runs its harvest leg only
+
+    if runs_dir is not None and corpus_root is not None and graph is not None:
+
+so with `--entrypoint` and no `--module` the flag is accepted, the path is
+validated, and nothing happens. Both arms below pass `--no-memory`, so the
+cycle stops before proposing and neither costs a live model call. The only
+difference between them is `--module`.
+
+=== arm A: --entrypoint only (what a prompt-file repo is documented to pass)
+
+$ aef loop cycle --repo . --state <state> --workdir <wd2> --corpus corpus \
+    --runs <runs> --proposer rule_based_prompt --agent-root .claude/agents \
+    --agent-path .claude/agents/accela-agent.md \
+    --entrypoint agents.migrated.marlin_accela.graph:build_graph \
+    --no-memory --config aef.yaml
+
+  --graph-id not given; derived 'marlin-accela' from the 5 scenario(s) in corpus, which record one graph
+  preflight: 3 of 6 obligation(s) unmet (corpus + tripwire, observations, halt channel). ADVISORY — this command does not refuse on them; run `aef loop doctor` for each fix.
+  ledger verified: 4 entr(ies)
+  no memory store configured: nothing to learn from, no candidate
+cycle verdict: no memory store configured: nothing to learn from, no candidate (--no-memory was passed: this cycle could not propose) [--graph-id derived from --corpus: 'marlin-accela']
+EXIT=0
+
+  ^ no harvest line at all. Five recorded runs were on disk at the path given.
+
+=== arm B: the same command plus --module
+
+$ aef loop cycle … --module agents.migrated.marlin_accela.graph \
+    --entrypoint agents.migrated.marlin_accela.graph:build_graph --no-memory …
+
+  --graph-id not given; derived 'marlin-accela' from the 5 scenario(s) in corpus, which record one graph
+  preflight: 3 of 6 obligation(s) unmet (corpus + tripwire, observations, halt channel). ADVISORY — this command does not refuse on them; run `aef loop doctor` for each fix.
+  ledger verified: 4 entr(ies)
+  promoted 0 run(s) to the train split
+    5 passed, not promoted: 22a5f0ec-8744-4076-a34e-4dc03c7abe21, 491c4102-0bc4-437f-9089-c24efedab233, 7d10629e-0855-493e-8606-f744999b92d2, 999d7f25-ee17-46da-b300-6a156d1c2a02, 9c48f5c9-746a-4a8f-ad9c-e78968e6c838
+  no memory store configured: nothing to learn from, no candidate
+cycle verdict: … [--graph-id derived from --corpus: 'marlin-accela']
+EXIT=0
+
+  ^ the harvest leg runs and reports.
+
+The M6 cycle that produced the ledger in 13-ledger.json was arm A's shape, so
+its harvest leg never ran. That is not why harvest promoted nothing — §6 of ADR
+0163 shows it promotes nothing when it DOES run — but it means the ledger's
+cycle is silent about a step it was asked to perform.

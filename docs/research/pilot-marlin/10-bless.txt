@@ -1,0 +1,2 @@
+blessed .claude/agents/accela-agent.md as baseline v1 for graph 'marlin-accela'
+  G5 now has a reference point to measure drift against.

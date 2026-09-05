@@ -1,0 +1,6 @@
+promoted 0 run(s) to the train split
+  5 passed, not promoted: 22a5f0ec-8744-4076-a34e-4dc03c7abe21, 491c4102-0bc4-437f-9089-c24efedab233, 7d10629e-0855-493e-8606-f744999b92d2, 999d7f25-ee17-46da-b300-6a156d1c2a02, 9c48f5c9-746a-4a8f-ad9c-e78968e6c838
+EXIT=0
+promoted 0 run(s) to the train split
+  5 REJECTED, did not re-execute deterministically: 22a5f0ec-8744-4076-a34e-4dc03c7abe21, 491c4102-0bc4-437f-9089-c24efedab233, 7d10629e-0855-493e-8606-f744999b92d2, 999d7f25-ee17-46da-b300-6a156d1c2a02, 9c48f5c9-746a-4a8f-ad9c-e78968e6c838
+EXIT=0

@@ -1,0 +1,15 @@
+== control 1: the same policy over the SAME run with tokens planted in the objective
+  email           substitutions=1  -> ...next ingestion run? (contact [REDACTED:email])
+  api_key         substitutions=1  -> ...xt ingestion run? (contact [REDACTED:api_key])
+  bearer          substitutions=1  -> ...ext ingestion run? (contact [REDACTED:bearer])
+  aws_key         substitutions=1  -> ...xt ingestion run? (contact [REDACTED:aws_key])
+  opaque_secret   substitutions=1  -> ...estion run? (contact [REDACTED:opaque_secret])
+
+== control 2: secret-shaped working-memory keys are dropped outright
+  before ['api_key', 'keep_me', 'token']  ->  after ['keep_me']  (count=2)
+
+== control 3: what the default list does NOT catch in THIS repo
+  marlin's own subscription UUID: substitutions=0
+  -> Marlin subscription 7e16b0bb-b75a-4a16-9765-839cf1b96755; resource group rg-marlin-dev
+  reason: `opaque_secret` excludes '-' (ADR 0126 removed it, because a hyphenated
+  plain-English objective was being redacted). A UUID is hyphenated, so it survives.

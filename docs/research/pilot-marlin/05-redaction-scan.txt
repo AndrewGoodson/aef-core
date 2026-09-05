@@ -1,0 +1,56 @@
+redaction policy (ADR 0119) — patterns, in match order:
+  email            [A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}
+  api_key          \b(?:sk|pk|rk|ak)[-_](?:live|test|ant|proj)?[-_]?[A-Za-z0-9]{16,}\b
+  bearer           (?i)\bbearer\s+[A-Za-z0-9._~+/=-]{16,}
+  aws_key          \bAKIA[0-9A-Z]{16}\b
+  opaque_secret    \b(?=[A-Za-z0-9+/=_]*[A-Za-z])(?=[A-Za-z0-9+/=_]*\d)[A-Za-z0-9+/=_]{40,}\b
+  working_memory keys dropped outright: ['api_key', 'token', 'secret', 'password']
+
+5 recorded run(s)
+
+run_id      9c48f5c9-746a-4a8f-ad9c-e78968e6c838
+  graph_id    marlin-accela
+  objective   The City of Clearwater has just provisioned Marlin-owned Accela app credentials in Key Vault. Should the Clearwater Accela connector's enabled flag be
+  INPUT scan  0 substitution(s); working-memory keys dropped: none
+  OUTPUT scan clean   (labels matching the scenario harvest would write)
+  answer      514 words, 3324 chars; 0 substitution(s) inside the answer
+  first line  **Short answer: No.** Credentials are gate #1 of two. `enabled` stays `false`.
+  model_calls 0  <-- what `aef run --record-runs` pinned
+
+run_id      22a5f0ec-8744-4076-a34e-4dc03c7abe21
+  graph_id    marlin-accela
+  objective   For agency TAMPA in the PROD environment, which OAuth2 grant type and which request parameters does a server-to-server Accela v4 token request need, a
+  INPUT scan  0 substitution(s); working-memory keys dropped: none
+  OUTPUT scan clean   (labels matching the scenario harvest would write)
+  answer      563 words, 3843 chars; 0 substitution(s) inside the answer
+  first line  ## Answer (advisory — no calls made, no credentials touched)
+  model_calls 0  <-- what `aef run --record-runs` pinned
+
+run_id      7d10629e-0855-493e-8606-f744999b92d2
+  graph_id    marlin-source
+  objective   An ArcGIS permit layer returned a page of 2000 features with no exceededTransferLimit flag. Fetched 2000, lake 2000, published 2000. Is this run recon
+  INPUT scan  0 substitution(s); working-memory keys dropped: none
+  OUTPUT scan clean   (labels matching the scenario harvest would write)
+  answer      453 words, 3140 chars; 0 substitution(s) inside the answer
+  first line  ## Answer: No, and no.
+  model_calls 0  <-- what `aef run --record-runs` pinned
+
+run_id      491c4102-0bc4-437f-9089-c24efedab233
+  graph_id    marlin-source
+  objective   A Socrata permit dataset exposes issue_date, last_updated and :updated_at. Which field is the ingestion watermark, what grace_days does it need, and w
+  INPUT scan  0 substitution(s); working-memory keys dropped: none
+  OUTPUT scan clean   (labels matching the scenario harvest would write)
+  answer      949 words, 6482 chars; 0 substitution(s) inside the answer
+  first line  ## Answer
+  model_calls 0  <-- what `aef run --record-runs` pinned
+
+run_id      999d7f25-ee17-46da-b300-6a156d1c2a02
+  graph_id    marlin-reviewer
+  objective   A handoff-v1 packet names marlin-implementer as both sender and receiver, carries three evidence entries whose git_tree_sha values disagree, and sets 
+  INPUT scan  0 substitution(s); working-memory keys dropped: none
+  OUTPUT scan clean   (labels matching the scenario harvest would write)
+  answer      620 words, 4270 chars; 0 substitution(s) inside the answer
+  first line  ## Review result
+  model_calls 0  <-- what `aef run --record-runs` pinned
+
+{"input_subs": 0, "output_hits": 0, "wm_dropped": 0}
