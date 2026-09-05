@@ -1,0 +1,4 @@
+caps 1..20, every subject 0..cap+3 words x 3 separators x 3 trailers: 0 disagreements
+n=35: original=True in 0.0000s | linear=True in 0.000004s
+n=36: original=<did not terminate in 600s> | linear=False in 0.000004s
+n=60: original=<did not terminate in 600s> | linear=False in 0.000003s
