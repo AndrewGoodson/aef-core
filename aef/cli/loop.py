@@ -2063,14 +2063,12 @@ def cmd_lineage_list(args: argparse.Namespace) -> int:
         and e.record.parent_ref in folded
         and not folded[e.record.parent_ref].kept
     ]
-    print(
-        f"  {kept} kept, {len(entries) - kept} rejected; {sampleable} sampleable as a parent"
-    )
+    print(f"  {kept} kept, {len(entries) - kept} rejected; {sampleable} sampleable as a parent")
     for entry in stones:
-        parent = folded[entry.record.parent_ref or ""]
+        stone = folded[entry.record.parent_ref or ""]
         print(
-            f"  stepping stone: {entry.record.ref[:12]} was KEPT from {parent.ref[:12]}, "
-            f"which the gates REJECTED ({parent.disposition})"
+            f"  stepping stone: {entry.record.ref[:12]} was KEPT from {stone.ref[:12]}, "
+            f"which the gates REJECTED ({stone.disposition})"
         )
     if not stones:
         print("  no kept member descends from a rejected one")

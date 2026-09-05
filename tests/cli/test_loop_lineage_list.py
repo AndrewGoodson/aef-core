@@ -203,9 +203,7 @@ def test_an_empty_lineage_is_explained_rather_than_printed_as_nothing(
     assert "--no-lineage" in out
 
 
-def test_the_graph_id_selects_the_file(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_the_graph_id_selects_the_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     _seed(tmp_path / "state", graph_id="demo_agent")
     assert main(_argv(tmp_path / "state", "--graph-id", "demo_agent")) == 0
     assert "4 member(s)" in capsys.readouterr().out

@@ -78,9 +78,7 @@ def test_a_runner_with_no_cli_selects_nothing_and_the_build_does_not_fail(
     """The skip, RUN rather than read: no CLI on PATH and no home directory
     means an empty target list, and the step that would spend quota is guarded
     on exactly that string."""
-    output = _run_detect(
-        tmp_path, {"HOME": str(tmp_path / "nohome"), "PATH": "/usr/bin:/bin"}
-    )
+    output = _run_detect(tmp_path, {"HOME": str(tmp_path / "nohome"), "PATH": "/usr/bin:/bin"})
     assert output.strip().endswith("targets=") or output.strip() == "targets="
     assert _step("Live harness tests")["if"] == "steps.detect.outputs.targets != ''"
     # ...and the complementary branch prints the reason. A skip that prints
@@ -143,9 +141,7 @@ def test_the_cli_s_own_login_file_selects_the_backend(tmp_path: Path) -> None:
     home = tmp_path / "home"
     (home / ".codex").mkdir(parents=True)
     (home / ".codex" / "auth.json").write_text("{}")
-    output = _run_detect(
-        tmp_path, {"HOME": str(home), "PATH": _bin_with_a_fake_codex(tmp_path)}
-    )
+    output = _run_detect(tmp_path, {"HOME": str(home), "PATH": _bin_with_a_fake_codex(tmp_path)})
     assert "tests/providers/test_codex_live.py" in output
 
 

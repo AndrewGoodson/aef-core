@@ -6555,3 +6555,140 @@ pre-0197 pattern → 1 (`sk-ant-api03-…`). Six for six.
 
 Erratum appended to ADR 0163 §5 with the new number; `make measure` pins the
 line against the erratum, so the closure is re-checked rather than asserted.
+
+
+## N8 — the tree grew from the rejections, and none of it was better (ADR 0198)
+
+J0b left dimension 6 at 7/10 on two clauses: *"no measured run where a
+stepping stone produced a better descendant; no owner-facing `aef loop lineage
+list`."* One is a measurement, one is a command.
+
+**S4's blocker was reproduced from its own raw data before anything was
+built.** `docs/research/j2/results.jsonl` says the same thing fifteen times:
+every turn that reached G3 scored `0.5` against an incumbent of `0.5` and was
+refused by G2 for trading one scenario for another. A keep on that corpus
+needed a single `draft_prompt` edit scoring 1.0, and parent selection cannot
+change what a proposer writes — so the rig moved, to the one place in this
+repository where the keep is reachable by construction.
+
+`agents/demo` has two constants and its docstring says why. Measured, not
+assumed (`run_j2b.py --probe`): 3/3 → **0.5000**, 4/3 → 0.5000, 3/4 → 0.5000,
+**4/4 → 0.6667**, 5/5 → 0.8333. A one-constant candidate is *neutral*, so G3
+rejects it, and it is a stepping stone by construction: the only route to 4/4
+runs through a rejection. (The first run of that probe was wrong and is
+recorded: `RETRY_BUDGET = 3` and `= 4` are the same size, CPython invalidates
+a `.pyc` on mtime-in-seconds plus size, and rewriting inside one second re-ran
+the previous variant's bytecode. The loop itself is immune — every turn gets
+its own workspace.)
+
+Four arms, fresh clone and state each. **16 live calls** for the LLM arms —
+the demo corpus is recorded traces with no model calls, so a turn costs the
+proposer's request and nothing else — and **0** for the rule-based arms, with
+the call counter capped at 0 to prove it.
+
+| proposer | arm | turns | kept | reverted | distinct parents | from a rejection | **kept from one** | calls |
+|---|---|---|---|---|---|---|---|---|
+| rule_based | greedy | 2 | 0 | 2 | 1 | 0 | **0** | 0 |
+| rule_based | sampling | 3 | 0 | 3 | 2 | 2 | **0** | 0 |
+| llm | greedy | 8 | 1 | 7 | 2 | 0 | **0** | 8 |
+| llm | sampling | 8 | 1 | 7 | 6 | 5 | **0** | 8 |
+
+Both LLM arms kept exactly one candidate — turn 1, from the root, 0.4545 →
+0.8182 — and then went flat for seven turns, every later candidate scoring
+*exactly* the incumbent and dying to G3's cohort comparison.
+
+**The number J0b asked for is 0, and the denominator is the finding.** Greedy
+proposed from a rejected member 0 times in 8 turns, because it cannot. Sampling
+did it **5 times**, three generations deep, and all five descendants were
+themselves rejected. That is a stronger null than ADR 0160's, where the
+statistic was 0 in both arms only because nothing was ever kept: here the arms
+kept, the mechanism ran five times, and it did not pay.
+
+The rule-based arms make the ceiling mechanical rather than statistical:
+`cycle` takes `proposals[0]` and `find_constants` returns `RETRY_BUDGET` first,
+so from *any* parent the proposal raises `RETRY_BUDGET` and never
+`QUALITY_THRESHOLD`. Sampling walks a longer line than greedy and it is the
+same line. **Parent diversity is worth nothing when the proposer's output is a
+deterministic function of the parent.**
+
+**A defect found by running.** The greedy arm reported `kept: 0` for a run
+whose turn 1 had kept a candidate. `run_loop` writes each member twice — once
+gated, once at the end of the run that proposed from it, carrying the children
+count — and the fold took the LAST record wholesale; the closing record of a
+*resumed root* is built with `parent_ref=None`, so it overwrote the
+candidate's own parent and verdict with nulls:
+
+```
+20260905T103745 turn 1  a4d0bfe46fb4  parent c01e9b0659c7  kept True  escalate
+20260905T104214 turn 0  a4d0bfe46fb4  parent -             kept True  None
+```
+
+`archive.fold_lineage` is now THE fold — first record per ref, largest
+children count — shared by the driver, the CLI and the rig, and being
+reader-side it repairs every lineage file already on disk.
+
+`aef loop lineage list` prints members, parents, scores, verdicts, children
+and `sampleable`, where `sampleable` is `_parent_weight` itself plus
+`_resume_lineage`'s ref check rather than a second opinion that could drift
+from the sampler. It prints the negative — `no kept member descends from a
+rejected one` — because this increment's result is one. It builds no config
+and loads no graph, so it works after a run that could not start.
+
+4 mutations, 4 caught, restores SHA-1-verified. 18 tests. Registered in
+`make measure` as `j2b-archive` (6 rows, zero live calls). **Dimension 6:
+7 → 8.** `sample_parents` stays off and is still not deleted — on a third
+measurement, and now with a stated experiment that would overturn the answer:
+a rig where a rejection is on the path to a keep *and* the proposer can take
+the second step. This one had the first and not the second.
+
+
+## N10 — the Codex path runs here, and in CI where it can (ADR 0199)
+
+J0b: *"the Codex path is never exercised against the real CLI — its only live
+test is one of the three skips."* Two problems wearing one sentence. ADR 0131
+did run it; and no CI job ever set the opt-in, so on every push the path was
+exercised **nowhere**.
+
+```
+$ codex --version
+codex-cli 0.153.2
+$ AEF_LIVE_HARNESS=1 pytest -q tests/providers/test_codex_live.py
+.                                                                        [100%]
+1 passed in 4.87s
+```
+
+Then the half that decides an adopter's containment story. `codex exec` has no
+system-prompt flag, so the persona goes in the USER turn and ADR 0152's
+sentence is FALSE on this backend — and every previous assertion that
+`PromptAgentNode` records that was against a `_Declaring` fake whose
+`isolation` was a hard-coded frozenset, which proves the node reacts to a
+declaration, not that the real provider makes one. A real `Graph`,
+`GraphExecutor` and `CodexProvider` over the real binary now assert it end to
+end: `user_turn_persona` and `read_only_fs` present, **`no_tools` and
+`single_turn` absent** — the two `claude_code` earns and this argv does not
+send, so a record claiming them would be ADR 0169's defect restored — the
+`prompt_agent.persona_in_user_turn` warning, and `state.errors == []` because
+it is the provider's property and never the run's error. `2 passed in 9.24s`.
+
+`ci.yml` gains `live-harness`. `runs-on: ${{ vars.AEF_LIVE_RUNNER ||
+'ubuntu-latest' }}` so an owner can aim it and it is never unschedulable.
+Detection is two questions — is the CLI on PATH (cheap, certain) and is there
+a credential, in the two forms one actually takes: a repository secret, or the
+CLI's own auth file. The guard is on the **target list**, not a boolean, so a
+runner with codex and no claude runs codex. Run under four runner shapes,
+including the honest miss: this box's Claude login is a Keychain entry rather
+than a file, so the detector reports no credential and under-runs rather than
+guessing at a third form. The empty case prints which backend was missing and
+the two ways to fix it — a silent skip being exactly the failure ADR 0188
+found in this repo's own nightly.
+
+The test extracts the detection shell **from the workflow** and runs it, so the
+two cannot drift. Its own first draft had the defect it exists to prevent: two
+tests called `shutil.which("codex")` and skipped without it, so on every CI
+runner they would have been skips. M7 — "the detector selects a CLI with no
+credential" — was **NOT CAUGHT** until a stubbed `codex` on PATH removed the
+skip. 3 mutations, 3 caught after that.
+
+Two stale docstrings retracted: `CodexProvider` no longer says its parsing is
+a hypothesis, and its `isolation` property no longer says the adapter has
+never been run. **Dimension 8: 4 → 5.**

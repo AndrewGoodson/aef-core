@@ -644,6 +644,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--report", action="store_true")
+    # `--verify` is the shared re-runner interface (ADR 0196): an alias of
+    # `--report`, so `make measure` re-derives this table from the committed
+    # JSONL with no clone, no gate run and no live call.
+    parser.add_argument("--verify", action="store_true", help="alias of --report")
     parser.add_argument(
         "--relineage",
         action="store_true",
@@ -659,6 +663,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", default=str(DEFAULT_OUT))
     parser.add_argument("--workroot", default=None, help="scratch root for the arm's clone")
     args = parser.parse_args(argv)
+    args.report = args.report or args.verify
 
     if args.dry_run:
         dry_run(args.turns, args.proposer, args.max_calls)
