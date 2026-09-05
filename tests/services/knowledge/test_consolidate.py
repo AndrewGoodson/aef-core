@@ -475,7 +475,13 @@ def test_a_reordered_chain_is_a_different_failure_and_is_not_a_recurrence() -> N
     """The rule is SUBSEQUENCE, not set membership. `default_signature` states
     that `A>B` and `B>A` are different failures — a run shown `fetch>parse`
     that instead failed `parse>fetch` did not reproduce the lesson, and a set
-    subset would have said it did."""
+    subset would have said it did.
+
+    It is also not `helpful`, and this assertion was updated deliberately when
+    ADR 0180 added the third outcome. The run had the lesson in context and
+    still failed; crediting the good column for that is the inversion ADR 0162
+    measured. `harmful_elsewhere` is what "did not reproduce it, failed
+    something else" means."""
     memory, knowledge = _stores(
         [
             _failure(run_id="q0", failing_nodes=["fetch", "parse"], created_at=T1),
@@ -488,4 +494,170 @@ def test_a_reordered_chain_is_a_different_failure_and_is_not_a_recurrence() -> N
     )
     written = RuleBasedConsolidator().consolidate(memory, knowledge, agent_id="a1")
     entry = next(e for e in written if e.signature == "failure:fetch>parse")
-    assert (entry.helpful, entry.harmful) == (1, 0)
+    assert (entry.helpful, entry.harmful, entry.harmful_elsewhere) == (0, 0, 1)
+
+
+# ---------------------------------------------------------------------------
+# The third outcome (ADR 0180): had the lesson, failed DIFFERENTLY
+# ---------------------------------------------------------------------------
+
+# ADR 0174's key shape. A check-derived failure record is signed by the check's
+# identity without its value, which is why two runs failing different checks on
+# one field still recur as one lesson.
+CAP = "check:working_memory.summary:max_words"
+REGEX = "check:working_memory.summary:regex"
+
+
+def _check_failure(
+    *, run_id: str, keys: list[str], created_at: datetime = T1, shown: list[str] | None = None
+) -> MemoryRecord:
+    content: dict[str, object] = {
+        "failed_checks": keys,
+        "failing_nodes": [],
+        "verbal_feedback": "check failed: working_memory.summary …",
+        "objective": f"summarise {run_id}",
+    }
+    if shown is not None:
+        content["retrieved_signatures"] = shown
+    return MemoryRecord(
+        kind="failure",
+        content=content,
+        run_id=run_id,
+        agent_id="a1",
+        created_at=created_at,
+    )
+
+
+def test_a_run_that_resolved_the_lesson_and_broke_something_else_is_not_helpful() -> None:
+    """ADR 0162 rig B's `sum-35-priory-gatehouse`, in miniature and by hand.
+
+    The word-cap lesson was in context; the run came in UNDER the cap (the
+    failure the lesson names did not recur) and its shortened summary stopped
+    matching a content regex the same run had passed before. ADR 0118's two
+    outcomes had nowhere to put that, so it landed in `helpful` — the lesson
+    credited for the failure it caused, on the one run in the whole rig that
+    showed the shape ranking would need.
+    """
+    memory, knowledge = _stores(
+        [
+            _check_failure(run_id="s0", keys=[CAP]),
+            _check_failure(run_id="s1", keys=[CAP]),
+            _check_failure(run_id="s2", keys=[REGEX], created_at=T2, shown=["failure:" + CAP]),
+        ]
+    )
+    entry = next(
+        e
+        for e in RuleBasedConsolidator().consolidate(memory, knowledge, agent_id="a1")
+        if e.signature == "failure:" + CAP
+    )
+    assert (entry.helpful, entry.harmful, entry.harmful_elsewhere) == (0, 0, 1)
+
+
+def test_helpful_now_means_the_run_failed_nothing() -> None:
+    """The other half of the same rule. A run with the lesson in context that
+    produced no failure record at all is the only thing `helpful` counts."""
+    memory, knowledge = _stores(
+        [
+            _check_failure(run_id="s0", keys=[CAP]),
+            _check_failure(run_id="s1", keys=[CAP]),
+            _shown(
+                _success(run_id="s2", objective="summarise s2", created_at=T2),
+                ["failure:" + CAP],
+            ),
+        ]
+    )
+    entry = next(
+        e
+        for e in RuleBasedConsolidator().consolidate(memory, knowledge, agent_id="a1")
+        if e.signature == "failure:" + CAP
+    )
+    assert (entry.helpful, entry.harmful, entry.harmful_elsewhere) == (1, 0, 0)
+
+
+def test_reproducing_the_lesson_is_still_harmful_not_harmful_elsewhere() -> None:
+    """The third outcome must not swallow the second: a run that reproduced
+    the lesson's own failure is `harmful`, however many other checks it also
+    failed."""
+    memory, knowledge = _stores(
+        [
+            _check_failure(run_id="s0", keys=[CAP]),
+            _check_failure(run_id="s1", keys=[CAP]),
+            _check_failure(run_id="s2", keys=[CAP, REGEX], created_at=T2, shown=["failure:" + CAP]),
+        ]
+    )
+    entry = next(
+        e
+        for e in RuleBasedConsolidator().consolidate(memory, knowledge, agent_id="a1")
+        if e.signature == "failure:" + CAP
+    )
+    assert (entry.harmful, entry.harmful_elsewhere) == (1, 0)
+
+
+def test_a_success_signature_is_not_a_failure_however_it_is_spelled() -> None:
+    """The third outcome reads the record's `kind`, not a prefix on the
+    signature it produced. A custom `signature_fn` may spell a failure any way
+    it likes, and a run's own `success:<objective>` is not a failure however it
+    is spelled — inferring one from the string is the guess `_failure_nodes`
+    refuses to make."""
+
+    def sign(record: MemoryRecord) -> str | None:
+        keys = record.content.get("failed_checks")
+        if isinstance(keys, list) and keys:
+            return "failure:" + ">".join(str(k) for k in keys)
+        objective = record.content.get("objective")
+        # Deliberately spelled `failure:`-like for a SUCCESS, which is the
+        # trap: only the kind distinguishes them.
+        return f"failure:not-really:{objective}" if isinstance(objective, str) else None
+
+    memory, knowledge = _stores(
+        [
+            _check_failure(run_id="s0", keys=[CAP]),
+            _check_failure(run_id="s1", keys=[CAP]),
+            _shown(_success(run_id="s2", objective="o", created_at=T2), ["failure:" + CAP]),
+        ]
+    )
+    entry = next(
+        e
+        for e in RuleBasedConsolidator(signature_fn=sign).consolidate(
+            memory, knowledge, agent_id="a1"
+        )
+        if e.signature == "failure:" + CAP
+    )
+    assert (entry.helpful, entry.harmful, entry.harmful_elsewhere) == (1, 0, 0)
+
+
+def test_the_j4_rig_b_numbers(  # noqa: D103 - the docstring is below, long on purpose
+) -> None:
+    """S6's ten runs (ADR 0162 rig B, `docs/research/j4/harm.jsonl`), by
+    outcome rather than by prose.
+
+    Seven recorded cap negatives become one lesson. Ten runs then had it in
+    context: six failed nothing, three reproduced the cap failure
+    (`sum-23`, `sum-39`, `sum-36`) and one — `sum-35` — resolved the cap and
+    broke a regex. The shipped tally read `helpful=7 harmful=3`, which is the
+    number ADR 0162 refused to rank on.
+    """
+    records = [_check_failure(run_id=f"neg{i}", keys=[CAP]) for i in range(7)]
+    for i in range(6):  # the six with-lesson runs that failed nothing
+        records.append(
+            _shown(
+                _success(run_id=f"ok{i}", objective=f"o{i}", created_at=T2),
+                ["failure:" + CAP],
+            )
+        )
+    for i in range(3):  # sum-23, sum-39, sum-36 — the cap failure recurred
+        records.append(
+            _check_failure(run_id=f"again{i}", keys=[CAP], created_at=T2, shown=["failure:" + CAP])
+        )
+    records.append(  # sum-35 — cap resolved, a different check broke
+        _check_failure(run_id="sum-35", keys=[REGEX], created_at=T2, shown=["failure:" + CAP])
+    )
+
+    memory, knowledge = _stores(records)
+    entry = next(
+        e
+        for e in RuleBasedConsolidator().consolidate(memory, knowledge, agent_id="a1")
+        if e.signature == "failure:" + CAP
+    )
+    assert entry.occurrence_count == 10
+    assert (entry.helpful, entry.harmful, entry.harmful_elsewhere) == (6, 3, 1)

@@ -75,11 +75,20 @@ class KnowledgeEntry:
     # what the retriever spends tokens on, and I4 measured that trade).
     runs_since_last_seen: int = 0
     # ACE's outcome signal (ADR 0118), computed by the consolidator from the
-    # records: runs where this lesson was in context and the run did NOT
-    # reproduce this failure (helpful), or did (harmful). Surfaced in chunk
-    # metadata and skill drafts; not yet a ranking input — see the retriever.
+    # records. Three outcomes, not two, because ADR 0162 rig B measured a run
+    # that had the lesson in context, RESOLVED the failure the lesson names,
+    # and broke a different owner check in the same run — and the two-outcome
+    # version scored it `helpful`, crediting the lesson for the failure it
+    # caused (ADR 0180). Surfaced in chunk metadata and skill drafts; not a
+    # ranking input on any of the three — see the retriever.
+    #
+    # - `helpful`           in context, and the run produced NO failure at all.
+    # - `harmful`           in context, and the run reproduced THIS failure.
+    # - `harmful_elsewhere` in context, this failure did not recur, and the run
+    #                       failed something else instead.
     helpful: int = 0
     harmful: int = 0
+    harmful_elsewhere: int = 0
 
     def __post_init__(self) -> None:
         # Validation here rather than at write/serialise time — ADR 0108's
@@ -99,8 +108,8 @@ class KnowledgeEntry:
                 f"A repeated id inflates occurrence_count, which is the entry's only "
                 f"measure of how well-evidenced it is."
             )
-        if self.helpful < 0 or self.harmful < 0:
-            raise ValueError("helpful/harmful tallies must be non-negative")
+        if self.helpful < 0 or self.harmful < 0 or self.harmful_elsewhere < 0:
+            raise ValueError("helpful/harmful/harmful_elsewhere tallies must be non-negative")
         if self.runs_since_last_seen < 0:
             raise ValueError(
                 f"runs_since_last_seen must be non-negative; got {self.runs_since_last_seen}"

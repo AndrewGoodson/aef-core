@@ -4815,3 +4815,94 @@ is the root of F2 and the reason its fix needs a warning branch at all;
 its owner makes it an alias; one flaky container-sandbox test; and the fact that
 the suite fails 28 tests with `[Errno 2] No such file or directory: 'python'`
 when the venv is not on `PATH`, which looks exactly like a regression and is not.
+
+
+## Fix wave K2 — the good column, the quotation, and the one call site (ADR 0180)
+
+Three findings that earlier workers reproduced and could not fix because the
+files were not theirs. All three reproduced again here, from committed data,
+before anything changed. **Zero live model calls.**
+
+**1. The tally counted a harmful run as helpful.** ADR 0118's `_tally` had two
+branches around `_reproduced()` — reproduced the lesson's failure, or not — and
+no room for *had the lesson, resolved that failure, failed something else*. So
+ADR 0162 rig B's `sum-35-priory-gatehouse`, the single run in the entire rig
+with the shape a ranking signal would need, was counted **helpful**: the
+word-cap lesson shortened its summary from 30 words to 28 and the shortened
+text stopped matching a content regex the baseline passed. Replayed here
+through the shipped `default_signature` and the shipped consolidator, the ten
+runs read `helpful=7 harmful=3` with that run inside the 7. `_tally` now splits
+three ways — `harmful` (reproduced it), `helpful` (failed **nothing**),
+`harmful_elsewhere` (resolved it and failed something else) — and the same ten
+runs read `helpful=6 harmful=3 harmful_elsewhere=1`. "Failure" is the record's
+`kind`, never a prefix on its signature, so a custom `signature_fn` cannot fool
+it. **Nothing ranks on the new counter.** ADR 0162 refused to rank because the
+signal read backwards; reading forwards earns it a place in the metadata, not a
+coefficient, and `knowledge_boost` stays 0.0.
+
+`test_a_reordered_chain_is_a_different_failure_and_is_not_a_recurrence`
+asserted the old `(1, 0)` and was updated deliberately to `(0, 0, 1)`. The
+subsequence rule it exists for is unchanged.
+
+**2. The check-derived record quoted the model's own output back into its next
+prompt.** `observed 406 words, 2836 chars: '**No. The Accela connector…'`. ADR
+0174 argued that the observed value is the run's own and recording it records
+what happened — right about provenance, silent about destination:
+`verbal_feedback` is what `RuleBasedPromptProposer` pastes into a persona and
+what `render_retrieved_context` renders as a bullet. ADR 0162 measured the
+cost — a lesson whose text carried a 38-word example summary made two at-cap
+runs LONGER (23 → 28 against a cap of 25; 38 → 41 against 38) and broke the
+very check the lesson describes. This is ADR 0110's *the model is never trusted
+with provenance* failing one layer down: there the model was kept out of the
+counted fields, here its text was put into the counted field's explanation. The
+line now keeps every count the harness computed and drops the quotation. On
+`sum-35`, 33 twelve-character windows of the output in `verbal_feedback` (48
+anywhere in content) became **0**. A non-text value is reported by type rather
+than by `repr`, whose *length* is the answer on a boolean field. The output
+stays readable in the recorded scenario's trace, named in an `output_location`
+key that reaches no prompt.
+
+The first draft of that fix put the forwarding address inside the failure line
+and the critic's 160-character excerpt then cut the observation out of
+`verbal_feedback`. A test caught it, which is the only reason it is a sentence
+here rather than a regression.
+
+**3. The producer was wired into `bootstrap` alone.** ADR 0175's arm (c)
+recorded `"failures": {}` while six of seventeen scored runs failed an owner
+check: nothing outside `bootstrap` could write a check-derived record, so
+`runs_since_last_seen` climbed to 17, ADR 0116's staleness demotion walked the
+seeded lesson from rank 0 to rank 39, and the two negatives late in the split
+never saw it — halving the power of the comparison S1b existed to run.
+`record_check_outcomes(...)` replaces `write_check_failure_record` and is
+idempotent per `(agent_id, run_id, failed check keys)` by two independent
+guards — a derived record id, and a store query — so wiring it at more than one
+site cannot inflate `source_record_ids`. **ADR 0174's refusal of the gate path
+stands**: a gate run writing to the durable store would let scoring a candidate
+manufacture the next one's evidence, so the store is the caller's to supply and
+a gate path supplies none. `harvest` is re-refused for its own reason — a
+production run carries no owner check to evaluate. The two call sites that
+should exist are REPORTED because the files belong to other workers:
+`run_scenario(..., memory: MemoryStore | None = None)` and `cmd_score
+--memory`.
+
+**Reported, not fixed.** `harmful_elsewhere` is not surfaced in
+`aef/services/context/memory_retriever.py`'s chunk metadata or in
+`aef/harness/skills.py`'s draft, both of which print `helpful`/`harmful`; those
+are one-line additions in files outside this worker's list.
+
+**No rubric dimension moves,** and the rubric is untouched. What a re-run of
+S1b's four arms would need is written into ADR 0180 rather than left to be
+re-derived: the excerpt gone from the lesson text, the producer on the scored
+split, and repeats — S1b's own same-prompt variance ran to 0.0857 and every
+arm-to-arm delta sat inside it.
+
+**Green bar.** `pytest -q` 2590 passed / 7 skipped / 4 xfailed (from 2572;
++18); `mypy aef examples` clean on 134 files; `ruff check .` clean; `ruff
+format --check aef tests examples` 274 files formatted. 5 mutations, 5 caught,
+control green before and after, both restores proved by sha256 equality with a
+byte backup. `tests/cli/test_prompt_repo_acceptance.py::test_a_prompt_file_repo
+_goes_from_adopt_to_a_gated_prompt_candidate` fails, and fails identically on
+the merge base — verified by exporting `git archive HEAD` to a clean tree and
+running the same suite there (`1 failed, 2572 passed, 7 skipped, 4 xfailed`,
+same test, same assertion). It is ADR 0178's `loop doctor` surface and nothing
+here goes near it.

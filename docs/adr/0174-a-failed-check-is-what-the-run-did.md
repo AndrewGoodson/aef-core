@@ -646,3 +646,40 @@ The other thing standing between a prompt candidate and an *accept* is ADR
   prose names `check.value` and is right for an owner's report; the structured
   form is what a producer of memory reads, so the two audiences are served
   without either parsing the other's output.
+
+
+## Erratum (2026-09-05, ADR 0180): the excerpt, and the single wiring site
+
+Two things this ADR decided were reproduced as defects by later workers and are
+changed. Neither touches its central argument — that evaluating an owner's
+pre-written check against a run's output is recording what happened.
+
+**1. §4's rendering leaked the run's own output into its next prompt.** The
+line `observed 406 words, 2836 chars: '**No. The Accela connector…'` is quoted
+above as the redaction working, and its residual list even names the observed
+value as item 3 — *honest, and worth knowing*. What the list did not weigh is
+that `verbal_feedback` is a **prompt surface**: `RuleBasedPromptProposer`
+pastes it into the persona and `render_retrieved_context` renders it as a
+bullet, so the excerpt is the model's previous answer travelling into its next
+request. ADR 0162 rig B then measured the cost — a lesson whose text carried a
+38-word example summary made two at-cap runs LONGER (23 → 28 words against a
+cap of 25; 38 → 41 against 38) and broke the very cap check the lesson
+describes. The line now keeps every count this ADR computes — words,
+characters, path, operator, `checks_passed`/`checks_total` — and drops the
+quotation; a non-string value is reported by type rather than by `repr`, whose
+length is the answer on a boolean field. Residual items 1, 2 and 4 stand
+unchanged. The output stays readable in the recorded scenario's trace.
+
+**2. §5's "one call site" was one too few.** Refusing `run_scenario` was right
+and is unchanged: a gate run writing to the adopter's durable store lets
+scoring a candidate manufacture the evidence for the next one. Refusing
+`harvest` was right and is unchanged: a production run carries no owner check.
+What was missed is the case in between — an OWNER scoring a run against owner
+checks with a durable store present. ADR 0175 measured what its absence costs:
+over a 17-scenario scored split, `"failures": {}` while six runs failed owner
+checks, `runs_since_last_seen` climbing to 17, ADR 0116 demoting the seeded
+lesson from rank 0 to rank 39, and the two late negatives never seeing it. The
+producer is now one idempotent function, `record_check_outcomes` (replacing
+`write_check_failure_record`), safe to wire at more than one site; the two
+sites it should be wired at — `run_scenario(..., memory=None)` and `cmd_score
+--memory` — are named in ADR 0180 and belong to other files.
