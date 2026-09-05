@@ -269,13 +269,13 @@ by `tests/test_rubric_arithmetic.py`:
 
 ```
 $ grep '^## Current' docs/research/self-learning-rubric.md
-## Current — 2026-09-05, J0b's re-score (ADR 0188) over J0's base (ADR 0151), plus the above-95 loop's increments — **71 / 100**
+## Current — 2026-09-05, J0b's re-score (ADR 0188) over J0's base (ADR 0151), plus the above-95 loop's increments — **74 / 100**
 ```
 
 This paragraph used to open "Landed 2026-09-03 by the improve loop … 50 → 79".
 The 79 was a self-score; an independent re-scorer with no access to the ADRs
 or the loop files re-scored the same code at **68**, and that base — plus the
-increments measured on top of it — is the 72 above (ADR 0151). Eighteen points
+increments measured on top of it — is the 74 above (ADR 0151). Eighteen points
 went, and not one of them because a control failed: they went on the repo's two
 signature shapes, *wired but not consumed* and *asserted in prose rather than
 shown by an artifact*.

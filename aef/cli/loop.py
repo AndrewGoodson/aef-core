@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from aef.harness.archive import ArchiveError
+from aef.harness.archive import ArchiveError, lineage_path
 from aef.harness.checks import TaskCheck
 from aef.harness.corpus import (
     CorpusError,
@@ -1981,6 +1981,100 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return EXIT_OK if result.ready else EXIT_REJECTED
 
 
+def cmd_lineage_list(args: argparse.Namespace) -> int:
+    """Every member of the lineage archive, with its parent and whether the
+    sampler may build on it (ADR 0198).
+
+    J0b scored dimension 6 with two deductions, and this closes the second of
+    them verbatim: *"no owner-facing `aef loop lineage list` — only a counts
+    line."* `aef loop run` prints `archive: N member(s) ... M distinct kept
+    tree(s)`, which says how big the search was and nothing about its shape.
+    The information about a search is in the rejections — where the loop went
+    and could not stand — and that is what this prints.
+
+    Read-only, and it takes no `--config` and loads no graph: it opens one
+    JSONL file, verifies each record's digest on the way (`read_lineage`), and
+    prints. A listing that had to build a `LoopConfig` would be unavailable in
+    exactly the situation an owner wants it — after a run that could not
+    start.
+    """
+    from aef.harness.loop import read_lineage_entries
+
+    paths = LoopPaths(root=Path(args.state))
+    key = graph_id(args)
+    repo_root = Path(args.repo)
+    repo = GitRepo(root=repo_root) if (repo_root / ".git").exists() else None
+    entries = read_lineage_entries(paths.lineage_dir, key, repo=repo)
+    path = lineage_path(paths.lineage_dir, key)
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "graph_id": key,
+                    "path": str(path),
+                    "members": [
+                        {
+                            **entry.record.to_payload(),
+                            "weight": entry.weight,
+                            "sampleable": entry.sampleable,
+                            "why_not": entry.why_not,
+                            "ref_resolves": entry.ref_resolves,
+                        }
+                        for entry in entries
+                    ],
+                },
+                indent=2,
+            )
+        )
+        return EXIT_OK
+    if not entries:
+        # Not an error: a loop that has run no turn has an empty lineage, and
+        # so does one run with `--no-lineage`. Both are worth naming, because
+        # "no members" with no explanation reads as a broken command.
+        print(f"no lineage for {key!r} at {path}")
+        print(
+            "  Either no `aef loop run` has gated a candidate under this --state and "
+            "--graph-id yet, or it was run with --no-lineage."
+        )
+        return EXIT_OK
+    print(f"lineage for {key!r} — {len(entries)} member(s) — {path}")
+    print(f"  {'ref':<12}  {'parent':<12}  {'score':>7}  {'verdict':<9}  {'kids':>4}  sampleable")
+    for entry in entries:
+        record = entry.record
+        parent = record.parent_ref[:12] if record.parent_ref else "-"
+        score = "-" if record.score is None else f"{record.score:.4f}"
+        verdict = record.disposition or ("kept" if record.kept else "-")
+        mark = "yes" if entry.sampleable else f"no  ({entry.why_not})"
+        print(
+            f"  {record.ref[:12]:<12}  {parent:<12}  {score:>7}  {verdict:<9}  "
+            f"{record.children:>4}  {mark}"
+        )
+    kept = sum(1 for e in entries if e.record.kept)
+    sampleable = sum(1 for e in entries if e.sampleable)
+    # THE number ADR 0198 was asked for, on the surface an owner reads rather
+    # than only in a research JSONL: a kept member whose parent the gates
+    # rejected is a stepping stone that produced a better descendant.
+    folded = {e.record.ref: e.record for e in entries}
+    stones = [
+        e
+        for e in entries
+        if e.record.kept
+        and e.record.parent_ref
+        and e.record.parent_ref in folded
+        and not folded[e.record.parent_ref].kept
+    ]
+    print(f"  {kept} kept, {len(entries) - kept} rejected; {sampleable} sampleable as a parent")
+    for entry in stones:
+        stone = folded[entry.record.parent_ref or ""]
+        print(
+            f"  stepping stone: {entry.record.ref[:12]} was KEPT from {stone.ref[:12]}, "
+            f"which the gates REJECTED ({stone.disposition})"
+        )
+    if not stones:
+        print("  no kept member descends from a rejected one")
+    return EXIT_OK
+
+
 def cmd_corpus_reconcile(args: argparse.Namespace) -> int:
     """Rewrite `manifest.json` from the scenario files on disk. OWNER ONLY.
 
@@ -2711,6 +2805,34 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     )
     p_bless.add_argument("--note", default="", help="why this state is the baseline")
     p_bless.set_defaults(handler=cmd_bless)
+
+    p_lineage = loop_subs.add_parser(
+        "lineage", help="read the DGM lineage archive — every candidate, kept and rejected"
+    )
+    lineage_subs = p_lineage.add_subparsers(dest="lineage_command", required=True)
+    p_lineage_list = lineage_subs.add_parser(
+        "list",
+        help="every member with its parent, score, verdict and whether it can be a parent",
+        description=(
+            "The archive an owner can read (ADR 0198).\n\n"
+            "`aef loop run` prints one counts line — how many members, how many "
+            "distinct trees — which says how big the search was and nothing about "
+            "its shape. The information about a search is in the REJECTIONS: where "
+            "the loop went and could not stand, and which of those places the next "
+            "turn may still build on. `sampleable` is `_parent_weight`, the "
+            "function the sampler itself calls, not a second opinion about it: a "
+            "candidate a cheap gate refused has no task metric and can never be a "
+            "parent, and a member whose branch has been deleted is history rather "
+            "than a starting point.\n\n"
+            "Read-only. It opens one JSONL file, checks each record's digest, and "
+            "prints; it builds no config and loads no graph, so it works after a "
+            "run that could not start."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _common(p_lineage_list)
+    p_lineage_list.add_argument("--json", action="store_true")
+    p_lineage_list.set_defaults(handler=cmd_lineage_list)
 
     p_corpus = loop_subs.add_parser(
         "corpus", help="owner actions on a corpus directory (never run by the loop)"

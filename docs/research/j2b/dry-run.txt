@@ -1,0 +1,21 @@
+J2b — does a stepping stone produce a better descendant? (ADR 0198)
+
+arms          : greedy, sampling (identical but for `sample_parents`)
+proposer      : llm
+turns per arm : 8
+agent         : agents/demo/graph.py  entrypoint agents.demo.graph:build_graph
+graph id      : demo_agent
+corpus        : every demo_agent scenario; summary scenarios removed
+cassette      : miss -> fail (the demo traces record no model calls)
+build command : python -c import agents.demo.graph as g; g.build_graph()
+
+calls, per turn:
+  1  the LLM proposer's request
+  0  the gates: the demo corpus replays with no model call at all
+
+HARD CAP      : 20 live calls; the wrapper raises rather than exceed it
+
+THE STATISTIC: stepping_stone_keeps — kept members whose parent the gates
+REJECTED, computed from <state>/lineage/demo_agent.jsonl. ADR 0160's
+distinct-kept-trees was 0 in both arms and could not discriminate; this one
+is 0 unless the archive did the thing it exists to do.

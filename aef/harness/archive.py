@@ -37,7 +37,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass, field
+from dataclasses import replace as _replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -464,3 +466,39 @@ def read_lineage(root: Path, graph_id: str) -> tuple[LineageRecord, ...]:
             )
         out.append(LineageRecord.from_payload(payload))
     return tuple(out)
+
+
+def fold_lineage(records: Sequence[LineageRecord]) -> dict[str, LineageRecord]:
+    """One member per ref, in the order the refs first appear (ADR 0198).
+
+    THE fold, in one place, because there were two and they disagreed. The
+    file is append-only and a member is written **twice**: once when it is
+    gated, and once at the end of the run that proposed from it, carrying the
+    `children` count — which only exists when the run is over.
+
+    Everything about a member except that count is a fact about the moment it
+    was gated and is never re-measured: its ref, its tree, its parent, its
+    score, its verdict. So the fold takes the FIRST record for a ref and the
+    LARGEST children count across all of them.
+
+    The fold that was here — last record wins, wholesale — read the closing
+    record's fields as an update, and the closing record for a **resumed
+    root** carries none of them. `run_loop` constructs its root from the kept
+    branch with `parent_ref=None`, so its closing record overwrote the
+    candidate's own parent and gate verdict with nulls, and one further
+    invocation erased the fact that the kept branch had ever been a candidate.
+    Measured on the J2b greedy arm (ADR 0198): turn 1 kept `a4d0bfe4` from
+    `c01e9b06` at 0.818; after the resumed invocation the same ref read back
+    `parent_ref None, disposition None`, so the count of kept members with a
+    parent — and the stepping-stone statistic built on it — was 0 for a run
+    that had kept one. An archive whose whole claim is that it remembers
+    where the loop has been may not forget the parent of its own head.
+    """
+    folded: dict[str, LineageRecord] = {}
+    for record in records:
+        seen = folded.get(record.ref)
+        if seen is None:
+            folded[record.ref] = record
+        elif record.children > seen.children:
+            folded[record.ref] = _replace(seen, children=record.children)
+    return folded

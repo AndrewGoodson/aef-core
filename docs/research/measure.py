@@ -94,6 +94,9 @@ ADR_0180 = "docs/adr/0180-the-good-column-and-the-quotation.md"
 ADR_0193 = "docs/adr/0193-the-arms-re-run-on-the-corpus-that-exists.md"
 ADR_0184 = "docs/adr/0184-the-lesson-was-fresh-and-the-layer-paid.md"
 ADR_0186 = "docs/adr/0186-one-model-across-the-corpus-and-what-it-cost.md"
+ADR_0198 = (
+    "docs/adr/0198-the-tree-grew-from-the-rejections-and-none-of-it-was-better.md"
+)
 
 _WM_DROP_RE = (
     r"before \['api_key', 'keep_me', 'token'\]  ->  after \['keep_me'\]  \(count=(\d+)\)"
@@ -547,6 +550,50 @@ MEASUREMENTS: tuple[Measurement, ...] = (
                 "marlin's own subscription UUID (0163 erratum)",
                 r"> marlin's own subscription UUID: substitutions=(\d+)",
                 r"^  uuid\s+substitutions=(\d+)",
+            ),
+        ),
+    ),
+    Measurement(
+        id="j2b-archive",
+        title="N8 — does a stepping stone produce a better descendant?",
+        adr=ADR_0198,
+        argv=("docs/research/j2b/run_j2b.py", "--verify"),
+        rows=(
+            # The statistic the increment exists for, pinned in BOTH arms of
+            # the proposer that kept something. A regression that made a
+            # rejected member look kept would move these off 0, which is the
+            # direction that would matter.
+            Row(
+                "llm/greedy: kept from a rejected member",
+                r"\| llm \| greedy \| 8 \| 1 \| 7 \| 2 \| 0 \| \*\*(\d+)\*\*",
+                r"\| llm \| greedy \| 8 \| 1 \| 7 \| 2 \| 0 \| 0 \| \*\*(\d+)\*\*",
+            ),
+            Row(
+                "llm/sampling: kept from a rejected member",
+                r"\| llm \| sampling \| 8 \| 1 \| 7 \| 6 \| 5 \| \*\*(\d+)\*\*",
+                r"\| llm \| sampling \| 8 \| 1 \| 7 \| 6 \| 0 \| 5 \| \*\*(\d+)\*\*",
+            ),
+            # And the DENOMINATOR, which is what makes the 0 above readable:
+            # sampling built on a rejection five times and greedy never did.
+            Row(
+                "llm/sampling: candidates from a rejected member",
+                r"\| llm \| sampling \| 8 \| 1 \| 7 \| 6 \| (\d+) \|",
+                r"\| llm \| sampling \| 8 \| 1 \| 7 \| 6 \| 0 \| (\d+) \|",
+            ),
+            Row(
+                "llm/sampling: distinct parents",
+                r"\| llm \| sampling \| 8 \| 1 \| 7 \| (\d+) \|",
+                r"\| llm \| sampling \| 8 \| 1 \| 7 \| (\d+) \|",
+            ),
+            Row(
+                "llm/greedy: distinct parents",
+                r"\| llm \| greedy \| 8 \| 1 \| 7 \| (\d+) \|",
+                r"\| llm \| greedy \| 8 \| 1 \| 7 \| (\d+) \|",
+            ),
+            Row(
+                "rule_based/sampling: turns before the repeated-tree stop",
+                r"\| rule_based \| sampling \| (\d+) \| 0 \| 3 \|",
+                r"\| rule_based \| sampling \| (\d+) \| 0 \| 3 \|",
             ),
         ),
     ),
