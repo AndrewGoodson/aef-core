@@ -85,14 +85,30 @@ jobs:
             | tee -a "$GITHUB_STEP_SUMMARY"
           status=${PIPESTATUS[0]}
           set -e
-          echo "cycle exit: $status" >> "$GITHUB_STEP_SUMMARY"
+          # In WORDS, not only as a number. 2 and 3 both fail the job and
+          # their REMEDIES DIFFER — clear the kill switch versus fix the
+          # invocation — which is why they are two codes (ADR 0167 §6) and
+          # why announcing 3 as a halt sent the reader to the wrong file
+          # (ADR 0178).
+          case "$status" in
+            0) meaning="escalated, or nothing to propose — read the verdict line" ;;
+            1) meaning="REJECTED by a gate — the system working, not a broken job" ;;
+            2) meaning="HALTED — the kill switch is on; clearing ~/.aef-loop-state/HALTED is a deliberate act" ;;
+            3) meaning="ERROR — the cycle crashed; the kill switch is NOT on, fix the invocation" ;;
+            *) meaning="exit $status is not a code this loop defines — the cycle raised, or something else did" ;;
+          esac
+          echo "cycle exit: $status ($meaning)" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           # 0 = escalated to a human (the normal outcome; Tier-1 is off) and
-          # 1 = the candidate was rejected, which is also normal. Only 2 —
-          # HALTED, or an invocation the CLI refuses — should fail the job and
-          # reach "Surface a halt". Letting exit 1 fail it would have made
-          # every ordinary rejection look like an incident.
-          if [ "$status" -ge 2 ]; then exit "$status"; fi
+          # 1 = the candidate was rejected, which is also normal. 2 (HALTED)
+          # and 3 (the cycle crashed) both fail the job and reach the step
+          # below, which has to know WHICH — so the code is written down
+          # before the job dies. Letting exit 1 fail it would have made every
+          # ordinary rejection look like an incident.
+          if [ "$status" -ge 2 ]; then
+            echo "$status" > "$RUNNER_TEMP/cycle.status"
+            exit "$status"
+          fi
 
       - name: Weekly digest
         if: github.event.schedule == '0 9 * * 1' || github.event_name == 'workflow_dispatch'
@@ -105,9 +121,27 @@ jobs:
       # owner noticing an email. A pager, a Linear ticket, or an SMS hook is
       # the real answer and is NOT configured — recorded as an open question
       # rather than papered over (ADR 0057).
-      - name: Surface a halt
+      #
+      # It said HALTED for every failure, exit 3 included — a CRASH, whose
+      # remedy is to fix the invocation and for which there is no kill switch
+      # to clear. A summary naming the wrong remedy is worse than one naming
+      # none (ADR 0178).
+      - name: Surface a halt or an error
         if: failure()
         run: |
-          echo "## Self-rewiring loop HALTED" >> "$GITHUB_STEP_SUMMARY"
+          status=$(cat "$RUNNER_TEMP/cycle.status" 2>/dev/null || echo "")
+          case "$status" in
+            2) echo "## Self-rewiring loop HALTED"
+               echo "The kill switch is on. Read the ledger, then remove"
+               echo "~/.aef-loop-state/HALTED to resume — a deliberate act, not an"
+               echo "automatic one." ;;
+            3) echo "## Self-rewiring loop ERROR — the cycle crashed"
+               echo "This is NOT a halt: no kill switch is set and clearing one changes"
+               echo "nothing. The exception is in the cycle log above; the remedy is to"
+               echo "fix the invocation (the module, the corpus, the config)." ;;
+            *) echo "## Self-rewiring loop job FAILED"
+               echo "No cycle exit code was recorded, so the cycle is not what failed —"
+               echo "read the failing step above." ;;
+          esac >> "$GITHUB_STEP_SUMMARY"
           aef loop status --repo . --state ~/.aef-loop-state >> "$GITHUB_STEP_SUMMARY" || true
           exit 1

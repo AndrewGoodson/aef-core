@@ -119,3 +119,97 @@ def test_loop_state_lives_outside_the_checkout(name: str) -> None:
         f"{name} must pass a --state path outside the repository checkout"
     )
     assert "--state ." not in text
+
+
+# --------------------------------------------------------------------------
+# Exit 3 is a CRASH, not a HALT (ADR 0167 §6, reported wrong until ADR 0178)
+#
+# `EXIT_ERROR = 3` was chosen over reusing 2 for one reason: a halt's remedy
+# (clear the kill switch) is not a crash's (fix the invocation). Both fail the
+# job on `-ge 2`, which is correct — but the failure step was named
+# `Surface a halt` and printed `## Self-rewiring loop HALTED` for either, and
+# `loop-gate.yml`'s comment listed only 0/1/2. Reproduced by rendering the
+# workflow and running its own `case` with status=3.
+# --------------------------------------------------------------------------
+
+
+def _cycle_step() -> dict:
+    document = _load("loop-monitor.yml")
+    steps = document["jobs"]["monitor"]["steps"]
+    return [s for s in steps if s.get("name") == "Daily cycle"][0]
+
+
+def test_the_nightly_summary_gives_every_exit_code_its_own_words() -> None:
+    import re
+
+    run = str(_cycle_step()["run"])
+    arms = dict(re.findall(r'\n\s+(\d|\*)\)\s+meaning="([^"]*)"', run))
+    assert set(arms) == {"0", "1", "2", "3", "*"}, arms
+    assert "HALTED" in arms["2"] and "HALTED" not in arms["3"], arms
+    assert "ERROR" in arms["3"] and "crashed" in arms["3"], arms["3"]
+    assert arms["2"] != arms["3"], "a halt and a crash must not read the same"
+
+
+def test_the_failure_step_tells_a_halt_from_a_crash() -> None:
+    """It said HALTED for both. The kill switch is the remedy for one of them
+    and does not exist for the other."""
+    import shutil
+    import subprocess
+
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover - bash exists on every runner here
+        pytest.skip("no bash")
+
+    assert 'echo "$status" > "$RUNNER_TEMP/cycle.status"' in str(_cycle_step()["run"]), (
+        "the failure step cannot tell a halt from a crash unless the code is recorded"
+    )
+    steps = _load("loop-monitor.yml")["jobs"]["monitor"]["steps"]
+    failing = [s for s in steps if s.get("if") == "failure()"]
+    assert len(failing) == 1, [s.get("name") for s in failing]
+    body = str(failing[0]["run"])
+    body = body[: body.index("aef loop status")]
+
+    printed = {}
+    for status in ("2", "3", ""):
+        script = body.replace(
+            'status=$(cat "$RUNNER_TEMP/cycle.status" 2>/dev/null || echo "")',
+            f'status="{status}"',
+        )
+        done = subprocess.run(
+            [bash, "-c", f"GITHUB_STEP_SUMMARY=/dev/stdout\n{script}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        printed[status] = done.stdout
+
+    assert "HALTED" in printed["2"] and "HALTED to resume" in printed["2"], printed["2"]
+    assert "HALTED" not in printed["3"], printed["3"]
+    assert "NOT a halt" in printed["3"] and "invocation" in printed["3"], printed["3"]
+    assert "HALTED" not in printed[""] and "FAILED" in printed[""], printed[""]
+
+
+def test_the_gate_workflow_names_the_exit_code_an_exception_gets() -> None:
+    """The comment is the only thing that tells a reader what a non-zero gate
+    exit meant, and it stopped at 2 while the CLI grew a 3."""
+    from aef.harness.loop import EXIT_ERROR
+
+    text = (WORKFLOWS / "loop-gate.yml").read_text()
+    assert f"exit {EXIT_ERROR} =" in text, text
+    assert "kill switch" in text
+    assert "Not a halt" in text
+
+
+@pytest.mark.parametrize("name", LOOP_WORKFLOWS)
+def test_the_workflows_still_fail_the_job_on_every_code_at_or_above_two(name: str) -> None:
+    """The CONTROL for the rewording: the failure RULE is unchanged. An exit
+    code chosen without checking the rule that consumes it is how 1 came to
+    mean two things (ADR 0167 §6)."""
+    from aef.harness.loop import EXIT_ERROR, EXIT_HALTED
+
+    text = (WORKFLOWS / name).read_text()
+    if "-ge 2" not in text:
+        # `loop-gate.yml` has no status capture at all: any non-zero fails.
+        assert "aef loop gate" in text
+        return
+    assert EXIT_HALTED >= 2 and EXIT_ERROR >= 2
