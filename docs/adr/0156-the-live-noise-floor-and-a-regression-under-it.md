@@ -329,3 +329,7 @@ which, and the run cannot be replayed to find out.
 Low on generalisation. Six scenarios of one shape, one night, one model.
 The claim that a 0.028 regression is undetectable is a claim about **this**
 corpus's resolution, and consequence 2 says what would change it.
+
+## Note (orchestrator, at merge)
+
+Written against the pre-J0 rubric: dim 1 was 19/20 on this branch and is **15/20** on `main` after ADR 0151. The delta claimed here is 0 either way, so no row moves; the floor line and the ReDoS finding stand unchanged.
