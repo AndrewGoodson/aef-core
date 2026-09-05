@@ -24,11 +24,14 @@ See docs/adr/0014.
 
 from __future__ import annotations
 
+import hashlib
 import importlib
+import importlib.util
 import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
 from aef.config import (
     build_domain_gates,
@@ -130,6 +133,78 @@ def _ensure_cwd_importable() -> None:
         sys.path.insert(0, cwd)
 
 
+def looks_like_a_path(module_path: str) -> bool:
+    """Is this a FILE to load rather than a dotted module name to import?
+
+    A `.py` suffix or a separator; nothing else. Deliberately not "try the
+    import and fall back", because a dotted import that fails for its own
+    reason — a typo inside the module, a missing dependency — would then be
+    retried as a filename, miss, and be reported as "no such file", hiding the
+    real error behind a second one.
+    """
+    return module_path.endswith(".py") or "/" in module_path or "\\" in module_path
+
+
+def import_graph_module(module_path: str) -> ModuleType:
+    """The one importer, for a dotted module name **or a file path**.
+
+    ADR 0168, erratum on ADR 0152. `aef migrate --agent-root .claude/agents` —
+    the opt-in ADR 0152 §4 chose, and the only way to put a persona in Zone A —
+    writes `.claude/agents/migrated/<module>/graph.py`, and the report printed
+
+        aef run .claude.agents.migrated.marlin_accela.graph --objective "..."
+
+    which is not a module name at all. Reproduced:
+
+        $ aef run .claude.agents.migrated.marlin_accela.graph --objective x
+        error: the 'package' argument is required to perform a relative import
+        for '.claude.agents.migrated.marlin_accela.graph'
+
+    A leading dot means "relative import" to `importlib`, and no dotted spelling
+    of that path exists — `.claude` is not an identifier, so no amount of
+    quoting makes one. M1 shipped a flag whose own generated command could not
+    be run under it, and M4 worked around it by keeping the graphs at the
+    default root while passing `--agent-root .claude/agents` to the loop, which
+    is the two-trees-one-loop state ADR 0152's blast-radius block warns about.
+
+    Refusing the root instead was rejected: `.claude/agents` IS the documented
+    opt-in, so a refusal would delete the feature rather than fix it. Loading a
+    file is one function and no new concept — `aef init`'s CWD-on-`sys.path`
+    fix already exists for the dotted case, and the file case needs neither.
+
+    The module is registered in `sys.modules` under a derived name before it is
+    executed, which is what the import system does for a normal import and what
+    a module importing itself (or a dataclass being pickled out of it) needs.
+    """
+    _ensure_cwd_importable()
+    if not looks_like_a_path(module_path):
+        return importlib.import_module(module_path)
+
+    path = Path(module_path)
+    if not path.is_file():
+        raise ValueError(
+            f"{module_path!r} looks like a file path and there is no file there "
+            f"(resolved to {path.resolve()}). Pass a dotted module name, or a path "
+            f"to the .py file that defines build_graph()."
+        )
+    resolved = path.resolve()
+    # Derived from the resolved path, so two graphs with the same basename in
+    # different directories do not collide in `sys.modules` — `graph.py` is the
+    # name `aef migrate` gives every single one of them.
+    name = "aef_graph_" + hashlib.sha256(str(resolved).encode()).hexdigest()[:16]
+    spec = importlib.util.spec_from_file_location(name, resolved)
+    if spec is None or spec.loader is None:  # pragma: no cover - unreadable file
+        raise ValueError(f"cannot load a Python module from {resolved}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(name, None)
+        raise
+    return module
+
+
 def load_graph_module(module_path: str):  # type: ignore[no-untyped-def]
     """Import a module and call its `build_graph()`.
 
@@ -137,8 +212,7 @@ def load_graph_module(module_path: str):  # type: ignore[no-untyped-def]
     would execute — recording against a different graph than production runs
     would make the corpus describe something nobody ships.
     """
-    _ensure_cwd_importable()
-    module = importlib.import_module(module_path)
+    module = import_graph_module(module_path)
     build_graph = getattr(module, "build_graph", None)
     if build_graph is None:
         raise ValueError(f"module {module_path!r} has no build_graph() function")
@@ -173,8 +247,7 @@ def run_graph_module(
     audit_log_path: str | Path | None = None,
     judge_rubric: dict[str, float] | None = None,
 ) -> AEFState:
-    _ensure_cwd_importable()
-    module = importlib.import_module(module_path)
+    module = import_graph_module(module_path)
     build_graph = getattr(module, "build_graph", None)
     if build_graph is None:
         raise ValueError(f"module {module_path!r} has no build_graph() function")

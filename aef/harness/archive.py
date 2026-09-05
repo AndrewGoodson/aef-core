@@ -34,6 +34,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from aef.harness.zones import segment_refusal
 from aef.kernel.durability import _atomic_write_text
 
 ENTRY_FILENAME = "entry.json"
@@ -97,6 +98,38 @@ class ArchiveEntry:
 
 
 def _graph_dir(root: Path, graph_id: str) -> Path:
+    """`<root>/<graph_id>`, and the graph id must be ONE safe path segment.
+
+    It was `root / graph_id` with nothing between them, and a graph id is not
+    an internal token: `aef migrate` takes it from a persona's `name:`
+    frontmatter and prints it in its report as the value to hand
+    `aef loop bless --graph-id`. Reproduced (ADR 0168) — `record(root,
+    "../escape", ...)` with `root` at `state/archive`:
+
+        recorded version 1
+        archive root contents: []
+        WROTE state/escape/v000001/entry.json
+        WROTE state/escape/v000001/files/agents/graph.py
+
+    One level ABOVE the archive root it was handed, with the archive root left
+    empty. `pathlib` makes the absolute form worse still: `root / "/etc/x"`
+    discards `root` entirely.
+
+    Refused rather than sanitised, and refused in the ONE place every read and
+    every write goes through, so `versions()` cannot report on a directory
+    `record()` would not create. Sanitising would silently map two ids onto one
+    archive, which for an append-only store is the failure it exists to
+    prevent. `aef migrate` no longer mints such an id (`PromptAgentSite.
+    graph_id`); this is the containment behind that, for an id typed by hand.
+    """
+    refusal = segment_refusal(graph_id)
+    if refusal:
+        raise ArchiveError(
+            f"graph_id {graph_id!r} is not usable as an archive directory: {refusal}. "
+            f"A graph id is joined onto the archive root, so it must be one path "
+            f"segment — no '/', no '..', no leading '/'. `aef migrate` reports the "
+            f"safe id it generated for each agent; pass that."
+        )
     return root / graph_id
 
 
