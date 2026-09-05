@@ -155,17 +155,26 @@ def dump_entries(knowledge: Any) -> list[dict[str, Any]]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--out", required=True)
+    ap = argparse.ArgumentParser(description=__doc__)
+    # The shared re-runner interface (ADR 0196). This runner does not reach
+    # `seed_stores` on the current tree: it imports `write_check_failure_record`,
+    # which ADR 0180 removed in favour of `record_check_outcomes`. Nothing was
+    # left behind that can re-derive ADR 0175's step-0 table, and the flag is
+    # here so `make measure` reports that by name rather than by omission.
+    ap.add_argument("--verify", action="store_true")
+    ap.add_argument("--out")
     args = ap.parse_args()
+    if not args.verify and not args.out:
+        ap.error("one of --verify or --out")
 
     memory, knowledge, rows = seed_stores(verbose=True)
     records = dump_records(memory)
     entries = dump_entries(knowledge)
 
-    out = Path(args.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(
+    out = Path(args.out or "/dev/null")
+    if args.out:
+        out.parent.mkdir(parents=True, exist_ok=True)
+    (out if args.out else Path("/dev/null")).write_text(
         json.dumps(
             {"scenarios": len(rows), "rows": rows, "records": records, "entries": entries},
             indent=2,

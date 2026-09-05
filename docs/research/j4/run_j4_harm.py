@@ -476,10 +476,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--live", action="store_true")
     mode.add_argument("--report", action="store_true")
+    # `--verify` is the shared re-runner interface (ADR 0196): an alias of
+    # `--report`, so `docs/research/measure.py` can invoke every runner the
+    # same way. Re-derives the published table from the committed results
+    # file; zero live calls.
+    mode.add_argument("--verify", action="store_true", help="alias of --report (ADR 0196)")
     mode.add_argument("--tally", action="store_true")
     parser.add_argument("--arm", choices=("harm", "help"), default="harm")
     parser.add_argument("--corpus", type=Path, default=REPO_ROOT / "corpus")
     args = parser.parse_args(argv)
+    args.report = args.report or args.verify
 
     if args.report:
         report(args.corpus)

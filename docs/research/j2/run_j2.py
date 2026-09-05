@@ -480,6 +480,10 @@ def main(argv: list[str] | None = None) -> int:
         "lineage persists (ADR 0160).",
     )
     parser.add_argument("--report", action="store_true")
+    # `--verify` is the shared re-runner interface (ADR 0196): an alias of
+    # `--report`, so `docs/research/measure.py` can invoke every runner the
+    # same way. Re-derives the published table from results.jsonl; zero live calls.
+    parser.add_argument("--verify", action="store_true", help="alias of --report (ADR 0196)")
     parser.add_argument("--arm", choices=ARMS)
     parser.add_argument("--turns", type=int, default=8)
     parser.add_argument("--seed", type=int, default=0)
@@ -490,6 +494,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", default=str(DEFAULT_OUT))
     parser.add_argument("--workroot", default=None, help="scratch root for the arm's clone")
     args = parser.parse_args(argv)
+    args.report = args.report or args.verify
 
     scenarios = tuple(args.scenarios)
     if args.dry_run:

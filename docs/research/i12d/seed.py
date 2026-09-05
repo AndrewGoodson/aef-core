@@ -1,26 +1,21 @@
-"""S1c step 0 — seed memory from the TRAIN split, offline, and consolidate.
+"""N2 step 0 — seed memory from the TRAIN split, offline, and consolidate.
 
-This is `docs/research/i12b/seed.py` (ADR 0175) with ADR 0180's first two
-fixes applied, and the diff is the point of the increment:
+This is `docs/research/i12c/seed.py` (ADR 0184) run against the corpus that
+exists NOW. Not one line of its logic is changed, and that is the point: ADR
+0191 withdrew S1c's `+2` because ADR 0186 re-recorded eighteen scenarios on
+`claude-opus-5[1m]` on a branch S1c never saw, so S1c's step 0 — one entry
+from three train runs — does not reproduce on `main`. The seed below is the
+same program; the table it prints is not the same table, and the diff is the
+first deliverable of this increment.
 
-1. **`record_check_outcomes` replaces `write_check_failure_record`.** K2 made
-   the producer one idempotent function; `bootstrap` and `run_scenario` both
-   call it now, so the seed calls exactly what the shipped paths call.
-2. **The lesson no longer quotes the run's own output.** S1b put this text in
-   front of the model in ten of seventeen prompts:
+What ADR 0186 changed underneath it: `sum-01`…`sum-18` were `claude-fable-5-1`
+recordings and are now Opus ones, and Opus writes longer — four more TRAIN
+scenarios (`sum-04`, `sum-05`, `sum-08`, `sum-11`) and four more VALIDATION
+scenarios (`sum-13`, `sum-14`, `sum-16`, `sum-17`) now fail the owner word cap
+that they passed. So the lesson consolidates from more runs and the scored
+split carries twice the negatives.
 
-       observed 31 words, 208 chars: 'Vaccination clinics have relocated
-       from Netherby Grange…'
-
-   — an example of an over-long summary, inside a lesson telling the model to
-   be shorter, and ADR 0162 measured that exact shape making two at-cap runs
-   LONGER and breaking the very check the lesson describes. `_observed` keeps
-   the counts and drops the excerpt (ADR 0180 finding 2). `assert_no_excerpt`
-   below asserts the property on THIS corpus's seed rather than trusting the
-   unit test: no 12-character window of any train run's output appears
-   anywhere in any record's content.
-
-Three properties are unchanged from S1b, each because a rule of this loop
+Three properties are unchanged from S1b/S1c, each because a rule of this loop
 demands it:
 
 - **Train only.** The arms are scored on VALIDATION. An arm that learned from
@@ -35,6 +30,9 @@ demands it:
 - **`seed_stores()` is deterministic and costs nothing**, so `arms.py` calls it
   once per arm rather than sharing a snapshot: each arm starts from an
   identical seed and no arm inherits another's validation-run reflections.
+
+`assert_no_excerpt` (ADR 0180) is kept and still runs: no 12-character window
+of any train run's output may appear anywhere in any record derived from it.
 
 Usage:
   PYTHONPATH=<worktree> <venv>/bin/python seed.py --out results/seed.json
@@ -207,7 +205,17 @@ def dump_entries(knowledge: Any) -> list[dict[str, Any]]:
     ]
 
 
-def _write(out: Path, rows: Any, records: Any, entries: Any, checked: int) -> None:
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", required=True)
+    args = ap.parse_args()
+
+    memory, knowledge, rows, outputs = seed_stores(verbose=True)
+    records = dump_records(memory)
+    entries = dump_entries(knowledge)
+    checked = assert_no_excerpt(records, outputs)
+
+    out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         json.dumps(
@@ -223,26 +231,6 @@ def _write(out: Path, rows: Any, records: Any, entries: Any, checked: int) -> No
             default=str,
         )
     )
-
-
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
-    # `--verify` is the shared re-runner interface (ADR 0196): re-derive the
-    # step-0 table from the committed corpus and cassettes, print it, write
-    # nothing, zero live calls. `--out` is then optional.
-    ap.add_argument("--verify", action="store_true")
-    ap.add_argument("--out")
-    args = ap.parse_args()
-    if not args.verify and not args.out:
-        ap.error("one of --verify or --out")
-
-    memory, knowledge, rows, outputs = seed_stores(verbose=True)
-    records = dump_records(memory)
-    entries = dump_entries(knowledge)
-    checked = assert_no_excerpt(records, outputs)
-
-    if args.out:
-        _write(Path(args.out), rows, records, entries, checked)
 
     fails = sum(1 for r in records if r["kind"] == "failure")
     print(f"\ntrain scenarios: {len(rows)}   live calls: 0 (cassette, on_miss='fail')")

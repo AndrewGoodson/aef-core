@@ -6319,3 +6319,239 @@ case the code that consumed the request was correct about the request and wrong
 about the world, and in each case the repair was the same: carry the fact from
 where it is known, and refuse when it is not known rather than proceeding on
 the request.
+
+---
+
+## N2 — the arms re-run on the corpus that exists, and the knob answered for nothing (ADR 0193)
+
+**Branch:** `upgrade/n2-dim2-one-model`, off `d8357c2`.
+**Rubric claim, stated before any live call:** dimension 2, 12 → 14 only if the
+pre-registered rule's first branch fires. Total before: 69.
+
+**Why this ran.** ADR 0191 withdrew S1c's `+2` (ADR 0184) because ADR 0186
+re-recorded eighteen corpus scenarios on Opus in the same hour, on a branch S1c
+never saw, so its step 0 no longer reproduces on `main`. Withdrawn, not
+disproved. *A measurement that cannot be re-run on the current tree is
+asserted.*
+
+**Step 0 — the seed, re-run first (0 live calls).** Same script, unchanged
+logic, different table:
+
+| | S1c (ADR 0184) | N2 |
+|---|---|---|
+| entries / signature | 1, `failure:check:working_memory.summary:max_words` | **identical** |
+| recurrence | 3 distinct runs | **7** |
+| confidence | 0.4286 | **0.6364** |
+| lesson text ends | `…observed 31 words, 208 chars` | **`…observed 37 words, 233 chars`** |
+| validation negatives | 4 | **8** |
+
+`NEGATIVES` is now derived from each scenario's own trace and asserted, so a
+corpus edit moves the list instead of invalidating the run silently.
+
+**Step 1 — the knob's own A/B, for 0 calls.** Arm (c) at the shipped
+`knowledge_boost=0.0` sends arm (b)'s prompts **byte for byte on all 17** (one
+sha256, `c6873a50…`); the entry ranks 20–23 of 28 and never reaches the five
+bullets `render_retrieved_context` renders. So (b)'s three live repeats ARE
+(c)@0.0's, and the 34 calls ADR 0184 budgeted for this question were not spent.
+Arm (c) ran at **8.0** — the smallest value on a 1.0 grid that keeps the lesson
+in the prompt in all 17 scenarios under the WORST-case dry trajectory, chosen
+offline before any quota.
+
+**Step 2 — the arms.** 119 live calls, `claude-opus-5[1m]` on 119 of 119, equal
+repeats this time:
+
+| arm | repeats | mean | spread | negatives (n=8) | neg spread |
+|---|---|---|---|---|---|
+| (a) no retrieve | 1 | 0.9529 | – | 0.9000 | – |
+| (b) raw records | 3 | **0.9373** | 0.0118 | 0.8667 | 0.0250 |
+| (c) + knowledge @ 8.0 | 3 | **0.9843** | 0.0353 | 0.9833 | 0.0250 |
+
+```
+    (c) − (b) on the mean       = +0.0470     larger repeat spread    = 0.0353
+    (c) − (b) on the negatives  = +0.1167     larger negatives spread = 0.0250
+    BRANCH: 12 -> 14
+```
+
+**What arm (b) actually showed the model**, at every scenario, in every repeat:
+
+```
+- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed   (×5)
+```
+
+Five byte-identical no-op bullets. Seven records of a real recurring word-cap
+failure sat in the same store, out-ranked by twenty near-duplicate successes.
+ADR 0110's crowding thesis, live in a prompt rather than in a coverage proxy —
+and the reason **(b) − (a) = −0.0156**, the fourth measurement of that
+comparison and its third sign change.
+
+**Config fix (ADR 0184's defect 2).** `knowledge_boost`, `staleness_half_life`
+and `knowledge_min_occurrences` are now `aef.yaml` fields. Unset means `None`
+and `build_retriever` omits it, so `MemoryRetriever`'s dataclass keeps the
+single copy of every measured default; `0` is not unset (it disables the
+demotion); each refusal mirrored at config-load time.
+
+**Mutation:** 4 planted (falsy check for `is not None`; drop `**knobs`; move the
+shipped boost default to 8.0; delete the boost validator) — 4 caught, every file
+restored byte-identically and `shasum -a 256 -c` verified. No `git checkout --`.
+
+**Not claimed.** `knowledge_boost`'s shipped default does **not** move. 8.0
+guarantees engagement on a store holding exactly ONE entry; ADR 0110 measured a
+raised boost displacing a precisely-relevant record when there are many, and
+this corpus cannot form a second entry to test it on. What the default's basis
+becomes is narrower and sharper: not "the knob buys nothing" but "the knob is
+the difference between an inert layer and an engaged one here, and 8.0 is
+unmeasured on a many-entry store".
+
+**Green bar:** `pytest -q` 2891 passed, 7 skipped, 1 xfailed · `mypy aef
+examples` clean · `ruff check .` clean · `ruff format --check` clean.
+
+**Calls:** 120 of 120 (1 preflight + 17 + 51 + 51). Seed, static sweep, nine dry
+arms and the knob's A/B cost 0.
+
+**Score:** dimension 2 12 → 14, total **69 → 71**.
+
+## N5 — `make measure`, and it is red on purpose (ADR 0196)
+
+ADR 0188 gave dimension 5 nine of ten and named the missing point word for
+word: *"several headline numbers reach a reader as docstring prose with the
+data one directory away and no re-runner (`make measure`) that regenerates the
+tables in CI"*. ADR 0191 had already paid the bill — S1c's `+2` **withdrawn
+because its seed no longer reproduced**, found a night later, by hand.
+
+`docs/research/measure.py` + `make measure`. Eleven runners, one shared
+`--verify`: re-derive the published table from **committed raw data**, print
+it, write nothing, **zero live calls in any mode** (committed JSON/JSONL, or a
+cassette at `on_miss="fail"`). 53 rows across 13 measurements, each diffed
+against **the ADR paragraph that publishes it** — the ADR is the expectation,
+not a constant in the driver, so perturbing a number in an ADR fails exactly
+like perturbing the data.
+
+**Who needed changing.** Four already had `--report` (i14, j2, both j4) and
+gained an alias. Three printed unconditionally and gained the flag (i12b, i12c
+aggregates, and i12c's seed lost its mandatory `--out`). Four **could not
+produce their published table at all**:
+
+- `i12/aggregate.py` had raised `FileNotFoundError` on every invocation since
+  its raw JSON was flattened out of `results/`. Path fixed; ADR 0155's table
+  then reproduces exactly (0.8541 / 0.8541 / 0.8334 / 0.9166, spread 0.0833,
+  84 calls).
+- `i12b/seed.py` imports `write_check_failure_record`, removed by ADR 0180.
+  ADR 0175's step-0 table has no runner on this tree. Recorded, not "fixed" —
+  re-pointing it at a different producer would produce a different number.
+- i13 had **no aggregator**: six raw `aef loop score --json` payloads and three
+  tables typed by hand. New `i13/verify.py`; every number in ADR 0156
+  reproduces, floor 0.7639 / regression 0.7361 / fall 0.0278 included.
+- `pilot-marlin/scan_control.py` needed marlin's uncommitted `.aef/runs`; its
+  `--verify` runs the same controls against a stand-in objective.
+
+**What the first run found.** Two published numbers are stale and nobody had
+said so: **ADR 0159's oracle B is 18/18 published against 10/18 re-derived**
+(the one block `--report` recomputes live from `corpus/`, which ADR 0186 moved
+to one model — 0186 disclosed exactly this for v2 and did not check v1), and
+`j4/report-tally.txt` still says `helpful=7` where ADR 0180's own correction
+says 6. No committed result file was edited: the ADR is pinned, the artefact is
+labelled.
+
+**The key case, verbatim:**
+
+```
+=== i12c-seed — S1c step 0 — the seed ADR 0184's +2 rests on
+    ok    train scenarios                              20
+    XFAIL failure records                              ADR says '3', re-derived '7'
+    XFAIL records the excerpt property covers          ADR says '23', re-derived '27'
+    XFAIL entry recurrence (distinct runs)             ADR says '3', re-derived '7'
+    ok    consolidated entries                         1
+```
+
+Expected, recorded, and the withdrawn row's evidence. Note that `i12c-arms` —
+the arm tables, from the committed `arms.jsonl` — reproduces in full: it is the
+seed underneath that moved, which is why 0191 withdrew the score and not the
+table.
+
+**Red on purpose.** `make measure` exits 1 while ANY row drifts, explained or
+not: a published number that no longer re-derives is a number nobody should
+cite. CI runs `make measure-ci` (`--fast --against-expectations`), which fails
+when the drift set **changes** — a new drift, and equally a known drift that
+healed and left a stale note. If N2's re-run makes ADR 0184's seed reproduce,
+CI goes red until the note comes out.
+
+**Mutation.** `| (b) raw records | **0.9176** |` → `**0.9999**` in ADR 0175:
+`DRIFT (b) raw records, mean  ADR says '0.9999', re-derived '0.9176'`, and
+`make measure-ci` exits 1 with `NEW DRIFT`. Restored, `shasum -a 256` matched
+`83e9a571…`. The same mutation is automated in
+`test_a_perturbed_published_number_is_caught` against a symlinked shadow tree,
+so nothing committed is written.
+
+Green bar: `pytest -q` **2930 passed, 7 skipped, 1 xfailed** (was 2885 + the 45
+this increment adds), `mypy aef examples` clean on 135 files, `ruff check .`
+clean, `ruff format --check` clean.
+
+## N6 — the shapes this repo actually carries (ADR 0197)
+
+M6 (ADR 0163) scanned a real repo clean and named its own residual: marlin's
+boundary rule is written around a subscription UUID and the pattern list did
+not match it, because ADR 0126 removed `-` from `opaque_secret` to stop
+`migrate-the-customer-billing-pipeline-to-v2-with-zero-downtime` being redacted
+into a placeholder.
+
+Reproduced first, eleven shapes planted one at a time. **Five findings, one of
+them known:**
+
+```
+uuid                substitutions=0  -> ...(contact 7e16b0bb-b75a-4a16-9765-839cf1b96755)
+slack_token         substitutions=0  -> ...789012-1234567890123-AbCdEfGhIjKlMnOpQrStUvWx)
+jwt                 substitutions=2  -> ...ACTED:opaque_secret].[REDACTED:opaque_secret])
+github_token        substitutions=1  -> ...ion service (contact [REDACTED:opaque_secret])
+connection_string   substitutions=1  -> ...stgres://svcuser:[REDACTED:email]:5432/marlin)
+```
+
+A JWT torn into two opaque secrets, a GitHub PAT caught under the wrong name,
+and a database URL reported as an **email** with `svcuser:` surviving in the
+clear. A label is not cosmetic — "something opaque leaked" and "your production
+database URL leaked" are different incidents.
+
+Six named shapes added: `connection_string` (first, ahead of `email`), `jwt`
+(after `bearer`, so `Bearer <jwt>` stays a bearer header), `uuid`,
+`github_token`, `slack_token`, and five more AWS key prefixes. `-` is still
+absent from `opaque_secret`; the UUID gets in by structure — every group
+hex-only and length-exact — not by weakening.
+
+**And one the increment was not looking for: `api_key` did not match a real
+Anthropic key.** Its middle was `(?:live|test|ant|proj)?[-_]?`, one optional
+segment from a fixed vocabulary, so on `sk-ant-api03-<36>` the `ant` consumed
+the slot and `api03` was left in front of a class with no hyphen: **no match at
+all**. Now `(?:[-_][A-Za-z0-9]{2,10}){0,3}`.
+
+`find()` applies patterns in order now, so the labels are the ones a redaction
+would actually stamp; the detector is not weakened, and the proof is two lines
+(if any pattern matches, the first such still matches, because nothing before
+it changed the text).
+
+**The seam, found by the full suite going red.** A run id is a `uuid4` the
+harness assigns, so once `uuid` was a pattern the output scan matched the
+scenario's own `id` and `initial_state.run_id` and **every harvest of a
+recorded run was rejected "a secret survived redaction"** —
+`tests/cli/test_run.py::test_a_recorded_run_re_executes_identically_and_is_harvested`.
+That is ADR 0126's F12 exactly, one field over. `_scannable` drops the two
+harness identifiers **by exact field path**, never by teaching a pattern to
+ignore a shape, with a control that a tenant-typed UUID is still caught.
+
+**What the scanner finds in committed artefacts.** All of `docs/research/` and
+all of `corpus/`: **no credential**. 58 `uuid` matches (run ids, session ids,
+the scratch path segment), 66 `opaque_secret` (every `RecordedCall.key`,
+`prompt_sha256`, and the audit ledger's `entry_hash`/`previous_hash` chain —
+worth knowing: a harvest that ever scanned a ledger would reject it), and the
+planted controls themselves. The one real identifier is marlin's subscription
+UUID, quoted deliberately in ADR 0163 as the residual's evidence; it is an
+Azure subscription id rather than a credential, published by its owner in
+marlin's own `AGENTS.md`, and it was **not** retro-redacted — redacting the
+four places it stands would make 0163's finding untraceable and leave the value
+in marlin's repo regardless. Stated as a judgement, the owner's to overturn.
+
+**Mutation**, each pattern dropped in turn, restored with `shasum -a 256`
+verified against `beb0f1be…`: `uuid` → 4 failures, `jwt` → 2, `github_token` →
+3, `slack_token` → 3, `connection_string` → 5, and `api_key` reverted to its
+pre-0197 pattern → 1 (`sk-ant-api03-…`). Six for six.
+
+Erratum appended to ADR 0163 §5 with the new number; `make measure` pins the
+line against the erratum, so the closure is re-checked rather than asserted.

@@ -1,17 +1,16 @@
-"""S1c — read the arm JSONs and print every table ADR 0184 quotes.
+"""N2 — read the arm JSONs and print every table ADR 0193 quotes.
 
-S1b (ADR 0175) had no budget for repeats and therefore measured its noise bar
-from the scenarios where two arms happened to send byte-identical prompts —
-a weaker instrument, and it said so. Cutting arm (d), which S1b proved sends
-arm (c)'s prompts byte for byte, pays for the real one: **repeats of the same
-arm**, whose spread is the bar the pre-registered decision rule uses.
-
-The rule, stated before the live calls were spent:
+The pre-registered rule, stated in the worker's brief before any live call and
+evaluated here rather than by hand:
 
     dim 2 moves 12 -> 14 iff (c) > (b) on the mean by MORE than the larger of
-    the two arms' repeat spreads AND (c) >= (b) on the four owner-check
-    negatives. 12 -> 13 iff (c) > (b) on the negatives by more than the spread
-    with the mean inside it. Otherwise +0.
+    the two arms' repeat spreads AND (c) >= (b) on the owner-check negatives.
+    12 -> 13 iff the negatives alone clear it. Otherwise +0, and the ADR says
+    the knowledge layer does not help this agent on this corpus.
+
+Unlike ADR 0184's run this one affords **three repeats of each** of (b) and
+(c), so the two spreads are estimated from equal samples and neither arm's
+mean is more precise than the other's.
 
 Usage:
   <venv>/bin/python aggregate.py [results-dir]
@@ -24,7 +23,14 @@ import statistics
 import sys
 from pathlib import Path
 
+# The eight owner-check negatives of the one-model corpus (ADR 0186). Kept in
+# step with `arms.py::NEGATIVES`, which derives and asserts them from the
+# corpus itself on every run.
 NEGATIVES = (
+    "sum-13-cider-press",
+    "sum-14-quarry-lake",
+    "sum-16-cliff-path",
+    "sum-17-clockmaker",
     "sum-30-ganister-tarn",
     "sum-33-cotterdale-bus",
     "sum-35-priory-gatehouse",
@@ -34,7 +40,7 @@ NEGATIVES = (
 LABEL = {
     "a": "(a) no retrieve",
     "b": "(b) raw records",
-    "c": "(c) + knowledge @ boost 3.0",
+    "c": "(c) + knowledge @ boost 8.0",
 }
 
 
@@ -53,18 +59,16 @@ def spread(values: list[float]) -> float:
 
 
 def main() -> None:
-    # `--verify` is the shared re-runner interface (ADR 0196): re-derive the
-    # published table from the committed raw JSON, print it, write nothing,
-    # zero live calls. That is what this script already did unconditionally,
-    # so the flag is an affirmation rather than a mode; it exists so one
-    # driver can invoke every runner the same way.
-    argv = [a for a in sys.argv[1:] if a != "--verify"]
-    root = Path(argv[0]) if argv else Path(__file__).resolve().parent / "results"
+    root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent / "results"
     arms = load(root)
     ids = list(arms["a"][0]["per_scenario"])
 
     print("## Per repeat\n")
-    print("| arm | repeat | boost | mean | negatives (n=4) | rest (n=13) | in prompt | calls |")
+    n_neg = sum(1 for i in ids if i in NEGATIVES)
+    print(
+        f"| arm | repeat | boost | mean | negatives (n={n_neg}) | "
+        f"rest (n={len(ids) - n_neg}) | in prompt | calls |"
+    )
     print("|---|---|---|---|---|---|---|---|")
     for arm in "abc":
         for d in arms[arm]:
@@ -144,7 +148,7 @@ def main() -> None:
         )
 
     print("\n## The entry's rank trajectory in arm (c)\n")
-    print("| repeat | rank @ scenario 1 | rank @ scenario 17 | in prompt | max rank |")
+    print(f"| repeat | rank @ scenario 1 | rank @ scenario {len(ids)} | in prompt | max rank |")
     print("|---|---|---|---|---|")
     for d in arms["c"]:
         ranks = [d["entry_rank"][i] for i in ids]

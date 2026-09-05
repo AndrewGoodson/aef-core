@@ -236,6 +236,24 @@ Artefacts: `docs/research/pilot-marlin/05-redaction-scan.txt`,
 `06-redaction-control.txt`, and the two scripts beside them. **The scan's output
 is what is committed; no raw recorded run is.**
 
+> **Erratum, 2026-09-05 (ADR 0197).** The residual above is **closed in the
+> code and not in the committed `.txt`**. `DEFAULT_PATTERNS` now carries a
+> `uuid` shape (8-4-4-4-12 hex, every group hex-only and length-exact, so it
+> cannot revive ADR 0126's hyphenated-English false positive), and the same
+> control re-run today reads:
+>
+> ```
+> marlin's own subscription UUID: substitutions=1
+> ```
+>
+> `06-redaction-control.txt` still shows `substitutions=0`: it is the artefact
+> M6 produced and is left as the record of what was true then.
+> `python docs/research/pilot-marlin/scan_control.py --verify` is the version
+> that runs, and `make measure` pins this line against this paragraph.
+> Five more shapes landed with it — `jwt`, `github_token`, `slack_token`,
+> `connection_string`, and four more AWS key prefixes — and `api_key` was
+> widened, because `sk-ant-api03-<36>` matched nothing at all.
+
 ## 6. `aef loop harvest` — 0 promoted, 5 rejected, and why
 
 ```

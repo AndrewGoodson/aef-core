@@ -223,17 +223,33 @@ near-duplicate records about one recurring failure crowd out every other
 lesson, so coverage falls 6→1 as recurrence rises while the wiki holds at 6.
 That number is still true and it is **not** a prediction about task outcome:
 S1b (ADR 0175) re-ran the four ACE arms on a corpus whose failures recur, with
-the layer fully engaged — one entry formed from three distinct train runs,
-reaching the drafting model in 10 of 17 scored scenarios — and the task metric
-did not move. **The coverage proxy is disproved for this corpus.**
+the layer fully engaged and the task metric did not move (ADR 0175). **That
+result was superseded, twice, and the sequence is the point.** ADR 0184
+re-ran it with the model's own output excerpt removed from lessons and the
+lesson kept fresh by the scored split, and the knowledge arm won — then ADR
+0191 WITHDREW that row, because a sibling branch had re-recorded the corpus
+in the same hour and the measurement's seed no longer reproduced. ADR 0193
+re-ran it on the corpus that exists, with equal repeats: **(c) 0.9843 vs (b)
+0.9373, +0.0470 against a 0.0353 spread, and +0.1167 on the negatives.** The
+knowledge layer helps this agent on this corpus. Raw retrieval still does not
+((b) − (a) = −0.0156, the fourth measurement and the third sign change).
 
-**`knowledge_boost` defaults to 0.0**, and the reason is now sharper than the
-one this paragraph used to give. It said the knob "changed no coverage number
-anywhere, so the benefit is consolidation, not ranking". That is wrong as
-stated: on a real corpus the knob demonstrably controls whether the only
-lesson in the store reaches the model at all (0/17 vs 10/17 in prompt). What
-survives is the outcome — the ranking knob is real, and moving it moves no
-task metric (ADR 0175).
+**`knowledge_boost` defaults to 0.0**, and the reason has changed twice. It
+first said the knob "changed no coverage number anywhere, so the benefit is
+consolidation, not ranking" — wrong as stated: the knob controls whether the
+only lesson in the store reaches the model at all (0/17 in prompt at 0.0,
+17/17 at 8.0). It then said moving it moves no task metric; ADR 0193 moved it.
+The default stays 0.0 anyway, and that is a judgement rather than a
+measurement: the value that engages the layer is tuned to a store holding
+exactly ONE entry, and this corpus cannot form a second, so nothing here has
+measured what the knob does when lessons compete. `ContextConfig` now carries
+it (with `staleness_half_life` and `knowledge_min_occurrences`), so an adopter
+can set what the measurement used.
+
+What arm (b) looks like from the inside is the sharpest finding: its lesson
+block is **five byte-identical no-op bullets**, seven real word-cap records
+out-ranked by twenty near-duplicate successes. That is ADR 0110's crowding
+thesis, in a prompt rather than a coverage proxy.
 
 An **LLM-backed summariser** (`adapters/llm_summariser.py`) is implemented and
 tested but **off by default**, and the reason is a measurement rather than
@@ -253,7 +269,7 @@ by `tests/test_rubric_arithmetic.py`:
 
 ```
 $ grep '^## Current' docs/research/self-learning-rubric.md
-## Current — 2026-09-04, J0's base (ADR 0151) plus increments measured since — **72 / 100**
+## Current — 2026-09-05, J0b's re-score (ADR 0188) over J0's base (ADR 0151), plus the above-95 loop's increments — **71 / 100**
 ```
 
 This paragraph used to open "Landed 2026-09-03 by the improve loop … 50 → 79".

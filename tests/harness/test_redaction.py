@@ -190,6 +190,15 @@ def test_every_default_pattern_is_exercised() -> None:
         # Was `"A" * 44`, which the corrected `opaque_secret` no longer
         # matches: 40+ chars is not on its own a secret (ADR 0126).
         "opaque_secret": "a1B2c3D4" * 5 + "xyz9",
+        # ADR 0197's shapes. `tests/harness/test_redaction_shapes.py` is where
+        # each one is exercised against a planted positive AND against the
+        # false positives ADR 0126 named; this row only keeps the promise that
+        # no pattern in the list is sampleless.
+        "uuid": "7e16b0bb-b75a-4a16-9765-839cf1b96755",
+        "jwt": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpM",
+        "github_token": "ghp_1234567890abcdefghijklmnopqrstuvwxyzAB",
+        "slack_token": "xoxb-123456789012-1234567890123-AbCdEfGhIjKlMnOpQrStUvWx",
+        "connection_string": "postgres://svcuser:hunter2correct@db.internal.example:5432/db",
     }
     for label, pattern in DEFAULT_PATTERNS:
         assert re.search(pattern, samples[label]), label

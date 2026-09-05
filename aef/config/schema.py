@@ -241,6 +241,26 @@ class ContextConfig(_StrictModel):
     # for retrieval specifically.
     token_budget: int | None = None
 
+    # The three knowledge-layer knobs, added by ADR 0193. Until then this
+    # block carried `impl` and `token_budget` and nothing else, and
+    # `build_retriever` passed `max_token_budget` alone — so
+    # `knowledge_boost`, `staleness_half_life` and `knowledge_min_occurrences`
+    # were reachable ONLY by hand-constructing `Services`, which is the shape
+    # ADR 0101 deleted `GraphStore` for. Two of the three have defaults set by
+    # measurement (ADR 0110, ADR 0116) and ADR 0193 measures a +0.0470 task
+    # metric at a third value of the first; an adopter who read those ADRs
+    # could not act on any of it.
+    #
+    # `None` means "whatever `MemoryRetriever` defaults to", and it is None
+    # rather than a repeated literal ON PURPOSE: a measured default written
+    # down twice is two numbers that must agree with nothing checking that
+    # they do (ADR 0091). `build_retriever` omits an unset field, so the
+    # dataclass stays the single source of every default —
+    # `tests/config/test_context_knobs.py` asserts exactly that.
+    knowledge_boost: float | None = None
+    staleness_half_life: int | None = None
+    knowledge_min_occurrences: int | None = None
+
     @field_validator("impl")
     @classmethod
     def _must_name_a_real_retriever(cls, value: str) -> str:
@@ -260,6 +280,40 @@ class ContextConfig(_StrictModel):
                 f"context.token_budget must be positive; got {value}. A zero budget admits "
                 f"no chunk, so retrieval would silently return nothing."
             )
+        return value
+
+    # The three below mirror `MemoryRetriever.__post_init__`'s refusals at
+    # config-load time, with the same reasons, for the reason
+    # `CommandProviderConfig` states: an `aef.yaml` that loads clean must not
+    # construct an invalid runtime object at first use.
+
+    @field_validator("knowledge_boost")
+    @classmethod
+    def _boost_must_be_non_negative(cls, value: float | None) -> float | None:
+        if value is not None and value < 0:
+            raise ValueError(
+                f"context.knowledge_boost must be non-negative; got {value}. A negative "
+                f"boost would rank the best-evidenced entries LAST, which is the opposite "
+                f"of what the field's name promises."
+            )
+        return value
+
+    @field_validator("staleness_half_life")
+    @classmethod
+    def _half_life_must_be_non_negative(cls, value: int | None) -> int | None:
+        if value is not None and value < 0:
+            raise ValueError(
+                f"context.staleness_half_life must be non-negative; got {value}. A "
+                f"negative half-life would rank the STALEST entries first. 0 disables the "
+                f"demotion; see docs/adr/0116."
+            )
+        return value
+
+    @field_validator("knowledge_min_occurrences")
+    @classmethod
+    def _min_occurrences_must_be_at_least_one(cls, value: int | None) -> int | None:
+        if value is not None and value < 1:
+            raise ValueError(f"context.knowledge_min_occurrences must be at least 1; got {value}.")
         return value
 
 
