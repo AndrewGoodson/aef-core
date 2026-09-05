@@ -45,8 +45,22 @@ class G1Builds(Gate):
     commands: tuple[tuple[str, ...], ...] = field(default_factory=lambda: DEFAULT_BUILD_COMMANDS)
 
     def run(self, ctx: GateContext) -> GateResult:
+        # `workspace-G1`, not `workspace`. G2 materialises its own tree from
+        # the same `ctx.workdir` when the cohort could not be built, and
+        # `trust._prepare_empty_destination` refuses a non-empty destination —
+        # so with one shared name the second gate to run raised
+        # `TrustBoundaryError` and could never judge the candidate at all
+        # (ADR 0170 defect 1; seen as a red herring in ADR 0148 and reported
+        # in ADR 0157).
+        #
+        # A per-gate directory rather than sharing G1's tree, because the
+        # emptiness rule protects something real: a workspace must be exactly
+        # base-ref + Zone A overlay, and THIS gate has just run build commands
+        # in its copy. Those commands come from configuration and execute
+        # candidate code; whatever they wrote (caches, artefacts, anything)
+        # would otherwise be in the tree G2 re-executes the corpus against.
         workspace = build_candidate_workspace(
-            ctx.repo, ctx.verdict.diff, ctx.workdir / "workspace", ctx.zone_policy
+            ctx.repo, ctx.verdict.diff, ctx.workdir / f"workspace-{self.id}", ctx.zone_policy
         )
         policy = ctx.sandbox_policy or SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED)
 
