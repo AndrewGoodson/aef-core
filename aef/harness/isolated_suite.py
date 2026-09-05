@@ -75,7 +75,7 @@ def run_corpus_isolated(
     sandbox: SandboxPolicy | None = None,
     step_timeout_s: float | None = None,
     cassette_miss: str = "fail",
-    live_provider: dict[str, str] | None = None,
+    live_provider: dict[str, Any] | None = None,
 ) -> dict[str, ScenarioResult]:
     """Execute every scenario, concluding in this process.
 
@@ -83,8 +83,12 @@ def run_corpus_isolated(
     nodes run (ADR 0123). `cassette_miss="fail"` — the default — makes a
     request the recording never saw a failed node, so the gate is
     deterministic and holds no credential. `"live"` sends misses to a
-    provider the worker builds from `live_provider` (`{"impl", "model"}`,
-    read by the caller from the BASE REF's config, never the workspace's).
+    provider the worker builds from `live_provider` — the BASE REF's whole
+    serialised `model_provider` block, never the workspace's, and never a
+    two-field subset of it (ADR 0181; ADR 0158's F-M5-2 was that subset).
+    The environment that provider needs in order to authenticate is the
+    CALLER's to supply, on `sandbox.env_allowlist`: this function inherits no
+    credential of its own, and the default allowlist carries none.
 
     One worker for the whole corpus: a fresh process per scenario would make
     module-level agent state behave differently under the gate than it does
@@ -148,7 +152,7 @@ def _run_one(
     *,
     session: NodeWorkerSession,
     cassette_miss: str = "fail",
-    live_provider: dict[str, str] | None = None,
+    live_provider: dict[str, Any] | None = None,
 ) -> ScenarioResult:
     # The node bodies run in the worker, so everything a node may `require_*`
     # has to be there too: a provider — or a POLICY ENGINE — on the parent's

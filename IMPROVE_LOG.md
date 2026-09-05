@@ -4815,3 +4815,173 @@ is the root of F2 and the reason its fix needs a warning branch at all;
 its owner makes it an alias; one flaky container-sandbox test; and the fact that
 the suite fails 28 tests with `[Errno 2] No such file or directory: 'python'`
 when the venv is not on `PATH`, which looks exactly like a regression and is not.
+
+
+## Fix wave K2 — the good column, the quotation, and the one call site (ADR 0180)
+
+Three findings that earlier workers reproduced and could not fix because the
+files were not theirs. All three reproduced again here, from committed data,
+before anything changed. **Zero live model calls.**
+
+**1. The tally counted a harmful run as helpful.** ADR 0118's `_tally` had two
+branches around `_reproduced()` — reproduced the lesson's failure, or not — and
+no room for *had the lesson, resolved that failure, failed something else*. So
+ADR 0162 rig B's `sum-35-priory-gatehouse`, the single run in the entire rig
+with the shape a ranking signal would need, was counted **helpful**: the
+word-cap lesson shortened its summary from 30 words to 28 and the shortened
+text stopped matching a content regex the baseline passed. Replayed here
+through the shipped `default_signature` and the shipped consolidator, the ten
+runs read `helpful=7 harmful=3` with that run inside the 7. `_tally` now splits
+three ways — `harmful` (reproduced it), `helpful` (failed **nothing**),
+`harmful_elsewhere` (resolved it and failed something else) — and the same ten
+runs read `helpful=6 harmful=3 harmful_elsewhere=1`. "Failure" is the record's
+`kind`, never a prefix on its signature, so a custom `signature_fn` cannot fool
+it. **Nothing ranks on the new counter.** ADR 0162 refused to rank because the
+signal read backwards; reading forwards earns it a place in the metadata, not a
+coefficient, and `knowledge_boost` stays 0.0.
+
+`test_a_reordered_chain_is_a_different_failure_and_is_not_a_recurrence`
+asserted the old `(1, 0)` and was updated deliberately to `(0, 0, 1)`. The
+subsequence rule it exists for is unchanged.
+
+**2. The check-derived record quoted the model's own output back into its next
+prompt.** `observed 406 words, 2836 chars: '**No. The Accela connector…'`. ADR
+0174 argued that the observed value is the run's own and recording it records
+what happened — right about provenance, silent about destination:
+`verbal_feedback` is what `RuleBasedPromptProposer` pastes into a persona and
+what `render_retrieved_context` renders as a bullet. ADR 0162 measured the
+cost — a lesson whose text carried a 38-word example summary made two at-cap
+runs LONGER (23 → 28 against a cap of 25; 38 → 41 against 38) and broke the
+very check the lesson describes. This is ADR 0110's *the model is never trusted
+with provenance* failing one layer down: there the model was kept out of the
+counted fields, here its text was put into the counted field's explanation. The
+line now keeps every count the harness computed and drops the quotation. On
+`sum-35`, 33 twelve-character windows of the output in `verbal_feedback` (48
+anywhere in content) became **0**. A non-text value is reported by type rather
+than by `repr`, whose *length* is the answer on a boolean field. The output
+stays readable in the recorded scenario's trace, named in an `output_location`
+key that reaches no prompt.
+
+The first draft of that fix put the forwarding address inside the failure line
+and the critic's 160-character excerpt then cut the observation out of
+`verbal_feedback`. A test caught it, which is the only reason it is a sentence
+here rather than a regression.
+
+**3. The producer was wired into `bootstrap` alone.** ADR 0175's arm (c)
+recorded `"failures": {}` while six of seventeen scored runs failed an owner
+check: nothing outside `bootstrap` could write a check-derived record, so
+`runs_since_last_seen` climbed to 17, ADR 0116's staleness demotion walked the
+seeded lesson from rank 0 to rank 39, and the two negatives late in the split
+never saw it — halving the power of the comparison S1b existed to run.
+`record_check_outcomes(...)` replaces `write_check_failure_record` and is
+idempotent per `(agent_id, run_id, failed check keys)` by two independent
+guards — a derived record id, and a store query — so wiring it at more than one
+site cannot inflate `source_record_ids`. **ADR 0174's refusal of the gate path
+stands**: a gate run writing to the durable store would let scoring a candidate
+manufacture the next one's evidence, so the store is the caller's to supply and
+a gate path supplies none. `harvest` is re-refused for its own reason — a
+production run carries no owner check to evaluate. The two call sites that
+should exist are REPORTED because the files belong to other workers:
+`run_scenario(..., memory: MemoryStore | None = None)` and `cmd_score
+--memory`.
+
+**Reported, not fixed.** `harmful_elsewhere` is not surfaced in
+`aef/services/context/memory_retriever.py`'s chunk metadata or in
+`aef/harness/skills.py`'s draft, both of which print `helpful`/`harmful`; those
+are one-line additions in files outside this worker's list.
+
+**No rubric dimension moves,** and the rubric is untouched. What a re-run of
+S1b's four arms would need is written into ADR 0180 rather than left to be
+re-derived: the excerpt gone from the lesson text, the producer on the scored
+split, and repeats — S1b's own same-prompt variance ran to 0.0857 and every
+arm-to-arm delta sat inside it.
+
+**Green bar.** `pytest -q` 2590 passed / 7 skipped / 4 xfailed (from 2572;
++18); `mypy aef examples` clean on 134 files; `ruff check .` clean; `ruff
+format --check aef tests examples` 274 files formatted. 5 mutations, 5 caught,
+control green before and after, both restores proved by sha256 equality with a
+byte backup. `tests/cli/test_prompt_repo_acceptance.py::test_a_prompt_file_repo
+_goes_from_adopt_to_a_gated_prompt_candidate` fails, and fails identically on
+the merge base — verified by exporting `git archive HEAD` to a clean tree and
+running the same suite there (`1 failed, 2572 passed, 7 skipped, 4 xfailed`,
+same test, same assertion). It is ADR 0178's `loop doctor` surface and nothing
+here goes near it.
+
+
+## Fix wave K1 — the login that never reached the one place candidates run (ADR 0181)
+
+ADR 0158's two HIGH findings, closed. They were separate defects with one
+consequence: **no provider served a live cassette miss inside the gates, on any
+repo.** `UPGRADE_LOOP.md` says *a prompt candidate is gated live, or not at
+all*; it resolved to the second, every time, everywhere.
+
+**F-M5-3 was a decision, and M5 said so** — "the allowlist exists so no
+credential is inherited, and adding `USER` is how the shadow run gains the
+operator's quota". Both halves true, pointing opposite ways: `sandbox.py`
+scrubs the environment of the one process that runs agent-written code, and
+ADR 0112's premise is that the harness login IS the credential. The decision:
+**live model calls inside the gates are an explicit per-repo opt-in, off by
+default** — `gates.live_model_calls` in `aef.yaml`, read from the **base ref**
+like every other rule a candidate is judged by (ADR 0082: a candidate that
+could set this in its own branch would be handing itself the operator's
+login). False — the default, and what every existing repo gets — leaves the
+worker's allowlist byte-for-byte what it was, and `--cassette-miss live` is
+**refused by name** instead of rejecting every candidate on an environment
+artifact. True adds `HARNESS_LOGIN_ENV`, and every `gated` ledger event records
+`live_model_calls` so the audit trail says which passes spent the quota.
+
+**The variable was measured, not guessed.** Five probes of the exact argv
+`ClaudeCodeProvider` builds: allowlist as shipped → `Not logged in`;
+**+`LOGNAME` → still `Not logged in`**; +`USER` → `OK`; allowlist *minus*
+`HOME` +`USER` → `OK`; `PATH`+`USER` alone → `OK`. So `USER` and only `USER` —
+not `HOME` (the credential is not in the config directory), and **not the other
+conventional spelling of the same fact**, which is ADR 0150's rule one more
+time. The table lives in `HARNESS_LOGIN_ENV`'s docstring, next to what it
+justifies. `DEFAULT_ENV_ALLOWLIST` is unchanged, and two tests say so out loud,
+because the obvious fix is one word on that line and it would let every gate
+pass on every repo spend the operator's quota with nobody asked.
+
+**F-M5-2**: `_live_provider_from_base_ref` put `{impl, model}` on the wire, so
+`impl: command` — the provider needing **no credential at all**, the one ADR
+0154 points every new adopter at — was refused worker-side (`worker refused
+configuration: … no `command:` block is present`) and G2 reported that as a
+behavioural regression. `ModelProviderConfig` is data; the validated block
+crosses whole now and `model_validate` rebuilds it, argv template, output
+pointer, `isolation:` assertion and fallback chain intact.
+
+**The live proof**, same pilot clone, persona, proposer and flag as ADR 0158:
+
+```
+G2 pass  2 scenario(s) re-executed; every previously-passing one still passes.
+G3 fail  candidate does not beat the p95 of the random control cohort
+evidence: 7 corpus pass(es) (14 scenario execution(s)) … live_model_calls: True
+```
+
+ADR 0158 got `G2 fail — 2 previously-passing scenario(s) no longer pass` out of
+29 `claude -p` runs that exited in ~30 ms with `Not logged in`, and its whole
+gate pass took 20 seconds. This one took 115 and served 12 live misses inside
+the worker. **Same verdict word, completely different claim**: the rejection is
+a judgement of the prompt now, and G3's arithmetic is what said no. Drift
+0.007/0.500. Acceptance is *reachable*, not reached — **this fixes the
+apparatus, not the learning**, and the two should not be confused: the
+rule-based lesson still moved nothing, exactly as ADR 0157's falsification and
+0158's paired `loop score` predicted.
+
+Both defects reached G2 as an ordinary regression, so **the exit code and the
+verdict cannot distinguish a live gate pass from the two defects that made one
+impossible** — which is why the live test now asserts `live_model_calls is
+True`, asserts real executions in the evidence line, and asserts that neither
+`worker refused configuration` nor `Not logged in` appears in the run.
+
+**Green bar:** `pytest -q` 2700 passed / 7 skipped / 1 xfailed, `mypy aef
+examples` clean (135 files), `ruff check .` clean, `ruff format --check` clean.
+**+19 tests, 2689 → 2708**, and the two strict xfails became passing tests
+rather than being deleted. **6 mutations planted, 6 killed**, every restore
+sha256-verified. **18 live calls** of a ≤30 budget. **No rubric dimension
+moves** — this is apparatus.
+
+**Reported, not fixed:** the one remaining strict xfail in
+`tests/cli/test_prompt_repo_acceptance.py` is F-M5-1 (obligation 6's
+every-graph scan, unreachable under a widened root), which belongs to another
+worker; and the generated `FIRST_DAY.md`/`aef.yaml` templates say nothing about
+the new opt-in — the exact paragraph M7 should place is in ADR 0181.

@@ -169,6 +169,13 @@ class RuleBasedConsolidator:
         # two per run (ADR 0118).
         in_context: dict[tuple[str | None, str], set[str]] = {}
         produced: dict[tuple[str | None, str], set[str]] = {}
+        # The subset of `produced` written by records the reflect node (or the
+        # harness's check producer) called a FAILURE. Kept apart from
+        # `produced` rather than filtered out of it by prefix, because a custom
+        # `signature_fn` need not spell failures `failure:…` — the record's own
+        # `kind` is the fact, and inferring it from the string would be the
+        # same guess `_failure_nodes` refuses to make (ADR 0180).
+        produced_failures: dict[tuple[str | None, str], set[str]] = {}
         for kind in self.kinds:
             for record in memory.query(kind, agent_id=agent_id, limit=self.candidates_per_kind):
                 if record.run_id and record.created_at is not None:
@@ -184,6 +191,8 @@ class RuleBasedConsolidator:
                         )
                     if signature is not None:
                         produced.setdefault(run_key, set()).add(signature)
+                        if record.kind == "failure":
+                            produced_failures.setdefault(run_key, set()).add(signature)
                 if signature is None:
                     continue
                 groups.setdefault((record.agent_id, signature), []).append(record)
@@ -194,12 +203,20 @@ class RuleBasedConsolidator:
             if len(representatives) < self.min_occurrences:
                 continue
             entry = _build_entry(signature, record_agent_id, representatives, self.summarise)
-            helpful, harmful = _tally(signature, entry.kind, record_agent_id, in_context, produced)
+            helpful, harmful, harmful_elsewhere = _tally(
+                signature,
+                entry.kind,
+                record_agent_id,
+                in_context,
+                produced,
+                produced_failures,
+            )
             entry = dataclasses.replace(
                 entry,
                 runs_since_last_seen=_runs_since(entry.last_seen, record_agent_id, runs_seen),
                 helpful=helpful,
                 harmful=harmful,
+                harmful_elsewhere=harmful_elsewhere,
             )
             written.append(knowledge.upsert(entry))
 
@@ -303,42 +320,74 @@ def _tally(
     agent_id: str | None,
     in_context: dict[tuple[str | None, str], set[str]],
     produced: dict[tuple[str | None, str], set[str]],
-) -> tuple[int, int]:
-    """Runs of this agent that had `signature` in context: harmful if the
-    run REPRODUCED that failure, helpful otherwise. A lesson never shown to a
-    run scores nothing either way — absence of evidence.
+    produced_failures: dict[tuple[str | None, str], set[str]],
+) -> tuple[int, int, int]:
+    """Runs of this agent that had `signature` in context, split THREE ways. A
+    lesson never shown to a run scores nothing at all — absence of evidence.
 
-    Two rules, both fixes for defects an adversarial round reproduced (ADR
-    0126, erratum to 0118):
+    | the run… | outcome |
+    |---|---|
+    | reproduced this failure | `harmful` |
+    | failed nothing | `helpful` |
+    | resolved this failure and failed something else | `harmful_elsewhere` |
 
-    1. **Only `failure` entries are tallied.** A success entry keeps `(0, 0)`.
-       The tally asks "was this failure avoided", and every run that repeats a
-       success necessarily re-produces the success signature, so a success
-       lesson scored `harmful` once per time it worked — the metric read
-       backwards on exactly the entries it was most confident about.
+    Four rules, each a fix for a defect somebody reproduced.
+
+    1. **Only `failure` entries are tallied** (ADR 0126, erratum to 0118). A
+       success entry keeps `(0, 0, 0)`. The tally asks "was this failure
+       avoided", and every run that repeats a success necessarily re-produces
+       the success signature, so a success lesson scored `harmful` once per
+       time it worked — the metric read backwards on exactly the entries it
+       was most confident about.
     2. **Reproduced means the entry's failing-node list appears, in order,
-       inside a failure signature the run produced.** Not string equality: a
-       run whose `fetch` failure cascaded into `parse` signs itself
-       `failure:fetch>parse`, which is a different string from the
+       inside a failure signature the run produced** (ADR 0126). Not string
+       equality: a run whose `fetch` failure cascaded into `parse` signs
+       itself `failure:fetch>parse`, which is a different string from the
        `failure:fetch` lesson it was shown, so equality counted the run
        *helpful* — the lesson was credited with preventing the very failure
        that had just happened. Order is kept (a subsequence, not a set
        subset) because `default_signature` states that `A>B` and `B>A` are
        different failures. A signature this rule cannot parse as a node list
        — a custom `signature_fn` — still matches itself by equality.
+    3. **`helpful` requires that the run failed NOTHING** (ADR 0180). ADR
+       0118's two outcomes had no room for "had it in context and failed
+       DIFFERENTLY", so a run that resolved the lesson's failure and broke
+       another owner check counted toward the good column. That is not a
+       corner case: it is the single instance ADR 0162's rig B produced
+       (`sum-35-priory-gatehouse` — the word-cap lesson shortened the summary
+       from 30 words to 28 and the shortened text stopped matching a content
+       regex), and the shipped tally read `helpful=7 harmful=3` with the one
+       genuinely harmful run inside the 7. A signal that moves the wrong way
+       as harm rises is worse than no signal, which is why ADR 0162 refused
+       to rank on it.
+    4. **Failure is the record's `kind`, not a prefix on its signature.** The
+       third outcome is decided by `produced_failures`, which is populated
+       only from records the producer marked `kind="failure"`. A run's
+       `success:<objective>` signature is not a failure however it is spelled,
+       and a custom `signature_fn` may spell failures any way it likes.
+
+    Rule 3 changes what `helpful` MEANS, and the honest reading of it is
+    narrow: the consolidator sees records, not scenarios, so it cannot know
+    whether the other failure had passed on some previous run of the same
+    scenario. What it can say is that the run had the lesson and still failed,
+    which is enough to keep it out of the good column and not enough to blame
+    the lesson for it. ADR 0180 states that limit and does NOT rank on the
+    third counter — surfacing it is the whole change.
     """
     if kind != "failure":
-        return 0, 0
+        return 0, 0, 0
     entry_nodes = _failure_nodes(signature)
-    helpful = harmful = 0
+    helpful = harmful = harmful_elsewhere = 0
     for run_key, shown in in_context.items():
         if run_key[0] != agent_id or signature not in shown:
             continue
         if _reproduced(signature, entry_nodes, produced.get(run_key, set())):
             harmful += 1
+        elif produced_failures.get(run_key):
+            harmful_elsewhere += 1
         else:
             helpful += 1
-    return helpful, harmful
+    return helpful, harmful, harmful_elsewhere
 
 
 def _failure_nodes(signature: str) -> tuple[str, ...] | None:

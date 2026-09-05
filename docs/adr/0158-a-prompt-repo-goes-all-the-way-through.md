@@ -488,6 +488,45 @@ gate pass (F-M5-2, F-M5-3), and even with them fixed, the one lesson this
 proposer writes today moved nothing on the one check it was grounded in. The
 sequence is proved; the learning is not.
 
+## Erratum (2026-09-05, ADR 0181) — F-M5-2 and F-M5-3 are closed
+
+Both HIGH findings are fixed, and their two strict xfails in
+`tests/cli/test_prompt_repo_acceptance.py` are passing tests now.
+
+**F-M5-3** was fixed as the decision this ADR asked for rather than as the
+one-word patch it warned against: `gates.live_model_calls` in `aef.yaml`, off
+by default, read from the base ref. With it false the worker's allowlist is
+byte-for-byte what it was here and `--cassette-miss live` is refused by name;
+with it true the allowlist gains `sandbox.HARNESS_LOGIN_ENV`, measured to be
+`USER` alone — `LOGNAME` does **not** substitute and `HOME` is not needed.
+`DEFAULT_ENV_ALLOWLIST` is unchanged.
+
+**F-M5-2** was fixed by putting the validated `ModelProviderConfig` on the wire
+whole instead of `{impl, model}`; `impl: command` now rebuilds worker-side with
+its argv template and `isolation:` assertion intact.
+
+So this ADR's sentence *"no provider serves a live cassette miss inside the
+gates today"* was true when written and its "today" should be read as
+2026-09-04. It is false as of ADR 0181.
+
+**The live half's conclusion is superseded.** `G2 fail — 2 previously-passing
+scenario(s) no longer pass` was an artifact of F-M5-3: 29 `claude -p`
+invocations exited in ~30 ms with `Not logged in`, which is also why the whole
+gate pass finished in 20 seconds. Re-run on the same pilot clone, the same
+persona, the same proposer and the same flag with the opt-in on, it reaches
+**`G2 pass` — 2 scenarios re-executed, every previously-passing one still
+passes — and `G3 fail` on the control cohort's p95**, in 115 seconds, with 12
+live cassette misses served inside the worker and drift 0.007/0.500. The
+verdict is REJECT either way and the two rejections are different claims: this
+one is a judgement of the prompt.
+
+What this ADR measured *about the prompt* stands and is corroborated. Its
+paired in-process `aef loop score` (0.0000 → 0.0000) and its falsification of
+ADR 0157's L4 reach the same conclusion G3's cohort comparison does by another
+route: the rule-based lesson, with its evidence redacted (ADR 0174), carries
+nothing a `contains` check can act on. ADR 0181 fixes the apparatus, not the
+learning. **F-M5-1 stands, unfixed.**
+
 ## Green bar
 
 `pytest -q`: **2511 passed, 7 skipped, 4 xfailed** (2522 collected, from 2516

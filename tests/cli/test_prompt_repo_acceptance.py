@@ -39,19 +39,19 @@ convenience, and both written up in ADR 0158:
   prompt is a changed cassette key, so the candidate misses every recorded
   call and G2 rejects it. That is the changed-prompt-cannot-replay rule, not
   a judgement on the prompt, and `UPGRADE_LOOP.md`'s own rule says a prompt
-  candidate is gated live or not at all. The live half below does that. The
-  offline half cannot: `--cassette-miss live` carries only `{impl, model}`
-  across the sandbox boundary (`aef/harness/loop.py::_live_provider_from_base_ref`
-  -> `aef/harness/node_worker.py::_configure`), and `impl: command` — the one
-  provider that needs no credential, and the one ADR 0154 points every new
-  adopter at — cannot be rebuilt from those two fields. Reproduced by
-  `test_the_live_provider_spec_can_rebuild_the_credential_free_provider`.
-  And `impl: claude_code`, which *can* be rebuilt from them, is `Not logged
-  in` inside the worker because the sandbox's environment allowlist has no
-  `USER` — reproduced by
-  `test_the_sandbox_env_allowlist_carries_what_the_harness_login_needs`. So
-  **no** provider serves a live cassette miss inside the gates today, and
-  ADR 0158 records the paired live score `aef loop score` made instead.
+  candidate is gated live or not at all. The live half below does that; the
+  offline half stays on `fail` because CI holds no credential and must not
+  want one.
+* **What ADR 0181 changed here.** ADR 0158 found that *no* provider served a
+  live cassette miss inside the gates: `impl: command` could not be rebuilt
+  worker-side because only `{impl, model}` crossed the boundary (F-M5-2), and
+  `impl: claude_code`, which could, answered `Not logged in` because the
+  sandbox's environment allowlist has no `USER` (F-M5-3). Both were pinned
+  here as strict xfails and both are now closed, so the two tests that
+  carried them assert the fixes instead: the whole `model_provider` block
+  crosses, and the login reaches the worker **only** where the repo set
+  `gates.live_model_calls: true`. The default allowlist is unchanged — the
+  live half's config opts in explicitly, and the offline half never does.
 """
 
 from __future__ import annotations
@@ -665,55 +665,62 @@ def test_obligation_six_scans_every_graph_under_a_widened_root(
     assert "5 graphs scanned" in doctor.stdout, doctor.stdout
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "F-M5-2: `--cassette-miss live` carries only {impl, model} from the base ref "
-        "across the sandbox boundary (aef/harness/loop.py::_live_provider_from_base_ref "
-        "-> aef/harness/node_worker.py::_configure), and `impl: command` cannot be "
-        "rebuilt from those two fields. So the one provider that needs no credential — "
-        "and the one ADR 0154 points every new adopter at — is the one provider a live "
-        "gate pass cannot use, and every scenario fails with `worker refused "
-        "configuration` which g2_outcome then reports only as `1 error(s)`"
-    ),
-)
+# Was a strict xfail pinning F-M5-2; ADR 0181 (fix wave K1) closed it, so this
+# is now the regression test for the provider crossing the sandbox boundary.
 def test_the_live_provider_spec_can_rebuild_the_credential_free_provider(
     tmp_path: Path,
 ) -> None:
+    """The base ref's WHOLE `model_provider` block crosses, so `impl: command`
+    — the one provider that needs no credential, and the one ADR 0154 points
+    every new adopter at — is rebuilt worker-side with its argv template
+    intact. While only `{impl, model}` crossed, the schema refused the result
+    (correctly: there was no `command:` block) and every scenario in every
+    cohort member failed as `worker refused configuration`, which
+    `g2_outcome` reported only as `1 error(s)`."""
+    from aef.config.factory import build_model_provider
     from aef.config.loader import load_agent_config
     from aef.config.schema import ModelProviderConfig
+    from aef.providers.command_provider import CommandProvider
 
     config_path = tmp_path / "aef.yaml"
     config_path.write_text(STUB_CONFIG)
     agent_config = load_agent_config(config_path)
-    # Exactly what `_live_provider_from_base_ref` puts on the wire.
-    spec = {
-        "impl": agent_config.model_provider.impl,
-        "model": agent_config.model_provider.model,
-    }
+    # Exactly what `_live_provider_from_base_ref` puts on the wire, through the
+    # JSON the framed protocol actually carries.
+    spec = json.loads(json.dumps(agent_config.model_provider.model_dump(mode="json")))
     # ...and exactly what `node_worker._configure` does with it.
-    ModelProviderConfig(impl=str(spec["impl"]), model=str(spec.get("model", "")))
+    provider = build_model_provider(ModelProviderConfig.model_validate(spec))
+    assert isinstance(provider, CommandProvider)
+    assert spec["command"]["argv"] == ["/bin/echo", "{system}", "{prompt}"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "F-M5-3: `USER` is not in `sandbox.DEFAULT_ENV_ALLOWLIST`, and without it the "
-        "`claude` CLI answers `Not logged in - Please run /login`. Measured: the "
-        "allowlist alone -> `is_error: true, 'Not logged in'`; the allowlist plus USER "
-        "alone -> `is_error: false, 'OK'`. So `ClaudeCodeProvider` — whose whole premise "
-        "(ADR 0112) is that the coding agent's own login IS the credential — cannot "
-        "authenticate inside the gate's sandbox worker, every `--cassette-miss live` "
-        "request from a changed prompt fails as `ModelProviderError: claude exited 1`, "
-        "and G2 reports it as `N previously-passing scenario(s) no longer pass`. "
-        "`UPGRADE_LOOP.md` says a prompt candidate is gated live or not at all; today "
-        "it is the second"
-    ),
-)
+# Was a strict xfail pinning F-M5-3; ADR 0181 (fix wave K1) closed it — as a
+# decision rather than a one-word patch, which is what M5 asked for.
 def test_the_sandbox_env_allowlist_carries_what_the_harness_login_needs() -> None:
-    from aef.harness.sandbox import DEFAULT_ENV_ALLOWLIST
+    """The login reaches the gate's worker, and ONLY where the repo asked.
 
-    assert "USER" in DEFAULT_ENV_ALLOWLIST, sorted(DEFAULT_ENV_ALLOWLIST)
+    Measured (ADR 0181, the exact argv `ClaudeCodeProvider` builds): the
+    allowlist alone -> `is_error: true, 'Not logged in'`; with `LOGNAME` ->
+    still `Not logged in`; with `USER` -> `is_error: false, 'OK'`; and
+    `PATH + USER` alone is enough, so it is not `HOME` either.
+
+    The default allowlist is UNCHANGED and this test says so: it exists so no
+    credential is inherited by the one process that runs candidate code, and
+    a fix that widened it globally would let every gate pass on every repo
+    spend the operator's quota. `gates.live_model_calls: true` is how an
+    owner asks for the widening, per repo, in writing."""
+    from aef.harness.sandbox import (
+        DEFAULT_ENV_ALLOWLIST,
+        HARNESS_LOGIN_ENV,
+        NetworkPolicy,
+        SandboxPolicy,
+        with_harness_login,
+    )
+
+    assert "USER" not in DEFAULT_ENV_ALLOWLIST, sorted(DEFAULT_ENV_ALLOWLIST)
+    assert HARNESS_LOGIN_ENV == frozenset({"USER"})
+    widened = with_harness_login(SandboxPolicy(network=NetworkPolicy.ACKNOWLEDGED_UNISOLATED))
+    assert "USER" in widened.env_allowlist
 
 
 # --------------------------------------------------------------------------
@@ -739,6 +746,15 @@ tools:
 policies:
   require_hitl_above_risk: 0.0
   forbid: []
+
+# The per-repo opt-in that makes `--cassette-miss live` legal (ADR 0181).
+# Off by default everywhere; on here because this test IS the live gate pass,
+# and with it the gate's worker inherits the operator's harness login — which
+# is to say a candidate's code can spend the operator's quota. Stated in the
+# config rather than passed as a flag on purpose: it is a property of the
+# repo, not of one invocation.
+gates:
+  live_model_calls: true
 
 objectives: "Answer Accela connector questions."
 
@@ -901,14 +917,14 @@ def test_a_real_prompt_repo_gates_a_prompt_candidate_live(tmp_path: Path) -> Non
         "--config",
         "aef.yaml",
         # LIVE, on purpose: a changed prompt is a changed cassette key, so the
-        # only honest way to score one is to make the call. MEASURED, and this
-        # is F-M5-3: the call does not survive the gate's sandbox — the
-        # worker's scrubbed environment has no `USER`, so `claude -p` answers
-        # `Not logged in`, every miss fails, and G2's rejection is an artifact
-        # of the environment rather than a judgement of the prompt. The flag
-        # is passed as written anyway: the day the allowlist carries `USER`,
-        # this test starts making the measurement it was written to make, and
-        # until then the strict xfail above says so out loud.
+        # only honest way to score one is to make the call. This is the
+        # measurement ADR 0158 could not make — its F-M5-3 meant the call did
+        # not survive the gate's sandbox (`Not logged in`) and its F-M5-2
+        # meant no credential-free provider could cross either, so G2's
+        # rejection was an artifact of the environment rather than a
+        # judgement of the prompt. Both closed in ADR 0181, and the assertions
+        # below check that the executions really happened rather than trusting
+        # the exit code.
         "--cassette-miss",
         "live",
         "--proposer",
@@ -931,6 +947,17 @@ def test_a_real_prompt_repo_gates_a_prompt_candidate_live(tmp_path: Path) -> Non
     detail = gated[0]["detail"]
     gates = {str(g["gate"]): g for g in detail["gates"]}  # type: ignore[index,union-attr]
     assert "G2" in gates, gates
+    # The candidates ran under the operator's own harness login, and the
+    # ledger says so — ADR 0181's audit-trail half.
+    assert detail["live_model_calls"] is True, detail  # type: ignore[index]
+    # And they really EXECUTED. `IsolationError: worker refused configuration`
+    # (F-M5-2) and `ModelProviderError: claude exited 1 ... Not logged in`
+    # (F-M5-3) both reached G2 as an ordinary regression, so the exit code and
+    # the verdict cannot distinguish a live gate pass from the two defects
+    # that made one impossible. The evidence line counts real executions.
+    assert "scenario execution(s)" in str(detail["evidence"]), detail  # type: ignore[index]
+    for failure_text in ("worker refused configuration", "Not logged in"):
+        assert failure_text not in cycle.stdout, cycle.stdout
     # A verdict was REACHED. Which one it is, is the measurement, and it is
     # recorded in ADR 0158 rather than demanded here.
     assert [k for k in kinds if k in ("accepted", "rejected", "escalated")], kinds

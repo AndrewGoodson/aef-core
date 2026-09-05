@@ -345,6 +345,36 @@ class ShadowConfig(_StrictModel):
         return value
 
 
+class GatesConfig(_StrictModel):
+    """What the loop's gates are allowed to do to this repo's owner (ADR 0181).
+
+    One field so far, and it is a security decision rather than a tuning knob.
+    """
+
+    live_model_calls: bool = False
+    """May a candidate's model calls go LIVE inside the gates' sandbox worker?
+
+    **Default false, and that default is the containment property.** The
+    worker is the one place the harness executes code an agent wrote, and its
+    environment is scrubbed to `sandbox.DEFAULT_ENV_ALLOWLIST` so that no
+    credential is inherited — which is why `claude -p` answers `Not logged in`
+    there (ADR 0158's F-M5-3). Setting this true adds
+    `sandbox.HARNESS_LOGIN_ENV` to that allowlist for the gate's worker, and
+    the consequence is worth stating in the owner's own words: *a candidate's
+    code can then spend your harness quota.*
+
+    It is the price of `--cassette-miss live`, which is the only honest way to
+    score a changed prompt — a changed prompt is a changed cassette key, so
+    replay scores it 0 and that is an artifact, not a verdict (ADR 0123/0126).
+    With this false, `--cassette-miss live` is refused by name rather than
+    quietly rejecting every candidate: the second is what happened for the
+    whole of ADR 0158.
+
+    Recorded on every `gated` ledger event, so a reader of the audit trail can
+    see which gate passes ran candidates under the operator's login.
+    """
+
+
 class AgentConfig(_StrictModel):
     extends: str = "_base"
 
@@ -374,5 +404,6 @@ class AgentConfig(_StrictModel):
     tools: ToolsConfig = ToolsConfig()
     policies: PoliciesConfig = PoliciesConfig()
     shadow: ShadowConfig = ShadowConfig()
+    gates: GatesConfig = GatesConfig()
     objectives: str
     evolution: EvolutionSettings = EvolutionSettings()

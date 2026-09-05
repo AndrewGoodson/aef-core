@@ -16,22 +16,26 @@ test, and nothing downstream distinguishes the two (ADR 0157's caveat)."""
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from aef.harness.check_memory import (
     _OP_PROSE,
     CHECK_OBSERVER_NODE_ID,
+    CHECK_RECORD_ID_PREFIX,
+    OUTPUT_LOCATION,
     check_failure_record,
     check_key,
-    write_check_failure_record,
+    check_record_id,
+    record_check_outcomes,
 )
 from aef.harness.checks import OPS, TaskCheck, evaluate_checks
 from aef.reasoning.nodes import render_retrieved_context
 from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
 from aef.services.knowledge.consolidate import RuleBasedConsolidator, default_signature
 from aef.services.knowledge.in_memory import InMemoryKnowledgeStore
+from aef.services.memory.base import MemoryRecord, MemoryStore
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.state import AEFState
 
@@ -90,7 +94,7 @@ def test_zero_knowledge_entries_becomes_one_when_the_same_check_fails_twice() ->
     one owner check do."""
     memory = InMemoryMemoryStore()
     for run in ("r1", "r2"):
-        written = write_check_failure_record(
+        written = record_check_outcomes(
             memory=memory,
             checks=(VERDICT,),
             final_state=_state(),
@@ -188,13 +192,18 @@ def test_the_signature_carries_no_expected_value_into_a_rendered_prompt() -> Non
 # --- what the lesson does say -----------------------------------------------
 
 
-def test_the_feedback_names_the_check_and_the_observed_value() -> None:
+def test_the_feedback_names_the_check_and_the_shape_of_what_was_observed() -> None:
+    """Updated deliberately by ADR 0180: this used to assert the observed TEXT
+    was in the feedback. It is the counts that stay — the excerpt was the
+    model's own output travelling into its next prompt, which ADR 0162
+    measured making the failure it describes more likely."""
     record = _record(_state("the connector stays disabled"), VERDICT)
     assert record is not None
     feedback = str(record.content["verbal_feedback"])
     assert "working_memory.prompt_agent" in feedback
     assert "does not contain a required substring" in feedback
-    assert "the connector stays disabled" in feedback
+    assert "observed 4 words, 28 chars" in feedback
+    assert "the connector stays disabled" not in feedback
 
 
 def test_a_missing_value_is_reported_as_missing_not_as_empty() -> None:
@@ -274,7 +283,7 @@ def test_two_different_required_substrings_on_one_field_are_one_lesson() -> None
     corpus of distinct scenarios (ADR 0155's summary split)."""
     memory = InMemoryMemoryStore()
     for run, value in (("r1", "swimming"), ("r2", "landslip")):
-        write_check_failure_record(
+        record_check_outcomes(
             memory=memory,
             checks=(TaskCheck(path="working_memory.summary", op="contains", value=value),),
             final_state=AEFState(
@@ -296,7 +305,7 @@ def test_two_different_required_substrings_on_one_field_are_one_lesson() -> None
 def test_a_different_field_is_a_different_lesson() -> None:
     memory = InMemoryMemoryStore()
     for run, path in (("r1", "working_memory.summary"), ("r2", "working_memory.answer")):
-        write_check_failure_record(
+        record_check_outcomes(
             memory=memory,
             checks=(TaskCheck(path=path, op="contains", value="x"),),
             final_state=AEFState(run_id=run, agent_id="a", objective="o"),
@@ -312,7 +321,7 @@ def test_a_different_field_is_a_different_lesson() -> None:
 def test_one_occurrence_is_still_an_episode() -> None:
     """ADR 0110's threshold is not weakened by this producer."""
     memory = InMemoryMemoryStore()
-    write_check_failure_record(
+    record_check_outcomes(
         memory=memory,
         checks=(VERDICT,),
         final_state=_state(),
@@ -354,3 +363,258 @@ def test_no_operator_renders_its_expected_value(op: str) -> None:
     if record is None:  # the check held; nothing to leak
         return
     assert "ZQXMARKER" not in json.dumps(record.content)
+
+
+# --- the run's own OUTPUT is never in the lesson either (ADR 0180) -----------
+
+# The first is `sum-35-priory-gatehouse`'s with-lesson summary, verbatim from
+# `docs/research/j4/harm.jsonl` — the run ADR 0162 rig B found was harmful.
+# The second OPENS with the marlin pilot's answer as ADR 0174 quotes it
+# (`**No. The Accela connector…`) and continues plausibly; only its opening is
+# from the record, and the property under test does not depend on the rest.
+REAL_OUTPUTS = (
+    "From February, the Priory gatehouse gets twelve weeks of stonework, "
+    "repointing and lead roof renewal, staying open except two April weeks; "
+    "the precinct wall is assessed separately later.",
+    "**No. The Accela connector must remain `enabled: false` until the "
+    "credentials are provisioned and the sandbox has been exercised.**",
+)
+
+OUTPUT_WINDOW = 12
+
+
+def _windows(text: str, n: int = OUTPUT_WINDOW) -> set[str]:
+    body = " ".join(text.split())
+    return {body[i : i + n] for i in range(max(len(body) - n + 1, 0))}
+
+
+@pytest.mark.parametrize("output", REAL_OUTPUTS)
+@pytest.mark.parametrize(("op", "value"), [("contains", "ZQXMARKER"), ("max_words", 3)])
+def test_no_record_repeats_a_window_of_the_output_it_was_computed_from(
+    output: str, op: str, value: object
+) -> None:
+    """The generic property, not one string.
+
+    A `verbal_feedback` is a prompt surface: `RuleBasedPromptProposer` pastes
+    it into the persona and `render_retrieved_context` renders it as a lesson
+    bullet. ADR 0162 rig B measured a lesson whose text carried a 38-word
+    example summary making two at-cap runs LONGER and breaking the very cap
+    check the lesson is about — so no window of the run's own output may
+    survive into the record, and 12 characters is short enough that an excerpt
+    of any useful length trips it.
+    """
+    record = _record(
+        _state(output), TaskCheck(path="working_memory.prompt_agent", op=op, value=value)
+    )
+    assert record is not None, "expected the check to fail and a record to exist"
+    blob = " ".join(json.dumps(record.content).split())
+    leaked = sorted(w for w in _windows(output) if w in blob)
+    assert leaked == [], f"{len(leaked)} window(s) of the output survived, e.g. {leaked[:3]}"
+
+
+def test_the_counts_survive_even_though_the_text_does_not() -> None:
+    """Dropping the excerpt must not drop the observation. The words, the
+    characters, the path, the operator and the check tallies are all still
+    there — they are what the harness computed, as opposed to what the model
+    wrote."""
+    record = _record(
+        _state("one two three four five"),
+        TaskCheck(path="working_memory.prompt_agent", op="max_words", value=3),
+        TaskCheck(path="working_memory.nowhere", op="exists"),
+    )
+    assert record is not None
+    feedback = str(record.content["verbal_feedback"])
+    assert "5 words, 23 chars" in feedback
+    assert "working_memory.prompt_agent" in feedback
+    assert "longer than the owner's maximum" in feedback
+    assert record.content["checks_passed"] == 0
+    assert record.content["checks_total"] == 2
+
+
+def test_the_record_says_where_a_human_can_read_the_output() -> None:
+    """A redaction that leaves no forwarding address makes the evidence
+    unreachable, which is the failure mode ADR 0110 names for a summary that
+    replaces its own source."""
+    record = _record(_state("something"), VERDICT)
+    assert record is not None
+    assert record.content["output_location"] == OUTPUT_LOCATION
+    # In the record for a human, NOT in the lines a model is shown: the critic
+    # excerpts each quoted signal at 160 characters, so a sentence spent in the
+    # failure line pushes the observation out of `verbal_feedback`.
+    assert OUTPUT_LOCATION not in str(record.content["verbal_feedback"])
+    assert "observed 1 words, 9 chars" in str(record.content["verbal_feedback"])
+
+
+def test_a_non_text_value_is_reported_by_type_not_by_repr() -> None:
+    """`repr(True)` is the run's output as much as a sentence is, and its
+    LENGTH is the answer on a boolean field (4 characters versus 5)."""
+    state = AEFState(run_id="r1", agent_id="a", objective="o", working_memory={"flag": True})
+    record = check_failure_record(
+        checks=(TaskCheck(path="working_memory.flag", op="equals", value="no"),),
+        final_state=state,
+        critic=CRITIC,
+        judge=JUDGE,
+        run_id="r1",
+        agent_id="a",
+        created_at=NOW,
+    )
+    assert record is not None
+    feedback = str(record.content["verbal_feedback"])
+    assert "a non-text value of type bool" in feedback
+    assert "True" not in feedback
+    assert "chars" not in feedback
+
+
+# --- one producer, callable from every scored path (ADR 0180) ---------------
+
+
+class _CountingStore(InMemoryMemoryStore):
+    """A real store that also counts writes. Not a mock of the thing under
+    test: `record_check_outcomes` is exercised against a working store, and
+    the counter only observes."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.writes = 0
+
+    def write(self, record: MemoryRecord) -> str:
+        self.writes += 1
+        return super().write(record)
+
+
+def _record_into(memory: MemoryStore, run_id: str = "r1") -> MemoryRecord | None:
+    return record_check_outcomes(
+        memory=memory,
+        checks=(VERDICT,),
+        final_state=_state(),
+        critic=CRITIC,
+        judge=JUDGE,
+        run_id=run_id,
+        agent_id="a",
+        created_at=NOW,
+    )
+
+
+def test_recording_one_run_twice_writes_one_record() -> None:
+    """The wiring this unblocks is more than one call site — `bootstrap`, and
+    whatever scores a run against owner checks with a store present — so
+    wiring it twice must not manufacture evidence. `source_record_ids` is the
+    entry's only measure of how well-evidenced it is."""
+    memory = _CountingStore()
+    first = _record_into(memory)
+    second = _record_into(memory)
+    assert first is not None and second is not None
+    assert memory.writes == 1
+    assert second.id == first.id
+    assert len(memory.query("failure", run_id="r1", agent_id="a", limit=10)) == 1
+
+
+def test_the_second_call_returns_the_record_already_in_the_store() -> None:
+    """Not `None`: the run DID fail an owner check, and a caller that reports
+    on the return value (bootstrap's `check_failed` line) must still say so."""
+    memory = _CountingStore()
+    _record_into(memory)
+    again = _record_into(memory)
+    assert again is not None
+    assert again.kind == "failure"
+    assert again.content["failed_checks"] == ["check:working_memory.prompt_agent:contains"]
+
+
+def test_the_record_id_is_derived_from_the_run_and_the_failed_checks() -> None:
+    """Derived rather than a uuid4, so a store keyed by id collapses a repeat
+    even where the query-based guard cannot see it — `RunScopedMemory` answers
+    queries from its per-input scratch while mirroring writes into a durable
+    sink."""
+    record = _record(_state(), VERDICT)
+    assert record is not None
+    assert record.id == check_record_id(
+        agent_id="a", run_id="r1", keys=["check:working_memory.prompt_agent:contains"]
+    )
+    assert record.id.startswith(CHECK_RECORD_ID_PREFIX)
+    other = _record(_state(), VERDICT, run_id="r2")
+    assert other is not None
+    assert other.id != record.id
+
+
+def test_two_different_runs_are_two_records() -> None:
+    """Idempotence is per run, not per signature — recurrence across DISTINCT
+    runs is exactly what ADR 0110's threshold counts."""
+    memory = _CountingStore()
+    _record_into(memory, run_id="r1")
+    _record_into(memory, run_id="r2")
+    assert memory.writes == 2
+    entries = RuleBasedConsolidator().consolidate(memory, InMemoryKnowledgeStore(), agent_id="a")
+    assert len(entries) == 1
+    assert entries[0].occurrence_count == 2
+
+
+def test_a_scored_run_recording_its_check_failure_keeps_the_lesson_fresh() -> None:
+    """ADR 0175's defect 1, in the small.
+
+    A lesson seeded from two runs, then a scored split where every run writes a
+    `success` record. `runs_since_last_seen` climbs with the split — ADR 0116
+    demotes on exactly that number, and over 17 scenarios the measured entry
+    went from rank 0 to rank 39 — and the lesson can never be re-seen, because
+    before ADR 0180 only `bootstrap` could produce a check-derived failure. The
+    producer being one callable function is what closes it: the run that DOES
+    fail the same check records it, and the counter resets.
+    """
+    seeded = InMemoryMemoryStore()
+    for run in ("b1", "b2"):
+        _record_into(seeded, run_id=run)
+
+    def split(memory: MemoryStore, *, producer_on_the_scored_path: bool) -> int:
+        for i in range(6):
+            at = NOW + timedelta(minutes=i + 1)
+            memory.write(
+                MemoryRecord(
+                    kind="success",
+                    content={"objective": f"scored-{i}", "verbal_feedback": "clean run"},
+                    run_id=f"scored-{i}",
+                    agent_id="a",
+                    created_at=at,
+                )
+            )
+            if producer_on_the_scored_path and i == 5:
+                record_check_outcomes(
+                    memory=memory,
+                    checks=(VERDICT,),
+                    final_state=_state(),
+                    critic=CRITIC,
+                    judge=JUDGE,
+                    run_id=f"scored-{i}",
+                    agent_id="a",
+                    created_at=at,
+                )
+        entries = RuleBasedConsolidator().consolidate(
+            memory, InMemoryKnowledgeStore(), agent_id="a"
+        )
+        entry = next(e for e in entries if e.kind == "failure")
+        return entry.runs_since_last_seen
+
+    without = split(_copy_of(seeded), producer_on_the_scored_path=False)
+    with_producer = split(_copy_of(seeded), producer_on_the_scored_path=True)
+    assert without == 6, "every scored run is a run this lesson has gone without recurring"
+    assert with_producer == 0, "the run that failed the same check re-freshens it"
+
+
+def _copy_of(memory: InMemoryMemoryStore) -> InMemoryMemoryStore:
+    fresh = InMemoryMemoryStore()
+    for kind in ("failure", "success"):
+        for record in memory.query(kind, limit=100):  # type: ignore[arg-type]
+            fresh.write(record)
+    return fresh
+
+
+def test_wiring_the_producer_twice_does_not_inflate_the_evidence() -> None:
+    """The end-to-end version of the idempotence property: two call sites
+    firing on each of two runs must still consolidate to a two-run lesson, not
+    a four-run one."""
+    memory = _CountingStore()
+    for run in ("r1", "r2"):
+        _record_into(memory, run_id=run)  # e.g. bootstrap
+        _record_into(memory, run_id=run)  # e.g. the scored path
+    entries = RuleBasedConsolidator().consolidate(memory, InMemoryKnowledgeStore(), agent_id="a")
+    assert len(entries) == 1
+    assert entries[0].occurrence_count == 2
+    assert memory.writes == 2
