@@ -6555,3 +6555,240 @@ pre-0197 pattern → 1 (`sk-ant-api03-…`). Six for six.
 
 Erratum appended to ADR 0163 §5 with the new number; `make measure` pins the
 line against the erratum, so the closure is re-checked rather than asserted.
+
+---
+
+## N3 — the round becomes a suite (ADR 0194)
+
+**Branch:** `upgrade/n3-redteam-and-halt`, off `d8357c2`.
+**Rubric claim:** dimension 4, +1 of the 2 J0b deducted (N4 below claims the
+other). Total before: 72.
+
+**Expectation, stated before the work.** J0b's dim-4 deduction had two halves
+and this increment closes the first: *"adversarial rounds exist as a document
+I was not allowed to read, not as an executable red-team suite."* I expected to
+find that the seven attacks were enforced only by prose, and that at least one
+of them had no test running the exploit at all.
+
+**Reproduce (RUN, before any change).** Read what actually held §2 in place:
+
+```
+tests/harness/test_trust_case.py
+  ::test_the_adversarial_section_reports_failures_not_only_successes
+
+    assert text.count("BROKE IT") >= 2
+    assert "demonstrated bypass" in text
+```
+
+Two string searches over a markdown file, plus a **26-line comment inside the
+test** mapping each attack to whichever existing test happened to exercise the
+same control. That comment was not laziness — it was written by an earlier
+worker precisely because a previous blind reviewer had read the prose as the
+record of the round (ADR 0151, dim 4). It was the honest response available at
+the time, and it is still a hand-maintained mapping, in prose, inside a test
+that cannot notice itself going stale.
+
+The concrete failure mode, stated so it is checkable: delete
+`assert_shadowable`, or empty `_ZONE_B_ROOTS`, and **no test in this repository
+would have said "A5 is live again"**. The trust-case test would have said,
+correctly, that the document still contains the words `BROKE IT`.
+
+**Built.** `tests/adversarial/`, 18 modules, one per attack. Each does three
+things and the third is the increment:
+
+1. builds the hostile input — candidate, tag, manifest, diff, graph id, config;
+2. runs it through the real control, imported from `aef/`, asserts the refusal;
+3. **mutates the control away and asserts the attack lands.**
+
+Step 3 is what separates this from a green bar. A test that passes because the
+exploit was never viable looks, from outside, exactly like a test that passes
+because the defence worked. Most modules say so in the assertion message: *"the
+attack above proves less than it claims if this half stops failing."*
+
+Mutation is in-process (`monkeypatch`), so it is re-runnable in CI and cannot
+leave the tree edited — a test that rewrites `aef/` and restores it is one
+interrupted run away from a tree nobody inspects.
+
+**The attack list, with what each mutation actually did.** Seven from the
+document; eleven added, ten of which have a known-good exploit because they
+were found and reproduced on this system rather than imagined for a document.
+
+```
+A1  Tier-1 from config/env/flag   pass tier1_enabled=True    -> AUTO_MERGE
+A2  forged manifest               compare_digest -> True     -> forgery verifies
+A3  signature replay              drop head_sha from payload -> replay verifies
+A4  MUTATING shadow node          assert_shadowable -> noop  -> host marker written
+A5  shadow does direct file I/O   containment OFF            -> host marker written
+A6  tenant tag search             drop the CanarySalt        -> oracle goes chance -> 100%
+A7  harness via evaluator.suites  _forbidden_prefixes -> ()  -> aef.harness.loop:gate resolves
+A8  Zone A symlink                _zone_a_escapes -> {}      -> baseline is 16 bytes of a path
+A9  diff leaves Zone A            _ZONE_B_ROOTS -> ()        -> G0 PASSES a harness rewrite
+A10 bytecode in the drift budget  delete adopt's .gitignore  -> .pyc staged, drift over 0.500
+A11 ../escape graph id            segment_refusal -> ""      -> writes ABOVE the archive root
+A12 reward hack                   delete the MUST_FAIL rows  -> G2 stops firing
+A13 placebo carries the treatment _content_words -> frozenset() -> null drawn from the lesson
+A14 kill the provider you lose to max_dead_fraction=1.0     -> PASSES on chosen survivors
+A15 provider fact as a lesson     _names_a_provider_fact->False -> pasted into the persona
+A16 marker pair in adopter prose  match the BARE marker      -> the adopter's rule is deleted
+A17 self-granted live login       read the candidate's ref   -> the branch grants itself
+A18 silence your own halt         read the working tree      -> the halt reaches nobody
+```
+
+**18 attacks, 18 mutations, 18 caught.**
+
+**Two attacks get through on purpose, and say so.** `assert_shadowable` refuses
+MUTATING and **not** EXTERNAL_CALL — the container is that control, which is
+exactly what §2.1 says — and A14's residual is real: a candidate can kill up to
+`MAX_DEAD_FRACTION` and have those scenarios excluded, one scenario on the real
+six-scenario corpus. Both are written as tests that pass by getting through,
+with docstrings saying that if they ever start raising, the trust case's
+mapping is stale and should be re-read rather than quietly enjoyed. A list
+where everything held is the completeness claim §2.5 has three ADRs about.
+
+**The grep test is replaced, not supplemented.** What stands in its place
+compares the document and the directory **in both directions**: an attack named
+with no module is a claim with nothing behind it, and a module with no line in
+the prose is a control the owner reading §2 is never told about. A second test
+asserts every module carries `test_a<n>_the_control_is_load_bearing`, so the
+mutation discipline is a fact about the files rather than a hope about their
+contents. Neither can be satisfied by editing prose.
+
+**Three file-level mutations, because `monkeypatch` is not enough.** It proves
+a code path is reached and matters; it does not prove the suite would catch an
+edit to the shipped source. Backups copied, sha256 recorded, restored by copy
+and re-verified:
+
+```
+--- baseline ---     a9: rc=0 2 passed   a11: rc=0 8 passed   a18: rc=0 1 passed
+M1 zones.py   `for root in _ZONE_B_ROOTS:` -> `for root in ():`
+   a9:  rc=1  1 failed, 1 passed        restored, sha256 c1052342ab41af9e…
+M2 archive.py `refusal = segment_refusal(graph_id)` -> `refusal = ""`
+   a11: rc=1  8 failed                  restored, sha256 827f61b667d13b2d…
+M3 loop.py    `_halt_channel` against `cand` rather than the base ref
+   a18: rc=1  1 failed                  restored, sha256 99344b67f1c0a5c5…
+--- after ---        a9: rc=0 2 passed   a11: rc=0 8 passed   a18: rc=0 1 passed
+```
+
+M1 is the one worth reading: **one of two, not both**. The traversal attack
+(`agents/../aef/kernel/executor.py`) still refused, because `_segments` rejects
+`..` before any zone question is asked. Defence in depth, measured rather than
+assumed — and the reason the table above records what each mutation DID rather
+than "the control is load-bearing".
+
+**Verdict: dimension 4, +1 (with N4's +1, 13 → 15).** The document can no
+longer drift from the round it reports, in either direction, and 106 tests run
+in 12 seconds. What has NOT changed, and is now stated in §2.0 of the trust
+case where an owner reads it rather than only in an ADR: the suite is still
+written by the party that wrote the defences (§3 prices that in, and no
+automation removes it); a mutation proves a control load-bearing against *the
+exploit that module builds*, not every exploit of its class; and a control
+removed in-process is not a control removed from a deployment.
+
+---
+
+## N4 — a halt that reaches someone (ADR 0195)
+
+**Rubric claim:** dimension 4, the other +1. Same branch, same total before.
+
+**Expectation.** J0b's second dim-4 fact was a line the system printed about
+itself: *"`aef loop digest` printed `Halt channel configured: NO`."* I expected
+to find an unconfigured feature. I found something worse.
+
+**Reproduce (RUN, before any change).** Engage the kill switch, halt, look:
+
+```
+=== A: no halt_channel block (today's default) ===
+kill switch engaged  : True
+ledger HALTED entries: ['halted']
+halt entry detail    : {'reasons': ['a gated change regressed live']}
+external file exists : False
+digest> - Halts: 1
+digest> - Halt channel configured: NO
+```
+
+The loop halted correctly, wrote `HALT.md` into a checkout nobody was looking
+at, appended a tamper-evident ledger entry nobody was reading, and told no one.
+`05-approval-policy.md` §7 says a halt must not depend on someone reading
+GitHub email; this depended on someone noticing the loop had stopped.
+
+Then the part that changes the reading. `HaltNotifier` had a `webhook_url`,
+and **nothing in `aef/` ever called `notify`** — grep found `_halt_notifier()`
+constructed for `.configured` and never for its behaviour, with the URL coming
+from `AEF_HALT_WEBHOOK`, which no workflow sets. So `Halt channel configured:
+NO` did not mean *the owner declined to configure it*. It meant *there is
+nothing an owner could configure and have run*: the ADR 0100 shape, in the one
+surface whose entire job is to say when something has gone wrong.
+
+**Built.** `halt_channel:` in `aef.yaml` — an argv template, the same shape as
+`model_provider.impl: command` (ADR 0154), for the same reason: this repo does
+not know how its owner is paged, so it ships no webhook client, no SDK, no new
+dependency and no guess. `{reason}` is a slot; the reason, the timestamp and
+**the ledger's last entry** go to the command's stdin as one JSON object, so
+the page says which candidate and when without the reader opening the ledger.
+
+Six decisions inside that, each of which could have gone the other way, and
+each with a test:
+
+- **Read from the BASE REF** (ADR 0082/0181). The halt most worth delivering is
+  by construction the one a candidate caused — a rollback of a change every
+  gate passed halts *because* the gates have a blind spot. A channel a
+  candidate could delete on its branch is one it would. This is A18 above.
+- **One resolver for the halt and the digest.** A digest printing `yes` while a
+  halt found nothing to run is this same defect one level up, and harder to
+  notice.
+- **The kill switch is engaged BEFORE the channel runs**, so a channel taking
+  its whole timeout leaves no window in which the loop is still runnable.
+- **Every failure is recorded and none masks the halt** — a missing program, a
+  non-zero exit, a timeout, an unloadable `aef.yaml`. The halt matters more
+  than the notification.
+- **`argv[0]` only** reaches the ledger and the digest. The rest of a command
+  line is where a token ends up when somebody writes one there, and the ledger
+  is committed evidence.
+- **The digest reads notifications from the LEDGER**, not from a parameter: the
+  process that halted is long gone by the time anyone runs `digest`, and a
+  channel that is configured and failing looks identical, from the config
+  alone, to one that works.
+
+**Measured, all three states, `/bin/sh -c 'cat >> file'` as the channel — a
+real subprocess, zero network:**
+
+```
+=== B: halt_channel naming /bin/sh -c 'cat >> file' ===
+external file exists : True
+external file content: '{"at": "2026-09-05T03:00:00+00:00", "event": "halt",
+  "last_ledger_entry": null, "reason": "a gated change regressed live"}'
+halt entry detail    : {'halt_notification': {'command': '/bin/sh',
+  'delivered': True, 'detail': 'exit 0'}, 'reasons': [...]}
+digest> - Halt channel configured: yes — /bin/sh (2 argument(s))
+
+=== C: a channel that fails ===
+digest> - 2026-09-05T03:00:00+00:00 FAILED: /bin/false — FileNotFoundError:
+        [Errno 2] No such file or directory: '/bin/false'; the halt still stands
+digest>   **A halt notification FAILED.** The halt still stands; what did not
+digest>   happen is you being told about it. Fix the command, not the loop.
+```
+
+And state A is no longer merely a `NO`: it now also reads `NOT SENT: no halt
+channel was configured when the loop halted`, from the ledger, in the place the
+owner is already looking.
+
+**What this does NOT do**, stated in the ADR because the alternative is an
+owner believing they are covered: it does not retry (a retry would be a queue,
+and a queue that loses its process loses the message; the durable record is the
+ledger and this is the doorbell); it does not page anyone by itself (it runs a
+command, and what that command reaches is the command's business); and it is
+exactly as reliable as the command the owner wrote — `delivered` is an exit
+status, named after the thing this code can observe, and it is not "the owner
+saw it".
+
+**What would earn the rest of dimension 4**, also in the ADR: the channel has
+never fired on a real regression on a real repo, so "the owner would be told"
+is a property of the code rather than of the deployment; `aef loop digest`
+takes no `--config`, so the channel is resolved through `DEFAULT_CONFIG_PATH`
+(`aef.yaml` at the base ref) — a documented convention rather than a guess,
+and an explicit flag would still be better; and an exit code is thin delivery
+evidence where a channel could give more.
+
+**Verdict: dimension 4, +1. With N3, 13 → 15; heading 72 → 74.** The line can
+still print `NO`, and that is now correct: it means the owner has not named a
+command. What it can no longer mean is that there was nothing to name.
