@@ -75,20 +75,16 @@
         "model": ""
       },
       "result": {
-        "cache_creation_input_tokens": 905,
-        "cache_read_input_tokens": 0,
-        "content": "A planning application for forty houses at the disused Sedgely clay pit has been deferred after great crested newts were found in flooded workings; the developer must propose relocating the newts, while residents object to increased traffic.",
+        "content": "A planning application to fill Sedgely clay pit and build forty houses was deferred after great crested newts were found in flooded workings; the developer must relocate the newts to a new pond before the council decides.",
         "input_tokens": 2,
-        "model": "claude-opus-5[1m]",
-        "model_attribution": "usage_match",
-        "output_tokens": 68,
+        "model": "claude-fable-5-1",
+        "output_tokens": 64,
         "stop_reason": "end_turn"
       }
     }
   ],
-  "notes": "synthetic passage; re-recorded live via claude_code on the session default model (ADR 0186). Originally recorded on claude-fable-5-1 (ADR 0123); that recording is kept at docs/research/i14/fable-recordings/sum-10-clay-pit.json",
-  "recorded_at": "2026-09-05T07:51:09.958531+00:00",
-  "source": "record",
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:49:22.304618+00:00",
   "split": "train",
   "trace": [
     {
@@ -97,7 +93,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-10-clay-pit:retrieve:0",
         "node_id": "retrieve",
-        "now": "2026-09-05T07:51:09.966590+00:00",
+        "now": "2026-09-04T01:49:22.307454+00:00",
         "run_id": "sum-10-clay-pit",
         "trace_id": "sum-10-clay-pit"
       },
@@ -151,7 +147,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-10-clay-pit:draft:1",
         "node_id": "draft",
-        "now": "2026-09-05T07:51:09.966676+00:00",
+        "now": "2026-09-04T01:49:22.307507+00:00",
         "run_id": "sum-10-clay-pit",
         "trace_id": "sum-10-clay-pit"
       },
@@ -168,11 +164,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 70,
+            "token_cost": 66,
             "trace_id": "sum-10-clay-pit",
-            "ts": "2026-09-05T07:51:09.966676Z"
+            "ts": "2026-09-04T01:49:22.307507Z"
           }
         ],
         "reflections": [],
@@ -180,7 +176,7 @@
         "scores": {},
         "tool_results": [],
         "working_memory": {
-          "summary": "A planning application for forty houses at the disused Sedgely clay pit has been deferred after great crested newts were found in flooded workings; the developer must propose relocating the newts, while residents object to increased traffic."
+          "summary": "A planning application to fill Sedgely clay pit and build forty houses was deferred after great crested newts were found in flooded workings; the developer must relocate the newts to a new pond before the council decides."
         }
       },
       "input_state": {
@@ -221,7 +217,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-10-clay-pit:reflect:2",
         "node_id": "reflect",
-        "now": "2026-09-05T07:51:12.474034+00:00",
+        "now": "2026-09-04T01:49:29.229655+00:00",
         "run_id": "sum-10-clay-pit",
         "trace_id": "sum-10-clay-pit"
       },
@@ -255,11 +251,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 70,
+            "token_cost": 66,
             "trace_id": "sum-10-clay-pit",
-            "ts": "2026-09-05T07:51:09.966676Z"
+            "ts": "2026-09-04T01:49:22.307507Z"
           }
         ],
         "reflections": [],
@@ -275,7 +271,7 @@
             "newts",
             "planning"
           ],
-          "summary": "A planning application for forty houses at the disused Sedgely clay pit has been deferred after great crested newts were found in flooded workings; the developer must propose relocating the newts, while residents object to increased traffic.",
+          "summary": "A planning application to fill Sedgely clay pit and build forty houses was deferred after great crested newts were found in flooded workings; the developer must relocate the newts to a new pond before the council decides.",
           "text": "A planning application to fill the disused Sedgely clay pit and build forty houses on the site has been deferred after a survey found great crested newts in two of the flooded workings. The developer must now submit a plan to move the newts to a new pond before the council will decide. Residents on the lane beside the pit had already objected to the extra traffic. The pit was worked for brick clay until the 1970s and has since filled with rainwater."
         }
       },
@@ -292,7 +288,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-10-clay-pit:consolidate:3",
         "node_id": "consolidate",
-        "now": "2026-09-05T07:51:12.474264+00:00",
+        "now": "2026-09-04T01:49:29.229831+00:00",
         "run_id": "sum-10-clay-pit",
         "trace_id": "sum-10-clay-pit"
       },
@@ -324,11 +320,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 70,
+            "token_cost": 66,
             "trace_id": "sum-10-clay-pit",
-            "ts": "2026-09-05T07:51:09.966676Z"
+            "ts": "2026-09-04T01:49:22.307507Z"
           }
         ],
         "reflections": [
@@ -346,7 +342,7 @@
             "newts",
             "planning"
           ],
-          "summary": "A planning application for forty houses at the disused Sedgely clay pit has been deferred after great crested newts were found in flooded workings; the developer must propose relocating the newts, while residents object to increased traffic.",
+          "summary": "A planning application to fill Sedgely clay pit and build forty houses was deferred after great crested newts were found in flooded workings; the developer must relocate the newts to a new pond before the council decides.",
           "text": "A planning application to fill the disused Sedgely clay pit and build forty houses on the site has been deferred after a survey found great crested newts in two of the flooded workings. The developer must now submit a plan to move the newts to a new pond before the council will decide. Residents on the lane beside the pit had already objected to the extra traffic. The pit was worked for brick clay until the 1970s and has since filled with rainwater."
         }
       },

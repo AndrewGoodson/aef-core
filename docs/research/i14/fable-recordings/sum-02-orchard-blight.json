@@ -75,20 +75,16 @@
         "model": ""
       },
       "result": {
-        "cache_creation_input_tokens": 942,
-        "cache_read_input_tokens": 0,
-        "content": "Varley blight has struck about a third of the older pear trees at Pellham orchard, prompting a copper spray programme, withdrawal of affected fruit, and weekly inspections nearby; younger south-slope plantings remain unaffected, though a smaller harvest is expected.",
+        "content": "Pellham orchard confirmed Varley blight on about a third of older pear trees, started a copper spray programme, pulled affected fruit from its shop, asked neighbours to inspect weekly, and expects a smaller harvest with younger plantings unaffected.",
         "input_tokens": 2,
-        "model": "claude-opus-5[1m]",
-        "model_attribution": "usage_match",
-        "output_tokens": 91,
+        "model": "claude-fable-5-1",
+        "output_tokens": 86,
         "stop_reason": "end_turn"
       }
     }
   ],
-  "notes": "synthetic passage; re-recorded live via claude_code on the session default model (ADR 0186). Originally recorded on claude-fable-5-1 (ADR 0123); that recording is kept at docs/research/i14/fable-recordings/sum-02-orchard-blight.json",
-  "recorded_at": "2026-09-05T07:50:39.940439+00:00",
-  "source": "record",
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:48:35.179468+00:00",
   "split": "train",
   "trace": [
     {
@@ -97,7 +93,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-02-orchard-blight:retrieve:0",
         "node_id": "retrieve",
-        "now": "2026-09-05T07:50:39.956498+00:00",
+        "now": "2026-09-04T01:48:35.180401+00:00",
         "run_id": "sum-02-orchard-blight",
         "trace_id": "sum-02-orchard-blight"
       },
@@ -151,7 +147,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-02-orchard-blight:draft:1",
         "node_id": "draft",
-        "now": "2026-09-05T07:50:39.956581+00:00",
+        "now": "2026-09-04T01:48:35.180454+00:00",
         "run_id": "sum-02-orchard-blight",
         "trace_id": "sum-02-orchard-blight"
       },
@@ -168,11 +164,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 93,
+            "token_cost": 88,
             "trace_id": "sum-02-orchard-blight",
-            "ts": "2026-09-05T07:50:39.956581Z"
+            "ts": "2026-09-04T01:48:35.180454Z"
           }
         ],
         "reflections": [],
@@ -180,7 +176,7 @@
         "scores": {},
         "tool_results": [],
         "working_memory": {
-          "summary": "Varley blight has struck about a third of the older pear trees at Pellham orchard, prompting a copper spray programme, withdrawal of affected fruit, and weekly inspections nearby; younger south-slope plantings remain unaffected, though a smaller harvest is expected."
+          "summary": "Pellham orchard confirmed Varley blight on about a third of older pear trees, started a copper spray programme, pulled affected fruit from its shop, asked neighbours to inspect weekly, and expects a smaller harvest with younger plantings unaffected."
         }
       },
       "input_state": {
@@ -221,7 +217,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-02-orchard-blight:reflect:2",
         "node_id": "reflect",
-        "now": "2026-09-05T07:50:42.717252+00:00",
+        "now": "2026-09-04T01:48:41.229696+00:00",
         "run_id": "sum-02-orchard-blight",
         "trace_id": "sum-02-orchard-blight"
       },
@@ -255,11 +251,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 93,
+            "token_cost": 88,
             "trace_id": "sum-02-orchard-blight",
-            "ts": "2026-09-05T07:50:39.956581Z"
+            "ts": "2026-09-04T01:48:35.180454Z"
           }
         ],
         "reflections": [],
@@ -275,7 +271,7 @@
             "Pellham orchard",
             "copper"
           ],
-          "summary": "Varley blight has struck about a third of the older pear trees at Pellham orchard, prompting a copper spray programme, withdrawal of affected fruit, and weekly inspections nearby; younger south-slope plantings remain unaffected, though a smaller harvest is expected.",
+          "summary": "Pellham orchard confirmed Varley blight on about a third of older pear trees, started a copper spray programme, pulled affected fruit from its shop, asked neighbours to inspect weekly, and expects a smaller harvest with younger plantings unaffected.",
           "text": "Growers at the Pellham orchard have confirmed an outbreak of Varley blight on roughly a third of their older pear trees. The fungus spreads in wet springs and shows first as dark rings on new leaves. The orchard has begun a copper spray programme and has pulled affected fruit from its farm shop as a precaution. Neighbouring farms have been asked to inspect their own trees weekly until midsummer. The orchard expects a smaller harvest but says the younger plantings on the south slope are so far unaffected."
         }
       },
@@ -292,7 +288,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-02-orchard-blight:consolidate:3",
         "node_id": "consolidate",
-        "now": "2026-09-05T07:50:42.717492+00:00",
+        "now": "2026-09-04T01:48:41.229915+00:00",
         "run_id": "sum-02-orchard-blight",
         "trace_id": "sum-02-orchard-blight"
       },
@@ -324,11 +320,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 93,
+            "token_cost": 88,
             "trace_id": "sum-02-orchard-blight",
-            "ts": "2026-09-05T07:50:39.956581Z"
+            "ts": "2026-09-04T01:48:35.180454Z"
           }
         ],
         "reflections": [
@@ -346,7 +342,7 @@
             "Pellham orchard",
             "copper"
           ],
-          "summary": "Varley blight has struck about a third of the older pear trees at Pellham orchard, prompting a copper spray programme, withdrawal of affected fruit, and weekly inspections nearby; younger south-slope plantings remain unaffected, though a smaller harvest is expected.",
+          "summary": "Pellham orchard confirmed Varley blight on about a third of older pear trees, started a copper spray programme, pulled affected fruit from its shop, asked neighbours to inspect weekly, and expects a smaller harvest with younger plantings unaffected.",
           "text": "Growers at the Pellham orchard have confirmed an outbreak of Varley blight on roughly a third of their older pear trees. The fungus spreads in wet springs and shows first as dark rings on new leaves. The orchard has begun a copper spray programme and has pulled affected fruit from its farm shop as a precaution. Neighbouring farms have been asked to inspect their own trees weekly until midsummer. The orchard expects a smaller harvest but says the younger plantings on the south slope are so far unaffected."
         }
       },

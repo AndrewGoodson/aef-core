@@ -75,20 +75,16 @@
         "model": ""
       },
       "result": {
-        "cache_creation_input_tokens": 916,
-        "cache_read_input_tokens": 0,
-        "content": "Cracking on the Halden reservoir spillway crest has prompted engineers to lower the water level two metres; supply to three villages and a paper mill is secure thanks to above-average rainfall. Repairs are contracted in October, and the viewing platform is closed.",
+        "content": "Engineers found spillway crest cracking at the Halden reservoir and lowered water two metres pending repairs; supply to three villages and a paper mill is unaffected, the contract is awarded in October, and the spillway viewing platform is closed.",
         "input_tokens": 2,
-        "model": "claude-opus-5[1m]",
-        "model_attribution": "usage_match",
-        "output_tokens": 86,
+        "model": "claude-fable-5-1",
+        "output_tokens": 80,
         "stop_reason": "end_turn"
       }
     }
   ],
-  "notes": "synthetic passage; re-recorded live via claude_code on the session default model (ADR 0186). Originally recorded on claude-fable-5-1 (ADR 0123); that recording is kept at docs/research/i14/fable-recordings/sum-04-halden-reservoir.json",
-  "recorded_at": "2026-09-05T07:50:45.503240+00:00",
-  "source": "record",
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:48:46.822240+00:00",
   "split": "train",
   "trace": [
     {
@@ -97,7 +93,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-04-halden-reservoir:retrieve:0",
         "node_id": "retrieve",
-        "now": "2026-09-05T07:50:45.510690+00:00",
+        "now": "2026-09-04T01:48:46.823415+00:00",
         "run_id": "sum-04-halden-reservoir",
         "trace_id": "sum-04-halden-reservoir"
       },
@@ -151,7 +147,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-04-halden-reservoir:draft:1",
         "node_id": "draft",
-        "now": "2026-09-05T07:50:45.510781+00:00",
+        "now": "2026-09-04T01:48:46.823464+00:00",
         "run_id": "sum-04-halden-reservoir",
         "trace_id": "sum-04-halden-reservoir"
       },
@@ -168,11 +164,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 88,
+            "token_cost": 82,
             "trace_id": "sum-04-halden-reservoir",
-            "ts": "2026-09-05T07:50:45.510781Z"
+            "ts": "2026-09-04T01:48:46.823464Z"
           }
         ],
         "reflections": [],
@@ -180,7 +176,7 @@
         "scores": {},
         "tool_results": [],
         "working_memory": {
-          "summary": "Cracking on the Halden reservoir spillway crest has prompted engineers to lower the water level two metres; supply to three villages and a paper mill is secure thanks to above-average rainfall. Repairs are contracted in October, and the viewing platform is closed."
+          "summary": "Engineers found spillway crest cracking at the Halden reservoir and lowered water two metres pending repairs; supply to three villages and a paper mill is unaffected, the contract is awarded in October, and the spillway viewing platform is closed."
         }
       },
       "input_state": {
@@ -221,7 +217,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-04-halden-reservoir:reflect:2",
         "node_id": "reflect",
-        "now": "2026-09-05T07:50:48.528502+00:00",
+        "now": "2026-09-04T01:48:53.577837+00:00",
         "run_id": "sum-04-halden-reservoir",
         "trace_id": "sum-04-halden-reservoir"
       },
@@ -255,11 +251,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 88,
+            "token_cost": 82,
             "trace_id": "sum-04-halden-reservoir",
-            "ts": "2026-09-05T07:50:45.510781Z"
+            "ts": "2026-09-04T01:48:46.823464Z"
           }
         ],
         "reflections": [],
@@ -275,7 +271,7 @@
             "spillway",
             "October"
           ],
-          "summary": "Cracking on the Halden reservoir spillway crest has prompted engineers to lower the water level two metres; supply to three villages and a paper mill is secure thanks to above-average rainfall. Repairs are contracted in October, and the viewing platform is closed.",
+          "summary": "Engineers found spillway crest cracking at the Halden reservoir and lowered water two metres pending repairs; supply to three villages and a paper mill is unaffected, the contract is awarded in October, and the spillway viewing platform is closed.",
           "text": "Engineers inspecting the Halden reservoir found cracking along the crest of the spillway and have lowered the water level by two metres while repairs are planned. The reservoir supplies three villages and a paper mill, none of which are expected to lose water because autumn rainfall has been above average. The repair contract will be awarded in October and the work is expected to take one dry season. Walkers can still use the reservoir path, but the viewing platform above the spillway is closed."
         }
       },
@@ -292,7 +288,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-04-halden-reservoir:consolidate:3",
         "node_id": "consolidate",
-        "now": "2026-09-05T07:50:48.528809+00:00",
+        "now": "2026-09-04T01:48:53.578026+00:00",
         "run_id": "sum-04-halden-reservoir",
         "trace_id": "sum-04-halden-reservoir"
       },
@@ -324,11 +320,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 88,
+            "token_cost": 82,
             "trace_id": "sum-04-halden-reservoir",
-            "ts": "2026-09-05T07:50:45.510781Z"
+            "ts": "2026-09-04T01:48:46.823464Z"
           }
         ],
         "reflections": [
@@ -346,7 +342,7 @@
             "spillway",
             "October"
           ],
-          "summary": "Cracking on the Halden reservoir spillway crest has prompted engineers to lower the water level two metres; supply to three villages and a paper mill is secure thanks to above-average rainfall. Repairs are contracted in October, and the viewing platform is closed.",
+          "summary": "Engineers found spillway crest cracking at the Halden reservoir and lowered water two metres pending repairs; supply to three villages and a paper mill is unaffected, the contract is awarded in October, and the spillway viewing platform is closed.",
           "text": "Engineers inspecting the Halden reservoir found cracking along the crest of the spillway and have lowered the water level by two metres while repairs are planned. The reservoir supplies three villages and a paper mill, none of which are expected to lose water because autumn rainfall has been above average. The repair contract will be awarded in October and the work is expected to take one dry season. Walkers can still use the reservoir path, but the viewing platform above the spillway is closed."
         }
       },

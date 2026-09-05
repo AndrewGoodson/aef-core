@@ -75,20 +75,16 @@
         "model": ""
       },
       "result": {
-        "cache_creation_input_tokens": 922,
-        "cache_read_input_tokens": 0,
-        "content": "The Ravensholme choir takes its first overseas tour by coach to Bruges in June, giving three concerts of folk arrangements and commissioned works, self-funded through fundraising, plus a homecoming performance.",
+        "content": "Ravensholme choir travels by coach to Bruges in June for three concerts, first tour abroad in twelve years; members self-fund, rehearsals doubled, homecoming concert planned.",
         "input_tokens": 2,
-        "model": "claude-opus-5[1m]",
-        "model_attribution": "usage_match",
-        "output_tokens": 71,
+        "model": "claude-fable-5-1",
+        "output_tokens": 64,
         "stop_reason": "end_turn"
       }
     }
   ],
-  "notes": "synthetic passage; re-recorded live via claude_code on the session default model (ADR 0186). Originally recorded on claude-fable-5-1 (ADR 0123); that recording is kept at docs/research/i14/fable-recordings/sum-09-choir-tour.json",
-  "recorded_at": "2026-09-05T07:51:07.048719+00:00",
-  "source": "record",
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:49:17.387634+00:00",
   "split": "train",
   "trace": [
     {
@@ -97,7 +93,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-09-choir-tour:retrieve:0",
         "node_id": "retrieve",
-        "now": "2026-09-05T07:51:07.056405+00:00",
+        "now": "2026-09-04T01:49:17.389321+00:00",
         "run_id": "sum-09-choir-tour",
         "trace_id": "sum-09-choir-tour"
       },
@@ -151,7 +147,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-09-choir-tour:draft:1",
         "node_id": "draft",
-        "now": "2026-09-05T07:51:07.056484+00:00",
+        "now": "2026-09-04T01:49:17.389373+00:00",
         "run_id": "sum-09-choir-tour",
         "trace_id": "sum-09-choir-tour"
       },
@@ -168,11 +164,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 73,
+            "token_cost": 66,
             "trace_id": "sum-09-choir-tour",
-            "ts": "2026-09-05T07:51:07.056484Z"
+            "ts": "2026-09-04T01:49:17.389373Z"
           }
         ],
         "reflections": [],
@@ -180,7 +176,7 @@
         "scores": {},
         "tool_results": [],
         "working_memory": {
-          "summary": "The Ravensholme choir takes its first overseas tour by coach to Bruges in June, giving three concerts of folk arrangements and commissioned works, self-funded through fundraising, plus a homecoming performance."
+          "summary": "Ravensholme choir travels by coach to Bruges in June for three concerts, first tour abroad in twelve years; members self-fund, rehearsals doubled, homecoming concert planned."
         }
       },
       "input_state": {
@@ -221,7 +217,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-09-choir-tour:reflect:2",
         "node_id": "reflect",
-        "now": "2026-09-05T07:51:09.809801+00:00",
+        "now": "2026-09-04T01:49:22.301266+00:00",
         "run_id": "sum-09-choir-tour",
         "trace_id": "sum-09-choir-tour"
       },
@@ -255,11 +251,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 73,
+            "token_cost": 66,
             "trace_id": "sum-09-choir-tour",
-            "ts": "2026-09-05T07:51:07.056484Z"
+            "ts": "2026-09-04T01:49:17.389373Z"
           }
         ],
         "reflections": [],
@@ -275,7 +271,7 @@
             "Bruges",
             "coach"
           ],
-          "summary": "The Ravensholme choir takes its first overseas tour by coach to Bruges in June, giving three concerts of folk arrangements and commissioned works, self-funded through fundraising, plus a homecoming performance.",
+          "summary": "Ravensholme choir travels by coach to Bruges in June for three concerts, first tour abroad in twelve years; members self-fund, rehearsals doubled, homecoming concert planned.",
           "text": "The Ravensholme choir will travel by coach to Bruges in June for three concerts, its first tour abroad since the group was founded twelve years ago. The programme mixes English folk arrangements with two pieces written for the choir by a local composer. Members are paying their own travel costs, and the choir has sold tea-towels and a recording to cover hall hire. Rehearsals have moved to twice a week until the tour. A homecoming concert is planned for the village hall."
         }
       },
@@ -292,7 +288,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-09-choir-tour:consolidate:3",
         "node_id": "consolidate",
-        "now": "2026-09-05T07:51:09.810001+00:00",
+        "now": "2026-09-04T01:49:22.301470+00:00",
         "run_id": "sum-09-choir-tour",
         "trace_id": "sum-09-choir-tour"
       },
@@ -324,11 +320,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 73,
+            "token_cost": 66,
             "trace_id": "sum-09-choir-tour",
-            "ts": "2026-09-05T07:51:07.056484Z"
+            "ts": "2026-09-04T01:49:17.389373Z"
           }
         ],
         "reflections": [
@@ -346,7 +342,7 @@
             "Bruges",
             "coach"
           ],
-          "summary": "The Ravensholme choir takes its first overseas tour by coach to Bruges in June, giving three concerts of folk arrangements and commissioned works, self-funded through fundraising, plus a homecoming performance.",
+          "summary": "Ravensholme choir travels by coach to Bruges in June for three concerts, first tour abroad in twelve years; members self-fund, rehearsals doubled, homecoming concert planned.",
           "text": "The Ravensholme choir will travel by coach to Bruges in June for three concerts, its first tour abroad since the group was founded twelve years ago. The programme mixes English folk arrangements with two pieces written for the choir by a local composer. Members are paying their own travel costs, and the choir has sold tea-towels and a recording to cover hall hire. Rehearsals have moved to twice a week until the tour. A homecoming concert is planned for the village hall."
         }
       },
