@@ -75,20 +75,16 @@
         "model": ""
       },
       "result": {
-        "cache_creation_input_tokens": 910,
-        "cache_read_input_tokens": 0,
-        "content": "Tidewell public library digitised its microfilm archive of the local newspaper from 1874 to 1961, producing keyword-searchable, hand-corrected scans already helping historians trace the old seafront tramline.",
+        "content": "Tidewell library finished scanning its 1874–1961 newspaper microfilm archive; keyword-searchable scans, hand-corrected over eleven months, now available on terminals or at home, already aiding local historians.",
         "input_tokens": 2,
-        "model": "claude-opus-5[1m]",
-        "model_attribution": "usage_match",
-        "output_tokens": 70,
+        "model": "claude-fable-5-1",
+        "output_tokens": 72,
         "stop_reason": "end_turn"
       }
     }
   ],
-  "notes": "synthetic passage; re-recorded live via claude_code on the session default model (ADR 0186). Originally recorded on claude-fable-5-1 (ADR 0123); that recording is kept at docs/research/i14/fable-recordings/sum-03-tidewell-library.json",
-  "recorded_at": "2026-09-05T07:50:42.873959+00:00",
-  "source": "record",
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:48:41.233300+00:00",
   "split": "train",
   "trace": [
     {
@@ -97,7 +93,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-03-tidewell-library:retrieve:0",
         "node_id": "retrieve",
-        "now": "2026-09-05T07:50:42.881174+00:00",
+        "now": "2026-09-04T01:48:41.234470+00:00",
         "run_id": "sum-03-tidewell-library",
         "trace_id": "sum-03-tidewell-library"
       },
@@ -151,7 +147,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-03-tidewell-library:draft:1",
         "node_id": "draft",
-        "now": "2026-09-05T07:50:42.881255+00:00",
+        "now": "2026-09-04T01:48:41.234521+00:00",
         "run_id": "sum-03-tidewell-library",
         "trace_id": "sum-03-tidewell-library"
       },
@@ -168,11 +164,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 72,
+            "token_cost": 74,
             "trace_id": "sum-03-tidewell-library",
-            "ts": "2026-09-05T07:50:42.881255Z"
+            "ts": "2026-09-04T01:48:41.234521Z"
           }
         ],
         "reflections": [],
@@ -180,7 +176,7 @@
         "scores": {},
         "tool_results": [],
         "working_memory": {
-          "summary": "Tidewell public library digitised its microfilm archive of the local newspaper from 1874 to 1961, producing keyword-searchable, hand-corrected scans already helping historians trace the old seafront tramline."
+          "summary": "Tidewell library finished scanning its 1874–1961 newspaper microfilm archive; keyword-searchable scans, hand-corrected over eleven months, now available on terminals or at home, already aiding local historians."
         }
       },
       "input_state": {
@@ -221,7 +217,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-03-tidewell-library:reflect:2",
         "node_id": "reflect",
-        "now": "2026-09-05T07:50:45.357228+00:00",
+        "now": "2026-09-04T01:48:46.818937+00:00",
         "run_id": "sum-03-tidewell-library",
         "trace_id": "sum-03-tidewell-library"
       },
@@ -255,11 +251,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 72,
+            "token_cost": 74,
             "trace_id": "sum-03-tidewell-library",
-            "ts": "2026-09-05T07:50:42.881255Z"
+            "ts": "2026-09-04T01:48:41.234521Z"
           }
         ],
         "reflections": [],
@@ -275,7 +271,7 @@
             "microfilm",
             "1874"
           ],
-          "summary": "Tidewell public library digitised its microfilm archive of the local newspaper from 1874 to 1961, producing keyword-searchable, hand-corrected scans already helping historians trace the old seafront tramline.",
+          "summary": "Tidewell library finished scanning its 1874–1961 newspaper microfilm archive; keyword-searchable scans, hand-corrected over eleven months, now available on terminals or at home, already aiding local historians.",
           "text": "Tidewell public library has finished scanning its microfilm archive of the town newspaper, which runs from 1874 to 1961. The scans are searchable by keyword and can be read on any of the library's terminals or from home with a library card. Staff spent eleven months on the project, correcting the machine transcription by hand where the old type was smudged. Local historians have already used the archive to trace the original route of the tramline that once ran along the seafront."
         }
       },
@@ -292,7 +288,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-03-tidewell-library:consolidate:3",
         "node_id": "consolidate",
-        "now": "2026-09-05T07:50:45.357456+00:00",
+        "now": "2026-09-04T01:48:46.819125+00:00",
         "run_id": "sum-03-tidewell-library",
         "trace_id": "sum-03-tidewell-library"
       },
@@ -324,11 +320,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 72,
+            "token_cost": 74,
             "trace_id": "sum-03-tidewell-library",
-            "ts": "2026-09-05T07:50:42.881255Z"
+            "ts": "2026-09-04T01:48:41.234521Z"
           }
         ],
         "reflections": [
@@ -346,7 +342,7 @@
             "microfilm",
             "1874"
           ],
-          "summary": "Tidewell public library digitised its microfilm archive of the local newspaper from 1874 to 1961, producing keyword-searchable, hand-corrected scans already helping historians trace the old seafront tramline.",
+          "summary": "Tidewell library finished scanning its 1874–1961 newspaper microfilm archive; keyword-searchable scans, hand-corrected over eleven months, now available on terminals or at home, already aiding local historians.",
           "text": "Tidewell public library has finished scanning its microfilm archive of the town newspaper, which runs from 1874 to 1961. The scans are searchable by keyword and can be read on any of the library's terminals or from home with a library card. Staff spent eleven months on the project, correcting the machine transcription by hand where the old type was smudged. Local historians have already used the archive to trace the original route of the tramline that once ran along the seafront."
         }
       },

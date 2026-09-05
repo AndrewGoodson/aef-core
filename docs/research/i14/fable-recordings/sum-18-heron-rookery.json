@@ -75,20 +75,16 @@
         "model": ""
       },
       "result": {
-        "cache_creation_input_tokens": 906,
-        "cache_read_input_tokens": 0,
-        "content": "Wimble Carr's heronry recorded forty-one nests this spring, its highest since 1962, with herons in old alders aided by a mild winter and a shooting ban.",
+        "content": "Wimble Carr heronry held forty-one nests this spring, a record since 1962; herons nest in old alders, aided by a mild winter and a shooting ban.",
         "input_tokens": 2,
-        "model": "claude-opus-5[1m]",
-        "model_attribution": "usage_match",
-        "output_tokens": 57,
+        "model": "claude-fable-5-1",
+        "output_tokens": 55,
         "stop_reason": "end_turn"
       }
     }
   ],
-  "notes": "synthetic passage; re-recorded live via claude_code on the session default model (ADR 0186). Originally recorded on claude-fable-5-1 (ADR 0123); that recording is kept at docs/research/i14/fable-recordings/sum-18-heron-rookery.json",
-  "recorded_at": "2026-09-05T07:51:36.239347+00:00",
-  "source": "record",
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:50:11.190173+00:00",
   "split": "validation",
   "trace": [
     {
@@ -97,7 +93,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-18-heron-rookery:retrieve:0",
         "node_id": "retrieve",
-        "now": "2026-09-05T07:51:36.248308+00:00",
+        "now": "2026-09-04T01:50:11.192677+00:00",
         "run_id": "sum-18-heron-rookery",
         "trace_id": "sum-18-heron-rookery"
       },
@@ -151,7 +147,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-18-heron-rookery:draft:1",
         "node_id": "draft",
-        "now": "2026-09-05T07:51:36.248392+00:00",
+        "now": "2026-09-04T01:50:11.192725+00:00",
         "run_id": "sum-18-heron-rookery",
         "trace_id": "sum-18-heron-rookery"
       },
@@ -168,11 +164,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 59,
+            "token_cost": 57,
             "trace_id": "sum-18-heron-rookery",
-            "ts": "2026-09-05T07:51:36.248392Z"
+            "ts": "2026-09-04T01:50:11.192725Z"
           }
         ],
         "reflections": [],
@@ -180,7 +176,7 @@
         "scores": {},
         "tool_results": [],
         "working_memory": {
-          "summary": "Wimble Carr's heronry recorded forty-one nests this spring, its highest since 1962, with herons in old alders aided by a mild winter and a shooting ban."
+          "summary": "Wimble Carr heronry held forty-one nests this spring, a record since 1962; herons nest in old alders, aided by a mild winter and a shooting ban."
         }
       },
       "input_state": {
@@ -221,7 +217,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-18-heron-rookery:reflect:2",
         "node_id": "reflect",
-        "now": "2026-09-05T07:51:38.838657+00:00",
+        "now": "2026-09-04T01:50:16.477532+00:00",
         "run_id": "sum-18-heron-rookery",
         "trace_id": "sum-18-heron-rookery"
       },
@@ -255,11 +251,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 59,
+            "token_cost": 57,
             "trace_id": "sum-18-heron-rookery",
-            "ts": "2026-09-05T07:51:36.248392Z"
+            "ts": "2026-09-04T01:50:11.192725Z"
           }
         ],
         "reflections": [],
@@ -275,7 +271,7 @@
             "herons",
             "nests"
           ],
-          "summary": "Wimble Carr's heronry recorded forty-one nests this spring, its highest since 1962, with herons in old alders aided by a mild winter and a shooting ban.",
+          "summary": "Wimble Carr heronry held forty-one nests this spring, a record since 1962; herons nest in old alders, aided by a mild winter and a shooting ban.",
           "text": "The heronry at Wimble Carr held forty-one nests this spring, the highest count since records began there in 1962. The herons nest high in a stand of old alders at the edge of the marsh and are counted each April by a warden with a telescope from the far bank. Last year's mild winter is thought to have helped, along with a ban on shooting over the marsh that came into force three years ago. The site is closed to visitors during the nesting season."
         }
       },
@@ -292,7 +288,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-18-heron-rookery:consolidate:3",
         "node_id": "consolidate",
-        "now": "2026-09-05T07:51:38.838870+00:00",
+        "now": "2026-09-04T01:50:16.477702+00:00",
         "run_id": "sum-18-heron-rookery",
         "trace_id": "sum-18-heron-rookery"
       },
@@ -324,11 +320,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 59,
+            "token_cost": 57,
             "trace_id": "sum-18-heron-rookery",
-            "ts": "2026-09-05T07:51:36.248392Z"
+            "ts": "2026-09-04T01:50:11.192725Z"
           }
         ],
         "reflections": [
@@ -346,7 +342,7 @@
             "herons",
             "nests"
           ],
-          "summary": "Wimble Carr's heronry recorded forty-one nests this spring, its highest since 1962, with herons in old alders aided by a mild winter and a shooting ban.",
+          "summary": "Wimble Carr heronry held forty-one nests this spring, a record since 1962; herons nest in old alders, aided by a mild winter and a shooting ban.",
           "text": "The heronry at Wimble Carr held forty-one nests this spring, the highest count since records began there in 1962. The herons nest high in a stand of old alders at the edge of the marsh and are counted each April by a warden with a telescope from the far bank. Last year's mild winter is thought to have helped, along with a ban on shooting over the marsh that came into force three years ago. The site is closed to visitors during the nesting season."
         }
       },

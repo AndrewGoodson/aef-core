@@ -75,20 +75,16 @@
         "model": ""
       },
       "result": {
-        "cache_creation_input_tokens": 928,
-        "cache_read_input_tokens": 0,
-        "content": "The Ottery lantern walk returns in November, with free half-term workshops making willow and tissue lanterns. The dusk procession follows the river to the harbour for a brass band and hot chocolate; drivers should avoid harbour road.",
+        "content": "Ottery lantern walk returns in November with willow-and-tissue lanterns from free half-term workshops; dusk procession follows river path to harbour for brass band and hot chocolate, expecting four hundred walkers.",
         "input_tokens": 2,
-        "model": "claude-opus-5[1m]",
-        "model_attribution": "usage_match",
-        "output_tokens": 77,
+        "model": "claude-fable-5-1",
+        "output_tokens": 73,
         "stop_reason": "end_turn"
       }
     }
   ],
-  "notes": "synthetic passage; re-recorded live via claude_code on the session default model (ADR 0186). Originally recorded on claude-fable-5-1 (ADR 0123); that recording is kept at docs/research/i14/fable-recordings/sum-11-lantern-festival.json",
-  "recorded_at": "2026-09-05T07:51:12.612521+00:00",
-  "source": "record",
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:49:29.232681+00:00",
   "split": "train",
   "trace": [
     {
@@ -97,7 +93,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-11-lantern-festival:retrieve:0",
         "node_id": "retrieve",
-        "now": "2026-09-05T07:51:12.619443+00:00",
+        "now": "2026-09-04T01:49:29.234493+00:00",
         "run_id": "sum-11-lantern-festival",
         "trace_id": "sum-11-lantern-festival"
       },
@@ -151,7 +147,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-11-lantern-festival:draft:1",
         "node_id": "draft",
-        "now": "2026-09-05T07:51:12.619518+00:00",
+        "now": "2026-09-04T01:49:29.234540+00:00",
         "run_id": "sum-11-lantern-festival",
         "trace_id": "sum-11-lantern-festival"
       },
@@ -168,11 +164,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 79,
+            "token_cost": 75,
             "trace_id": "sum-11-lantern-festival",
-            "ts": "2026-09-05T07:51:12.619518Z"
+            "ts": "2026-09-04T01:49:29.234540Z"
           }
         ],
         "reflections": [],
@@ -180,7 +176,7 @@
         "scores": {},
         "tool_results": [],
         "working_memory": {
-          "summary": "The Ottery lantern walk returns in November, with free half-term workshops making willow and tissue lanterns. The dusk procession follows the river to the harbour for a brass band and hot chocolate; drivers should avoid harbour road."
+          "summary": "Ottery lantern walk returns in November with willow-and-tissue lanterns from free half-term workshops; dusk procession follows river path to harbour for brass band and hot chocolate, expecting four hundred walkers."
         }
       },
       "input_state": {
@@ -221,7 +217,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-11-lantern-festival:reflect:2",
         "node_id": "reflect",
-        "now": "2026-09-05T07:51:15.133951+00:00",
+        "now": "2026-09-04T01:49:34.594164+00:00",
         "run_id": "sum-11-lantern-festival",
         "trace_id": "sum-11-lantern-festival"
       },
@@ -255,11 +251,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 79,
+            "token_cost": 75,
             "trace_id": "sum-11-lantern-festival",
-            "ts": "2026-09-05T07:51:12.619518Z"
+            "ts": "2026-09-04T01:49:29.234540Z"
           }
         ],
         "reflections": [],
@@ -275,7 +271,7 @@
             "willow",
             "harbour"
           ],
-          "summary": "The Ottery lantern walk returns in November, with free half-term workshops making willow and tissue lanterns. The dusk procession follows the river to the harbour for a brass band and hot chocolate; drivers should avoid harbour road.",
+          "summary": "Ottery lantern walk returns in November with willow-and-tissue lanterns from free half-term workshops; dusk procession follows river path to harbour for brass band and hot chocolate, expecting four hundred walkers.",
           "text": "The Ottery lantern walk returns in November with lanterns made from willow and tissue paper at free workshops during half term. The procession leaves the school field at dusk, follows the river path and finishes at the harbour, where a brass band plays and hot chocolate is sold from the lifeboat station. Organisers expect about four hundred walkers and have asked drivers to avoid the harbour road for two hours. Last year's rain kept numbers low, so the date has been moved a week earlier."
         }
       },
@@ -292,7 +288,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-11-lantern-festival:consolidate:3",
         "node_id": "consolidate",
-        "now": "2026-09-05T07:51:15.134157+00:00",
+        "now": "2026-09-04T01:49:34.594329+00:00",
         "run_id": "sum-11-lantern-festival",
         "trace_id": "sum-11-lantern-festival"
       },
@@ -324,11 +320,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 79,
+            "token_cost": 75,
             "trace_id": "sum-11-lantern-festival",
-            "ts": "2026-09-05T07:51:12.619518Z"
+            "ts": "2026-09-04T01:49:29.234540Z"
           }
         ],
         "reflections": [
@@ -346,7 +342,7 @@
             "willow",
             "harbour"
           ],
-          "summary": "The Ottery lantern walk returns in November, with free half-term workshops making willow and tissue lanterns. The dusk procession follows the river to the harbour for a brass band and hot chocolate; drivers should avoid harbour road.",
+          "summary": "Ottery lantern walk returns in November with willow-and-tissue lanterns from free half-term workshops; dusk procession follows river path to harbour for brass band and hot chocolate, expecting four hundred walkers.",
           "text": "The Ottery lantern walk returns in November with lanterns made from willow and tissue paper at free workshops during half term. The procession leaves the school field at dusk, follows the river path and finishes at the harbour, where a brass band plays and hot chocolate is sold from the lifeboat station. Organisers expect about four hundred walkers and have asked drivers to avoid the harbour road for two hours. Last year's rain kept numbers low, so the date has been moved a week earlier."
         }
       },

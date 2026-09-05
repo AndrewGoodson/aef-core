@@ -5239,3 +5239,99 @@ for the equivalent missing-flag refusal.
 ## S0b / J0b — the second independent score (ADR 0188)
 
 72 → **69**. Five dimensions moved: 1, 4, 7 down (each verified; the dim-1 defect fixed in the same commit), 5 and 6 up (the reviewer found the artifacts). Report: `docs/research/j0b-independent-score-2026-09-05.md`.
+
+## S3c — one model across the corpus, and what it cost (ADR 0186)
+
+**Planted.** ADR 0162's defect 1, which that worker reported and could not fix
+because `corpus/` was not its file: *"Six corpus scenarios are
+`claude-fable-5-1` recordings … Any future measurement that treats the
+validation split as one model's output is wrong by 6/17 … This worker's
+`load_pairs` refuses them; nothing else does."*
+
+**The count is 20, not 18.** Read out of every cassette rather than out of a
+document: `{'claude-fable-5-1': 20, '': 11, 'claude-opus-5[1m]': 19}`.
+`sum-01`…`sum-18` in train/validation **plus `sum-19-tram-depot` and
+`sum-20-seed-bank` in the holdout**, which no prior ADR names. (The eleven `''`
+are `agents/demo` scenarios that call no model.)
+
+**Eighteen re-recorded on `claude-opus-5[1m]`; the two holdout ones
+deliberately not.** `record_run` refuses to write the holdout without
+`allow_holdout=True` — *"the owner's only independent read"* — and spending it
+is an owner's act, not a worker's. They are declared exceptions, named in the
+test and in the provenance table, left for an owner. The cost is stated rather
+than buried: the holdout is a Fable read of an Opus corpus and should not be
+cited as this agent's independent score.
+
+**Method.** No `--force` exists and `refuse_existing_ids` is right to refuse,
+so each file was sha256'd, copied byte-for-byte to
+`docs/research/i14/fable-recordings/<id>.json`, deleted, and re-recorded with
+the **same id, split, agent id, objective, `working_memory`, `budget_ms`,
+`expected` and byte-identical owner `checks`**, all read off the archive.
+Nothing re-authored. `model: ""` in the recording config so no `--model`
+reaches the CLI (S3b's rule, ADR 0171).
+
+**The proof that only the answer moved is the cassette key** — a hash of the
+request. Every one is unchanged (`sum-01`: `d4fc36cc…8e5117` before and
+after), asserted per file alongside a key-by-key diff permitting only `trace`,
+`model_calls[*].result`, `recorded_at`, `notes`, `source` to differ. `OK: 18
+re-recorded … OK: no other corpus file changed, manifest included OK: all 18
+archived recordings are byte-identical to HEAD`.
+
+**Measured** (`aef loop score --json`, cassette replay both sides, 37 hits /
+0 misses / 0 live calls each — no variance in either number):
+
+| | before | after |
+|---|---|---|
+| train | mean **0.9675** n=20, 3 negatives | mean **0.9275** n=20, **7 negatives** |
+| validation | mean **0.9529** n=17, 4 negatives | mean **0.9059** n=17, **8 negatives** |
+
+**Eight of eighteen changed verdict, all 1.0 → 0.8, all `max_words`** —
+`sum-04`, `05`, `08`, `11` (train), `sum-13`, `14`, `16`, `17` (validation),
+over by 1–6 words. **Zero content checks moved in either direction**: every
+required term is still present in every re-recording. That is ADR 0171's
+finding — *"this agent's one reproducible failure is length"* — replicating on
+eighteen scenarios it did not use. The family is now n=15 and still one family.
+
+**The mechanism, as far as this measures it.** On the identical prompt: mean
+words Fable 32.28 → Opus 35.17 (+2.89), **14 longer, 0 shorter**, 4 the same
+count, no two summaries the same text. The caps did not move; the writer did.
+One task family, one cap range, n=18 — not a general claim about either model.
+
+**What it invalidates.** ADR 0171's v2 judge A/B ran over 17 validation states
+of which 6 were Fable's (`sum-13`…`sum-18`), and 4 of those 6 have different
+verdicts now. Its 13/17 constant baseline is now 9/17 and its AUC 1.000 was
+over 13×4 pairs where the same statistic would now be over 9×8. `results-v2.jsonl`
+is left untouched and un-re-run: 34 calls, and 19 of a 24 budget were spent.
+**No `results-v3.jsonl` exists**, and citing v2's number for this corpus would
+be wrong. The corpus is *better* for grading a judge (8 validation negatives
+instead of 4) — a reason to re-run it, not to assume its answer.
+
+**For S6's successor.** `run_j4_selfpref.py:176`'s refusal **stays** — it is
+the guard that caught this. What lifts is the exclusion it forced: `SELECTED`
+at line 110 may now be the whole validation split, 17 pairs instead of 11 (37
+with train), and the discriminating subset grows with the eight new negatives.
+
+**Tripwire.** `tests/harness/test_corpus_provenance.py` — one model family
+across the corpus with the two exceptions named as a *set*; the exceptions are
+holdout-only; train/validation carry no exceptions at all; and every archived
+recording still matches its replacement on checks, initial state, split,
+`expected`, `budget_ms` and cassette key. Families compared with the `[1m]`
+suffix stripped (ADR 0169), because a guard defeated by a suffix is not one.
+
+**5 mutations, 5 caught**, every restore sha256-verified, control `4 passed`
+before the first and after the last: a train answer re-attributed to Fable (2
+failed), the holdout silently re-recorded on Opus (1), an exception moved
+holdout→validation (2), an owner check widened post-recording (1), the passage
+edited post-recording (1).
+
+**Green bar:** `pytest -q` **2720 → 2724** (+4), 7 skipped, 1 xfailed; `mypy
+aef examples` clean (135 files); `ruff check .` clean; `ruff format --check`
+281 files formatted. **19 live calls of ≤24** — 1 preflight (ADR 0150's argv,
+`is_error false`, `input_tokens 2`, `modelUsage` → `claude-opus-5[1m]`) and 18
+recordings, none retried, every `stop_reason` `end_turn`, every one
+`model_attribution: "usage_match"`. **No rubric dimension is claimed** — this
+is corpus hygiene with a measured, unflattering consequence.
+
+**Reported, not written:** the provenance table for `corpus/README.md` is in
+ADR 0186 (M7 owns that file), and the two holdout recordings need an owner
+decision before the holdout can be read as this agent's behaviour.

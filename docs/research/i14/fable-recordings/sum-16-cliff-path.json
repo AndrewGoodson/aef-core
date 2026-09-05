@@ -75,20 +75,16 @@
         "model": ""
       },
       "result": {
-        "cache_creation_input_tokens": 905,
-        "cache_read_input_tokens": 0,
-        "content": "A landslip after heavy rain destroyed twenty metres of cliff edge at Gannet Head, closing that coast path section and diverting walkers inland via a farm track. Authorities plan a new path set further back; car park and cafe stay open.",
+        "content": "Landslip after heavy rain removed twenty metres of cliff, closing the coast path at Gannet Head; walkers detour inland via a farm track while the trail authority plans a new path further from the edge.",
         "input_tokens": 2,
-        "model": "claude-opus-5[1m]",
-        "model_attribution": "usage_match",
-        "output_tokens": 80,
+        "model": "claude-fable-5-1",
+        "output_tokens": 67,
         "stop_reason": "end_turn"
       }
     }
   ],
-  "notes": "synthetic passage; re-recorded live via claude_code on the session default model (ADR 0186). Originally recorded on claude-fable-5-1 (ADR 0123); that recording is kept at docs/research/i14/fable-recordings/sum-16-cliff-path.json",
-  "recorded_at": "2026-09-05T07:51:30.100939+00:00",
-  "source": "record",
+  "notes": "synthetic passage; recorded live via claude_code (ADR 0123)",
+  "recorded_at": "2026-09-04T01:50:00.594588+00:00",
   "split": "validation",
   "trace": [
     {
@@ -97,7 +93,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-16-cliff-path:retrieve:0",
         "node_id": "retrieve",
-        "now": "2026-09-05T07:51:30.109049+00:00",
+        "now": "2026-09-04T01:50:00.596744+00:00",
         "run_id": "sum-16-cliff-path",
         "trace_id": "sum-16-cliff-path"
       },
@@ -151,7 +147,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-16-cliff-path:draft:1",
         "node_id": "draft",
-        "now": "2026-09-05T07:51:30.109122+00:00",
+        "now": "2026-09-04T01:50:00.596784+00:00",
         "run_id": "sum-16-cliff-path",
         "trace_id": "sum-16-cliff-path"
       },
@@ -168,11 +164,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 82,
+            "token_cost": 69,
             "trace_id": "sum-16-cliff-path",
-            "ts": "2026-09-05T07:51:30.109122Z"
+            "ts": "2026-09-04T01:50:00.596784Z"
           }
         ],
         "reflections": [],
@@ -180,7 +176,7 @@
         "scores": {},
         "tool_results": [],
         "working_memory": {
-          "summary": "A landslip after heavy rain destroyed twenty metres of cliff edge at Gannet Head, closing that coast path section and diverting walkers inland via a farm track. Authorities plan a new path set further back; car park and cafe stay open."
+          "summary": "Landslip after heavy rain removed twenty metres of cliff, closing the coast path at Gannet Head; walkers detour inland via a farm track while the trail authority plans a new path further from the edge."
         }
       },
       "input_state": {
@@ -221,7 +217,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-16-cliff-path:reflect:2",
         "node_id": "reflect",
-        "now": "2026-09-05T07:51:32.755764+00:00",
+        "now": "2026-09-04T01:50:05.715508+00:00",
         "run_id": "sum-16-cliff-path",
         "trace_id": "sum-16-cliff-path"
       },
@@ -255,11 +251,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 82,
+            "token_cost": 69,
             "trace_id": "sum-16-cliff-path",
-            "ts": "2026-09-05T07:51:30.109122Z"
+            "ts": "2026-09-04T01:50:00.596784Z"
           }
         ],
         "reflections": [],
@@ -275,7 +271,7 @@
             "coast path",
             "landslip"
           ],
-          "summary": "A landslip after heavy rain destroyed twenty metres of cliff edge at Gannet Head, closing that coast path section and diverting walkers inland via a farm track. Authorities plan a new path set further back; car park and cafe stay open.",
+          "summary": "Landslip after heavy rain removed twenty metres of cliff, closing the coast path at Gannet Head; walkers detour inland via a farm track while the trail authority plans a new path further from the edge.",
           "text": "A section of the coast path at Gannet Head has been closed after a landslip took away about twenty metres of the cliff edge following a week of heavy rain. Walkers are being diverted inland along a farm track that adds roughly a mile to the route. The national trail authority will survey the cliff once the ground has dried and expects to build a new path further from the edge rather than repair the old line. The nearby car park and cafe remain open."
         }
       },
@@ -292,7 +288,7 @@
         "graph_version": "0.1.0",
         "idempotency_key": "sum-16-cliff-path:consolidate:3",
         "node_id": "consolidate",
-        "now": "2026-09-05T07:51:32.755960+00:00",
+        "now": "2026-09-04T01:50:05.715679+00:00",
         "run_id": "sum-16-cliff-path",
         "trace_id": "sum-16-cliff-path"
       },
@@ -324,11 +320,11 @@
         "provenance": [
           {
             "graph_version": "0.1.0",
-            "model": "claude-opus-5[1m]",
+            "model": "claude-fable-5-1",
             "node_id": "draft",
-            "token_cost": 82,
+            "token_cost": 69,
             "trace_id": "sum-16-cliff-path",
-            "ts": "2026-09-05T07:51:30.109122Z"
+            "ts": "2026-09-04T01:50:00.596784Z"
           }
         ],
         "reflections": [
@@ -346,7 +342,7 @@
             "coast path",
             "landslip"
           ],
-          "summary": "A landslip after heavy rain destroyed twenty metres of cliff edge at Gannet Head, closing that coast path section and diverting walkers inland via a farm track. Authorities plan a new path set further back; car park and cafe stay open.",
+          "summary": "Landslip after heavy rain removed twenty metres of cliff, closing the coast path at Gannet Head; walkers detour inland via a farm track while the trail authority plans a new path further from the edge.",
           "text": "A section of the coast path at Gannet Head has been closed after a landslip took away about twenty metres of the cliff edge following a week of heavy rain. Walkers are being diverted inland along a farm track that adds roughly a mile to the route. The national trail authority will survey the cliff once the ground has dried and expects to build a new path further from the edge rather than repair the old line. The nearby car park and cafe remain open."
         }
       },
