@@ -19,7 +19,7 @@
     {
       "op": "regex",
       "path": "working_memory.summary",
-      "value": "^(?:\\s*\\S+){1,35}\\s*$"
+      "value": "^\\s*\\S+(?:\\s+\\S+){0,34}\\s*$"
     }
   ],
   "expected": "must_pass",

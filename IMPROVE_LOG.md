@@ -2786,3 +2786,105 @@ passes.
 candidate an executing gate reaches an *accept* verdict on, which needs the
 two gate defects above answered; ADR 0157 also states what S1's
 retrieval→prompt wiring changes about that claim.
+
+## D2 — a word cap that did not terminate, and a 0.0000 that would not say why (ADR 0166)
+
+**The defect.** ADR 0156 §D2, closed here. Every summary scenario in
+`corpus/` declared its word cap as `^(?:\s*\S+){1,N}\s*$`. The inner `\s*`
+is nullable, so adjacent iterations can split one non-space run anywhere, and
+the number of ways to cut a k-character string into ≤ N runs is exponential
+in k. A **match** short-circuits; a **failure** — a summary one word over the
+cap — must exhaust every one of them, and `checks.py::_holds` called
+`re.search` with no timeout. Every recorded cassette sits at or under its cap,
+so the branch was unreachable from every green test in this repo and reachable
+from every live gate pass. It cost I11 three attempts past a ten-minute wall
+(recorded there as a suspected throttle; erratum appended to ADR 0123) and S2
+four more.
+
+**Reproduced by running**, in a child process under a wall clock because the
+parent cannot time a call that never returns — both directly and through this
+repo's own `checks._holds` / `evaluation.score_scenario` on the real
+`corpus/validation/sum-13-cider-press.json`:
+
+```
+corpus pattern : ^(?:\s*\S+){1,35}\s*$
+_holds, corpus pattern, 35 words (at cap)                  -> True in 0.01 ms
+_holds, corpus pattern, 36 words (ONE OVER)                DID NOT TERMINATE in 8 s
+score_scenario, summary of 35 words (at cap)               -> 0.25 in 0.06 ms
+score_scenario, summary of 36 words (ONE OVER)             DID NOT TERMINATE in 8 s
+```
+
+and after the rewrite, same script, same scenario file:
+
+```
+corpus pattern : ^\s*\S+(?:\s+\S+){0,34}\s*$
+_holds, corpus pattern, 36 words (ONE OVER)                -> False in 0.02 ms
+score_scenario, summary of 36 words (ONE OVER)             -> 0.0 in 0.06 ms
+```
+
+**Four changes, each sufficient alone.**
+
+1. **`max_words` / `min_words`** — the cap with no regex in it. Integer value
+   (`bool` refused), non-string target fails rather than being stringified.
+2. **The twenty corpus scenarios keep a regex, and measuring is what showed
+   why.** `{1,N}` carries a LOWER bound: a bare `max_words` **accepts an empty
+   summary**, which is exactly the input ADR 0156 used to attribute repeat 3's
+   `0.00` to a failed call rather than a wrong answer; adding `min_words: 1`
+   is a fifth check on a four-check scenario and moves every recorded score
+   (0.75 → 0.80). So they take the linear-time equivalent
+   `^\s*\S+(?:\s+\S+){0,N-1}\s*$` — `\s+` is not nullable, so every iteration
+   boundary is forced. Migration: 6 scenarios at cap 30, 7 at 35, 7 at 40;
+   `checks` the only key that moved in all twenty (asserted per file by a JSON
+   diff over every top-level key, then `git diff --stat`: 20 files, 20
+   insertions, 20 deletions). New scenarios should use `max_words`.
+3. **A static detector**, at scenario load and again in `_holds`, because
+   Python's `re` has no timeout and this repo takes no dependency for one. It
+   refuses a repeated group whose body holds a nullable quantifier, or whose
+   body is a single unbounded-quantified atom (`(x+)+`). Verified against a
+   planted fault before being trusted: 10 patterns that must be refused
+   (including S2's exact three caps and `(a+)+`, `(a*)*`, `(a+)*`), 11 that
+   must pass (`^\S+$`, `(?:foo|bar){1,3}`, `\bword\b`, and the rewrite the
+   error message itself recommends — a fix whose advice the detector then
+   rejects is a dead end). All 21 agree. Planted in a scratch corpus file,
+   `load_scenario` refuses it, names the file, and leads with `unusable
+   check:`. A long input is **refused, never truncated** — "at most 35 words"
+   of the first 10,000 characters is a different question.
+4. **`loop score --json` gains `attribution`**, closing ADR 0156's further
+   defect. `run_scenario` already computed both halves and `cmd_score` emitted
+   neither, so "the provider died" and "the answer was wrong" were both
+   `0.0000` and telling them apart took token arithmetic. Tested on both
+   shapes with a stub provider; on the real corpus it immediately names the
+   case-sensitivity that has explained `sum-14` and `sum-16`'s 0.75 in prose
+   since ADR 0123.
+
+**The metric is unchanged.** `aef loop score agents.summary.graph:build_graph
+--corpus corpus --splits train,validation --json`, before and after,
+`diff`ed: identical byte for byte. train `0.9792` (n=12, stdev 0.0722),
+validation `0.9167` (n=6, stdev 0.1291), `sum-07`/`sum-14`/`sum-16` at 0.75,
+18 cassette hits and 0 misses.
+
+**Mutations: 5 of 5 caught**, every restore sha256-verified — the detector as
+a no-op, `max_words` reversed, `_holds` skipping the refusal, `cmd_score`
+dropping the `failure` string, and one corpus scenario keeping the old cap.
+**M3 exposed a weak test of my own**: with the refusal removed, the
+defence-in-depth test did not go red, it **hung** — which is the defect
+itself, and a hanging test is not a failing test. Rebuilt around a
+child-process wall so it fails in 5 seconds instead of never; the mutation was
+not dropped to keep the test.
+
+**Green bar.** `pytest -q` 2178 passed, 5 skipped (from 2131; +47). `mypy aef
+examples` 131 files clean. `ruff check .` clean. `ruff format --check aef
+tests examples` 252 formatted.
+
+**No rubric score moves** — this is a defect fix, not a measurement. What it
+buys is ADR 0156's consequence 4: "D2 blocks every live measurement in this
+repo until it is fixed" no longer holds.
+
+**Deliberately left.** `min_words` exists and nothing on disk uses it; whether
+the twenty scenarios should move to `max_words` + `min_words` is a decision
+for whoever next re-records the corpus, since it changes their recorded
+scores. No generated document lists the check ops — `grep "contains"` across
+`aef/cli/adopt.py`, `aef/cli/adopt_loop.py` and `aef/cli/templates/` finds
+nothing — so nothing under `adopt` needed an edit, recorded so M2 does not go
+looking. ADR 0156's third defect (`next(iter(modelUsage))`) is ADR 0154's and
+is not touched here.
