@@ -76,6 +76,16 @@ DEFAULT_OUT = REPO_ROOT / "docs" / "research" / "j2" / "results.jsonl"
 # these are what G2/G3 measure on. See the module docstring for why two.
 DEFAULT_SCENARIOS = ("sum-01-kestrel-ferry", "sum-02-orchard-blight")
 ARMS = ("greedy", "sampling")
+# G1's default is `python -m pytest -q` — this repo's WHOLE suite, per
+# candidate, per turn. The first live turn of this rig measured exactly that
+# and nothing else: `G1 rejected it: build command failed (timed out)`, before
+# any behavioural gate ran, on a candidate the model had just been paid to
+# write. G1's question here is "does the changed agent still import and
+# compile", so that is what it is asked. `aef loop run --build-command` now
+# exists for the same reason (ADR 0160).
+BUILD_COMMANDS: tuple[tuple[str, ...], ...] = (
+    ("python", "-c", "import agents.summary.graph as g; g.build_graph()"),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -261,6 +271,7 @@ def run_arm(
         corpus=load_corpus(repo_dir / "corpus"),
         entrypoint=ENTRYPOINT,
         config_path=CONFIG_PATH,
+        build_commands=BUILD_COMMANDS,
         cassette_miss="live",
         proposer="llm",
         proposer_provider=build_model_provider(

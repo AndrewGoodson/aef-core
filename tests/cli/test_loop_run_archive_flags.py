@@ -156,6 +156,69 @@ def test_the_handler_reads_the_flag_rather_than_the_parser_defaulting_it(
 
 
 # ---------------------------------------------------------------------------
+# `--build-command`, which `run` did not have
+# ---------------------------------------------------------------------------
+
+
+def test_run_accepts_build_commands_and_they_reach_the_gate_config(
+    repo: Path, tmp_path: Path, spy: _Spy
+) -> None:
+    """`gate` and `cycle` have taken `--build-command` since G1 existed;
+    `run` did not, and `_build_commands` reads the attribute with `getattr`,
+    so the absence was silent: every `aef loop run` candidate was built with
+    G1's default `python -m pytest -q` — the whole suite, per candidate, per
+    turn. Found by running J2's first live turn, whose only measurement was
+    `G1 rejected it: build command failed (timed out)`.
+
+    The assertion is on the `LoopConfig` the handler builds, because that is
+    what `gate` reads; a parser test alone would have passed against the
+    broken version had the flag merely existed.
+    """
+    argv = _argv(
+        repo,
+        tmp_path,
+        "--build-command",
+        "python -c pass",
+        "--build-command",
+        "python -m compileall -q .",
+    )
+    args = build_parser().parse_args(argv)
+    assert args.build_command == ["python -c pass", "python -m compileall -q ."]
+
+    from aef.cli.loop import cmd_run
+
+    captured: dict[str, Any] = {}
+
+    def capture(config: Any, **kwargs: Any) -> Any:
+        captured["build_commands"] = config.build_commands
+        return _Spy()(config, **kwargs)
+
+    import aef.harness.loop as loop_module
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(loop_module, "run_loop", capture)
+    try:
+        assert cmd_run(args) == 0
+    finally:
+        monkey.undo()
+    assert captured["build_commands"] == (
+        ("python", "-c", "pass"),
+        ("python", "-m", "compileall", "-q", "."),
+    )
+
+
+def test_without_the_flag_run_still_takes_g1s_default(
+    repo: Path, tmp_path: Path, spy: _Spy
+) -> None:
+    """The control: adding the flag must not change what an invocation
+    without it does."""
+    from aef.cli.loop import _config
+
+    args = build_parser().parse_args(_argv(repo, tmp_path))
+    assert _config(args).build_commands is None
+
+
+# ---------------------------------------------------------------------------
 # End to end, through the real driver and the real gates
 # ---------------------------------------------------------------------------
 

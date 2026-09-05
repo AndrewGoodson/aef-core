@@ -1472,6 +1472,20 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "parent last night kept, and will not re-gate a tree an earlier run already "
         "kept or rejected. Pass this for a self-contained run (an A/B arm, a demo).",
     )
+    # `gate` and `cycle` have had this since G1 existed; `run` never did, and
+    # `_build_commands` reads it with `getattr`, so `aef loop run` silently
+    # took G1's default `python -m pytest -q` — the WHOLE suite, per candidate,
+    # per turn. Found by running J2's first live turn (ADR 0160): the only
+    # thing the arm measured was `G1 rejected it: build command failed
+    # (timed out)`, before any behavioural gate, on a candidate the model had
+    # just been paid to write.
+    p_run.add_argument(
+        "--build-command",
+        action="append",
+        default=None,
+        help="a command G1 must pass, e.g. 'python -m pytest -q'. Repeatable. "
+        "Defaults to pytest only — anything more is repo-specific.",
+    )
     _proposer_flags(p_run)
     p_run.set_defaults(handler=cmd_run)
 
