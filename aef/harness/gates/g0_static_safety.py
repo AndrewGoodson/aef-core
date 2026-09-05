@@ -7,7 +7,11 @@ Rejects, in order of cost:
 2. **Diff size over budget.** A change too large to be meaningfully verified
    is auto-rejected rather than surfaced — Q-A1, owner default: 200 changed
    lines and 3 files. Restrictive on purpose; loosen only with evidence.
-3. **Static safety of the Python that would land**, by AST.
+3. **Static safety of the Python that would land**, by AST. Only Python: a
+   markdown persona has no AST, so a candidate that changes one is passed
+   *unscanned* — and the PASS reason now counts what was read and names what
+   was not, because a prompt-file repo makes that the ordinary case rather
+   than a curiosity (ADR 0152).
 
 The import rule is an **allowlist, not a denylist** (constraint #6's
 deny-by-default, applied to code rather than tools). A denylist has to
@@ -155,13 +159,52 @@ class G0StaticSafety(Gate):
                 evidence=tuple(str(f) for f in findings),
             )
 
+        # ADR 0152. `_scan` skips every path that does not end `.py`, which is
+        # correct — there is no AST in a markdown file — and used to be
+        # invisible: the PASS reason said "all Zone A, no static-safety
+        # violations" over a candidate whose only changed file G0 had never
+        # opened. Reproduced on a repo running `--agent-root .claude/agents`
+        # with a one-file candidate editing a persona:
+        #
+        #     G0 outcome: pass
+        #     G0 reason: 1 file(s), 3 line(s), all Zone A, no static-safety violations
+        #
+        # That is a claim about a file nobody read. Prompt-file agents make it
+        # the COMMON case rather than an edge one — a proposer that appends a
+        # lesson to a `.md` produces exactly this diff — so what was scanned is
+        # now said, and what was not is listed as evidence.
+        unscanned = self._unscanned(ctx)
+        scanned = sum(
+            1
+            for entry in verdict.diff.entries
+            if not entry.is_deletion and entry.path.endswith(".py")
+        )
+        reason = (
+            f"{verdict.diff.changed_files} file(s), {verdict.diff.changed_lines} line(s), "
+            f"all Zone A; {scanned} Python file(s) statically scanned, no violations"
+        )
+        if unscanned:
+            reason += (
+                f"; {len(unscanned)} NOT statically scanned (not Python — an AST gate has "
+                f"nothing to say about them, and G1/G2/G5 judge them instead)"
+            )
         return GateResult(
             gate=self.id,
             outcome=GateOutcome.PASS,
-            reason=(
-                f"{verdict.diff.changed_files} file(s), {verdict.diff.changed_lines} line(s), "
-                f"all Zone A, no static-safety violations"
-            ),
+            reason=reason,
+            evidence=tuple(f"{p}: not Python; no static scan" for p in unscanned),
+        )
+
+    def _unscanned(self, ctx: GateContext) -> tuple[str, ...]:
+        """Changed paths `_scan` will not read, in diff order.
+
+        The same predicate `_scan` filters on, read off the same entries, so
+        the two cannot disagree about which files were examined.
+        """
+        return tuple(
+            entry.path
+            for entry in ctx.verdict.diff.entries
+            if not entry.is_deletion and not entry.path.endswith(".py")
         )
 
     def _check_size(self, ctx: GateContext) -> GateResult | None:
