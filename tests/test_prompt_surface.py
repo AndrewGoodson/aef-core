@@ -59,6 +59,81 @@ FORBIDDEN = (
 # Verification instructions the guide says to KEEP.
 KEEP = ("reproduce", "green bar")
 
+# --------------------------------------------------------------------------
+# Load-bearing sentences (M7, ADR 0183)
+# --------------------------------------------------------------------------
+# Three facts that a reader ACTS on, each of which replaced a claim that had
+# gone false without anything failing. A prompt surface that quietly loses one
+# of them is back where it started, so they are pinned the same way the model
+# guide's blocks are: by the sentence, in the file that carries it.
+#
+# The rule these come from is ADR 0148's: a document says what a command
+# printed. The counter-rule they enforce is ADR 0158's: when the command
+# CANNOT be run, the document says that too, rather than describing the
+# capability as though it worked.
+#
+# Each entry is (surface, label, substring), matched against the surface with
+# runs of whitespace collapsed — these are hard-wrapped markdown documents, and
+# a pin that also pins where a line happens to break fails on a reflow and
+# teaches whoever hits it to delete the pin.
+#
+# Substrings, not regexes: a sentence that has been genuinely REWORDED should
+# fail here and be re-pinned deliberately, which is what happened to
+# `not** reproduced` in `tests/cli/test_adopt.py` this increment.
+LOAD_BEARING = (
+    # 1. Live gating is a GRANT, and it is off. A prompt candidate can only be
+    #    scored live, and `gates.live_model_calls: true` is what lets the
+    #    gates' sandbox worker — the one process here that executes code an
+    #    agent wrote — inherit the operator's harness login, and therefore
+    #    what lets a candidate's code spend their quota (ADR 0181).
+    #
+    #    This pin was written one merge earlier as "a prompt candidate cannot
+    #    yet be ACCEPTED live", which was ADR 0158's true sentence and stopped
+    #    being true when K1 landed. It is re-pinned on the flag rather than on
+    #    the limitation, because the flag is the thing a reader must decide
+    #    about and the limitation was always going to be closed.
+    ("CLAUDE.md", "live gating is an owner grant", "gates.live_model_calls"),
+    ("AGENT_INTEGRATION.md", "live gating is an owner grant", "gates.live_model_calls"),
+    ("<adopt: FIRST_DAY.md>", "live gating is an owner grant", "live_model_calls: true"),
+    ("<adopt: LOOP.md>", "live gating is an owner grant", "live_model_calls: true"),
+    # ...and the half that makes it safe to leave off: a refusal, not a
+    # silently-wrong verdict. Without this the gate reports "previously-passing
+    # scenario(s) no longer pass" about a subprocess that could not log in.
+    ("<adopt: FIRST_DAY.md>", "live gating refuses rather than misreports", "refused by name"),
+    ("<adopt: LOOP.md>", "live gating refuses rather than misreports", "refused by name"),
+    # 2. Exit code 3. `main()`'s catch-all returned 1 for any exception, so a
+    #    crash read as a healthy rejection and the nightly job stayed green
+    #    (ADR 0167). A document listing three exit codes teaches the reader to
+    #    treat 3 as unknown.
+    ("AGENT_INTEGRATION.md", "the fourth exit code", "| `3` |"),
+    ("<adopt: LOOP.md>", "the fourth exit code", "| `3` |"),
+    ("<adopt: LOOP.md>", "the memory flag is required", "--no-memory"),
+    # 3. Per-provider containment. `--tools ""` is spelled identically on two
+    #    CLIs and suppresses tools on one of them (ADR 0169). A blanket "the
+    #    prompt runs; the agent's tools do not" is the sentence this replaced.
+    ("CLAUDE.md", "containment is per-provider", "suppresses nothing"),
+    ("AGENT_INTEGRATION.md", "containment is per-provider", "suppresses nothing"),
+    ("<adopt: FIRST_DAY.md>", "containment is per-provider", "suppresses nothing"),
+    ("<adopt: LOOP.md>", "containment is per-provider", "suppresses nothing"),
+)
+
+# The corpus provenance note is not a prompt surface — no agent is handed
+# `corpus/README.md` as instructions — but it is the only place the six
+# `claude-fable-5-1` validation recordings are written down, and S6 found them
+# by accident after a judge A/B had already run across the mixture (ADR 0162).
+# Pinned here because this file is where "a document lost a sentence" is
+# caught, and because the recordings CANNOT be remade.
+CORPUS_README_PINS = (
+    "claude-fable-5-1",
+    "quota is exhausted",
+    "cannot be regenerated",
+)
+
+
+def _flat(text: str) -> str:
+    """The document with hard wrapping removed. See LOAD_BEARING."""
+    return " ".join(text.split())
+
 
 def _joined(text: str) -> str:
     """Markdown joins `>` continuation lines; compare the joined quote."""
@@ -165,6 +240,56 @@ def test_no_prompt_surface_carries_text_the_guide_removed(name: str) -> None:
     for label, pattern in FORBIDDEN:
         hits = [line for line in lines if pattern.search(line)]
         assert not hits, f"{name}: {label} text is back: {hits[:2]}"
+
+
+@pytest.mark.parametrize(("name", "label", "needle"), LOAD_BEARING)
+def test_the_load_bearing_sentences_are_still_there(name: str, label: str, needle: str) -> None:
+    """Nine claims in these documents had gone false with nothing failing
+    (ADR 0183). These three are the ones a reader ACTS on — budgets model
+    calls, reads a CI exit code, trusts a containment property — so losing one
+    costs more than a stale sentence."""
+    assert needle in _flat(_surface()[name]), f"{name} lost the {label} sentence: {needle!r}"
+
+
+def test_the_load_bearing_detector_would_notice_a_loss() -> None:
+    """The control. A needle so common that every document contains it would
+    pin nothing while passing forever, so each one is asserted ABSENT from
+    another surface that legitimately does not carry it — the autonomy
+    contract, which is about what may never be automated and says none of
+    these three things."""
+    other = _flat(_surface()["<adopt: AUTONOMY.md>"])
+    for _name, label, needle in LOAD_BEARING:
+        assert needle not in other, f"{label}: {needle!r} pins nothing — AUTONOMY.md has it too"
+
+
+def test_the_corpus_readme_records_which_model_wrote_what() -> None:
+    """`corpus/README.md` is the only place the twenty `claude-fable-5-1`
+    recordings are named, and their quota is exhausted — the scenarios cannot
+    be remade, so a measurement that assumes one model is wrong by 6/17 on the
+    validation split (ADR 0162's defect 1)."""
+    text = _flat((REPO / "corpus" / "README.md").read_text())
+    for needle in CORPUS_README_PINS:
+        assert needle in text, f"corpus/README.md lost the provenance note {needle!r}"
+    # Not just the words: the split that matters, with its count.
+    assert "6/17" in text, "the affected fraction of the validation split is not stated"
+    # And the table is derived from the files rather than typed, so it cannot
+    # drift from them. Re-derive it here; the counts must still hold.
+    import collections
+    import glob
+    import json
+
+    agg: collections.Counter[tuple[str, ...]] = collections.Counter()
+    for path in glob.glob(str(REPO / "corpus" / "*" / "*.json")):
+        scenario = json.loads(open(path).read())
+        models = tuple(
+            sorted(
+                {(c.get("result") or {}).get("model") for c in (scenario.get("model_calls") or [])}
+                - {None}
+            )
+        )
+        agg[models] += 1
+    assert agg[("claude-fable-5-1",)] == 20, agg
+    assert agg[("claude-opus-5[1m]",)] == 19, agg
 
 
 @pytest.mark.parametrize(

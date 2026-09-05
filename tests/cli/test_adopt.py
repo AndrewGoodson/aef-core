@@ -1057,7 +1057,16 @@ def test_the_kit_names_every_wired_harness_and_guesses_at_none(tmp_path: Path) -
     sequence = (tmp_path / "FIRST_DAY.md").read_text()
     assert "17.9k tokens" in sequence, "the leak Grok's isolation flag does not close"
     assert "--cwd" in sequence
-    assert "not** reproduced" in sequence, "codex's status must not be overstated"
+    # The pin moved (M7): it was the literal `not** reproduced`, which pinned
+    # one sentence's markdown rather than the fact. The prompt-file section is
+    # a table now (ADR 0169's per-provider evidence), so the same fact reads
+    # "Not reproduced live". Case-insensitive substring, no formatting.
+    assert "not reproduced" in sequence.lower(), "codex's status must not be overstated"
+    # The half of ADR 0169 that a stamped sentence used to hide: the two CLIs
+    # spell tool suppression identically and only one of them does it. A
+    # document that keeps grok's leak and drops this is still selling
+    # containment it does not have.
+    assert "suppresses nothing" in sequence, 'grok\'s --tools "" must not read as suppression'
 
 
 def test_the_generated_entry_files_carry_the_block_they_would_append(tmp_path: Path) -> None:

@@ -56,12 +56,54 @@ directional context, not commitments). Each phase lists what's real
 - [x] Per-agent config: `AgentConfig` (report §16, verbatim + `evolution`),
   unknown-key rejection, `agent.example.yaml` + `agent.azure_sec.yaml` —
   `aef/config/`
-- [x] CLI: `aef init`/`adopt`/`doctor`/`run`/`eval`/`trace` —
+- [x] CLI: `aef init`/`adopt`/`doctor`/`run`/`eval`/`trace`/`migrate` —
   `aef/cli/`
 
 **Deliberately out of Phase 0/1 scope** (see ADR 0007): fan-out/fan-in
 execution (BSP super-steps) — declared in the `Edge`/`Route` contract,
 not executed.
+
+### Providers — **FIVE, REAL** (`aef/providers/`)
+
+`model_provider.impl` in `aef.yaml`. Phase 0's line above ("Single provider …
+real `AnthropicProvider`") is the history, not the state.
+
+| `impl` | real? | note |
+|---|---|---|
+| `claude_code` | yes, **default**, reproduced end to end | the coding agent's own login is the credential — no API key anywhere (ADR 0112) |
+| `codex` | yes, **not reproduced live** | built from the CLI's documented flags; the Codex on the authoring box predates its server's model catalog |
+| `grok` | yes, parsed from a live run | none of its JSON field names are Claude's (`text`/`stopReason`, no `is_error`); each wrong guess yields an empty completion and no exception (ADR 0154) |
+| `command` | yes | any CLI, from an argv template in a `command:` block. The path for every harness released after this file was written, GitHub Copilot's CLI included |
+| `anthropic` | yes | SDK, needs `ANTHROPIC_API_KEY` |
+
+Plus the two wrappers `cassette` (record/replay) and `fallback` (declared
+order, falls through on `ModelProviderError`).
+
+Every provider declares `isolation -> frozenset[str]` from a closed
+vocabulary, **derived from the argv it actually builds** for a fixed probe, so
+removing a flag retracts the claim in the same commit (ADR 0169). `command`'s
+set is the owner's assertion, recorded and never verified; `fallback`'s is the
+**intersection**. The full per-provider table, with what was measured versus
+what is structural, is in `AGENT_INTEGRATION.md`.
+
+### Prompt-file agents — **REAL** (`aef/reasoning/prompt_agent.py`, `aef/cli/migrate.py`)
+
+The ordinary case rather than the exception: an adopting repo whose "agents"
+are `.md` personas a coding harness runs, with no SDK call site to convert.
+`aef adopt` labels it `prompt_files` with counts; `aef migrate` discovers
+`.claude/agents/**/*.md` recursively and writes **one four-node graph per
+persona** (`retrieve -> prompt_agent -> reflect -> consolidate -> END`,
+`graph_id` = the agent's name), reading the persona at execution time so an
+edit takes effect with no regeneration step (ADR 0152, 0179). Skills are
+found, counted and deliberately not migrated, with the reason printed.
+
+Zone A stays `agents/` by default, so the loop may edit the wrapper and not
+the prompt; `--agent-root .claude/agents` is the opt-in that widens it and the
+report states in words what that adds to the blast radius. A graph under such
+a root has no dotted module name, so every `aef loop` subcommand and `aef run`
+accept a **file path** as well as the two dotted spellings (ADR 0176/0177),
+and `--agent-path` may name the persona `.md`, which preflight resolves to
+that persona's generated graph through migrate's own mapping (ADR 0178).
 
 ## Phase 2 — Context engine — **PARTIALLY REAL**. The rest was **DELETED**.
 
@@ -91,22 +133,34 @@ either an unread `Services` slot or a test asserting they still raise.
   are counted rather than records. `make_consolidate_node` runs it after
   reflection; `Services.knowledge` is defaulted by `agent_services`.
 
-  **Kept on a measurement, not an argument.** Un-consolidated retrieval
-  *degrades* as experience accumulates — distinct-lesson coverage falls 6→1 at
-  a fixed budget as recurrence rises, because near-duplicate records about one
-  failure crowd out every other lesson. Consolidation holds it at 6. Both
-  optional knobs are off by default for measured reasons: `knowledge_boost` is
-  `0.0` (swept at 0/0.5/1/3, it changed no coverage number anywhere, so the
-  benefit is consolidation and not ranking), and the LLM-backed summariser
-  (`adapters/llm_summariser.py`, implemented and tested — **not a stub**)
-  costs coverage at tight budgets because its summary is added to the verbatim
-  feedback rather than replacing it, which trades coverage for traceability.
+  **Kept on a mechanism, and the measurement that once justified it has been
+  demoted.** Un-consolidated retrieval *degrades* as experience accumulates —
+  distinct-lesson coverage falls 6→1 at a fixed budget as recurrence rises,
+  because near-duplicate records about one failure crowd out every other
+  lesson, and consolidation holds it at 6 (ADR 0110). That is a fact about
+  *retrieval coverage* and it was used as a proxy for task outcome. **The
+  proxy is disproved for this corpus** (ADR 0175): with the layer fully
+  engaged — one entry formed from three distinct train runs, in the prompt for
+  10 of 17 scored scenarios — the task metric did not move, and the treated
+  subset was slightly worse. Consolidation stays because it is the level-2
+  mechanism dimension 2 of the rubric describes; it is not a score gain and
+  nobody should cite it as one.
 
-  **Not reachable from an `aef.yaml`.** `build_retriever` has no `knowledge=`
-  parameter and `ContextConfig` has no field for one, so the layer is wired
-  only by hand-constructing `Services` in Python. This is the same shape as
-  the defect that deleted `GraphStore` below, is known rather than discovered,
-  and is item A1 in `MERGE_READY_LOOP.md`.
+  Both optional knobs are off by default for measured reasons.
+  `knowledge_boost` is `0.0` — and the reason changed with ADR 0175. It used
+  to read "swept at 0/0.5/1/3, it changed no coverage number anywhere, so the
+  benefit is consolidation and not ranking"; on a real corpus the knob
+  **demonstrably** controls whether the store's only lesson reaches the model
+  (0/17 vs 10/17 in prompt), and what survives is that the task metric does
+  not follow it. The LLM-backed summariser (`adapters/llm_summariser.py`,
+  implemented and tested — **not a stub**) costs coverage at tight budgets
+  because its summary is added to the verbatim feedback rather than replacing
+  it, which trades coverage for traceability.
+
+  **Reachable from an `aef.yaml`.** `build_retriever` takes `knowledge=` and
+  `aef run --config` / `aef loop` build it, so a `context:` block is enough.
+  This paragraph said the opposite — "no `knowledge=` parameter … item A1 in
+  `MERGE_READY_LOOP.md`" — for a whole release after ADR 0118 closed it.
 
   It does not feed `aef/evolution/` and cannot be made to: an AST scan
   enforces the separation in both directions. Consolidated knowledge is not
@@ -137,8 +191,22 @@ either an unread `Services` slot or a test asserting they still raise.
   "failure"|"success")` from a real graph run. Grounded strictly in
   recorded signals (`state.errors`, `state.tool_results`, `state.scores`)
   — no model call. See ADR 0046.
-  **Still stubbed:** an LLM-backed Critic/Judge, and any use of a
-  `Judgment` to gate or re-plan.
+- **LLM-backed `Critic`/`Judge` — REAL, and off by measurement.**
+  `aef/reasoning/llm_reflection.py`, selected by `reflection.impl: llm`, with
+  the bias controls of ADR 0115. This line said "still stubbed" long after the
+  file had a body. It is **not the default**, and the reason is four A/Bs
+  rather than caution: ADR 0115, 0155 and 0175 each measured it and moved no
+  task metric, and ADR 0159 showed why the earlier judge comparisons could not
+  settle it at all — on a corpus with no true negatives the rule-based judge is
+  constant-fail and the LLM judge constant-pass, so 3/18, 9/18 and 15/18 are
+  all uninformative. ADR 0171 rebuilt the corpus with seven owner-check
+  negatives and re-ran it: **LLM 16/17, AUC 1.000** against a 13/17 constant
+  baseline — real separation, of exactly one failure family (word-cap
+  overruns) with n=4 in validation. A self-preference control now exists
+  (`PairwiseRanker`, ADR 0162) and measured self-preference **PRESENT** on
+  this box's own models, with `allow_self_ranking=False` refusing rather than
+  warning. Nothing in `run_loop` calls the ranker yet.
+  **Still stubbed:** any use of a `Judgment` to gate or re-plan.
 - `Optimizer` (`aef/services/optimizers/base.py`) — GEPA/DSPy-style
   offline prompt/program optimization, not implemented
 
@@ -160,6 +228,69 @@ cheap-first order `G0 → G1 → G4 → G5 → G2 → G3`, ADR 0085), the propos
 (M8, `proposer.py` — numeric *and* the bounded structural catalogue in
 `transformations.py`, ADR 0099), and post-merge monitoring (M10,
 `monitoring.py`).
+
+Built since **that** paragraph, each with the ADR that measured it:
+
+- **Three proposers**, not one: `rule_based`, `llm`, and `rule_based_prompt`
+  (ADR 0157) — the last appends one consolidated lesson as a bullet under
+  `## Lessons (aef)` in a persona, computed from records with **no model
+  call**, provenance in the bullet, never rewriting an owner's bullet, and
+  raising rather than returning when aimed outside Zone A.
+- **A prose control cohort.** G2 and G3 can now run on a candidate that
+  changes no Python file; before ADR 0170 such a candidate died at G2 with a
+  message about a scratch directory. Nothing about what the gates *accept*
+  changed — no threshold, no p95 rule, no `PolicyEngine` switch. G3's answer
+  for prose is only as good as its placebo, which controls for a bullet's
+  shape and length and not its plausibility; that is stated residual risk.
+- **Check-derived failure memory** (`check_memory.py`, ADR 0174). A run that
+  answers and gets the owner's *task metric* wrong now leaves a `failure`
+  record in the same shape `make_reflect_node` writes, so the consolidator,
+  the retriever and the prompt proposer read it unchanged. The failures are
+  applied to a **local copy** of the final state: injecting them into the real
+  `state.errors` was measured to corrupt the metric twice over (0.75 → 0.0000,
+  and `classify` reporting a run as raised that did not raise). The signature
+  drops the check's *value*, which is what makes two runs failing the same
+  check with different required terms one lesson instead of two — and what
+  makes the lesson carry no answer for a `contains` check to match, measured
+  in ADR 0158 as candidate and incumbent scoring identically. Teaching to the
+  test is the alternative.
+- **A durable candidate archive.** `<state>/lineage/` keeps every candidate
+  including the rejections, which is where the information about a search
+  actually is (ADR 0160). `sample_parents` — sampling a parent other than the
+  current best — is **off**: the live A/B did not show the diversity gain its
+  falsification required. The knob is kept rather than deleted, and dimension
+  6 moved 5 → 6 for the artifact half only.
+- **Shadow containment is the default, not an opt-in** (ADR 0161). The bypass
+  is real under the explicit opt-out, and the opt-out is an owner statement
+  that is announced and ledgered; `RunConfig.containment_mode` has **no
+  default**, so a shadow caller cannot forget to read the owner's choice
+  (ADR 0173).
+- **The loop CLI refuses silences.** One of `--memory`/`--no-memory` on both
+  commands that run a turn, enforced in the handler (ADR 0165/0167); every
+  attempt journalled to `<state>/cycles.jsonl` including the paths that raise;
+  `aef loop monitor` warns `SCHEDULED CYCLE PRODUCING NOTHING` after three
+  quiet cycles, which the ledger alone provably cannot detect. Exit codes are
+  `0` escalated · `1` rejected · `2` halted-or-usage · `3` the command could
+  not do its job (ADR 0167/0178) — CI should fail on `>= 2`.
+
+- **Live gating of a prompt candidate — REAL, and off by default** (ADR
+  0181). A changed prompt is a changed cassette key, so replay cannot score
+  it; the only honest way to gate one is `--cassette-miss live`. Until
+  2026-09-05 no provider could serve that inside the gates on any repo: the
+  worker's env allowlist inherited no login, so `claude -p` answered
+  `Not logged in`, and `impl: command` could not be rebuilt on the far side
+  of the boundary because only `{impl, model}` crossed it (ADR 0158's F-M5-3
+  and F-M5-2, both now closed and their strict xfails now passing tests).
+  The fix is an **opt-in and a refusal**, not a widening:
+  `gates.live_model_calls: true` in `aef.yaml`, read from the base ref so a
+  candidate cannot grant itself the login, adds the login variables to the
+  worker's allowlist and records `live_model_calls` on every `gated` ledger
+  event; with it false — the default, and what every existing repo gets — the
+  allowlist is byte-for-byte what it was, and `--cassette-miss live` is
+  **refused by name** rather than run. The refusal is the load-bearing half:
+  without it the gate produces `G2 fail — N previously-passing scenario(s) no
+  longer pass`, which is a subprocess that could not log in wearing the words
+  of a verdict about the prompt.
 
 **Tier-1 auto-merge remains OFF.** It is no longer blocked on
 implementation — every candidate that passes all six gates escalates to a
