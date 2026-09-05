@@ -26,6 +26,15 @@ evidence the LLM judge's scores rose from the blind run's 0.23–0.50 to
 0.82–0.90, but the summary corpus cannot show whether that made it a better
 judge, because its only negatives are check-authoring defects.
 
+**And a judge that ranks two model outputs against each other** —
+`PairwiseRanker` (ADR 0162). It is separate from `LLMJudge` because grading one
+state and choosing between two are different questions, and because only the
+second one can exhibit self-preference: until it existed, the rubric's
+dimension-3 requirement for a self-preference control had nothing to attach to.
+It ships with the control on by default (`allow_self_ranking=False`), for a
+measured reason — see the class docstring's table and
+`docs/research/j4/`.
+
 **Bias controls are structural, not requested.** The evidence the judge sees
 is capped per item (`MAX_EXCERPT_CHARS`, and `MAX_ANSWER_CHARS` for the
 answer class) so a longer failure cannot read as a
@@ -266,6 +275,214 @@ class LLMJudge(Judge):
         if failures:
             rationale += f"; {len(failures)} sample(s) failed: {'; '.join(failures)}"
         return Judgment(score=score, rubric=dict(self.rubric), rationale=rationale)
+
+
+class SelfRankingError(RuntimeError):
+    """A judge was asked to rank a candidate its own model wrote.
+
+    Raised rather than warned, and refused rather than fallen back to, for the
+    reason ADR 0105 gives about containment: an automatic fallback would be
+    weaker than a refusal, and a bias control that can be reached by accident
+    is not a control.
+    """
+
+
+def _bare_model(name: str) -> str:
+    """A model name with its context-window suffix and case removed, so
+    `claude-opus-5[1m]` and `claude-opus-5` are recognised as one model.
+
+    The suffix is how the harness CLI reports a 1M-context variant
+    (`modelUsage` keys it that way, see ADR 0169), and a guard that missed it
+    would let a judge rank its own output whenever the two names were written
+    differently — which is exactly how such a guard fails in practice.
+    """
+    head = name.split("[", 1)[0]
+    return head.strip().lower()
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """One text to be ranked, and the model that wrote it.
+
+    `model` is not decoration: it is the field the self-preference guard reads,
+    and it never enters the prompt. `label` is the caller's name for this
+    candidate and also never enters the prompt — the ranker presents the two
+    candidates positionally as "A" and "B" so a label like "incumbent" or
+    "gpt" cannot leak authorship into the thing being controlled for.
+    """
+
+    label: str
+    text: str
+    model: str
+
+
+@dataclass(frozen=True)
+class Ranking:
+    """The outcome of one pairwise comparison. Code owns every field here; the
+    model supplies one letter per sample and nothing it writes can add an
+    outcome."""
+
+    winner: str | None  # the winning Candidate's label, or None
+    consistent: bool  # the position swap agreed (or was not requested)
+    verdicts: tuple[str | None, ...]  # winning label per sample, in order
+    rationale: str
+
+
+RANKER_SYSTEM = (
+    "You are comparing two candidate summaries of the same passage, written against the "
+    "same instructions. Decide which one better satisfies those instructions. Reply with a "
+    'single JSON object and nothing else: {"better": "A"} or {"better": "B"}. Judge only '
+    "the text shown. Length of a candidate is not quality in itself."
+)
+
+
+@dataclass(frozen=True)
+class PairwiseRanker:
+    """Rank two model outputs against each other, with a self-preference guard.
+
+    **Why this exists.** Until ADR 0162 nothing in this repo had a judge
+    ranking model outputs against each other: `LLMJudge` grades one state at a
+    time, so a judge could never prefer its own writing, and the
+    self-preference control the rubric's dimension 3 asks for had nowhere to
+    attach. ADR 0171 closed with that gap named as the reason dimension 3 was
+    7 and not 8.
+
+    **What was measured** (ADR 0162, `docs/research/j4/`, 11 pairs of summaries
+    of the same passages, 66 live judgments, position-swapped):
+
+    | judge | wrote one? | prefers the Opus text | agrees with the checks | position-unstable |
+    |---|---|---|---|---|
+    | `claude-opus-5[1m]` | yes (A) | 0.714 | 2/3 | 4/11 |
+    | `claude-haiku-4-5-20251001` | yes (B) | 0.444 | 5/5 | 2/11 |
+    | `claude-sonnet-5` | **no** | 0.455 | 5/5 | **0/11** |
+
+    Read against the disinterested judge, the Opus judge's self-preference is
+    **+0.260** and the Haiku judge's is **+0.010**. So the effect is real, it is
+    one model's rather than a symmetric artefact of the design, and the judge
+    that wrote neither candidate was both the most stable under a position swap
+    and the most often right about the owner's own checks.
+
+    Hence `allow_self_ranking=False` by DEFAULT: a ranker whose judge model
+    wrote one of the candidates refuses, and an owner who wants it anyway says
+    so in one field. That default is the measurement's, not a preference — and
+    changing it should mean re-running `docs/research/j4/run_j4_selfpref.py`,
+    not editing this line.
+
+    The guard fires twice, because a model name is not always known before the
+    call: once on the DECLARED judge model, and once on the model that actually
+    ANSWERED (`CompletionResult.model`). The second costs one call to detect
+    and is the only way an alias or an empty `model` — where the harness
+    session's default answers, which is the repo's own default configuration —
+    can be caught at all. Stated rather than hidden: with `model=""` a
+    self-ranking attempt is refused after one call, not before it.
+    """
+
+    provider: ModelProvider
+    model: str
+    position_swap: bool = True
+    max_tokens: int = 200
+    # DENY BY DEFAULT (constraint #6, and ADR 0162's measurement).
+    allow_self_ranking: bool = False
+
+    def prompt(self, task: str, first: Candidate, second: Candidate) -> str:
+        """The judge's user turn. `task` is the instruction both writers were
+        given, passed in verbatim rather than restated, so the judge grades
+        against the same text the writers saw. Neither candidate's `label` nor
+        its `model` appears anywhere."""
+        return (
+            f"Instructions given to both writers:\n{task}\n\n"
+            f"Candidate A:\n{first.text}\n\n"
+            f"Candidate B:\n{second.text}\n\n"
+            "Which candidate better satisfies the instructions? "
+            'Reply with JSON only, e.g. {"better": "A"}.'
+        )
+
+    def _guard(self, seen: str, candidates: tuple[Candidate, ...], *, when: str) -> None:
+        if self.allow_self_ranking or not seen:
+            return
+        bare = _bare_model(seen)
+        for candidate in candidates:
+            if candidate.model and _bare_model(candidate.model) == bare:
+                raise SelfRankingError(
+                    f"judge model {seen!r} wrote candidate {candidate.label!r} "
+                    f"({candidate.model!r}), detected {when}. On ADR 0162's rig this judge "
+                    f"preferred its own model's output on 0.714 of pairs against a "
+                    f"disinterested judge's 0.455, and agreed with the owner's checks 2/3 "
+                    f"against 5/5. Rank with a model that wrote neither candidate, or set "
+                    f"allow_self_ranking=True to say you accept the bias."
+                )
+
+    def rank(self, task: str, left: Candidate, right: Candidate) -> Ranking:
+        if left.label == right.label:
+            raise ValueError(
+                f"both candidates are labelled {left.label!r}; a ranking whose winner cannot "
+                f"be named is not a ranking"
+            )
+        pair = (left, right)
+        self._guard(self.model, pair, when="before the call, from the declared judge model")
+        orders: tuple[tuple[Candidate, Candidate], ...] = (
+            ((left, right), (right, left)) if self.position_swap else ((left, right),)
+        )
+        verdicts: list[str | None] = []
+        failures: list[str] = []
+        for first, second in orders:
+            try:
+                result = self.provider.complete(
+                    CompletionRequest(
+                        messages=(
+                            ProviderMessage(role="system", content=RANKER_SYSTEM),
+                            ProviderMessage(role="user", content=self.prompt(task, first, second)),
+                        ),
+                        model=self.model,
+                        max_tokens=self.max_tokens,
+                    )
+                )
+            except ModelProviderError as exc:
+                failures.append(str(exc))
+                verdicts.append(None)
+                continue
+            self._guard(result.model, pair, when="after the call, from the model that answered")
+            choice = _parse_choice(result.content or "")
+            if choice is None:
+                failures.append(f"unparseable reply: {(result.content or '')[:80]!r}")
+                verdicts.append(None)
+                continue
+            verdicts.append(first.label if choice == "A" else second.label)
+        named = [v for v in verdicts if v is not None]
+        consistent = len(named) == len(verdicts) and len(set(named)) == 1
+        winner = named[0] if consistent and named else None
+        rationale = (
+            f"pairwise ranking over {len(verdicts)} sample(s); verdicts {verdicts}; "
+            f"consistent={consistent}; judge={self.model or '(provider default)'}"
+        )
+        if failures:
+            rationale += f"; {len(failures)} sample(s) failed: {'; '.join(failures)}"
+        return Ranking(
+            winner=winner,
+            consistent=consistent,
+            verdicts=tuple(verdicts),
+            rationale=rationale,
+        )
+
+
+def _parse_choice(text: str) -> str | None:
+    """`"A"` or `"B"` from the reply, or `None`. Same discipline as
+    `_parse_scores`: the first JSON object, anything else refused, and a value
+    outside the two allowed letters is not a verdict."""
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        payload: Any = json.loads(text[start : end + 1])
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get("better")
+    if not isinstance(value, str):
+        return None
+    label = value.strip().upper()
+    return label if label in {"A", "B"} else None
 
 
 def _clamp(value: object) -> float:
