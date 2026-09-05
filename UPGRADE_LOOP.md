@@ -63,9 +63,18 @@ best judgement". **Every S-thread measurement runs on the session default
 (Opus) and re-measures its baseline arm on the same model** — a comparison
 across models is not a comparison (TO_90's rule). Each ADR names the model.
 
-## The honest ceiling, stated before starting
+## The honest ceiling, stated before starting — SUPERSEDED by ADR 0151
 
-86 now. Reachable in this repo: d1 +1 (S2), d2 +3 (S1, S6), d3 +2 (S3,
+**J0 ran first and scored 68.5; the lower score stands on every dimension
+(ADR 0151). The rubric heading is 68.** The paragraph below was computed
+from 86 and is kept only as the record of what this loop expected before
+the control it asked for was applied. The report recomputes the ceiling
+from 68, with J0's seven named gaps — the no-op scheduled cycle, the
+retrieval→prompt link, prose-only measurements, no CLI for the archive, no
+persistence across runs, no live signal, the unexercised Codex path — as
+the increments that can re-earn points, each on an artifact.
+
+*(as written before J0)* 86 now. Reachable in this repo: d1 +1 (S2), d2 +3 (S1, S6), d3 +2 (S3,
 S6), d4 +1 (S5), d6 +2 (S4), d7 +2 (S7) = **97 maximum**. Above 95 needs
 ten of those eleven points to survive measurement. Four knobs have already
 been killed by measurement in this programme; **expect some of these to
