@@ -91,6 +91,7 @@ ADR_0162 = "docs/adr/0162-the-two-signals-and-which-one-came-apart.md"
 ADR_0163 = "docs/adr/0163-the-pilot-on-the-clone-and-the-path-that-was-never-open.md"
 ADR_0175 = "docs/adr/0175-the-arms-were-real-this-time-and-the-layer-still-did-not-pay.md"
 ADR_0180 = "docs/adr/0180-the-good-column-and-the-quotation.md"
+ADR_0193 = "docs/adr/0193-the-arms-re-run-on-the-corpus-that-exists.md"
 ADR_0184 = "docs/adr/0184-the-lesson-was-fresh-and-the-layer-paid.md"
 ADR_0186 = "docs/adr/0186-one-model-across-the-corpus-and-what-it-cost.md"
 
@@ -237,6 +238,37 @@ MEASUREMENTS: tuple[Measurement, ...] = (
             ),
         ),
         speed="slow",
+    ),
+    Measurement(
+        id="i12d-arms",
+        title="N2 — the four arms on the one-model corpus, ADR 0193's table",
+        adr=ADR_0193,
+        argv=("docs/research/i12d/aggregate.py", "--verify"),
+        rows=(
+            Row(
+                "(b) raw records, repeat 0",
+                r"\| \(b\) raw records \| 0 \| – \| ([0-9.]+)",
+                r"\| \(b\) raw records \| 0 \| 0\.0 \| ([0-9.]+)",
+            ),
+            Row(
+                "(c) + knowledge, repeat 1",
+                r"\| \(c\) \+ knowledge \| 1 \| 8\.0 \| ([0-9.]+)",
+                r"\| \(c\) \+ knowledge @ boost 8\.0 \| 1 \| 8\.0 \| ([0-9.]+)",
+            ),
+            Row(
+                "(c) − (b) on the mean",
+                r"\(c\) − \(b\) = \*\*\+?([0-9.]+)\*\* on the mean",
+                r"\(c\) − \(b\) on the mean\s+= \+?([0-9.]+)",
+            ),
+        ),
+        notes=(
+            "Registered by the orchestrator after the merge: N2 and N5 were "
+            "written blind to each other, and N2's aggregator took argv[1] as a "
+            "results directory, so the driver's `--verify` became a path and the "
+            "load came back empty (`KeyError: 'a'`). The re-runner caught a "
+            "measurement that could not re-derive itself one increment after it "
+            "was built, which is the whole claim of ADR 0196.",
+        ),
     ),
     Measurement(
         id="i12c-arms",
