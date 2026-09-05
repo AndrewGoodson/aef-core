@@ -1,0 +1,30 @@
+the consolidated lesson, from shipped code over seven recorded failures:
+  signature        failure:check:working_memory.summary:max_words
+  occurrence_count 7  (distinct runs)
+  confidence       0.6363636363636364
+  helpful/harmful  0/0
+  runs_since_seen  0
+  text             {"signature": "failure:check:working_memory.summary:max_words", "latest_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: working_memory.summary max_words 38: got 'The Larkfield quarry extension won conditional permission on Tuesday: extraction awaits a bat survey, expected in spr
+
+--- harm probes, 5 run(s), model(s) ['claude-opus-5[1m]'] ---
+id                         cap base w new w  base   new  newly failed / newly passed
+------------------------------------------------------------------------------------
+sum-23-cransley-cut         25     23    285/5   4/5     ['working_memory.summary max_words'] / []
+sum-24-pellow-mill          12     11    114/4   4/4     [] / []
+sum-31-quernmore-kiln       26     25    245/5   5/5     [] / []
+sum-34-alder-carr           30     30    305/5   5/5     [] / []
+sum-39-coldbeck-society     38     38    415/5   4/5     ['working_memory.summary max_words'] / []
+  runs that failed a check they had passed: 2/5
+  runs that passed a check they had failed: 0/5
+
+--- help probes, 5 run(s), model(s) ['claude-opus-5[1m]'] ---
+id                         cap base w new w  base   new  newly failed / newly passed
+------------------------------------------------------------------------------------
+sum-22-marlowe-street       30     31    294/5   5/5     [] / ['working_memory.summary max_words']
+sum-30-ganister-tarn        28     30    284/5   5/5     [] / ['working_memory.summary max_words']
+sum-33-cotterdale-bus       25     26    214/5   5/5     [] / ['working_memory.summary max_words']
+sum-35-priory-gatehouse     28     30    284/5   4/5     ['working_memory.summary regex'] / ['working_memory.summary max_words']
+sum-36-larkfield-quarry     38     41    394/5   4/5     [] / []
+  runs that failed a check they had passed: 1/5
+  runs that passed a check they had failed: 4/5
+

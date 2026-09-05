@@ -1,0 +1,225 @@
+J4 / S6 — pre-registration, written before a single live call was made.
+
+Worker S6 of UPGRADE_LOOP.md (= BEYOND_90_LOOP.md's J4). Two rigs, each
+claimed only if its own falsification holds. BEYOND_90's rule binds: "If the
+rig cannot be built honestly, leave both points unclaimed. A +1 taken on a
+rig designed to produce it is worth less than nothing."
+
+MODELS, named once and everywhere after:
+  writer/judge A  claude-opus-5[1m]          the harness session's default,
+                  reached by passing model "" so no --model flag is issued —
+                  the same convention ADR 0171 used to record the corpus.
+  writer/judge B  claude-haiku-4-5-20251001  passed explicitly as --model.
+The 20 summary scenarios and the 19 S3b recordings were all produced by A,
+so A is "the model that wrote the recorded summary" throughout.
+
+LIVE BUDGET: <= 90 calls total. Planned: 1 preflight + 60 rig A + 10 rig B
+= 71, leaving 19 for retries.
+
+=======================================================================
+RIG A — the self-preference control (dimension 3: 7 -> 8)
+=======================================================================
+
+WHY IT DOES NOT EXIST YET. Nothing in this repo has a judge ranking MODEL
+OUTPUTS against each other: `LLMJudge` grades one state at a time, so a
+judge could never prefer its own writing over someone else's, and ADR 0171
+closed with "the self-preference control is untouched (S6's)".
+
+STATES. 12 of the 17 summary scenarios in corpus/validation. A subset,
+because 17 x 2 candidates x 2 judges x 2 orders does not fit the budget;
+BEYOND_90 permits ">= 10 scenarios if needed and say so". The selection
+rule, fixed here before any call:
+
+  all 4 owner-check negatives:  sum-30-ganister-tarn, sum-33-cotterdale-bus,
+                                sum-35-priory-gatehouse, sum-36-larkfield-quarry
+  + the first 8 positives by id: sum-13-cider-press, sum-14-quarry-lake,
+                                sum-15-bookbinder, sum-16-cliff-path,
+                                sum-17-clockmaker, sum-18-heron-rookery,
+                                sum-29-brindle-viaduct, sum-31-quernmore-kiln
+
+Stratified on purpose: the negatives are where the owner's checks have a
+preference, and a self-preference statistic with no ground truth to control
+for is uninterpretable.
+
+CANDIDATES. Two summaries per scenario, of the same passage under the same
+instructions:
+  A-written: the summary already in the cassette, verbatim (model_calls[0]
+             .result.content, recorded from claude-opus-5[1m]).
+  B-written: the SAME recorded request — byte-identical system and user
+             messages, asserted equal before the call — replayed through
+             ClaudeCodeProvider(default_model="claude-haiku-4-5-20251001").
+             12 live calls.
+Only the model differs. Nothing else about the pair does.
+
+JUDGES. A pairwise ranker, built in docs/research/j4/run_j4_selfpref.py
+because none exists in aef/: the model is shown the task and both
+candidates and replies with one JSON label; code counts. It is told NOTHING
+about who wrote either candidate — that is not a mitigation applied after a
+finding, it is how the prompt is written, and it is stated here so a reader
+can check the committed prompt against the claim.
+
+Both judges see the same 12 pairs. Each pair is judged TWICE with the
+candidates in opposite positions (A-written first, then B-written first).
+12 x 2 judges x 2 orders = 48 live calls.
+
+PREFERENCE, defined before the data:
+  a judge PREFERS a writer on a scenario iff it names that writer's summary
+  the better one in BOTH orders. If the two orders disagree, the judge is
+  INCONSISTENT on that scenario and expresses no preference. The
+  inconsistency rate is the position control.
+
+OWNER CONTROL. Each candidate is scored by that scenario's own owner checks
+(aef.harness.checks.evaluate_checks over a state whose working_memory.summary
+is that candidate). The checks FAVOUR whichever candidate scores higher;
+equal fractions = the checks have no preference.
+
+THE STATISTIC.
+  self_pref = P(judge A prefers the A-written summary)
+            - P(judge B prefers the A-written summary)
+  over the scenarios where the respective judge is consistent. A judge that
+  simply recognises a better summary contributes equally to both terms; only
+  a judge that favours ITS OWN model's text moves the difference.
+  Reported alongside: the 2x2 (judge x preferred writer), each judge's
+  agreement with the owner checks on the scenarios where the checks
+  discriminate, and each judge's inconsistency rate.
+
+FALSIFICATION — dimension 3 moves 7 -> 8 ONLY IF BOTH:
+  (1) the control EXISTS as a committed runner plus committed raw judgments,
+      and
+  (2) EITHER the effect is measured ABSENT — |self_pref| <= 0.20 AND the two
+      judges' agreement-with-checks rates differ by <= 0.20 — OR it is
+      measured PRESENT and a mitigation is implemented and re-measured.
+  0.20 is the threshold, chosen now, and it is ADR 0171's position-delta
+  threshold reused rather than a number picked to fit a result.
+If the effect is present and unmitigated: +0, and this file says so.
+If a judge is inconsistent on more than half its pairs, its preference
+numbers are reported as uninterpretable rather than as an effect.
+
+-----------------------------------------------------------------------
+AMENDMENT 1 — made after the two quota preflights and BEFORE any
+measurement call, because the dry run falsified an assumption this file
+was built on.
+
+`run_j4_selfpref.py --dry-run` prints the model each cassette records as
+having answered. **Only sum-21..sum-39 were recorded on
+claude-opus-5[1m].** The corpus's original twenty (sum-01..sum-18,
+including six of the twelve states selected above) were recorded on
+**claude-fable-5-1** — the model of the earlier increments, whose quota
+UPGRADE_LOOP.md says is exhausted. ADR 0171 states nothing false about
+this (its nineteen NEW recordings are all Opus), but a self-preference
+control cannot use them: on a Fable-written summary, the Opus judge is not
+looking at its own output, and the whole statistic is a difference between
+"judges its own writing" and "judges someone else's".
+
+So rig A is restricted to the ELEVEN Opus-recorded validation scenarios:
+  sum-29, sum-30, sum-31, sum-32, sum-33, sum-34, sum-35, sum-36,
+  sum-37, sum-38, sum-39
+which still contains all four owner-check negatives and is still >= 10.
+11 write + 44 rank = 55 live calls. Nothing else in this file changes.
+
+The same fault would have hit rig B, whose harm probes were picked purely
+on cap headroom: sum-13, sum-14 and sum-16 are Fable recordings, so a new
+Opus run against them would have compared a lesson AND a model change. The
+harm probes are therefore re-picked from Opus recordings only — see rig B
+below, which is written in its amended form.
+-----------------------------------------------------------------------
+
+-----------------------------------------------------------------------
+AMENDMENT 2 — made after rig A's two arms and rig B's ten runs landed, and
+BEFORE a single call of the arm it adds. It is the "mitigation is
+implemented and re-measured" branch of the falsification above being
+exercised, not a change to the bar.
+
+Rig A's first result: self_pref = +0.270 and an agreement-with-checks gap
+of 0.333, both outside the 0.20 threshold written above. So the effect is
+measured PRESENT and the pre-registered consequence is +0 unless a
+mitigation is implemented and re-measured.
+
+The weakness of the two-arm design, stated now rather than after the
+result: BOTH judges wrote one of the two candidates, so
+P(opus prefers A) - P(haiku prefers A) is a difference-in-differences that
+can only say the two judges differ. It cannot say which one is biased, and
+it assumes the two biases are symmetric.
+
+A judge that wrote NEITHER candidate fixes that. `claude --help` documents
+three aliases on this box (fable, opus, sonnet); `preflight-sonnet.json`
+records one live call resolving `sonnet` to **claude-sonnet-5**, is_error
+false. It is added as a third, disinterested judge over the SAME 11 pairs,
+same prompt, same position swap: 22 calls, which takes this worker to
+exactly 90 — the cap — with no calls left for a retry. If a call fails the
+arm stops there and the report says over how many pairs it ran.
+
+Its rate is the reference, so each judge gets a per-judge number:
+  opus  self-preference = P(opus prefers A)   - P(sonnet prefers A)
+  haiku self-preference = P(sonnet prefers A) - P(haiku prefers A)
+
+The bar does not move. Dimension 3 moves 7 -> 8 only if the mitigation is
+both implemented (in aef/, with tests — a ranking judge that refuses to
+rank its own model's output unless an owner opts out) and re-measured (the
+disinterested arm), and the re-measurement supports it. If the
+disinterested judge agrees with the owner's checks no better than the
+self-interested one, the mitigation is not a mitigation and this is +0.
+
+-----------------------------------------------------------------------
+
+=======================================================================
+RIG B — a lesson that is harmful AND resolved (dimension 2: 12 -> 13)
+=======================================================================
+
+WHY IT DOES NOT EXIST YET. ADR 0118 surfaced helpful/harmful tallies and
+deliberately did not rank on them: "on every rig so far harmful and live
+coincide". `_tally` in aef/services/knowledge/consolidate.py defines harmful
+as "this run had the lesson in context and REPRODUCED that same failure", so
+a lesson whose failure keeps recurring is exactly the one worth showing.
+
+THE LESSON. The 7 owner-check negatives in the corpus are all max_words
+overruns (ADR 0171): sum-22, sum-25, sum-26 (train), sum-30, sum-33, sum-35,
+sum-36 (validation). Their failure records are built here, not by the
+harness, because the producer (M4b, ADR 0174) is on an unmerged branch and
+this worker may not depend on it: one MemoryRecord per run, verbal feedback
+from the REAL RuleBasedCritic over a state carrying the check failure, in
+the shape ADR 0174 specifies (`failed_checks`, signature
+`failure:check:working_memory.summary:max_words`). Synthetic in origin, real
+in shape — ADR 0157's precedent, and said out loud. The shipped
+RuleBasedConsolidator then folds them into one KnowledgeEntry with
+occurrence_count 7, and the shipped MemoryRetriever +
+render_retrieved_context put it in the prompt.
+
+HARM PROBES (5), as amended. Opus-recorded scenarios whose recorded summary
+already sits at or within two words of the cap and whose must_mention terms
+are multi-word, so a "you exceeded the word cap" lesson has somewhere to cut
+and something to cut out:
+  sum-24-pellow-mill      (cap 12, 11 words, must_mention Pellow Mill/asbestos)
+  sum-23-cransley-cut     (cap 25, 23 words, Cransley Cut/dredging)
+  sum-31-quernmore-kiln   (cap 26, 25 words, Quernmore/kiln)
+  sum-34-alder-carr       (cap 30, 30 words, Alder Carr/willow tit)
+  sum-39-coldbeck-society (cap 38, 38 words, Coldbeck Co-operative Society)
+All five are owner-PASS in the baseline recording, and all five baselines
+were written by the same model that will write the with-lesson runs.
+
+HELP PROBES (5). Five of the seven cap negatives — sum-22, sum-30, sum-33,
+sum-35, sum-36 — re-run with the same lesson, to say whether the lesson buys
+anything at all where it applies.
+
+10 live calls, all on claude-opus-5[1m], the model that made the baseline
+recordings. A comparison across models is not a comparison.
+
+HARM, defined before the data: a harm-probe run that had the lesson in
+context and FAILS an owner check its own baseline recording PASSED — a
+different check from the one the lesson is about. That is "harmful and
+resolved": the lesson's own failure did not recur, and the run failed
+differently because of it.
+
+FALSIFICATION — dimension 2 moves 12 -> 13 ONLY IF ALL:
+  (1) at least ONE harm probe flips a non-cap check from pass to fail with
+      the lesson in context (if none does, the rig cannot be built: the model
+      keeps both, and dimension 2 stays 12 with the inputs recorded);
+  (2) the SHIPPED pipeline produces a `harmful` tally on the entry that a
+      ranking term in MemoryRetriever could read — if `_tally` scores those
+      runs helpful or zero, then ranking on the tally would be ranking on a
+      signal this repo does not compute, and dimension 2 stays 12 with the
+      one-line blocker named; and
+  (3) demoting the entry by that tally measurably recovers the flipped
+      checks without losing the cap passes, swept the way ADR 0116 swept
+      staleness_half_life, with the default taken from the sweep.
+Only then is `harm_penalty` implemented in memory_retriever.py.

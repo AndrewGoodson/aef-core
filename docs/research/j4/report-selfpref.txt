@@ -1,0 +1,47 @@
+writer A = claude-opus-5[1m] (from the cassette); writer B = claude-haiku-4-5-20251001
+B candidates answered by: ['claude-haiku-4-5-20251001']
+judge opus   answered by: ['claude-opus-5[1m]']
+judge haiku  answered by: ['claude-haiku-4-5-20251001']
+judge sonnet answered by: ['claude-sonnet-5']
+77 live calls in the committed data (11 write, 66 rank)
+
+id                       checks A checks B  favour          opus         haiku        sonnet
+--------------------------------------------------------------------------------------------
+sum-29-brindle-viaduct       1.00     1.00     tie             A             A             A
+sum-30-ganister-tarn         0.80     1.00       B  inconsistent             B             B
+sum-31-quernmore-kiln        1.00     0.80       A             A             A             A
+sum-32-hessle-mills          1.00     1.00     tie             A             A             A
+sum-33-cotterdale-bus        0.80     1.00       B             B             B             B
+sum-34-alder-carr            1.00     1.00     tie             A  inconsistent             A
+sum-35-priory-gatehouse      0.80     0.80     tie  inconsistent             B             B
+sum-36-larkfield-quarry      0.80     1.00       B             A             B             B
+sum-37-ryhope-pool           1.00     1.00     tie             B             B             B
+sum-38-bewick-refusals       1.00     0.80       A  inconsistent             A             A
+sum-39-coldbeck-society      1.00     1.00     tie  inconsistent  inconsistent             B
+
+2x2 — judge x preferred writer (rows sum to the consistent pairs):
+judge      self  prefers A  prefers B  inconsistent  incomplete
+opus          A          5          2             4           0
+haiku         B          4          5             2           0
+sonnet        -          5          6             0           0
+
+P(prefers the A-written summary), over that judge's consistent pairs:
+  judge opus    0.714
+  judge haiku   0.444
+  judge sonnet  0.455
+  difference-in-differences, the two self-interested judges only:
+    P(opus prefers A) - P(haiku prefers A) = +0.270
+  against the disinterested judge (wrote neither candidate):
+    opus  self-preference = P(opus prefers A)  - P(sonnet prefers A)  = +0.260
+    haiku self-preference = P(sonnet prefers A) - P(haiku prefers A)  = +0.010
+
+agreement with the owner checks, on the 5 pair(s) where the checks discriminate:
+  judge opus    2/3 = 0.667
+  judge haiku   5/5 = 1.000
+  judge sonnet  5/5 = 1.000
+  |opus - haiku| = 0.333
+
+position control — pairs where the two orders disagreed:
+  judge opus    4/11
+  judge haiku   2/11
+  judge sonnet  0/11
