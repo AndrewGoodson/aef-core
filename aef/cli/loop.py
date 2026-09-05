@@ -988,9 +988,14 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
             default="rule_based",
             help=(
                 "which proposer writes the candidate. rule_based (default): numeric steps "
-                "and the bounded structural catalogue, deterministic. llm: a model writes "
-                "the whole file, code validates it against G0/G4 and falls back to "
-                "rule_based on any failure (ADR 0122). Off by default, by measurement."
+                "and the bounded structural catalogue, deterministic. rule_based_prompt: "
+                "for a `.md` prompt-file agent (--agent-path <persona>.md), appends the "
+                "highest-recurrence consolidated lesson as ONE bullet under a "
+                "'## Lessons (aef)' section — deterministic, no model call, provenance in "
+                "the bullet (ADR 0157). llm: a model writes the whole file, code validates "
+                "it against G0/G4 and falls back to rule_based on any failure (ADR 0122). "
+                "Off by default, by measurement. Not inferred from the agent path: "
+                "--proposer means the same thing in every repo."
             ),
         )
         sub.add_argument(
