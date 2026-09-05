@@ -2392,7 +2392,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
             "per failed check. Off by default. WHY IT MATTERS: with the producer wired into "
             "`bootstrap` only, a lesson's `runs_since_last_seen` climbs on every scored "
             "scenario and staleness walks it out of the prompt while nothing ever re-sees it "
-            "(17 by the seventeenth scenario; 0 with this flag). WHAT IT DOES NOT DO: this is "
+            "(the graph does NOT read this store on the score path — it writes the failure records a later `cycle --memory` can learn from; retrieval into the scored prompt is a `run`/`cycle` property (final seam hunt, ADR 0191)). WHAT IT DOES NOT DO: this is "
             "the IN-PROCESS path only. The gates' isolated path runs each scenario in a "
             "worker with no store and never writes one — a gate that could would let scoring "
             "a candidate manufacture the next one's evidence, which ADR 0174 refused and this "

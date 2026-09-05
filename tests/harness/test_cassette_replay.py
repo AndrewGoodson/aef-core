@@ -418,3 +418,20 @@ def test_run_scenario_records_a_failed_owner_check_when_given_a_store() -> None:
 def test_run_scenario_writes_nothing_without_a_store() -> None:
     scenario, _ = _record("a bird flies at dawn")
     assert "memory" not in run_scenario(scenario, _asking_graph())  # no side channel
+
+
+def test_the_score_paths_failure_record_is_stamped_with_execution_time() -> None:
+    """ADR 0191 (final hunt, F4): stamped with `recorded_at`, a scored run's
+    record sorted before every lesson seeded after the recording and could
+    never refresh one."""
+    from datetime import UTC, datetime
+
+    from aef.services.memory.in_memory import InMemoryMemoryStore
+
+    scenario, _ = _record("a bird flies at dawn")
+    before = datetime.now(UTC)
+    store = InMemoryMemoryStore()
+    run_scenario(scenario, _asking_graph(), memory=store)
+    (rec,) = [r for r in store.query("failure", limit=5) if r.kind == "failure"]
+    assert rec.created_at >= before, (rec.created_at, before, scenario.recorded_at)
+    assert rec.created_at > scenario.recorded_at

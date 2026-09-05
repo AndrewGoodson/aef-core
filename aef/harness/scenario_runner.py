@@ -20,6 +20,7 @@ agent code in the calling process and must not be used to score a candidate.
 from __future__ import annotations
 
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 from aef.harness.checks import CheckError
@@ -349,7 +350,12 @@ def run_scenario(
             judge=services.require_judge(),
             run_id=scenario.id,
             agent_id=scenario.initial_state.agent_id or "",
-            created_at=scenario.recorded_at,
+            # EXECUTION time, not the scenario's recording time: freshness
+            # (`runs_since_last_seen`) is ordered by `created_at`, and a record
+            # dated when the scenario was RECORDED sorts before every lesson
+            # seeded later, so a scored run could never refresh one (final seam
+            # hunt, ADR 0191: 11 of 17 validation scenarios could not).
+            created_at=datetime.now(UTC),
             graph_version=graph.version,
         )
     payload: dict[str, Any] = {
