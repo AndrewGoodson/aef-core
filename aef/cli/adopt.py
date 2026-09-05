@@ -1173,6 +1173,19 @@ policies:
 #   containment: auto  # auto | fallback | off — ADR 0161
 #   image: null        # required by `auto`; `fallback`/`off` are owner choices
 
+# Whether the GATES may make live model calls (aef-core ADR 0181). Off, and
+# stated rather than left absent, because turning it on is a real grant: the
+# gates' sandbox worker is the one process that executes code an AGENT wrote,
+# and with this true it inherits your harness login — so a candidate's code
+# can spend your quota. Read FROM THE BASE REF, so a candidate cannot switch
+# it on in its own branch. You need it to gate a prompt candidate at all: a
+# changed prompt is a changed cassette key, so `aef loop cycle
+# --cassette-miss live` is the only honest way to score one, and it is
+# REFUSED by name while this is false rather than failing every scenario and
+# reporting that as a verdict. Every `gated` ledger event records the value.
+gates:
+  live_model_calls: false
+
 objectives: "TODO: describe this agent's objective in one or two sentences."
 
 evolution:

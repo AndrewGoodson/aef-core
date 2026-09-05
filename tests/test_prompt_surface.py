@@ -81,15 +81,26 @@ KEEP = ("reproduce", "green bar")
 # fail here and be re-pinned deliberately, which is what happened to
 # `not** reproduced` in `tests/cli/test_adopt.py` this increment.
 LOAD_BEARING = (
-    # 1. Live gating. A prompt candidate is gated live or not at all, and
-    #    today it is "not at all" — the gates' sandbox worker cannot log in
-    #    and the credential-free provider cannot cross the worker boundary
-    #    (ADR 0158, F-M5-3 / F-M5-2). An adopter who reads only "gated live"
-    #    budgets for calls that will never be made.
-    ("CLAUDE.md", "live gating is blocked today", "cannot yet be **accepted**"),
-    ("AGENT_INTEGRATION.md", "live gating is blocked today", 'Today it is "not at all"'),
-    ("<adopt: FIRST_DAY.md>", "live gating is blocked today", "cannot yet be accepted"),
-    ("<adopt: LOOP.md>", "live gating is blocked today", "cannot yet be accepted"),
+    # 1. Live gating is a GRANT, and it is off. A prompt candidate can only be
+    #    scored live, and `gates.live_model_calls: true` is what lets the
+    #    gates' sandbox worker — the one process here that executes code an
+    #    agent wrote — inherit the operator's harness login, and therefore
+    #    what lets a candidate's code spend their quota (ADR 0181).
+    #
+    #    This pin was written one merge earlier as "a prompt candidate cannot
+    #    yet be ACCEPTED live", which was ADR 0158's true sentence and stopped
+    #    being true when K1 landed. It is re-pinned on the flag rather than on
+    #    the limitation, because the flag is the thing a reader must decide
+    #    about and the limitation was always going to be closed.
+    ("CLAUDE.md", "live gating is an owner grant", "gates.live_model_calls"),
+    ("AGENT_INTEGRATION.md", "live gating is an owner grant", "gates.live_model_calls"),
+    ("<adopt: FIRST_DAY.md>", "live gating is an owner grant", "live_model_calls: true"),
+    ("<adopt: LOOP.md>", "live gating is an owner grant", "live_model_calls: true"),
+    # ...and the half that makes it safe to leave off: a refusal, not a
+    # silently-wrong verdict. Without this the gate reports "previously-passing
+    # scenario(s) no longer pass" about a subprocess that could not log in.
+    ("<adopt: FIRST_DAY.md>", "live gating refuses rather than misreports", "refused by name"),
+    ("<adopt: LOOP.md>", "live gating refuses rather than misreports", "refused by name"),
     # 2. Exit code 3. `main()`'s catch-all returned 1 for any exception, so a
     #    crash read as a healthy rejection and the nightly job stayed green
     #    (ADR 0167). A document listing three exit codes teaches the reader to

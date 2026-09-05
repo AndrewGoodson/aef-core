@@ -85,17 +85,20 @@ claimed otherwise:**
   **A prompt candidate is scored live or not at all:** a changed prompt is
   a changed cassette key, so replay scores it 0 and that is an artifact,
   not a verdict; the bar is S2's measured noise floor (mean 0.7639, spread
-  0.1666 on Opus, ADR 0156). **And live is not available inside the gates
-  today**: the sandbox worker's env allowlist has no `USER`, so every
-  `claude -p` it spawns exits `Not logged in`, and the one credential-free
-  provider (`impl: command`) cannot cross the worker boundary at all
-  because only `{impl, model}` is put on the wire (ADR 0158, F-M5-3 and
-  F-M5-2, both pinned `xfail(strict=True)`). So a prompt candidate can be
-  proposed and can be rejected; it cannot yet be **accepted** on live
-  evidence, and no flag changes that.
+  0.1666 on Opus, ADR 0156). **And live is an explicit per-repo opt-in,
+  off by default**: `gates.live_model_calls: true` in `aef.yaml`, read from
+  the **base ref** so a candidate cannot grant itself the login, is what
+  lets the gates' sandbox worker inherit your harness credential — and
+  therefore what lets a candidate's code spend your quota. Without it
+  `--cassette-miss live` is **refused by name**, because the alternative is
+  the verdict ADR 0158 measured: `G2 fail — 2 previously-passing
+  scenario(s) no longer pass`, which was a subprocess that could not log in
+  and not a judgement of the prompt. Every `gated` ledger event records
+  which passes ran with it (ADR 0181, closing 0158's F-M5-2 and F-M5-3).
   `tests/cli/test_prompt_repo_acceptance.py` runs the whole sequence —
   `adopt -> migrate -> bootstrap --memory -> bless -> doctor -> cycle` —
-  and ADR 0158 records what it measured.
+  and ADR 0158 records what it measured, with 0181's errata on the two
+  findings it has since closed.
 
 Only five things are allowed to differ per agent: **Knowledge, Policies,
 Tools, Objectives, Evaluation Metrics** — see the prime directive below.

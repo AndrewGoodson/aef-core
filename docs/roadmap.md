@@ -273,15 +273,24 @@ Built since **that** paragraph, each with the ADR that measured it:
   `0` escalated · `1` rejected · `2` halted-or-usage · `3` the command could
   not do its job (ADR 0167/0178) — CI should fail on `>= 2`.
 
-**Live gating of a prompt candidate does not work today**, and it is the one
-capability this section would otherwise imply. A changed prompt is a changed
-cassette key, so replay cannot score it; and inside the gates' sandbox worker
-the `claude_code` provider exits `Not logged in` (the env allowlist has no
-`USER`) while `impl: command` cannot be rebuilt at all, because only
-`{impl, model}` crosses the worker boundary. So a prompt candidate can be
-proposed and rejected, never accepted on live evidence. Both defects are
-pinned `xfail(strict=True)` in `tests/cli/test_prompt_repo_acceptance.py`
-(ADR 0158, F-M5-3 and F-M5-2).
+- **Live gating of a prompt candidate — REAL, and off by default** (ADR
+  0181). A changed prompt is a changed cassette key, so replay cannot score
+  it; the only honest way to gate one is `--cassette-miss live`. Until
+  2026-09-05 no provider could serve that inside the gates on any repo: the
+  worker's env allowlist inherited no login, so `claude -p` answered
+  `Not logged in`, and `impl: command` could not be rebuilt on the far side
+  of the boundary because only `{impl, model}` crossed it (ADR 0158's F-M5-3
+  and F-M5-2, both now closed and their strict xfails now passing tests).
+  The fix is an **opt-in and a refusal**, not a widening:
+  `gates.live_model_calls: true` in `aef.yaml`, read from the base ref so a
+  candidate cannot grant itself the login, adds the login variables to the
+  worker's allowlist and records `live_model_calls` on every `gated` ledger
+  event; with it false — the default, and what every existing repo gets — the
+  allowlist is byte-for-byte what it was, and `--cassette-miss live` is
+  **refused by name** rather than run. The refusal is the load-bearing half:
+  without it the gate produces `G2 fail — N previously-passing scenario(s) no
+  longer pass`, which is a subprocess that could not log in wearing the words
+  of a verdict about the prompt.
 
 **Tier-1 auto-merge remains OFF.** It is no longer blocked on
 implementation — every candidate that passes all six gates escalates to a

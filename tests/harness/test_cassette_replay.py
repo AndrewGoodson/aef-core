@@ -392,3 +392,29 @@ def test_recorded_calls_are_data_a_person_can_read() -> None:
     assert isinstance(CassetteProvider(None, [RecordedCall.from_payload(payload)]), ModelProvider)
     with pytest.raises(ModelProviderError):
         CassetteProvider(None, []).complete(scenario.model_calls[0].request)
+
+
+def test_run_scenario_records_a_failed_owner_check_when_given_a_store() -> None:
+    """ADR 0180's second wiring site. Default None keeps every gate path as
+    it was (ADR 0174's refusal: a gate must not manufacture the next
+    candidate's evidence). A caller that owns the store gets one failure
+    record per failed run — and one on a repeat, K2's idempotence."""
+    from aef.services.memory.in_memory import InMemoryMemoryStore
+
+    scenario, _ = _record("a bird flies at dawn")  # the must-mention check fails
+    store = InMemoryMemoryStore()
+    assert run_scenario(scenario, _asking_graph(), memory=store)["score"] == 0.5
+    failures = [r for r in store.query("failure", limit=50) if r.kind == "failure"]
+    assert len(failures) == 1, [r.content for r in failures]
+    run_scenario(scenario, _asking_graph(), memory=store)
+    failures = [r for r in store.query("failure", limit=50) if r.kind == "failure"]
+    assert len(failures) == 1, "a repeat must not double-count"
+    passing, _ = _record("Kestrel flies at dawn")
+    clean = InMemoryMemoryStore()
+    run_scenario(passing, _asking_graph(), memory=clean)
+    assert not [r for r in clean.query("failure", limit=5) if r.kind == "failure"]
+
+
+def test_run_scenario_writes_nothing_without_a_store() -> None:
+    scenario, _ = _record("a bird flies at dawn")
+    assert "memory" not in run_scenario(scenario, _asking_graph())  # no side channel

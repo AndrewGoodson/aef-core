@@ -169,16 +169,36 @@ beat it at all. On aef-core's own six-scenario suite that floor was measured at
 flipping, consistently, is visible in the mean. Start on one scenario, not
 forty, and compare per scenario rather than on the mean.
 
-**Today the answer is "not at all", and you should know it before you spend
-anything.** Inside the gates, the sandbox worker that executes a candidate
-cannot log in — its environment allowlist deliberately carries no credential,
-so every `claude -p` it spawns exits `Not logged in` in about 30 ms — and the
-one provider that needs no credential, `impl: command`, cannot be rebuilt on
-the far side of that boundary at all, because only `{{impl, model}}` crosses
-it. **So a prompt candidate can be proposed and can be rejected, and cannot
-yet be accepted on live evidence.** No flag changes that; both defects are
-pinned as failing tests in aef-core so that fixing them makes a test go green
-rather than a document go quietly stale (aef-core ADR 0158).
+**Scoring a prompt change costs real model calls, and it is OFF until you say
+otherwise.** `--cassette-miss live` runs your candidate's model calls under
+**your** harness login, inside the sandbox that executes agent-written code —
+so it is off by default. Set
+
+```yaml
+gates:
+  live_model_calls: true
+```
+
+in `aef.yaml` to allow it, knowing a candidate's code can then spend your
+quota. It is read from the **base ref**, like `policies` and `tools.allow`, so
+a candidate cannot switch it on in its own branch and hand itself your login.
+
+Until you do, `--cassette-miss live` is **refused by name** rather than
+quietly rejecting every candidate — which is what used to happen, and it did
+not look like a defect:
+
+```
+error: live gating is off in aef.yaml; a prompt candidate cannot be scored
+from a cassette — set gates.live_model_calls: true, which lets a candidate's
+code spend your harness quota. Until then `--cassette-miss live` is refused
+rather than run: without the opt-in the gate's worker inherits no login,
+every miss fails, and G2 reports that as 'previously-passing scenario(s) no
+longer pass' — an artifact of the environment rather than a judgement of the
+prompt (ADR 0158, ADR 0181).
+```
+
+Every gate run records `live_model_calls` in the ledger, so you can always see
+which passes spent it.
 
 **A lesson computed from a check does not contain the check's answer, and
 that costs something.** The bullet names which output was graded and how, and
@@ -1543,11 +1563,15 @@ through G0/G1/G4/G5 to a G2 verdict, drift 0.003 of 0.500. That sentence used
 to read "no part of this has run against a repo aef-core did not write", and
 it was true until aef-core ADR 0158.
 
-**What has not**: acceptance. The verdict that sequence reaches is a
-rejection, in both the offline and the live arm, and in neither arm is it a
-judgement of the prompt — offline it is the changed-prompt-cannot-replay rule,
-live it is the two defects named earlier in this file. Nobody has yet seen a
-prompt candidate pass all six gates.
+**What has not**: acceptance. Nobody has yet seen a prompt candidate pass all
+six gates. Offline the verdict is always a G2 rejection, and that is the
+changed-prompt-cannot-replay rule rather than a judgement of the prompt. Live,
+with `gates.live_model_calls: true`, the gates reach a real verdict for the
+first time as of aef-core ADR 0181 — and the candidate measured there was
+rejected by **G3**, for not beating the null-hypothesis control cohort, which
+is the system working. Every rejection so far has been correct. That is not
+the same as the loop having improved anything, and neither this document nor
+aef-core claims it has.
 
 The most valuable thing you can send back is still **anything this document
 told you to do that did not work**: several defects in aef-core were generated

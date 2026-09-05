@@ -68,7 +68,7 @@ from aef.harness.monitoring import (
 )
 from aef.harness.proposer import Proposal
 from aef.harness.review import Decision, Disposition, decide, render_report
-from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
+from aef.harness.sandbox import NetworkPolicy, SandboxPolicy, with_harness_login
 from aef.harness.suite import CohortBuilder
 from aef.harness.zones import DEFAULT_AGENT_PATH, ZonePolicy
 from aef.observability.base import Tracer
@@ -346,6 +346,13 @@ def _preflight(config: LoopConfig) -> tuple[ledger.LedgerEntry, ...]:
     # (ADR 0141). It is the same audit-trail argument as the two above.
     if config.corpus is not None:
         check_never_shrinks(config.corpus, _corpus_baseline_manifest(config, config.corpus))
+    # A live gate pass hands the operator's own harness login to the process
+    # that runs candidate code, so the repo has to have said yes in writing.
+    # Checked HERE, before a proposal is journalled, rather than at the first
+    # cassette miss: a refusal that arrives after the candidate branch exists
+    # reads as a rejection of the candidate. Costs nothing under the default
+    # `cassette_miss="fail"`, which returns before reading any config.
+    _live_provider_from_base_ref(config)
     return entries
 
 
@@ -420,21 +427,83 @@ def _policy_from_base_ref(config: LoopConfig) -> PolicyConfig | None:
     return build_policy_config(agent_config.tools, agent_config.policies)
 
 
-def _live_provider_from_base_ref(config: LoopConfig) -> dict[str, str] | None:
+class LiveGatingDisabledError(PolicyConfigError):
+    """`--cassette-miss live` was asked for and the repo has not opted in.
+
+    A `PolicyConfigError` on purpose: this is the same class of refusal as an
+    unreadable `aef.yaml` — the run cannot be judged under rules nobody
+    supplied — and the CLI already reports that class by name instead of
+    letting it surface as a rejected candidate (ADR 0090).
+    """
+
+
+def _live_provider_from_base_ref(config: LoopConfig) -> dict[str, Any] | None:
     """Which provider the worker may build for cassette misses (ADR 0123).
 
-    Only under `cassette_miss="live"`, and only the impl and model named by
-    the BASE REF's `model_provider` — read the way the policy is read, so a
-    candidate cannot point the gate at a provider of its choosing by
-    editing the workspace's config. `None` otherwise, and a live miss with
-    no config then fails in the worker naming the absence.
+    Only under `cassette_miss="live"`, and only what the BASE REF's
+    `model_provider` declares — read the way the policy is read, so a
+    candidate cannot point the gate at a provider of its choosing by editing
+    the workspace's config. `None` otherwise, and a live miss with no config
+    then fails in the worker naming the absence.
+
+    **The WHOLE block crosses, not `{impl, model}`** (ADR 0181, closing ADR
+    0158's F-M5-2). `ModelProviderConfig` is data — a strict pydantic model
+    that round-trips through `model_dump(mode="json")` — and putting two of
+    its fields on the wire meant the worker rebuilt a config the schema then
+    refused: `impl: command` carries its argv template in a `command:` block,
+    so every scenario failed with `worker refused configuration` and G2 read
+    that as a behavioural regression. The credential-free provider — the one
+    ADR 0154 points every new adopter at — was the one provider a live gate
+    pass could not use.
+
+    **And it is gated on an explicit per-repo opt-in.** See
+    `GatesConfig.live_model_calls`: the worker is where candidate code runs,
+    so serving its model calls live means the operator's own harness login is
+    reachable from that process. Off by default; refused by name when asked
+    for without it.
     """
     if config.cassette_miss != "live":
         return None
     agent_config = _agent_config_from_base_ref(config)
     if agent_config is None:
         return None
-    return {"impl": agent_config.model_provider.impl, "model": agent_config.model_provider.model}
+    if not agent_config.gates.live_model_calls:
+        raise LiveGatingDisabledError(
+            f"live gating is off in {config.config_path or 'aef.yaml'}; a prompt candidate "
+            f"cannot be scored from a cassette — set gates.live_model_calls: true, which "
+            f"lets a candidate's code spend your harness quota. Until then "
+            f"`--cassette-miss live` is refused rather than run: without the opt-in the "
+            f"gate's worker inherits no login, every miss fails, and G2 reports that as "
+            f"'previously-passing scenario(s) no longer pass' — an artifact of the "
+            f"environment rather than a judgement of the prompt (ADR 0158, ADR 0181)."
+        )
+    return dict(agent_config.model_provider.model_dump(mode="json"))
+
+
+def _live_model_calls(config: LoopConfig) -> bool:
+    """Whether THIS gate pass lets a candidate's model calls reach a provider.
+
+    Recorded on the `gated` ledger event. The audit trail could otherwise not
+    answer the one question the opt-in exists to make answerable: did the
+    candidate that was judged here run under the operator's login?
+    """
+    return _live_provider_from_base_ref(config) is not None
+
+
+def _worker_sandbox_policy(
+    config: LoopConfig, live_provider: dict[str, Any] | None
+) -> SandboxPolicy:
+    """The sandbox the gate's worker runs under, widened only when it must be.
+
+    Tied to `live_provider` rather than to `cassette_miss` alone: with no
+    `--config` there is no provider to build worker-side, so widening the
+    allowlist would inherit a credential for calls that can never be made.
+    The narrowest widening that serves the opt-in, and nothing wider.
+    """
+    policy = config.sandbox_policy()
+    if live_provider is None:
+        return policy
+    return with_harness_login(policy)
 
 
 def _cheap_gates(config: LoopConfig, verdict: CandidateVerdict, now: datetime) -> tuple[Gate, ...]:
@@ -550,16 +619,21 @@ def _gates_with_evidence(
     scenarios, graph_note = _scenarios_for_graph(config, scenarios)
 
     policy_config = _policy_from_base_ref(config)
+    # One read, two uses: the provider the worker may build, and whether its
+    # environment has to carry the login that provider needs. Computing them
+    # apart is how the two could disagree (ADR 0091), and the disagreement
+    # would be a credential inherited for calls nothing makes.
+    live_provider = _live_provider_from_base_ref(config)
     builder = CohortBuilder(
         repo=config.repo,
         entrypoint=config.entrypoint,
-        policy=config.sandbox_policy(),
+        policy=_worker_sandbox_policy(config, live_provider),
         zone_policy=config.zone_policy,
         cohort_size=config.cohort_size,
         seed=config.cohort_seed,
         policy_config=policy_config,
         cassette_miss=config.cassette_miss,
-        live_provider=_live_provider_from_base_ref(config),
+        live_provider=live_provider,
     )
     try:
         cohort_verdict, candidate_run, note = builder.build(
@@ -827,6 +901,12 @@ def gate(
             # Which proposer produced it, so a ledger read after the fact can
             # separate the model's candidates from the rule-based ones.
             "proposer": config.proposer if proposal else None,
+            # Did this gate pass run candidates under the operator's own
+            # harness login? (ADR 0181.) The opt-in is a widening of the
+            # blast radius, and a widening that leaves no trace in the audit
+            # trail is one nobody can audit — the same argument
+            # `shadow.containment` records its non-default modes on.
+            "live_model_calls": _live_model_calls(config),
         },
     )
 

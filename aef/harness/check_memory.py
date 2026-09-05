@@ -43,9 +43,22 @@ the test are the same operation (ADR 0157), and the one thing that separates
 them is whether the lesson carries the answer. `RuleBasedPromptProposer` pastes
 an entry's `latest_feedback` verbatim into the agent's persona, so a literal
 `contains 'VERDICT:'` in this record's `verbal_feedback` is a target string
-appended to the prompt. The rendering below names the state path, the
-operator in prose, and the **observed** value — never `check.value`. What it
-still leaks is stated in ADR 0174 and is not nothing.
+appended to the prompt. The rendering below names the state path and the
+operator in prose — never `check.value`. What it still leaks is stated in ADR
+0174 and is not nothing.
+
+**It never copies the run's own output either** (ADR 0180). The first version
+of this module quoted the observed value — `observed 406 words, 2836 chars:
+'**No. The Accela connector…'` — on the reasoning that the observation is the
+run's, not the owner's, so recording it records what happened. True, and
+insufficient: that excerpt is the model's previous answer, and this record's
+text is a **prompt surface**. ADR 0162 rig B measured the cost. A lesson whose
+text carried a 38-word example summary made two at-cap runs LONGER (23 → 28
+words against a cap of 25; 38 → 41 against 38) and broke the very cap check
+the lesson describes. So the line keeps the COUNTS the harness computed —
+words, characters, the check's path and operator, and `checks_passed` /
+`checks_total` — and drops the excerpt. The output stays reachable for a human
+in the run's recorded trace (`OUTPUT_LOCATION`); it never reaches a lesson.
 
 ## The signature, and why it drops the expected value too
 
@@ -68,6 +81,7 @@ not a catch-all across unrelated failures, which is the thing
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Sequence
 from datetime import datetime
 
@@ -90,11 +104,28 @@ CHECK_OBSERVER_NODE_ID = "task_checks"
 # joins failing node ids.
 CHECK_KEY_PREFIX = "check:"
 
-# How much of the OBSERVED value each line quotes. The critic excerpts every
-# quoted signal at 160 characters (`MAX_EXCERPT_CHARS`), so a longer quote here
-# would simply be cut there, mid-word, and push the prose that explains it out
-# of the record.
-MAX_OBSERVED_CHARS = 60
+# Prefix on this producer's DERIVED record ids. `MemoryRecord.id` defaults to a
+# fresh uuid4, which makes "the same observation, recorded twice" two records;
+# these ids are a hash of (agent, run, failed check keys) instead, so a store
+# keyed by id collapses a repeat and a store that appends can still be told
+# what happened. See `record_check_outcomes` for the other half.
+CHECK_RECORD_ID_PREFIX = "checkfail-"
+
+# Where a reader goes for the text this record is ABOUT, carried as its own
+# content key rather than inside the failure lines. It is for a human reading
+# the store; the lines are for a model reading a lesson, and the `Critic`
+# excerpts each quoted signal at 160 characters, so a sentence spent here
+# would push the observation out of `verbal_feedback` — measured, the first
+# draft of this constant did exactly that.
+#
+# The output itself is in the recorded scenario: `corpus/<split>/<id>.json`,
+# whose `trace` replays to the final state, so the value the check read is
+# `resolve(final_state, check.path)`. `aef loop score` prints it per failing
+# check too. A human can always see it; a lesson never carries it (ADR 0180).
+OUTPUT_LOCATION = (
+    "the observed value is not recorded here — replay the run's trace "
+    "(corpus/<split>/<scenario>.json) and read the check's own state path"
+)
 
 # The prose each operator gets, with the expected value REMOVED. Present as a
 # table rather than an f-string chain so that adding an op to `checks.OPS`
@@ -124,15 +155,32 @@ def check_key(check: TaskCheck) -> str:
 
 
 def _observed(final_state: AEFState, check: TaskCheck) -> str:
+    """The SHAPE of what the run produced, and nothing of its content.
+
+    This used to end `: '<the first 59 characters of the output>'`, and that
+    excerpt is the model's own prior answer pasted into its next prompt — the
+    record's `verbal_feedback` is what `RuleBasedPromptProposer` appends to a
+    persona and what `render_retrieved_context` renders as a lesson bullet.
+    ADR 0162 rig B measured what that costs: a 330-character bullet whose
+    lesson text contained a 38-word example summary made two at-cap runs
+    LONGER (23→28 words against a cap of 25, 38→41 against 38) and broke the
+    very check the lesson is about. ADR 0110's rule — *the model is never
+    trusted with provenance; it may write one prose string* — applied one
+    layer down: the observation is the harness's, so the harness states it in
+    numbers it computed, and the text stays where a human can read it.
+
+    A non-string value is reported by type alone. `repr(True)` is as much the
+    run's own output as a sentence is, and its LENGTH is the answer on a
+    boolean field (4 versus 5 characters), which is the leak ADR 0174's
+    residual list names as unavoidable for a small-domain `equals` check —
+    unavoidable there, gratuitous here.
+    """
     found, value = resolve(final_state, check.path)
     if not found:
         return "<missing>"
-    text = value if isinstance(value, str) else repr(value)
-    words = f"{len(text.split())} words, " if isinstance(value, str) else ""
-    body = " ".join(text.split())
-    if len(body) > MAX_OBSERVED_CHARS:
-        body = body[: MAX_OBSERVED_CHARS - 1] + "…"
-    return f"{words}{len(text)} chars: {body!r}"
+    if not isinstance(value, str):
+        return f"a non-text value of type {type(value).__name__}"
+    return f"{len(value.split())} words, {len(value)} chars"
 
 
 def _describe_failure(final_state: AEFState, check: TaskCheck) -> str:
@@ -202,6 +250,7 @@ def check_failure_record(
     judgment = judge.judge(derived)
 
     return MemoryRecord(
+        id=check_record_id(agent_id=agent_id, run_id=run_id, keys=keys),
         kind="failure",
         content={
             "verbal_feedback": critique.verbal_feedback,
@@ -218,6 +267,12 @@ def check_failure_record(
             "check_failures": lines,
             "checks_passed": report.passed,
             "checks_total": report.total,
+            # Not rendered into any prompt — `render_retrieved_context` reads
+            # the summary or the feedback and nothing else — and not copied
+            # into a `KnowledgeEntry`, whose content is a fixed set of keys.
+            # It is here so a human reading the store knows the excerpt's
+            # absence is deliberate and where the text went (ADR 0180).
+            "output_location": OUTPUT_LOCATION,
             "retrieved_signatures": retrieved_signatures(final_state),
             "graph_version": graph_version,
             "objective": final_state.objective,
@@ -229,7 +284,22 @@ def check_failure_record(
     )
 
 
-def write_check_failure_record(
+def check_record_id(*, agent_id: str, run_id: str, keys: Sequence[str]) -> str:
+    """This producer's record id: a hash of what the observation IS.
+
+    Two evaluations of the same owner checks against the same run's final
+    state are one observation, so they are one id. `MemoryRecord.id` otherwise
+    defaults to a fresh uuid4 and the second call would be a second record —
+    which is not a cosmetic duplicate: `KnowledgeEntry.source_record_ids` is
+    the entry's only measure of how well-evidenced it is, and ADR 0110's
+    threshold is *distinct runs*, so a producer wired at two call sites could
+    inflate the evidence for a lesson simply by being wired twice.
+    """
+    digest = hashlib.sha256("\x00".join([agent_id, run_id, *keys]).encode()).hexdigest()
+    return f"{CHECK_RECORD_ID_PREFIX}{digest[:32]}"
+
+
+def record_check_outcomes(
     *,
     memory: MemoryStore,
     checks: Sequence[TaskCheck],
@@ -242,8 +312,38 @@ def write_check_failure_record(
     graph_version: str = "",
     tags: tuple[str, ...] = (),
 ) -> MemoryRecord | None:
-    """`check_failure_record`, written to `memory`. Returns the record, or
-    `None` when there was none to write."""
+    """`check_failure_record`, written to `memory` at most once per
+    `(agent_id, run_id, failed check keys)`. Returns the record — the one just
+    written, or the one already there — or `None` when there was none.
+
+    **This is the function every caller that scores a run against owner checks
+    should call**, and it is one function rather than a call site because ADR
+    0174 wired the producer into `bootstrap` alone. ADR 0175 then measured what
+    that costs: over a 17-scenario scored split the seeded lesson's
+    `runs_since_last_seen` climbs monotonically — every scored run writes a
+    `success` record and none can write a check failure — so ADR 0116's
+    staleness demotion walks the lesson from rank 0 to rank 39, and the two
+    owner-check negatives late in the split never saw it. The lesson could not
+    be re-seen because nothing outside `bootstrap` could produce it.
+
+    **Idempotent, so wiring it in more than one place cannot double-count.**
+    Two guards, because they fail on different stores: the record's id is
+    derived (`check_record_id`), which collapses a repeat in any store keyed by
+    id; and this function first asks the store whether it already holds a
+    failure record for this run with these keys, which covers an append-only
+    store such as `FileMemoryStore` and covers a second process. The known
+    hole is stated rather than left to be found: `bootstrap.RunScopedMemory`
+    answers queries from its per-input scratch, so a repeat write into its
+    durable *sink* from a later invocation is caught by the derived id and not
+    by the query.
+
+    **What it does NOT do is decide where it is safe to call.** ADR 0174
+    refused `scenario_runner.run_scenario` because the gates re-execute corpus
+    scenarios and a gate run that writes to the adopter's durable store lets
+    scoring a candidate manufacture the evidence for the next one. That
+    refusal stands: the store is the caller's to supply, and a gate path
+    supplies none.
+    """
     record = check_failure_record(
         checks=checks,
         final_state=final_state,
@@ -255,6 +355,29 @@ def write_check_failure_record(
         graph_version=graph_version,
         tags=tags,
     )
-    if record is not None:
-        memory.write(record)
+    if record is None:
+        return None
+    existing = _already_recorded(memory, record)
+    if existing is not None:
+        return existing
+    memory.write(record)
     return record
+
+
+def _already_recorded(memory: MemoryStore, record: MemoryRecord) -> MemoryRecord | None:
+    """The failure record this run already holds for these checks, if any.
+
+    `limit` is generous rather than 1: the query is most-recent-first over
+    every failure record of the run, and a run's own reflect node may have
+    written several. Reading a few and comparing keys is cheaper than being
+    wrong.
+    """
+    if not record.run_id:  # pragma: no cover - `check_failure_record` requires a run id
+        return None
+    keys = record.content.get("failed_checks")
+    for candidate in memory.query(
+        "failure", run_id=record.run_id, agent_id=record.agent_id, limit=64
+    ):
+        if candidate.id == record.id or candidate.content.get("failed_checks") == keys:
+            return candidate
+    return None

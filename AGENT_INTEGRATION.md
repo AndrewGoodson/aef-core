@@ -177,11 +177,18 @@ The generated `FIRST_DAY.md` and `LOOP.md` carry the sequence and the sentence
 that makes it honest: **a changed prompt cannot be scored from a cassette** —
 every request is a miss — so a prompt candidate is gated live or not at all,
 and the live noise floor (ADR 0156: mean 0.7639, spread 0.1666) is the bar.
-**Today it is "not at all"**: the gates' sandbox worker cannot log in and the
-one credential-free provider cannot cross the worker boundary, so a prompt
-candidate can be proposed and rejected but not accepted on live evidence
-(ADR 0158). Both are pinned `xfail(strict=True)`, so the day they are fixed a
-test goes green rather than a document going quietly stale.
+**And "live" is an explicit per-repo opt-in, off by default.**
+`gates.live_model_calls: true` in `aef.yaml` — read from the **base ref**, so
+a candidate cannot grant itself the login — is what lets the gates' sandbox
+worker inherit your harness credential, and therefore what lets a candidate's
+code spend your quota. That worker is the one process here that executes code
+an agent wrote, so the default is the containment property: no credential
+inherited. Without the opt-in, `--cassette-miss live` is **refused by name**,
+because the alternative is what ADR 0158 measured — `G2 fail — 2
+previously-passing scenario(s) no longer pass`, which was a subprocess that
+could not log in and not a judgement of the prompt. Every `gated` ledger event
+records `live_model_calls`, so the audit trail says which passes spent it
+(ADR 0181, closing ADR 0158's F-M5-2 and F-M5-3).
 
 **`FIRST_DAY.md` is the adopter's sequence** — `aef migrate` through
 `aef loop cycle`, in order, with the real output of every command and what

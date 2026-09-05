@@ -56,8 +56,10 @@ Added rather than corrected, because their absence was itself a false
 impression: the four exit codes and what each means; the required
 `--memory`/`--no-memory`; the file-path graph reference and the persona
 `--agent-path` form; check-derived failure memory and the measured cost of
-redacting the check's value; and the sentence that a prompt candidate **cannot
-yet be accepted** on live evidence.
+redacting the check's value; and what it costs to gate a prompt candidate live
+— which was *"it cannot yet be accepted"* when this was written and became
+*"`gates.live_model_calls`, and here is what it grants"* four hours later. See
+"K1 landed mid-increment" below.
 
 ### `AGENT_INTEGRATION.md`
 
@@ -79,8 +81,10 @@ And six capabilities that were **absent** from the authority entirely, which
 reads as "not built": the five providers and the `isolation` contract; prompt-
 file agents end to end; the three proposers; the prose control cohort; the
 lineage archive and containment-by-default; and the loop CLI's refusals and
-exit codes. Plus the paragraph saying live gating of a prompt candidate does
-not work today — the one capability the new section would otherwise imply.
+exit codes. Plus live gating of a prompt candidate — the one capability the
+new section would otherwise imply and, at the time it was written, the one
+thing that did not work at all (ADR 0181 landed before this branch merged;
+see below).
 
 ### `corpus/README.md`
 
@@ -344,7 +348,8 @@ Up from 50, which is `tests/cli/test_pristine_adoption.py`'s floor.
 ### 10. The green bar
 
 ```
-pytest -q            2692 passed, 7 skipped, 3 xfailed   (from 2679; +13 pin cases)
+pytest -q            2735 passed, 7 skipped, 1 xfailed   (2692 before merging
+                     origin/main; the two strict xfails K1 closed now pass)
 mypy aef examples    Success: no issues found in 135 source files
 ruff check .         All checks passed!
 ruff format --check  279 files already formatted
@@ -402,14 +407,30 @@ backup, prove the sha256 unchanged; control green before and after.
 
 | # | mutation | result |
 |---|---|---|
-| M1 | drop the live-gating sentence from `CLAUDE.md` | CAUGHT |
+| M1 | rename `gates.live_model_calls` in `CLAUDE.md` | CAUGHT |
 | M2 | drop the exit-3 row from the rendered `LOOP.md` | CAUGHT |
 | M3 | turn grok's "suppresses nothing" into "works" | CAUGHT |
 | M4 | delete the exhausted-quota note from `corpus/README.md` | CAUGHT |
+| M5 | turn the live-gating "refused by name" into "quietly skipped" | CAUGHT |
 
-4 of 4. M4 first read MISSED because the phrase occurs twice and only the first
-was perturbed — the mutation was wrong, not the pin, and the corrected
-mutation caught it.
+5 of 5, and **two of them needed the rig fixed before they meant anything** —
+which is the reproduce-first skill's whole point, applied to itself.
+
+- **M4 first read MISSED** because the phrase occurs twice in
+  `corpus/README.md` and the mutation perturbed only the first. The mutation
+  was wrong, not the pin.
+- **M5 first left the control RED after a restore whose sha256 was proved
+  unchanged.** The source was byte-identical; the *bytecode* was not.
+  `"refused by name"` and `"quietly skipped"` are both fifteen characters, so
+  the mutated and restored files had the same size and — within one second —
+  the same mtime, which is exactly the pair CPython's `.pyc` invalidation
+  compares. The stale `__pycache__` entry survived the restore and the control
+  ran the mutated module.
+
+  A same-length mutation is the *easiest* one to write and the one most likely
+  to be silently cached. The rig now runs every arm with
+  `PYTHONDONTWRITEBYTECODE=1`, which is a one-variable fix for a failure mode
+  that presents as "my correct code is failing".
 
 ---
 
@@ -432,6 +453,42 @@ mutation caught it.
    it may be correct (a wrong answer is not evidence a task was impossible) —
    but the document and the observed behaviour disagree on a repo of exactly
    the shape the document is for.
+
+---
+
+## K1 landed mid-increment, and one of these sentences went stale in an hour
+
+`UPGRADE_LOOP.md` allows this worker to merge `origin/main` before finishing.
+It did, and **K1 (ADR 0181) had landed** — closing both of ADR 0158's HIGH
+findings and their two strict xfails. So the sentence written four commits
+earlier in this same increment —
+
+> a prompt candidate can be proposed and can be rejected; it cannot yet be
+> **accepted** on live evidence, and no flag changes that
+
+— was true when written, false four hours later, and **a flag is exactly what
+changed it**. Every copy of it was retired in the same pass:
+
+| document | now says |
+|---|---|
+| `CLAUDE.md` | live is a per-repo opt-in, `gates.live_model_calls`, read from the base ref so a candidate cannot grant itself the login |
+| `AGENT_INTEGRATION.md` | the same, plus why the default is the containment property: the gates' worker is the one process here that runs code an agent wrote |
+| `docs/roadmap.md` | live gating **REAL, off by default** — with the date the "no provider serves a live miss" sentence stopped being true (2026-09-05) |
+| the generated kit | ADR 0181's own requested paragraph, with the refusal message pasted |
+| `aef.yaml` template | the `gates:` block, present and `false` rather than absent, with what turning it on grants |
+
+ADR 0180 named the template as M7's to place. It is placed, and the generated
+config round-trips through `load_agent_config` (`gates: live_model_calls=False`).
+
+**The pin moved with it, and the direction it moved is the point.** It had
+pinned the *limitation* ("cannot yet be accepted"); it now pins the **flag**
+and its **refusal** (`gates.live_model_calls`, `refused by name`). A pin on a
+limitation is a pin with an expiry date, and it expired inside one increment.
+A pin on the grant a reader must decide about does not.
+
+This is the fourteen-defect finding happening in miniature, fast enough to
+watch: a document's truth has a shelf life measured in merges, and the only
+defence is a pin on the thing that stays load-bearing.
 
 ## Consequences
 

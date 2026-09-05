@@ -71,7 +71,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from aef.harness.check_memory import write_check_failure_record
+from aef.harness.check_memory import record_check_outcomes
 from aef.harness.checks import CheckError, TaskCheck
 from aef.harness.corpus import Expected, Scenario, Source, Split
 from aef.harness.outcome import classify
@@ -576,7 +576,7 @@ def bootstrap(
         # `expected` key three lines of REFUSED_KEYS above: a label saying a
         # task SHOULD have failed is a judgement bootstrap may not make, and
         # `BootstrapInput` already draws the distinction in its docstring.
-        if write_check_failure_record(
+        if record_check_outcomes(
             memory=memory,
             checks=item.checks,
             final_state=final,

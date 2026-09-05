@@ -199,9 +199,17 @@ def _configure(services: Any, settings: Any) -> Any:
         from aef.config.factory import build_model_provider
         from aef.config.schema import ModelProviderConfig
 
-        inner = build_model_provider(
-            ModelProviderConfig(impl=str(live["impl"]), model=str(live.get("model", "")))
-        )
+        # `model_validate`, not two keyword arguments. The parent serialises
+        # the base ref's WHOLE `model_provider` block, so this rebuilds the
+        # provider the owner configured rather than a two-field approximation
+        # of it: `impl: command` keeps its argv template, its output pointer
+        # and its `isolation:` assertion, and `fallback:` keeps its chain.
+        # While only `{impl, model}` crossed, an `impl: command` config was
+        # refused by this schema — correctly, there was no `command:` block —
+        # and every scenario failed as `worker refused configuration`, which
+        # G2 reported as a behavioural regression (ADR 0158's F-M5-2, closed
+        # in ADR 0181).
+        inner = build_model_provider(ModelProviderConfig.model_validate(live))
 
     agent_id = settings.get("agent_id")
     clock_values = [datetime.fromisoformat(v) for v in settings.get("clock_values", ())]
