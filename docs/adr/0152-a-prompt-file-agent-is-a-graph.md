@@ -342,7 +342,6 @@ two CLI facts the design rests on (recursive agent discovery; a `.py` under
 Lower on breadth: one pilot repo, eight personas, one harness. Nothing here says
 a *changed* prompt survives the gates — that is M4/M5, and the corpus this
 increment recorded has no failing input for them to work from yet.
-<<<<<<< HEAD
 
 
 ## Erratum (2026-09-04, ADR 0169, fix wave G2)
@@ -377,7 +376,7 @@ node records it and the persona's channel per run
 `prompt_agent.persona_in_user_turn` error entry), and the generated header
 states the per-impl truth. ADR 0169 has the argv, the canary experiment and
 the raw JSON.
-=======
+
 \n
 
 ---
@@ -409,4 +408,3 @@ Fixed in ADR 0168: `aef run` (and `aef loop record`, which shares the loader)
 accept a file path as well as a dotted name, and `migrate` prints whichever form
 is runnable for the root the adopter chose. Refusing the root was rejected —
 `.claude/agents` is this ADR's whole opt-in.
->>>>>>> fix/g1b-doctor-discovery
