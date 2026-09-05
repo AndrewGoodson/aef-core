@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from aef.config.schema import (
     CONTEXT_IMPLS,
+    CommandProviderConfig,
     ContextConfig,
     ModelProviderConfig,
     PoliciesConfig,
@@ -32,7 +33,7 @@ from aef.services.memory.base import MemoryStore
 
 # `claude_code` first: in the repos this scaffold is built for, the harness
 # login is the only credential there is (ADR 0112).
-_SUPPORTED_IMPLS = ("claude_code", "codex", "anthropic")
+_SUPPORTED_IMPLS = ("claude_code", "codex", "grok", "anthropic", "command")
 
 
 class UnsupportedProviderImplError(NotImplementedError):
@@ -43,7 +44,9 @@ class UnsupportedProviderImplError(NotImplementedError):
         )
 
 
-def _build_single(impl: str, model: str) -> ModelProvider:
+def _build_single(
+    impl: str, model: str, command: CommandProviderConfig | None = None
+) -> ModelProvider:
     if impl == "claude_code":
         from aef.providers.harness_provider import ClaudeCodeProvider
 
@@ -52,6 +55,30 @@ def _build_single(impl: str, model: str) -> ModelProvider:
         from aef.providers.harness_provider import CodexProvider
 
         return CodexProvider(default_model=model)
+    if impl == "grok":
+        from aef.providers.harness_provider import GrokProvider
+
+        return GrokProvider(default_model=model)
+    if impl == "command":
+        # A harness this repo has never seen, described by the owner rather
+        # than guessed at here (ADR 0154). `ModelProviderConfig` already
+        # refused an `impl: command` with no block, so this cannot be None.
+        from aef.providers.command_provider import CommandProvider
+
+        if command is None:
+            raise UnsupportedProviderImplError(impl)
+        return CommandProvider(
+            argv=command.argv,
+            model_argv=command.model_argv,
+            system_argv=command.system_argv,
+            stdin=command.stdin,
+            output=command.output,
+            output_pointer=command.output_pointer,
+            usage_pointer=command.usage_pointer,
+            output_usage_pointer=command.output_usage_pointer,
+            default_model=model,
+            timeout_s=command.timeout_s,
+        )
     if impl == "anthropic":
         # Imported lazily: aef-core's `anthropic` extra is optional (constraint
         # #3's vendor isolation means only providers/ touches the SDK at all),
@@ -72,7 +99,7 @@ def build_model_provider(config: ModelProviderConfig) -> ModelProvider:
     # `config.model` validated for months and nothing read it (the ADR 0100
     # shape). It is the provider's default now; a request naming its own
     # model still wins.
-    providers = [_build_single(config.impl, config.model)]
+    providers = [_build_single(config.impl, config.model, config.command)]
     providers.extend(_build_single(impl, config.model) for impl in config.fallback)
     if len(providers) == 1:
         return providers[0]

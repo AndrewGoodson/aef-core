@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 class _StrictModel(BaseModel):
@@ -22,10 +22,87 @@ class _StrictModel(BaseModel):
 CONTEXT_IMPLS: frozenset[str] = frozenset({"memory"})
 
 
+class CommandProviderConfig(_StrictModel):
+    """`model_provider.impl: command` — a harness described entirely here
+    (ADR 0154). See `aef.providers.command_provider` for the security
+    properties; this block is the whole interface an owner gets.
+
+    Validation is delegated to `validate_template`, the same function
+    `CommandProvider.__init__` calls, so a bad template fails at config-load
+    time AND at construction time with the identical message. Two validators
+    that could disagree is the drift ADR 0091 records.
+    """
+
+    argv: list[str]
+    model_argv: list[str] = []
+    system_argv: list[str] = []
+    stdin: bool = False
+    output: str = "stdout"
+    output_pointer: str | None = None
+    usage_pointer: str | None = None
+    output_usage_pointer: str | None = None
+    timeout_s: float = 600.0
+
+    @model_validator(mode="after")
+    def _template_must_be_runnable(self) -> CommandProviderConfig:
+        # Imported here, not at module scope: `aef.config` must stay
+        # importable without the optional vendor extras, which is what
+        # `test_importing_aef_config_does_not_require_anthropic` pins.
+        # `aef.providers.command_provider` imports no SDK, but the lazy
+        # import keeps that guarantee independent of what it grows into.
+        from aef.providers.command_provider import OUTPUT_MODES, validate_template
+
+        validate_template(
+            self.argv,
+            model_argv=self.model_argv,
+            system_argv=self.system_argv,
+            stdin=self.stdin,
+        )
+        if self.output not in OUTPUT_MODES:
+            raise ValueError(f"command.output={self.output!r} is not one of {sorted(OUTPUT_MODES)}")
+        if self.output == "json_pointer" and self.output_pointer is None:
+            raise ValueError(
+                "command.output is 'json_pointer' but command.output_pointer is unset: "
+                "there is nothing to follow, so every reply would be empty."
+            )
+        if self.output != "json_pointer" and self.output_pointer is not None:
+            raise ValueError(
+                f"command.output_pointer is set while command.output is {self.output!r}, "
+                f"where it is never read; see docs/adr/0154."
+            )
+        if self.timeout_s <= 0:
+            raise ValueError(f"command.timeout_s must be positive; got {self.timeout_s}")
+        return self
+
+
 class ModelProviderConfig(_StrictModel):
     impl: str
     model: str
     fallback: list[str] = []
+    # Only `impl: command` reads this. Present-but-ignored is refused below
+    # for the same reason `knowledge_graph.impl` is (ADR 0100).
+    command: CommandProviderConfig | None = None
+
+    @model_validator(mode="after")
+    def _command_block_matches_the_impl(self) -> ModelProviderConfig:
+        if self.impl == "command" and self.command is None:
+            raise ValueError(
+                "model_provider.impl is 'command' but no `command:` block is present. "
+                "There is no argv template to run; see docs/adr/0154."
+            )
+        if self.impl != "command" and self.command is not None:
+            raise ValueError(
+                f"model_provider.command is set while impl is {self.impl!r}, which never "
+                f"reads it. A block that validates and is ignored lets an owner believe a "
+                f"harness is configured; set impl: command or remove the block."
+            )
+        if "command" in self.fallback:
+            raise ValueError(
+                "'command' cannot appear in model_provider.fallback: there is exactly one "
+                "`command:` block, so a fallback entry would have no template of its own "
+                "and would silently duplicate the primary."
+            )
+        return self
 
 
 class MemoryConfig(_StrictModel):

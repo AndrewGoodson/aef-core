@@ -2,10 +2,11 @@ import subprocess
 import sys
 
 import pytest
+from pydantic import ValidationError
 
 from aef.config import UnsupportedProviderImplError, build_model_provider
 from aef.config.schema import ModelProviderConfig
-from aef.providers.base import FallbackProvider
+from aef.providers.base import CompletionRequest, FallbackProvider, ProviderMessage
 
 
 def test_importing_aef_config_does_not_require_anthropic() -> None:
@@ -78,4 +79,74 @@ def test_build_codex_provider() -> None:
 
 def test_unsupported_impl_message_names_the_harness_impls() -> None:
     with pytest.raises(UnsupportedProviderImplError, match="claude_code"):
+        build_model_provider(ModelProviderConfig(impl="openai", model="gpt-x"))
+
+
+# ---------------------------------------------------------------------------
+# Grok and the generic command harness (ADR 0154)
+# ---------------------------------------------------------------------------
+_GROK_COMMAND: dict[str, object] = {
+    "argv": ["grok", "--output-format", "json", "{model}", "{system}", "-p", "{prompt}"],
+    "model_argv": ["-m", "{model}"],
+    "system_argv": ["--system-prompt-override", "{system}"],
+    "output": "json_pointer",
+    "output_pointer": "/text",
+    "usage_pointer": "/usage/input_tokens",
+}
+
+
+def test_build_grok_provider() -> None:
+    from aef.providers.harness_provider import GrokProvider
+
+    provider = build_model_provider(ModelProviderConfig(impl="grok", model="grok-4.6"))
+    assert type(provider) is GrokProvider
+    assert provider.default_model == "grok-4.6"
+
+
+def test_build_command_provider_from_a_template_alone() -> None:
+    """The whole claim of `impl: command`: a harness this repo has never
+    seen becomes an owner's config, not a class someone here guesses at."""
+    from aef.providers.command_provider import CommandProvider
+
+    config = ModelProviderConfig(impl="command", model="grok-4.6", command=_GROK_COMMAND)
+    provider = build_model_provider(config)
+    assert type(provider) is CommandProvider
+    assert provider.default_model == "grok-4.6"
+    argv, _ = provider.build(
+        CompletionRequest(messages=(ProviderMessage(role="user", content="hi"),), model="")
+    )
+    # `model_provider.model` reaches the CLI as the default (ADR 0112's rule
+    # for a field that validated for months while nothing read it).
+    assert argv[argv.index("-m") + 1] == "grok-4.6"
+
+
+def test_impl_command_without_a_command_block_is_refused_at_load() -> None:
+    with pytest.raises(ValidationError, match="no `command:` block"):
+        ModelProviderConfig(impl="command", model="x")
+
+
+def test_a_command_block_under_another_impl_is_refused_rather_than_ignored() -> None:
+    """ADR 0100's rule. A block that validates while nothing reads it lets an
+    owner believe a harness is configured."""
+    with pytest.raises(ValidationError, match="never reads it"):
+        ModelProviderConfig(impl="claude_code", model="x", command=_GROK_COMMAND)
+
+
+def test_command_cannot_appear_in_fallback_because_it_has_one_template() -> None:
+    with pytest.raises(ValidationError, match="exactly one"):
+        ModelProviderConfig(impl="claude_code", model="x", fallback=["command"])
+
+
+def test_a_bad_template_fails_at_config_load_not_at_the_first_model_call() -> None:
+    """Same validator as `CommandProvider.__init__`, called from the schema —
+    so an `aef.yaml` typo fails when the config loads rather than halfway
+    through a graph run, after the checkpoint."""
+    with pytest.raises(ValidationError, match="exactly once"):
+        ModelProviderConfig(impl="command", model="x", command={"argv": ["echo"]})
+
+
+def test_the_unsupported_impl_message_names_grok_and_command() -> None:
+    with pytest.raises(UnsupportedProviderImplError, match="grok"):
+        build_model_provider(ModelProviderConfig(impl="openai", model="gpt-x"))
+    with pytest.raises(UnsupportedProviderImplError, match="command"):
         build_model_provider(ModelProviderConfig(impl="openai", model="gpt-x"))
