@@ -3602,6 +3602,25 @@ synthesised**, which retires ADR 0157's `make_evidence.py`.
 signature → 1 entry → the lesson appears in the next run's draft prompt, where
 every bullet previously read *"no failure signals"*.
 
+**Re-run on S3b's corpus** (ADR 0171, merged from `main` mid-increment): 17
+summary validation scenarios, **four content negatives**, and before the
+producer `17 success record(s), 0 failure record(s)` — seventeen unique
+signatures, `CONSOLIDATED: 0 knowledge entr(ies)`. With it: 4 failure records
+under one signature `failure:check:working_memory.summary:max_words`, **1 entry
+across 4 distinct runs**. Two unflattering observations recorded with it: on
+this corpus the cap is *in the objective* ("summarise … in at most 28 words"),
+so redacting `max_words`' value buys nothing here even though the record's own
+text is clean; and the lesson is **retrieved and does not reach the model** —
+chunk 14 of 24, score 0.125, while `render_retrieved_context(max_items=5)`
+shows five `no failure signals` successes.
+
+**`aef loop bootstrap` now counts a wrong answer as a failure.** S3b
+reproduced the old line — eight inputs, three content negatives, `0 of 8
+recorded run(s) failed. A corpus where everything passes cannot demonstrate an
+improvement`. One count now, same definition the producer uses, split into its
+halves: `2 of 3 recorded run(s) FAILED: 1 raised or ended with a failed plan, 1
+failed an owner check`, with per-scenario `FAILED` / `WRONG` / `passed`.
+
 ### Mutations, green bar, and what is not claimed
 
 6 mutations, 6 kills, every restore sha256-verified against a pre-edit hash
@@ -3609,9 +3628,10 @@ every bullet previously read *"no failure signals"*.
 `bootstrap`, re-run the whole pilot → `no admissible failure memory: no
 candidate this cycle`.
 
-`pytest -q`: **2300 passed, 5 skipped**; collected 2262 → **2305 (+43, none
-removed)**. `mypy aef examples` clean (133 files), `ruff check .` clean,
-`ruff format --check` clean (259 files). S1's golden is green.
+`pytest -q`: **2446 passed, 6 skipped**; collected 2402 → **2452 (+50, none
+removed)** after merging `origin/main` mid-increment (2262 → 2305 before it).
+`mypy aef examples` clean (133 files), `ruff check .` clean, `ruff format
+--check` clean (265 files). S1's golden is green.
 
 **No rubric change.** No task score was measured; the artifact is a capability
 that was absent and is now present. S1's four arms are runnable as a real
@@ -3619,7 +3639,12 @@ comparison for the first time, and what they need is a corpus whose failures
 recur — **S3b is building it tonight**. Re-running (a)/(b)/(c)/(d) against that
 corpus is the measurement that could move dimension 2, not this increment.
 
-**Defects found outside this worker's files**: `aef loop cycle` silently drops
+**Defects found outside this worker's files.** `knowledge_boost = 0.0` hides
+the only lesson there is, and now has a counter-example: over S3b's split the
+single check-derived entry ranks **14 of 24** at the default and **3 of 24** at
+0.5, so it survives `render_retrieved_context`'s top-5 only when boosted — ADR
+0110 swept 0/0.5/1/3 and found no change, on a corpus that could not produce
+seventeen near-identical successes crowding one lesson. Also: `aef loop cycle` silently drops
 all evidence without `--graph-id` (`2 record(s) dropped as another graph's
 scenario`) though the graph id is in the corpus it already loaded; ADR 0157's
 G2/G3 defects reproduce unchanged; `loop score` wants `module:factory` where

@@ -437,11 +437,51 @@ score was measured here. ADR 0155's four arms would have to be re-run to say
 anything about that, and the honest statement of what they would need is
 below.
 
+### Re-run on S3b's corpus (ADR 0171), merged from `main` mid-increment
+
+The same rig over the **17** summary validation scenarios S3b's content
+negatives added, before the producer:
+
+```
+17 summary validation scenario(s)
+  … sum-30-ganister-tarn: score=0.80 checks=4/5 … FAILED CHECK: working_memory.summary max_words 28
+  … sum-33-cotterdale-bus: score=0.80 … sum-35-priory-gatehouse: score=0.80 … sum-36-larkfield-quarry: score=0.80
+memory: 17 success record(s), 0 failure record(s)      (seventeen unique signatures)
+CONSOLIDATED: 0 knowledge entr(ies)
+```
+
+**Four content negatives, and every record still says `success`.** With the
+producer: 4 failure records, **one** signature
+`failure:check:working_memory.summary:max_words`, **1 knowledge entry across 4
+distinct runs**. This is the recurring-failure evidence ADR 0155 said the layer
+needed, from a corpus this worker did not build.
+
+Two honest observations from that run, neither of them flattering:
+
+1. **The cap is in the objective anyway.** Every one of these scenarios asks
+   *"summarise … in at most 28 words"*, so redacting `max_words`' value from
+   the lesson buys nothing **on this corpus**: the agent is told the number in
+   the task. The redaction is still the right default — a `contains` marker is
+   not in the objective, and the marlin pilot's `VERDICT:` was not — but the
+   claim "the lesson does not leak the cap" is worth strictly less here than it
+   sounds. The record's own text is clean (`is longer than the owner's maximum;
+   observed 41 words`); the objective beside it is not.
+2. **The lesson is retrieved and does not reach the model.** On the
+   six-scenario split it renders into the draft prompt (above). On the
+   seventeen-scenario one it is **chunk 14 of 24, score 0.125**, and
+   `render_retrieved_context`'s `max_items=5` shows five `no failure signals`
+   successes instead. That is ADR 0110's own I4 finding — near-duplicate
+   records crowding out a distinct lesson as experience accumulates —
+   reappearing at the render cap rather than the token budget. See the defects
+   below; the knob exists and is off.
+
 ## Regression tests and mutations
 
-+43 tests (2262 → 2305 collected), none removed. `tests/harness/test_check_memory.py`
-is new (26); `test_bootstrap.py`, `test_consolidate.py` and `test_task_checks.py`
-gain the rest.
++50 tests, none removed — 2262 → 2305 on the pre-merge base, and 2402 → 2452
+after merging `origin/main` mid-increment (which brought S3b's corpus and four
+other workers' tests). `tests/harness/test_check_memory.py` is new (26);
+`test_bootstrap.py`, `test_consolidate.py`, `test_task_checks.py` and the two
+CLI bootstrap tests gain the rest.
 
 Six mutations, six kills. Every in-repo restore was byte-verified against a
 `shasum -a 256` taken before the edit (`git checkout --` was never used; the
@@ -458,9 +498,10 @@ tree carried uncommitted work throughout).
 
 ## Green bar
 
-`pytest -q`: **2300 passed, 5 skipped**; collected **2262 → 2305 (+43, none
-removed)**. `mypy aef examples`: 133 files, clean. `ruff check .`: clean.
-`ruff format --check aef tests examples`: 259 files, clean. S1's golden
+`pytest -q`: **2446 passed, 6 skipped**; collected **2402 → 2452 (+50, none
+removed)** after the `origin/main` merge (2262 → 2305 before it). `mypy aef
+examples`: 133 files, clean. `ruff check .`: clean. `ruff format --check aef
+tests examples`: 265 files, clean. S1's golden
 (`tests/agents/test_summary_prompt.py` — the `agents/summary` prompt
 byte-identical with nothing retrieved) is green; `agents/summary/graph.py` was
 not touched.
@@ -485,6 +526,25 @@ The other thing standing between a prompt candidate and an *accept* is ADR
 0157's defects 1 and 2, neither of which is closed here.
 
 ## Defects found outside this worker's files
+
+0. **`knowledge_boost = 0.0` hides the only lesson there is, and it now has a
+   counter-example.** ADR 0110 swept 0 / 0.5 / 1 / 3 and recorded that it
+   "changed no coverage number anywhere", so the benefit was consolidation and
+   not ranking. On S3b's 17-scenario split, over the memory this producer
+   writes, the single check-derived entry ranks:
+
+   | `knowledge_boost` | rank of the lesson | survives `render_retrieved_context(max_items=5)` |
+   |---|---|---|
+   | **0.0 (default)** | **14 of 24** | **no** |
+   | 0.5 | 3 of 24 | yes |
+   | 1.0 | 3 of 24 | yes |
+   | 3.0 | 0 of 24 | yes |
+
+   Seventeen near-identical `no failure signals` successes outrank one lesson.
+   The default is not re-argued here — one corpus is not a sweep, and
+   `aef/services/context/` is not this worker's file — but ADR 0110's sweep was
+   run on a corpus that could not produce this shape, and this is the first
+   corpus that can. Reported for whoever re-runs S1's arms.
 
 1. **`aef loop cycle` needs `--graph-id` or it silently drops all the
    evidence.** Without it the run reports `2 record(s) dropped as another
@@ -511,8 +571,18 @@ The other thing standing between a prompt candidate and an *accept* is ADR
   and gets the owner's task metric wrong now leaves failure memory, and two
   such runs make a lesson.
 - **`aef loop bootstrap`'s report no longer says "everything passed" when the
-  owner's metric failed.** `classify` and the checks answer different
-  questions, and they are printed as two lines rather than one.
+  owner's metric failed.** S3b reproduced the old behaviour on their own batch:
+  eight inputs, three content negatives the owner's checks caught, and
+  `0 of 8 recorded run(s) failed. A corpus where everything passes cannot
+  demonstrate an improvement` printed underneath them — the count was
+  `classify`'s alone while the checks sat in the same inputs file. It is now
+  one count with the same definition of failure the memory producer uses, split
+  into its two halves on one line (`2 of 3 recorded run(s) FAILED: 1 raised or
+  ended with a failed plan, 1 failed an owner check`), with per-scenario labels
+  `FAILED` / `WRONG` / `passed` — because a crash and a wrong answer need
+  different fixes and one label for both hides which an owner has. The
+  "everything passes" advisory is a claim about the corpus and is now silent
+  whenever it would be false.
 - A lesson computed from a check no longer contains the check. It contains
   enough to identify which output is graded and how — see the four numbered
   leaks — and that residual is the honest price of feedback at all.
