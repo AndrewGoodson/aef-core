@@ -17,9 +17,14 @@
       "value": "camera"
     },
     {
-      "op": "regex",
+      "op": "max_words",
       "path": "working_memory.summary",
-      "value": "^\\s*\\S+(?:\\s+\\S+){0,29}\\s*$"
+      "value": 30
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
     }
   ],
   "expected": "must_pass",
