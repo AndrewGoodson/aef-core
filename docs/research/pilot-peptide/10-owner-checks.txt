@@ -1,0 +1,7 @@
+013c9044  expected: FRESH   2 days old       (age_days=2, max stated $/mg=1.6665)
+028299cf  expected: STALE   unknown days old (age_days=None, max stated $/mg=1.96)
+7961a9cf  expected: STALE   24 days old      (age_days=24, max stated $/mg=1.6667)
+ddfe4cc1  expected: FRESH   0 days old       (age_days=0, max stated $/mg=1.966)
+fd9c9064  expected: STALE   unknown days old (age_days=None, max stated $/mg=299.98)
+
+5 scenario(s) now carry 3 owner check(s) each.

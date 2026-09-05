@@ -1,0 +1,52 @@
+policy patterns: email, api_key, bearer, aws_key, opaque_secret
+working_memory keys dropped outright: ['api_key', 'token', 'secret', 'password']
+5 recorded run(s)
+
+== 1. what harvest itself counts, with redaction ON (the shipped default)
+   arm 0 — as shipped
+     re-executed (offered to the re-check) : 5
+     admitted   (promoted)                 : 1
+     rejected   (non-deterministic)        : 4
+     refused    (behaviour changed under redaction): 0
+     refused    (a secret survived redaction)     : 0
+     redactions (substitutions made)              : 0
+     already in the corpus (skipped)              : 0
+     held back by the daily limit (5)          : 0
+   arm 1 — + the memory the run saw
+     re-executed (offered to the re-check) : 5
+     admitted   (promoted)                 : 5
+     rejected   (non-deterministic)        : 0
+     refused    (behaviour changed under redaction): 0
+     refused    (a secret survived redaction)     : 0
+     redactions (substitutions made)              : 0
+     already in the corpus (skipped)              : 0
+     held back by the daily limit (5)          : 0
+
+== 2. the policy applied directly to all five runs (the re-check reaches only some)
+   7961a9cf  INPUT subs=0  ANSWER subs=0  labels matched in the recorded working memory=[]
+   1ddcad17  INPUT subs=0  ANSWER subs=0  labels matched in the recorded working memory=[]
+   33108d40  INPUT subs=0  ANSWER subs=0  labels matched in the recorded working memory=[]
+   fef4beb1  INPUT subs=0  ANSWER subs=0  labels matched in the recorded working memory=[]
+   7e3962c3  INPUT subs=0  ANSWER subs=0  labels matched in the recorded working memory=[]
+   totals: {"input_subs": 0, "answer_subs": 0, "wm_dropped": 0}
+
+== 3. the control — a zero from a dead scanner looks like a zero from a clean repo
+   email          substitutions=1  -> ...ould be done with the listing? Escalate to [REDACTED:email].
+   api_key        substitutions=1  -> ...ld be done with the listing? Escalate to [REDACTED:api_key].
+   bearer         substitutions=1  -> ...ould be done with the listing? Escalate to [REDACTED:bearer]
+   aws_key        substitutions=1  -> ...ld be done with the listing? Escalate to [REDACTED:aws_key].
+   opaque_secret  substitutions=1  -> ...done with the listing? Escalate to [REDACTED:opaque_secret].
+
+   secret-shaped working-memory keys:
+     before ['api_key', 'token', 'vendor_domain']  ->  after ['vendor_domain']  (count=2)
+
+   what this repo's OWN identifier shapes do under the same policy:
+     vendor domain                substitutions=0  -> peptideplugs.com
+     vendor domain (multi-label)  substitutions=0  -> skyepeptides.us.com
+     compound slug                substitutions=0  -> bpc-157
+     price per mg                 substitutions=0  -> price_per_mg_usd 1.6667
+     scrape date                  substitutions=0  -> scrape_date 2026-08-12
+     a whole real row             substitutions=0  -> peptaura.com / bpc-157 "10 × 10mg vials" @ $0.96/mg, 2026-08-14
+     an operator email in prose   substitutions=1  -> reached [REDACTED:email] about the delisting
+     an azure subscription UUID (shape only) substitutions=0  -> /subscriptions/00000000-1111-2222-3333-444444444444/resourceGroups/rg-example
+     a bare UUID (shape only)     substitutions=0  -> 00000000-1111-2222-3333-444444444444

@@ -1,0 +1,24 @@
+<frozen runpy>:128: RuntimeWarning: 'aef.cli.main' found in sys.modules after import of package 'aef.cli', but prior to execution of 'aef.cli.main'; this may result in unpredictable behaviour
+scanned 21 Python file(s)
+found 0 call site(s): 0 wrapped, 0 skipped
+
+
+wrote <repo>/agents/migrated/graph.py
+  Zone A (agents/**) — agent-writable, the only tree the self-rewiring loop may propose changes to
+
+This generated the PLUMBING, not the semantics. Every wrapper passes
+state.objective as a single prompt and stores the raw result; if your
+function takes more than that, the node body is yours to finish.
+
+found 0 prompt agent(s) under .claude/agents
+  none — this repo's agents are not markdown personas in that directory, or it does not exist
+
+found 1 skill(s) and did NOT migrate any of them (0 yours + 1 aef's own):
+  SKILL    .claude/skills/new-model-check/SKILL.md   (aef's own — not yours)
+  A skill is not an agent. Its body is instructions injected into a session
+  already in progress, it presumes that session's task and tools, and it
+  routinely points at bundled files a tool-less completion cannot open — so a
+  graph built from SKILL.md would send an instruction sheet stripped of half
+  its content and return something that looks like an agent's answer. It also
+  has no objective of its own, and the objective is the user turn every
+  generated graph sends. Named here rather than skipped in silence.

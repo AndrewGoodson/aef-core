@@ -6555,3 +6555,113 @@ pre-0197 pattern → 1 (`sk-ant-api03-…`). Six for six.
 
 Erratum appended to ADR 0163 §5 with the new number; `make measure` pins the
 line against the erratum, so the closure is re-checked rather than asserted.
+
+---
+
+## N7 — The cold-start pilot: `peptideindex` (2026-09-05)
+
+**Branch:** `upgrade/n7-peptide-pilot`, off `d8357c2`.
+**Rubric claim, stated before the work:** dimension 7, **3 → 5**, and only if
+all three of these fired — real runs of a real repo's real job entered the
+corpus **through `harvest`** (counts quoted, control passed), a candidate was
+proposed **grounded in those harvested records**, and the gates reached a
+**verdict on it live**. If harvest admitted but the cycle grounded in bootstrap
+evidence instead, +1 and say which. If harvest refused, +0 and quote why.
+Total before: 69.
+
+**Model:** `claude-opus-5[1m]`. **40 live model calls** of a ≤ 60 budget:
+1 preflight, 5 objectives, 4 re-recordings forced by F-N7-1, 30 cassette misses
+inside the gates' worker.
+
+**Safety.** Steps 1–6 ran on a clone at `<scratch>/peptide` whose `origin` was
+removed before anything ran. Step 7 touched `/Users/raptor/peptideindex` and
+only as ADR 0192 §7 describes: one local branch, one commit, never pushed,
+`master` at `5752fcf3e` unchanged, the two pre-existing untracked paths
+untouched. Undo: `git -C /Users/raptor/peptideindex branch -D aef/adopt`.
+
+### What was measured
+
+| step | result |
+|---|---|
+| `adopt` on an agentless repo | 16 files, **all new**, nothing appended and nothing modified; `.gitignore` correctly skipped (line 2 is `__pycache__/`); a second `adopt` left all 17 byte-identical, `shasum -c` |
+| `migrate` on an agentless repo | `found 0 call site(s)`, `found 0 prompt agent(s)`, `0 yours + 1 aef's own` skill; `build_graph()` **raises** |
+| L1 (ADR 0189) on `master` | term 2 on the clone, term 1 on a clone-of-clone, term 1 on the owner's checkout answering `'master'` while HEAD was on `aef/adopt`; `--base main` → `EXIT_ERROR`; `proposed` ledger event records `base: master` |
+| one persona | `price-freshness-reviewer`, four rules all lifted from this repo's own code and its HEAD commit; `migrate` → one graph |
+| five objectives, live | 5 calls, 211–394 words, containment recorded on every one; **first live end-to-end exercise of ADR 0190's recorder fix** — 5 cassettes, 5 declarations |
+| `harvest` | 1 of 5 admitted, 4 rejected — **F-N7-1** |
+| redaction | 0 substitutions, 0 refusals; control 5/5 shapes, 2/3 keys; residual named |
+| owner checks | 3 rules, values computed; **2 of 5 fail**, one signature, two distinct runs |
+| `bless` / `doctor` | baseline v1; **4 of 6** obligations met, up from 1 of 6 at cold start |
+| one cycle, live | **REJECT by G3**, drift 0.057/0.500, `live_model_calls: true`, EXIT 1 |
+| grounded in harvested evidence | **yes** — both `grounded_in` ids trace to `source: harvest` scenarios; corpus is `{"harvest": 5}` |
+| `monitor` / `digest` | ran — **F-N7-2** |
+| the real repo | 1 commit, 16 files, 2691 insertions, 0 deletions, no push |
+
+### The two defects, reported not fixed
+
+**F-N7-1 (HIGH).** `harvest._reexecution_services` reproduces the clock, the
+model, the cassette and (since ADR 0190) the provider's isolation declaration —
+and hard-codes `memory=InMemoryMemoryStore()`. Since ADR 0118 every generated
+prompt-agent graph is `retrieve -> prompt_agent -> …` and the retrieved lessons
+go into the **user turn**, so the request depends on the durable store, the
+store grows with every run, and the replay always sees an empty one. Run k saw
+k−1 lessons; only the first run against a given store is harvestable. Isolated
+to one variable offline: as shipped **1 of 5**, with the memory the run itself
+saw **5 of 5**.
+
+**F-N7-2 (MEDIUM).** `loop.digest()` never passes `scenarios_added`, and the
+`digest` sub-parser has no `--corpus`, so `Scenarios added to the corpus` is
+`build_digest`'s default in every invocation there has ever been. ADR 0190
+keyed a new warning off it — *"the ingestion path is broken, not quiet"* —
+which fired here on a day `harvest` had admitted all five minutes earlier.
+Identical output with the corpus present and with it emptied.
+
+**F-N7-4 (HIGH), found at commit time and not during the pilot.** Worker N5's
+ADR 0197 landed on the trunk an hour after §5 of ADR 0192 named the UUID as
+this repo's redaction residual, and added a `uuid` pattern citing ADR 0163 for
+that reason. It is the right pattern; **a recorded run's own id is also a
+UUID**. Two arms over the same five real runs, one variable — the pattern list:
+
+```
+== BASE  (5 patterns, no uuid)      promoted 5 run(s) to the train split
+== TRUNK (10 patterns, ADR 0197)    promoted 0 run(s) to the train split
+                                      5 REJECTED, a secret survived redaction
+                                      5 substitution(s) made by the redaction policy
+```
+
+Both halves bite: `redact_state` rewrites `AEFState.run_id` to
+`[REDACTED:uuid]` — the identifier every join in the grounding chain runs on —
+and the output scan then refuses the run anyway, because the trace still
+carries the id the state no longer does. Reported, not fixed, and deliberately
+not softened into "extend the allowlist": two shapes that are both UUIDs must
+behave differently, which is a decision about *where* the scan runs, and it
+belongs to whoever owns ADR 0197.
+
+**F-N7-3 (LOW).** The generated checklist tells an owner of an agentless repo
+to "identify your current entrypoint(s) — the function(s) that start an agent
+run" two lines above "no legacy code to migrate". Item 3 is in
+`render_migration_checklist`'s `common` list and is emitted for `framework:
+none` as well.
+
+**One observation, no claim of harm.** `git add -A` — the gesture the brief and
+the obvious workflow both use after `adopt` — would have swept this owner's two
+untracked working directories (18 files, 548K) into the scaffold commit. The
+sixteen adopt-written paths were staged by name instead.
+
+### Verdict
+
+**Claim met in full: dimension 7, 3 → 5. Total 69 → 71.** The two honest
+qualifications are inside the row: four of the five harvested runs were
+re-recorded without `--memory` to route around F-N7-1, and the two grounding
+records share one check signature on one failure family. The last five points
+are unclaimed and no work on this machine can earn them — **peptideindex is the
+owner's own repo, not a third party.**
+
+**One thing the +2 does not survive unchanged:** F-N7-4 means the corpus this
+increment built cannot be rebuilt on the trunk as it stands. The measurement
+happened, its artefacts are committed, and the row says what it says — but the
+next worker to re-run this pilot gets `0 promoted` until F-N7-4 is settled, and
+that is stated here rather than discovered by them.
+
+**Artefacts:** `docs/research/pilot-peptide/` (every command's real output,
+scanned with the shipped `RedactionPolicy` before committing) and ADR 0192.

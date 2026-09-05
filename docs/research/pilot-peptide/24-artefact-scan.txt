@@ -1,0 +1,41 @@
+base  policy (5 patterns): email, api_key, bearer, aws_key, opaque_secret
+trunk policy (10 patterns): connection_string, email, api_key, bearer, jwt, aws_key, github_token, slack_token, uuid, opaque_secret
+50 artefact file(s) scanned in pilot-peptide/
+
+== BASE (this branch's aef/)
+   17-ledger.txt: ['opaque_secret']
+   redaction_scan.py: ['api_key', 'aws_key', 'bearer', 'email', 'opaque_secret']
+
+== TRUNK (ADR 0197)
+   04c-base-ref-derivation.txt: ['uuid']
+   05-objectives-and-answers.txt: ['uuid']
+   07a-harvest.txt: ['uuid']
+   07b-harvest-include-successes.txt: ['uuid']
+   08-redaction.txt: ['uuid']
+   09-harvest-all.txt: ['uuid']
+   11-score.txt: ['uuid']
+   15-cycle.txt: ['uuid']
+   17-ledger.txt: ['opaque_secret']
+   21-grounding-chain.txt: ['uuid']
+   25-uuid-vs-harvest.txt: ['uuid']
+   add_checks.py: ['uuid']
+   aefrun.sh: ['uuid']
+   arms_harvest.py: ['uuid']
+   diff_request.py: ['uuid']
+   grounding_chain.py: ['uuid']
+   inspect_runs.py: ['uuid']
+   mk_answers.py: ['uuid']
+   redaction_scan.py: ['api_key', 'aws_key', 'bearer', 'email', 'opaque_secret', 'uuid']
+   repro_digest.py: ['uuid']
+   repro_uuid_harvest.py: ['uuid']
+   repro_uuid_where.py: ['uuid']
+   resolve_base.py: ['uuid']
+   run_objectives.sh: ['uuid']
+   run_objectives2.sh: ['uuid']
+   scan_artefacts.py: ['uuid']
+
+== every match, named, so a zero and a known-benign hit are told apart
+   distinct uuid matches          : 11
+   distinct opaque_secret matches : 3 -> ['b7Xk92LmQz4RtY8UvNc3JhWd5FgS1AoE6PiKzT0B', 'd9954c71d1a4499ea6e0a0b5330c774e06dfe4e8a0c75992a8dd235f6ef7d06a', 'f0ef91fabfb7988dfb1ec00d209042fa4e2ce1756b0ae8e44a46c9ae02166c12']
+   distinct api_key matches       : 1 -> ['sk_live_9fJq2mXbTz7Wc4Rv0LpH6sYd']
+   distinct email matches         : 1 -> ['pricing-ops@peptideindex.com']

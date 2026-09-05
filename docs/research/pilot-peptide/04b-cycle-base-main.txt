@@ -1,0 +1,2 @@
+error (BaseRefError): base ref 'main' does not exist in <repo>. This repository's branches are: master. Pass --base <ref> naming one of them; the default is this repository's own default branch (origin/HEAD, else the branch you are on), not the literal 'main'.
+  preflight: 5 of 6 obligation(s) unmet (corpus + tripwire, reflect node routed to, observations, halt channel, blessed baseline). ADVISORY — this command does not refuse on them; run `aef loop doctor` for each fix.

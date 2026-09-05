@@ -1,0 +1,30 @@
+<frozen runpy>:128: RuntimeWarning: 'aef.cli.main' found in sys.modules after import of package 'aef.cli', but prior to execution of 'aef.cli.main'; this may result in unpredictable behaviour
+detected framework: none
+wrote <repo>/CLAUDE.md
+wrote <repo>/aef.yaml
+wrote <repo>/aef_adapter.py
+wrote <repo>/AGENT_INTEGRATION.md
+wrote <repo>/AUTONOMY.md
+wrote <repo>/AGENTS.md
+wrote <repo>/.github/copilot-instructions.md
+wrote <repo>/.cursor/rules/aef.mdc
+wrote <repo>/AEF_MIGRATION_CHECKLIST.md
+wrote <repo>/LOOP.md
+wrote <repo>/FIRST_DAY.md
+wrote <repo>/agents/README.md
+wrote <repo>/corpus/README.md
+wrote <repo>/.github/workflows/loop-gate.yml
+wrote <repo>/.github/workflows/loop-monitor.yml
+wrote <repo>/.claude/skills/new-model-check/SKILL.md
+skipped <repo>/.gitignore (already exists)
+
+migration checklist:
+  1. Read the generated CLAUDE.md and AGENTS.md (they are byte-identical) in full before writing any code.
+  2. Fill in aef.yaml: objectives, tools.allow, policies, evaluator.suites.
+  3. Identify your current entrypoint(s) — the function(s) that start an agent run.
+  4. Put every node you convert under `agents/` — Zone A, the only tree the loop is allowed to propose changes to. `aef migrate` writes its generated graph to `agents/migrated/graph.py`, which is inside Zone A, and names the zone of the path in its report; anywhere else is Zone C and, measured, a candidate touching it is rejected with `G0 rejected it: candidate touches paths outside Zone A` and the cycle exits 1 (ADR 0142, ADR 0143).
+  5. Write your first Node directly against aef.kernel — no legacy code to migrate.
+  6. Start with a two-node graph (do-the-thing -> END) and grow it.
+  7. Add an Evaluator (start with aef.services.eval.rule_based.RuleBasedEvaluator).
+  8. Run `aef doctor` to confirm the config and imports are wired correctly.
+  9. Then read `FIRST_DAY.md` and run the sequence it documents: `aef migrate` -> `aef loop bootstrap --state <dir> --memory <file>` -> the tripwire line bootstrap prints -> `aef loop bless` -> `aef loop doctor` -> `aef loop cycle`. It is the only document that says what each step costs you and which failures exit 0 having done nothing.

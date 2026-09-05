@@ -1,0 +1,22 @@
+[
+  {
+    "id": "O1-peptideplugs-tirzepatide-stale",
+    "objective": "Today is 2026-09-05 (UTC). Reviewing peptideplugs.com / tirzepatide. The captured rows for that vendor/compound pair are a single quantity-1 row: pack_description \"10mg vial\", price_per_mg_usd 1.6667, scrape_date 2026-08-12. There is no newer row. The committed vendor doc site/assets/data/vendors/peptideplugs.com.json shows min_price_per_mg_usd 1.6667 for tirzepatide and carries no as_of key. The storefront now returns 404 for that product page and the homepage mentions the compound nowhere. May the vendor profile display $1.67/mg as a current price, and what should be done with the listing?"
+  },
+  {
+    "id": "O2-evolvebiopep-tirzepatide-fresh",
+    "objective": "Today is 2026-08-14 (UTC) — the generated_at date of the committed snapshot. Reviewing evolvebiopep.com / tirzepatide. The captured rows are a single quantity-1 row: pack_description \"15mg vial\", price_per_mg_usd 1.6665, scrape_date 2026-08-12. site/assets/data/price-index.json names evolvebiopep.com as cheapest_vendor_domain for tirzepatide at min_price_per_mg_usd 1.6665, against a median of 6.4167 across 41 vendors. Does this pair need the \"As of\" chip on the vendor profile?"
+  },
+  {
+    "id": "O3-bpc157-cap-boundary",
+    "objective": "Today is 2026-08-14 (UTC). site/assets/data/price-index.json, generated_at 2026-08-14T16:53:34Z, reports bpc-157 with min_price_per_mg_usd 1.96, median_price_per_mg_usd 6.698 and max_price_per_mg_usd 299.98 across 138 vendors and 233 listings. db/price_outlier_cap_views.sql excludes any listing whose price_per_mg_usd is greater than 300. Does the row behind that 299.98 figure survive the plausibility cap as written, and what should this review say about it? Rule on the row behind max_price_per_mg_usd."
+  },
+  {
+    "id": "O4-peptaura-bpc157-multipack",
+    "objective": "Today is 2026-08-14 (UTC). Reviewing peptaura.com / bpc-157. Two captured rows share the same vial dose, both scrape_date 2026-08-14: pack_description \"10 × 10mg vials\", price_per_mg_usd 0.96; and pack_description \"10mg vial\", price_per_mg_usd 1.966. The committed vendor doc site/assets/data/vendors/peptaura.com.json shows min_price_per_mg_usd 1.966 for bpc-157. Which of the two figures may the site display as this vendor's price for bpc-157, and why?"
+  },
+  {
+    "id": "O5-skyepeptides-bpc157-no-date",
+    "objective": "Today is 2026-09-05 (UTC). Reviewing skyepeptides.us.com / bpc-157. The committed vendor doc site/assets/data/vendors/skyepeptides.us.com.json lists bpc-157 at min_price_per_mg_usd 1.96, and its compounds entries carry compound_slug, display_name and min_price_per_mg_usd only — there is no as_of key on any of them, and no scrape_date reached this document. site/assets/data/price-index.json names skyepeptides.us.com as cheapest_vendor_domain for bpc-157. May the profile display $1.96/mg as current?"
+  }
+]
