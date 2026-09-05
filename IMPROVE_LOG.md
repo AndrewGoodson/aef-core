@@ -3689,9 +3689,17 @@ CONSOLIDATED 1 entr(ies)
   G0 pass · G1 pass · G4 pass · G5 pass (drift 0.007/0.500) · G2 fail (TrustBoundaryError)
 ```
 
-G2's failure is ADR 0157's unfixed defect 1, unchanged. What changed is
-upstream: a verdict is reached on real evidence instead of the cycle exiting
-early. `grep -c VERDICT memory.jsonl → 0`.
+G2's failure there is ADR 0157's defect 1 — **fixed on `main` by M4c (ADR
+0170) mid-increment**. Re-run on the merged code, the gates build a prose
+control cohort and execute **21 scenarios** (`1 candidate + 1 incumbent + 5
+random control(s)`), and G2 rejects for a different reason: `3
+previously-passing scenario(s) no longer pass`. Confirmed at zero live cost —
+incumbent `3 cassette hit(s), 0 miss(es)` mean 0.3333, candidate `0 hits, 3
+misses` mean 0.0000. That is precisely the artifact UPGRADE_LOOP's own rule
+names ("never let a cassette miss score a changed prompt as 0 and call that a
+rejection"); the correct invocation is `--cassette-miss live`, 21 live
+executions, beyond the 5 calls left in budget — so **no live gate verdict is
+claimed**. `grep -c VERDICT memory.jsonl → 0`.
 
 **Live, 3 calls**: preflight (`is_error False`, `input_tokens 2`,
 `claude-opus-5[1m]`) plus two bootstrap recordings against
@@ -3729,10 +3737,10 @@ failed an owner check`, with per-scenario `FAILED` / `WRONG` / `passed`.
 `bootstrap`, re-run the whole pilot → `no admissible failure memory: no
 candidate this cycle`.
 
-`pytest -q`: **2446 passed, 6 skipped**; collected 2402 → **2452 (+50, none
-removed)** after merging `origin/main` mid-increment (2262 → 2305 before it).
-`mypy aef examples` clean (133 files), `ruff check .` clean, `ruff format
---check` clean (265 files). S1's golden is green.
+`pytest -q`: **2482 passed, 6 skipped**; collected 2438 → **2488 (+50, none
+removed)** after two `origin/main` merges (2262 → 2305 on the pre-merge base).
+`mypy aef examples` clean (134 files), `ruff check .` clean, `ruff format
+--check` clean (270 files). S1's golden is green.
 
 **No rubric change.** No task score was measured; the artifact is a capability
 that was absent and is now present. S1's four arms are runnable as a real

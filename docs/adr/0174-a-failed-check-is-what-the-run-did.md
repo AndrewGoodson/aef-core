@@ -346,12 +346,47 @@ Compare ADR 0157's bullet, whose text contained ``contains 'VERDICT:'``. The
 candidate is now built from evidence a real deployment produces, and the lesson
 is about the behaviour.
 
-G2's failure is **ADR 0157's defect 1, unchanged and not this worker's**: with
-no control cohort, `G2Outcome` re-materialises the workspace `G1Builds` already
-created and `trust._prepare_empty_destination` refuses a non-empty destination.
-A prompt candidate still cannot be *accepted* (ADR 0157 defect 2: G3 has no
-null hypothesis for a `.md`). What this increment changes is upstream of both:
-a verdict is now reached on real evidence instead of the cycle exiting early.
+G2's failure there is ADR 0157's defect 1 — `G2Outcome` re-materialising the
+workspace `G1Builds` already created — and **that defect was fixed on `main` by
+M4c (ADR 0170) while this increment was running**. The run above is kept because
+it is what this worker measured on its base; the merged result is below and it
+is different.
+
+#### Re-run after merging M4c (ADR 0170) — the gates now execute the candidate
+
+Same repo, same evidence, same three scenarios, on the merged code:
+
+```
+  ledger verified: 1 entr(ies)
+  proposed cycle-20260905T035600-prompt on local branch loop/cycle-… (proposer=rule_based_prompt)
+  evidence: 7 corpus pass(es) (21 scenario execution(s)): 1 candidate + 1 incumbent
+            + 5 random control(s); 3/3 gated scenario(s) recorded from graph 'marlin-accela'
+  G0 pass · G1 pass · G4 pass · G5 pass (drift 0.007/0.500)
+  G2  fail   3 previously-passing scenario(s) no longer pass (zero tolerance)
+  gated: reject
+```
+
+**A control cohort was built for a prose candidate and 21 scenario executions
+ran.** Both of ADR 0157's load-bearing gate defects are gone, so the whole path
+from a failed owner check to a gate that actually executes the candidate is
+open.
+
+The rejection, however, is **the artifact UPGRADE_LOOP's own rule names** —
+*"never let a cassette miss score a changed prompt as 0 and call that a
+rejection"* — and it was confirmed rather than assumed, at zero live cost:
+
+```
+INCUMBENT (unchanged persona):  3 cassette hit(s), 0 miss(es)  mean 0.3333
+CANDIDATE (bullet appended):    0 cassette hit(s), 3 miss(es)  mean 0.0000
+```
+
+Appending one bullet changes the request, so every recorded call misses, every
+node errors, and every previously-terminating scenario "no longer passes". The
+correct invocation is `--cassette-miss live`, which is 21 scenario executions
+against a live provider — **beyond this worker's remaining budget of 5 calls**,
+so it was not run and no live gate verdict is claimed. What this increment
+proves is that the evidence, the candidate and the gate execution now exist;
+what a live gate pass would cost is stated instead of guessed.
 
 ### Live — 3 calls
 
@@ -498,10 +533,10 @@ tree carried uncommitted work throughout).
 
 ## Green bar
 
-`pytest -q`: **2446 passed, 6 skipped**; collected **2402 → 2452 (+50, none
-removed)** after the `origin/main` merge (2262 → 2305 before it). `mypy aef
-examples`: 133 files, clean. `ruff check .`: clean. `ruff format --check aef
-tests examples`: 265 files, clean. S1's golden
+`pytest -q`: **2482 passed, 6 skipped**; collected **2438 → 2488 (+50, none
+removed)** after two `origin/main` merges (2262 → 2305 on the pre-merge base).
+`mypy aef examples`: 134 files, clean. `ruff check .`: clean. `ruff format
+--check aef tests examples`: 270 files, clean. S1's golden
 (`tests/agents/test_summary_prompt.py` — the `agents/summary` prompt
 byte-identical with nothing retrieved) is green; `agents/summary/graph.py` was
 not touched.
@@ -552,9 +587,12 @@ The other thing standing between a prompt candidate and an *accept* is ADR
    behaviour, unhelpfully similar to having no evidence, and the graph id is
    available from the corpus the same command already loaded.
    (`aef/cli/loop.py`, `aef/harness/proposer.py`.)
-2. **ADR 0157's defects 1 and 2 reproduce unchanged**: G2 raises
-   `TrustBoundaryError` on every non-Python candidate that clears G1, and G3
-   has no null hypothesis for one. Both confirmed again here, offline and live.
+2. **ADR 0157's defects 1 and 2 reproduced unchanged on this worker's base**
+   (G2 raising `TrustBoundaryError` on every non-Python candidate that clears
+   G1; G3 with no null hypothesis for one) — **and are FIXED on `main` by M4c,
+   ADR 0170**, merged mid-increment. Re-run there, the gates build a prose
+   control cohort and execute 21 scenarios. Reported as observed, then closed
+   by another worker; no longer open.
 3. **`aef loop score` takes `module:factory`, `aef loop bootstrap` takes
    `module`.** The same graph is named two ways by two subcommands of one
    command; `bootstrap`'s form passed to `score` gives
