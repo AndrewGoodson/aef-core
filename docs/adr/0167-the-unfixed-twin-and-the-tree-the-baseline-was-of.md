@@ -2,12 +2,11 @@
 
 ## Status
 
-Accepted. Fix wave G1a of the upgrade loop: seven findings from two seam
-hunts over M1 (ADR 0152), M3 (ADR 0154) and J0F (ADR 0165), each reproduced by
-running a command before anything changed. **No rubric dimension moves** —
-nothing here adds a capability; six of the seven close a control that was
-believed to exist, and the seventh removes a permanent red from a correct
-graph.
+Accepted. Fix wave G1a of the upgrade loop: ten findings from two seam hunts
+over M1 (ADR 0152), M3 (ADR 0154) and J0F (ADR 0165) plus three handed over by
+G1b, each reproduced by running a command before anything changed. **No rubric dimension moves** —
+nothing here adds a capability; nine of the ten close a control that was
+believed to exist, and the tenth removes a permanent red from a correct graph.
 
 An **erratum on ADR 0165** is appended to that file: its central claim held
 for one of the two commands that run a turn, and for the normal return only.
@@ -196,6 +195,56 @@ ledger.**` whenever any ledger entry in the window carried
 or an owner who wrote `containment: off` — is exactly such an entry. So the
 owner's weekly oversight surface reported their own configuration as an
 attack, which is an alarm firing on the normal case.
+
+### G1b-1 (folded in) — obligation 6 answered about the file the CLI guessed
+
+`model_calls_are_visible(repo_root, agent_path)` checks ONE path, defaulted by
+`cmd_doctor` and `_warn_unmet_obligations`. On a prompt-file repo that default
+is `agents/migrated/graph.py` — the call-site stub whose `build_graph()` raises
+`NotImplementedError` and which reaches no model at all. Reproduced with a
+model SDK import planted in one generated graph:
+
+```
+graphs on disk: ['agents/migrated/graph.py',
+                 'agents/migrated/marlin_accela/graph.py',
+                 'agents/migrated/marlin_azure/graph.py',
+                 'agents/migrated/marlin_reviewer/graph.py']
+
+obligation 6 on the DEFAULT --agent-path (the call-site stub):
+  visible=True   1 reachable module(s), none imports a model SDK
+obligation 6 on agents/migrated/marlin_accela/graph.py:
+  visible=False  src/client.py:1 imports anthropic — the harness cannot see it
+
+preflight, --agent-path left at its default:
+  [OK] 1 reachable module(s), none imports a model SDK
+```
+
+The same false pass ADR 0168 fixed in `aef doctor`, in the other diagnostic.
+
+### G1b-2 (folded in) — `ArchiveError` reported as a rejection
+
+`archive.versions` refuses a `--graph-id` that is not one safe path segment
+(ADR 0168), and neither `cmd_doctor` nor `cmd_bless` caught it. Reproduced —
+**not as a traceback**, which is what the report predicted: `main()`'s
+catch-all swallows it and prints its own prefix.
+
+```
+$ aef loop doctor ... --graph-id ../x
+  error: graph_id '../x' is not usable as an archive directory: path traversal
+  ('..') is never resolved, only refused. ...
+EXIT=1
+TRACEBACK: False
+```
+
+Exit 1 is `EXIT_REJECTED`: the same R3 confusion, one command over.
+
+### G1b-3 (folded in) — the loop's `--module` help predates the file form
+
+ADR 0168 made `import_graph_module` accept a file path, because
+`aef migrate --agent-root .claude/agents` writes
+`.claude/agents/migrated/<name>/graph.py` and a leading dot means *relative
+import* to `importlib`, so no dotted spelling of that path exists. Five
+`module`/`--module` arguments in `aef loop` still said "importable module".
 
 ## Decisions
 
@@ -432,9 +481,49 @@ are one line and a count of three. The control test (`a real security event
 still says a proposal reached for the harness`) is what keeps this a rename
 rather than the alarm being removed.
 
+### 8. Obligation 6 scans every graph when the path was a guess
+
+`preflight(..., scan_all_graphs=...)` iterates ADR 0168's own
+`discover_graph_files` — imported, not re-answered — and the obligation is
+unmet if ANY entry is invisible, naming the first and counting the rest. The
+CLI passes it when `--agent-path` is `DEFAULT_AGENT_PATH`, because then the
+path is this package's guess about a repo it has not looked at. An owner who
+types the default explicitly gets the wider scan too: it is a superset, and
+the named path is scanned inside it.
+
+The green branch now says how many graphs it scanned. "All clear" over an
+unstated number of files is exactly the claim that let one file out of nine
+stand in for the other eight, so the existing test pinning the old wording was
+updated deliberately rather than worked around.
+
+```
+$ aef loop doctor --repo <pilot> --state <s> --corpus <s>/corpus
+    [--] model calls visible  agents/migrated/marlin_accela/graph.py:
+         src/client.py:1 imports anthropic — the harness cannot see it
+EXIT=1
+```
+
+`test_the_cli_scans_every_graph_when_agent_path_was_left_at_its_default` runs
+the REAL `run_migrate` into the REAL `aef loop doctor`.
+
+### 9. An unusable `--graph-id` is a configuration error
+
+`cmd_doctor` and `cmd_bless` catch `ArchiveError` at the boundary, print
+`error (invalid --graph-id): ...` and return `EXIT_ERROR`. Same reasoning as
+§6: a hand-typed graph id is not a verdict on a candidate, and the nightly
+rule must fail on it.
+
+### 10. The loop's `--module` help says a file path works
+
+All five `module`/`--module` arguments in `aef loop` (record, bootstrap,
+harvest, cycle, run), with a test that a `loop cycle` under
+`--agent-root .claude/agents` actually accepts the file form — ADR 0168's own
+lesson was a flag whose generated command could not be run under it, so the
+help and the behaviour are asserted together.
+
 ## Mutations
 
-Twelve planted, twelve caught, every restore verified byte-identical by
+Sixteen planted, sixteen caught, every restore verified byte-identical by
 SHA-256, plus one more against the real generated module.
 
 | # | Mutation | Caught by |
@@ -451,6 +540,10 @@ SHA-256, plus one more against the real generated module.
 | M10 | an unexpected exception is `EXIT_REJECTED` again (the pre-fix behaviour) | `test_an_exception_from_the_graph_is_exit_error_not_a_rejection[cycle]` |
 | M11 | the digest renders a containment event as an attack again | `test_a_containment_event_is_not_reported_as_a_proposal_reaching_the_harness` |
 | M12 | the digest stops naming the containment reason | 4 monitoring tests, including the control that a real security event still names the harness |
+| M13 | obligation 6 scans the defaulted path only (the pre-fix behaviour) | `test_the_cli_scans_every_graph_when_agent_path_was_left_at_its_default` |
+| M14 | preflight ignores `scan_all_graphs` | 3 preflight tests, including the real-migrate-into-real-preflight one |
+| M15 | an unusable `--graph-id` is a rejection again | `test_an_unusable_graph_id_is_a_configuration_error_not_a_rejection[doctor]` |
+| M16 | the loop's `--module` help forgets the file form | `test_every_loop_module_argument_says_a_file_path_works` |
 | R | the REAL generated module regenerated and edited to `route=END` | `_reflect_is_routed_to` returns `(False, "…nothing routes to it…")`; restored byte-identically and green again |
 
 M7 is the one worth naming. The finding was that a defect fixed in one command
@@ -473,7 +566,11 @@ what makes the *class* of defect closed rather than this instance of it.
 - Four subcommands that previously accepted an in-repo `--state` now refuse.
   That is a behaviour change on an invocation the driver already called
   unsafe, and the message is the driver's own.
-- +55 tests, 2153 → 2208.
+- +43 tests in three new files (`test_loop_turn_commands.py`,
+  `test_loop_agent_root_guard.py`, `test_loop_state_outside_repo.py`, counting
+  parametrised cases), +15 in `test_preflight.py` and +5 in
+  `test_monitoring.py`. On this branch's parent: 2153 passed, 5 skipped. After
+  the fix wave and two merges of `main`: **2396 passed, 6 skipped**.
 
 ## Confidence
 

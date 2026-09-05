@@ -3216,3 +3216,116 @@ assert `sys.modules` itself. That is what the mutation pass is for.
 Green bar: `pytest -q` 2195 passed, 5 skipped (2153 -> 2195, **+42**, none
 removed) · `mypy aef examples` 131 files clean · `ruff check .` clean ·
 `ruff format --check aef tests examples` 252 files clean · **0 model calls.**
+
+
+## Fix wave G1a — the unfixed twin, and the tree the baseline was of (ADR 0167)
+
+Ten findings from two seam hunts over M1 (0152), M3 (0154) and J0F (0165),
+plus three handed over by G1b. **Every one was reproduced by running a command
+on the parent commit before anything was edited**, and the real output is in
+the ADR with its exit code.
+
+**The one worth the wave.** ADR 0165 found this repo's nightly `aef loop
+cycle` exiting 0 having done nothing, argued at length that "a loop that has
+run 180 nights producing nothing leaves a ledger byte-identical to one nobody
+has started", and fixed it. It fixed one of the two commands that run a turn.
+`aef loop run` read the same flag through the same
+`FileMemoryStore(...) if args.memory else None` expression ninety lines below,
+had **no guard at all**, and journalled **nothing**:
+
+```
+$ aef loop run --repo <r> --state <s> --workdir <w> --turns 2 --budget-minutes 1
+    turn 1: no memory store configured: nothing to learn from, no candidate
+    stopped: turn 1 produced no candidate
+EXIT=0                       # five times
+
+--- contents of the state dir ---
+   (state dir does not exist)
+
+$ aef loop monitor --repo <r> --state <s>
+    cycles run: 0 (last never)
+    last PROPOSED: never
+```
+
+Exactly the ambiguity 0165 §2 says it removed, one subcommand over. So the
+regression test does not name the two commands: it **derives** them from
+`aef/cli/loop.py`'s AST — every `cmd_*` importing `cycle` or `run_loop`,
+mapped to its subcommand through its own `set_defaults` — and asserts the
+derived set equals the set it can invoke. A planted third turn-runner (M7) is
+caught by that assertion, so the class is closed rather than this instance.
+`run` journals **one attempt per TURN**: the alarm counts consecutive quiet
+attempts against a threshold of three, and ten quiet turns as one entry would
+need thirty turns to fire.
+
+And 0165's journal stopped at the happy path. `record_cycle_attempt` sat after
+`cmd_cycle`'s `try`, so with the kill switch engaged the command printed
+`HALTED:`, exited 2, and `cycles.jsonl` **did not exist**. It is in a
+`finally` now, each branch naming its exception.
+
+**The permanent red.** Preflight obligation 2 was unmeetable on every graph
+`aef migrate` writes for a prompt agent — `loop doctor` printed
+`a reflect node exists but nothing routes to it` and exit 1 while executing
+that same module gave the trace `['prompt_agent', 'reflect', 'consolidate']`.
+The detector wanted a three-argument node function; M1's generated module has
+none, only `make_prompt_agent_node(route="reflect")`. Both shapes count now,
+and `test_the_real_migrate_output_passes_the_real_preflight` runs the real
+migrate into the real preflight — the C↔D join where the defect lived.
+
+**The baseline that was of another tree.** `bless --agent-root .claude/agents`
+wrote an `entry.json` with no `agent_root` anywhere, and the next cycle at the
+default root was rejected with `cumulative drift: 1.000` — G5 unioning two
+disjoint key sets, two rejections from a halt. `ArchiveEntry.agent_root` is
+additive and `""` is deliberately NOT a mismatch, so no pre-existing baseline
+is retroactively failed. And `--agent-root` non-default with `--agent-path`
+left at `DEFAULT_AGENT_PATH` — Zone C under the widened root — is refused by
+`bless`/`cycle`/`run`/`doctor`, naming both paths and the per-agent path
+migrate actually wrote.
+
+**Two exit codes that meant the same thing.** `main.py`'s catch-all returns 1
+for any exception and `EXIT_REJECTED` is also 1, so the rendered nightly
+workflow's `status >= 2` rule stayed green on a bad config, an import error,
+or the `agents.migrated.graph` placeholder whose `build_graph()` raises
+`NotImplementedError` — and the exception escaped before the journal, so
+neither alarm could see those nights. `EXIT_ERROR = 3`, journalled with the
+exception's name, `main.py` untouched, and the workflow's rule READ from
+`adopt_loop.py` rather than assumed.
+
+**Two more, from the enumerating shape.** Four of the nine subcommands taking
+`--repo` and `--state` accepted a state directory inside the repo that `cycle`
+refuses — `bless` printed `blessed ... as baseline v1` and left `archive/` and
+`ledger.jsonl` in the working tree. And the digest reported S5's containment
+fallback (no Docker, or `containment: off`) to the owner every Monday as
+`**A proposal reached for the harness**`.
+
+**The state-dir test caught a defect this wave introduced.** Its second
+assertion is that nothing is *created* — and the first version of the journal
+fix wrote `cycles.jsonl` into the very directory it had just refused. Putting
+the check in `_config`, which runs before the try block, is what makes the
+ordering right.
+
+**Handed over by G1b and folded in.** Obligation 6 checked ONE path and passed
+on the call-site stub that makes no model call while eight generated graphs
+went unopened — the same false pass 0168 fixed in `aef doctor`, closed here
+with 0168's own `discover_graph_files` rather than a second answer.
+`ArchiveError` from a hand-typed `--graph-id ../x` came back as exit 1, i.e.
+as a rejection (reproduced as exit 1, **not** as the traceback the report
+predicted — `main()`'s catch-all swallows it, which is the whole problem). And
+the loop's five `--module` help strings still said "importable module" after
+0168 made the file-path form work, which is the form a widened `--agent-root`
+needs; the help and the behaviour are now asserted together.
+
+Sixteen mutations, sixteen caught, every restore verified byte-identical by
+SHA-256, plus the real generated module regenerated and edited to `route=END`.
+
+**Still open, stated rather than implied.** Nothing retroactively repairs a
+baseline already blessed without a root, and whether any exists in the wild is
+not measured. One of `cmd_cycle`'s three named exception paths is reproduced
+end to end at the CLI; the other two are reachable through the CLI only behind
+a blessed baseline inside its drift budget and a corpus recorded from the
+matching graph, so they are exercised by injecting at the `aef.harness.loop.
+cycle` collaborator boundary — never by mocking `cmd_cycle`. Nothing here
+makes any scheduled loop more likely to propose anything; what changes is that
+a loop producing nothing now says so from both of the commands that could.
+
+Green bar: `pytest -q` 2396 passed, 6 skipped · `mypy aef examples` clean ·
+`ruff check .` clean · `ruff format --check` clean · **0 model calls.**

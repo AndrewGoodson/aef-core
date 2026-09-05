@@ -43,7 +43,7 @@ from aef.harness.candidate import ESCAPE_MODES, MODE_NAMES
 from aef.harness.corpus import Expected, load_corpus
 from aef.harness.git import GitError, GitRepo
 from aef.harness.vendor_scan import MODEL_SDK_ROOTS, VendorImport, scan_file
-from aef.harness.zones import DEFAULT_AGENT_ROOT
+from aef.harness.zones import DEFAULT_AGENT_ROOT, discover_graph_files
 
 
 class BlessError(RuntimeError):
@@ -427,14 +427,23 @@ def preflight(
     halt_channel_configured: bool,
     observations: Path,
     agent_root: str = DEFAULT_AGENT_ROOT,
+    scan_all_graphs: bool = False,
 ) -> Preflight:
     """The obligations, reported against ONE Zone A tree.
 
     `agent_root` defaults rather than being required because every existing
-    caller passed the default implicitly; obligation 5 is the only one that
-    reads it, and it reads it to answer a question nothing could answer
-    before — *is the archived baseline a baseline of the tree this loop is
-    measuring?* (ADR 0167).
+    caller passed the default implicitly; obligations 5 and 6 read it, the
+    first to answer a question nothing could answer before — *is the archived
+    baseline a baseline of the tree this loop is measuring?* — and the second
+    to know where the graphs are (ADR 0167).
+
+    `scan_all_graphs` widens obligation 6 from the single `agent_path` to
+    every graph `discover_graph_files` finds. The CLI passes it when
+    `--agent-path` was left at its default, because then the path is this
+    package's guess rather than the owner's answer, and a diagnostic that
+    reports on one file out of nine is how ADR 0168's false pass happened.
+    Default `False`, so a caller that names a path still gets an answer about
+    that path.
     """
     checks: list[Obligation] = []
 
@@ -544,9 +553,36 @@ def preflight(
         )
     )
 
-    # 6 — every model call reaches the harness (ADR 0137, corrected by 0141)
-    visible, detail, fix = model_calls_are_visible(repo_root, agent_path)
-    checks.append(Obligation(name="model calls visible", met=visible, detail=detail, fix=fix))
+    # 6 — every model call reaches the harness (ADR 0137, corrected by 0141,
+    # widened past one file by 0167)
+    #
+    # It scanned ONE path, defaulted by the CLI, so on a prompt-file repo with
+    # eight generated graphs it answered about `agents/migrated/graph.py` —
+    # the call-site stub whose `build_graph()` raises `NotImplementedError` and
+    # which reaches no model at all — and reported the obligation MET while the
+    # eight graphs that do call a model were never opened. Reproduced: a model
+    # SDK import planted in one generated graph, `visible=True  1 reachable
+    # module(s), none imports a model SDK`. Exactly the false pass ADR 0168
+    # fixed in `aef doctor`, in the other diagnostic, sharing the discovery
+    # function 0168 added rather than a second answer to the same question.
+    targets = [agent_path]
+    if scan_all_graphs:
+        targets = discover_graph_files(repo_root, agent_root=agent_root) or [agent_path]
+    invisible: list[tuple[str, str, str]] = []
+    for target in targets:
+        ok, why, how = model_calls_are_visible(repo_root, target)
+        if not ok:
+            invisible.append((target, why, how))
+    if invisible:
+        first_path, first_detail, first_fix = invisible[0]
+        more = f" (+{len(invisible) - 1} more graph(s))" if len(invisible) > 1 else ""
+        detail = f"{first_path}: {first_detail}{more}"
+        fix = first_fix
+    else:
+        plural = "graph" if len(targets) == 1 else "graphs"
+        detail = f"{len(targets)} {plural} scanned, none reaches a model SDK the harness cannot see"
+        fix = ""
+    checks.append(Obligation(name="model calls visible", met=not invisible, detail=detail, fix=fix))
 
     return Preflight(obligations=tuple(checks))
 

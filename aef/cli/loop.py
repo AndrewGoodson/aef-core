@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from aef.harness.archive import ArchiveError
 from aef.harness.checks import TaskCheck
 from aef.harness.corpus import (
     CorpusError,
@@ -183,6 +184,9 @@ def _warn_unmet_obligations(args: argparse.Namespace, config: LoopConfig) -> Non
         corpus_root=corpus_root,
         agent_path=getattr(args, "agent_path", None) or DEFAULT_AGENT_PATH,
         agent_root=getattr(args, "agent_root", DEFAULT_AGENT_ROOT),
+        # Obligation 6 over EVERY graph when the path is this package's guess
+        # rather than the owner's answer (ADR 0167/0168).
+        scan_all_graphs=_agent_path_is_defaulted(args),
         graph_id=args.graph_id,
         halt_channel_configured=bool(getattr(_halt_notifier(), "configured", False)),
         observations=config.paths.observations,
@@ -852,6 +856,19 @@ def _require_memory_flag(args: argparse.Namespace, command: str = "cycle") -> in
     return EXIT_USAGE
 
 
+def _agent_path_is_defaulted(args: argparse.Namespace) -> bool:
+    """Was `--agent-path` left at `DEFAULT_AGENT_PATH`?
+
+    When it was, the path is this package's guess about a repo it has not
+    looked at, and a diagnostic that reports on one file out of nine is how
+    ADR 0168's false pass happened — obligation 6 answered about the call-site
+    stub while eight generated graphs went unopened. An owner who types the
+    default explicitly gets the wider scan too: it is a superset, and the
+    named path is still scanned inside it.
+    """
+    return str(getattr(args, "agent_path", DEFAULT_AGENT_PATH)) == DEFAULT_AGENT_PATH
+
+
 def _require_agent_path_under_root(args: argparse.Namespace, command: str) -> int | None:
     """`--agent-path` must name a file inside `--agent-root`. `None` = proceed.
 
@@ -1240,6 +1257,15 @@ def cmd_bless(args: argparse.Namespace) -> int:
     except BlessError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_REJECTED
+    except ArchiveError as exc:
+        # `archive.versions`/`record` refuse a `--graph-id` that is not one
+        # safe path segment (ADR 0168). Only `BlessError` was caught here, so
+        # a hand-typed `--graph-id ../x` reached `main()`'s catch-all and was
+        # reported as exit 1 — the code that means "the candidate was
+        # rejected, the system is working". It is a configuration error: name
+        # it, and exit 3 so the nightly rule fails the job (ADR 0167).
+        print(f"error (invalid --graph-id): {exc}", file=sys.stderr)
+        return EXIT_ERROR
     print(f"blessed {args.agent_path} as baseline v{entry.version} for graph {args.graph_id!r}")
     print("  G5 now has a reference point to measure drift against.")
     return EXIT_OK
@@ -1252,16 +1278,28 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     if refusal is not None:
         return refusal
     config = _config(args)
-    result = preflight(
-        repo_root=Path(args.repo),
-        state_root=config.paths.root,
-        corpus_root=Path(args.corpus),
-        agent_path=args.agent_path,
-        agent_root=args.agent_root,
-        graph_id=args.graph_id,
-        halt_channel_configured=bool(getattr(_halt_notifier(), "configured", False)),
-        observations=Path(args.observations) if args.observations else config.paths.observations,
-    )
+    try:
+        result = preflight(
+            repo_root=Path(args.repo),
+            state_root=config.paths.root,
+            corpus_root=Path(args.corpus),
+            agent_path=args.agent_path,
+            agent_root=args.agent_root,
+            scan_all_graphs=_agent_path_is_defaulted(args),
+            graph_id=args.graph_id,
+            halt_channel_configured=bool(getattr(_halt_notifier(), "configured", False)),
+            observations=Path(args.observations)
+            if args.observations
+            else config.paths.observations,
+        )
+    except ArchiveError as exc:
+        # Obligation 5 reads `archive.versions`, which refuses a `--graph-id`
+        # that is not one safe path segment (ADR 0168). Nothing here caught
+        # it, so the refusal reached `main()`'s catch-all and was reported as
+        # exit 1 — the code that means "the candidate was rejected, the system
+        # is working". Named here, exit 3 (ADR 0167).
+        print(f"error (invalid --graph-id): {exc}", file=sys.stderr)
+        return EXIT_ERROR
     print(result.render())
     return EXIT_OK if result.ready else EXIT_REJECTED
 
@@ -1404,7 +1442,14 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_status.set_defaults(handler=cmd_status)
 
     p_record = loop_subs.add_parser("record", help="promote a real run into a corpus scenario")
-    p_record.add_argument("module", help="importable module exposing build_graph()")
+    p_record.add_argument(
+        "module",
+        help="importable module exposing build_graph(), OR a path to the graph "
+        "file. The file form is the one to use under a widened --agent-root: "
+        "`aef migrate --agent-root .claude/agents` writes "
+        "`.claude/agents/migrated/<name>/graph.py`, and no dotted spelling of that "
+        "path is importable — a leading dot means relative import (ADR 0168).",
+    )
     p_record.add_argument("--corpus", required=True)
     p_record.add_argument("--scenario-id", required=True)
     p_record.add_argument("--objective", required=True)
@@ -1491,7 +1536,14 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p_bootstrap.add_argument("module", help="importable module exposing build_graph()")
+    p_bootstrap.add_argument(
+        "module",
+        help="importable module exposing build_graph(), OR a path to the graph "
+        "file. The file form is the one to use under a widened --agent-root: "
+        "`aef migrate --agent-root .claude/agents` writes "
+        "`.claude/agents/migrated/<name>/graph.py`, and no dotted spelling of that "
+        "path is importable — a leading dot means relative import (ADR 0168).",
+    )
     p_bootstrap.add_argument("--corpus", required=True)
     p_bootstrap.add_argument(
         "--inputs", required=True, help="JSON file of inputs; see the description above"
@@ -1595,7 +1647,14 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "harvest", help="promote recorded production runs into corpus scenarios"
     )
     _common(p_harvest)
-    p_harvest.add_argument("module", help="importable module exposing build_graph()")
+    p_harvest.add_argument(
+        "module",
+        help="importable module exposing build_graph(), OR a path to the graph "
+        "file. The file form is the one to use under a widened --agent-root: "
+        "`aef migrate --agent-root .claude/agents` writes "
+        "`.claude/agents/migrated/<name>/graph.py`, and no dotted spelling of that "
+        "path is importable — a leading dot means relative import (ADR 0168).",
+    )
     p_harvest.add_argument("--runs", required=True, help="dir of runs from `aef run --record-runs`")
     p_harvest.add_argument("--corpus", required=True)
     p_harvest.add_argument(
@@ -1621,7 +1680,13 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     _common(p_cycle)
     p_cycle.add_argument("--base", default="main")
     p_cycle.add_argument("--workdir", required=True)
-    p_cycle.add_argument("--module", default=None, help="module exposing build_graph()")
+    p_cycle.add_argument(
+        "--module",
+        default=None,
+        help="module exposing build_graph(), OR a path to the graph file — the "
+        "form to use under a widened --agent-root, whose `.claude/agents/...` path "
+        "has no importable dotted spelling (ADR 0168).",
+    )
     p_cycle.add_argument("--runs", default=None, help="dir from `aef run --record-runs`")
     p_cycle.add_argument("--corpus", default=None)
     p_cycle.add_argument(
@@ -1675,7 +1740,13 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     _common(p_run)
     p_run.add_argument("--base", default="main")
     p_run.add_argument("--workdir", required=True)
-    p_run.add_argument("--module", default=None, help="module exposing build_graph()")
+    p_run.add_argument(
+        "--module",
+        default=None,
+        help="module exposing build_graph(), OR a path to the graph file — the "
+        "form to use under a widened --agent-root, whose `.claude/agents/...` path "
+        "has no importable dotted spelling (ADR 0168).",
+    )
     p_run.add_argument("--runs", default=None, help="dir from `aef run --record-runs`")
     p_run.add_argument("--corpus", default=None)
     p_run.add_argument("--config", default=None, help="aef.yaml path, read from the base ref")

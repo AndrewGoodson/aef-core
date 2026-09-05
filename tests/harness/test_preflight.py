@@ -197,7 +197,12 @@ def test_the_obligation_is_met_when_nothing_reachable_imports_a_vendor_sdk(
     `services.require_model_provider()` and imports no SDK at all."""
     obligation = _obligation(_check(tmp_path, ROUTED), "model calls visible")
     assert obligation.met
-    assert "none imports a model SDK" in obligation.detail
+    # Wording updated deliberately by ADR 0167: the green branch now says HOW
+    # MANY graphs it scanned, because "all clear" over an unstated number of
+    # files is the claim that let one file out of nine pass for the other
+    # eight (ADR 0168).
+    assert "1 graph scanned" in obligation.detail
+    assert "none reaches a model SDK the harness cannot see" in obligation.detail
 
 
 def test_a_vendor_import_two_modules_deep_is_still_found(tmp_path: Path) -> None:
@@ -936,3 +941,131 @@ def test_the_bless_fix_carries_the_agent_root_when_it_is_not_the_default(tmp_pat
         "blessed baseline",
     ).fix
     assert "--agent-root .claude/agents" in fix
+
+
+# --------------------------------------------------------------------------
+# Obligation 6 over EVERY graph, not the one the CLI guessed (ADR 0167/0168)
+#
+# It scanned the single `agent_path`, defaulted by `cmd_doctor` and
+# `_warn_unmet_obligations`. On a prompt-file repo the default names
+# `agents/migrated/graph.py` — the call-site stub whose `build_graph()` raises
+# `NotImplementedError` and which reaches no model at all — so obligation 6
+# passed on it while the generated graphs that DO call a model were never
+# opened. Reproduced with a model SDK import planted in one of them:
+#
+#   graphs on disk: ['agents/migrated/graph.py',
+#                    'agents/migrated/marlin_accela/graph.py', ...]
+#   obligation 6 on the DEFAULT --agent-path: visible=True
+#     1 reachable module(s), none imports a model SDK
+#   obligation 6 on agents/migrated/marlin_accela/graph.py: visible=False
+#     src/client.py:1 imports anthropic — the harness cannot see it
+#
+# The same false pass ADR 0168 fixed in `aef doctor`, in the other diagnostic,
+# closed with 0168's OWN discovery function rather than a second answer.
+# --------------------------------------------------------------------------
+
+
+def _migrated_prompt_repo(tmp_path: Path) -> Path:
+    """The REAL `aef migrate` on a prompt-file repo, plus a module that builds
+    its own client for one generated graph to reach."""
+    from aef.cli.migrate import run_migrate
+
+    root = tmp_path / "pilot"
+    agents = root / ".claude" / "agents"
+    agents.mkdir(parents=True)
+    for name in ("accela", "azure"):
+        (agents / f"{name}.md").write_text(
+            f"---\nname: marlin-{name}\ndescription: d\n---\n\nbody\n", encoding="utf-8"
+        )
+    (root / "src").mkdir()
+    (root / "src" / "__init__.py").write_text("")
+    (root / "src" / "client.py").write_text("import anthropic\n\nC = anthropic.Anthropic\n")
+
+    result = run_migrate(root)
+    assert result.prompt_agents, "migrate wrote no prompt-agent graph; the fixture is wrong"
+    target = root / result.prompt_agents[0].out_relative
+    target.write_text(target.read_text() + "\nfrom src.client import C  # noqa: E402,F401\n")
+    return root
+
+
+def _obligation_six(root: Path, tmp_path: Path, **kw: object):
+    defaults: dict[str, object] = {
+        "repo_root": root,
+        "state_root": tmp_path / "state",
+        "corpus_root": tmp_path / "corpus",
+        "agent_path": "agents/migrated/graph.py",
+        "graph_id": "g",
+        "halt_channel_configured": False,
+        "observations": tmp_path / "obs.jsonl",
+    }
+    defaults.update(kw)
+    return _obligation(preflight(**defaults), "model calls visible")  # type: ignore[arg-type]
+
+
+def test_scanning_only_the_defaulted_path_passes_on_the_stub(tmp_path: Path) -> None:
+    """The reproduction, pinned. Not a bug to fix here — this is the LIBRARY
+    default, and a caller that names a path gets an answer about that path.
+    What was wrong is that the CLI took this branch when it had guessed."""
+    root = _migrated_prompt_repo(tmp_path)
+    assert _obligation_six(root, tmp_path).met
+
+
+def test_scanning_every_graph_finds_the_invisible_model_call(tmp_path: Path) -> None:
+    root = _migrated_prompt_repo(tmp_path)
+    obligation = _obligation_six(root, tmp_path, scan_all_graphs=True)
+    assert not obligation.met, obligation.detail
+    assert "marlin_accela" in obligation.detail, obligation.detail
+    assert "imports anthropic" in obligation.detail
+    assert obligation.fix.strip()
+
+
+def test_a_clean_prompt_file_repo_reports_how_many_graphs_it_scanned(tmp_path: Path) -> None:
+    """The green branch has to name the number, or "all clear" is a claim
+    about an unknown number of files."""
+    from aef.cli.migrate import run_migrate
+    from aef.harness.zones import discover_graph_files
+
+    root = tmp_path / "clean"
+    agents = root / ".claude" / "agents"
+    agents.mkdir(parents=True)
+    for name in ("accela", "azure"):
+        (agents / f"{name}.md").write_text(
+            f"---\nname: marlin-{name}\ndescription: d\n---\n\nbody\n", encoding="utf-8"
+        )
+    run_migrate(root)
+
+    obligation = _obligation_six(root, tmp_path, scan_all_graphs=True)
+    assert obligation.met, obligation.detail
+    assert f"{len(discover_graph_files(root))} graphs scanned" in obligation.detail
+
+
+def test_the_cli_scans_every_graph_when_agent_path_was_left_at_its_default(
+    tmp_path: Path,
+) -> None:
+    """End to end: the defect was that the CLI defaulted the path and preflight
+    then answered about the guess. Runs the real `aef loop doctor`."""
+    from aef.cli.main import main
+
+    root = _migrated_prompt_repo(tmp_path)
+    import io
+    from contextlib import redirect_stdout
+
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        code = main(
+            [
+                "loop",
+                "doctor",
+                "--repo",
+                str(root),
+                "--state",
+                str(tmp_path / "state"),
+                "--corpus",
+                str(tmp_path / "corpus"),
+            ]
+        )
+    out = buffer.getvalue()
+    assert code == 1
+    line = next(ln for ln in out.splitlines() if "model calls visible" in ln)
+    assert "[--]" in line, line
+    assert "marlin_accela" in line, line
