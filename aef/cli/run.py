@@ -24,14 +24,9 @@ See docs/adr/0014.
 
 from __future__ import annotations
 
-import hashlib
-import importlib
-import importlib.util
-import sys
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import ModuleType
 
 from aef.config import (
     build_domain_gates,
@@ -42,6 +37,11 @@ from aef.config import (
 )
 from aef.config.factory import build_containment_mode
 from aef.config.schema import ContextConfig, ShadowConfig
+from aef.harness.graph_loading import (
+    ensure_cwd_importable,
+    import_graph_module,
+    looks_like_a_path,
+)
 from aef.harness.memory_store import FileMemoryStore
 from aef.harness.shadow import ContainmentMode
 from aef.kernel import (
@@ -146,89 +146,23 @@ def build_run_config(config_path: str | Path | None) -> RunConfig:
     )
 
 
-def _ensure_cwd_importable() -> None:
-    """`aef` runs as an installed console script, whose sys.path[0] is the
-    script's own directory (e.g. .venv/bin), NOT the caller's current
-    directory — unlike `python script.py` or `python -m`, where the CWD is
-    on sys.path automatically. Without this, `aef run agents.foo.graph`
-    can never find a module `aef init` just scaffolded one directory below
-    where you're standing: confirmed by actually running `aef init` then
-    `aef run` end-to-end, not inferred from reading the code."""
-    cwd = str(Path.cwd())
-    if cwd not in sys.path:
-        sys.path.insert(0, cwd)
-
-
-def looks_like_a_path(module_path: str) -> bool:
-    """Is this a FILE to load rather than a dotted module name to import?
-
-    A `.py` suffix or a separator; nothing else. Deliberately not "try the
-    import and fall back", because a dotted import that fails for its own
-    reason — a typo inside the module, a missing dependency — would then be
-    retried as a filename, miss, and be reported as "no such file", hiding the
-    real error behind a second one.
-    """
-    return module_path.endswith(".py") or "/" in module_path or "\\" in module_path
-
-
-def import_graph_module(module_path: str) -> ModuleType:
-    """The one importer, for a dotted module name **or a file path**.
-
-    ADR 0168, erratum on ADR 0152. `aef migrate --agent-root .claude/agents` —
-    the opt-in ADR 0152 §4 chose, and the only way to put a persona in Zone A —
-    writes `.claude/agents/migrated/<module>/graph.py`, and the report printed
-
-        aef run .claude.agents.migrated.marlin_accela.graph --objective "..."
-
-    which is not a module name at all. Reproduced:
-
-        $ aef run .claude.agents.migrated.marlin_accela.graph --objective x
-        error: the 'package' argument is required to perform a relative import
-        for '.claude.agents.migrated.marlin_accela.graph'
-
-    A leading dot means "relative import" to `importlib`, and no dotted spelling
-    of that path exists — `.claude` is not an identifier, so no amount of
-    quoting makes one. M1 shipped a flag whose own generated command could not
-    be run under it, and M4 worked around it by keeping the graphs at the
-    default root while passing `--agent-root .claude/agents` to the loop, which
-    is the two-trees-one-loop state ADR 0152's blast-radius block warns about.
-
-    Refusing the root instead was rejected: `.claude/agents` IS the documented
-    opt-in, so a refusal would delete the feature rather than fix it. Loading a
-    file is one function and no new concept — `aef init`'s CWD-on-`sys.path`
-    fix already exists for the dotted case, and the file case needs neither.
-
-    The module is registered in `sys.modules` under a derived name before it is
-    executed, which is what the import system does for a normal import and what
-    a module importing itself (or a dataclass being pickled out of it) needs.
-    """
-    _ensure_cwd_importable()
-    if not looks_like_a_path(module_path):
-        return importlib.import_module(module_path)
-
-    path = Path(module_path)
-    if not path.is_file():
-        raise ValueError(
-            f"{module_path!r} looks like a file path and there is no file there "
-            f"(resolved to {path.resolve()}). Pass a dotted module name, or a path "
-            f"to the .py file that defines build_graph()."
-        )
-    resolved = path.resolve()
-    # Derived from the resolved path, so two graphs with the same basename in
-    # different directories do not collide in `sys.modules` — `graph.py` is the
-    # name `aef migrate` gives every single one of them.
-    name = "aef_graph_" + hashlib.sha256(str(resolved).encode()).hexdigest()[:16]
-    spec = importlib.util.spec_from_file_location(name, resolved)
-    if spec is None or spec.loader is None:  # pragma: no cover - unreadable file
-        raise ValueError(f"cannot load a Python module from {resolved}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    try:
-        spec.loader.exec_module(module)
-    except BaseException:
-        sys.modules.pop(name, None)
-        raise
-    return module
+# `import_graph_module` and `looks_like_a_path` USED TO BE DEFINED HERE, and
+# that was the whole of ADR 0177's R1. ADR 0168 §M4 taught `aef run` that an
+# entrypoint may be a file path — because `aef migrate --agent-root
+# .claude/agents` writes a graph no dotted name can spell — and taught exactly
+# one of the repo's three loaders. `aef/harness/scenario_runner.py` and
+# `aef/harness/node_worker.py` kept their own `importlib.import_module`, so
+# `aef loop score` on the documented opt-in exited 1 and G2 loaded the
+# incumbent with one loader and the candidate with the other, turning an
+# import error into "1 previously-passing scenario(s) no longer pass".
+#
+# There is one implementation now and it lives in the HARNESS, because the
+# harness may not import the CLI. These names stay importable from here: the
+# generated `AGENT_INTEGRATION.md`, `aef/cli/loop.py` and three test modules
+# all reach for `aef.cli.run.import_graph_module`, and a second definition is
+# what this fix exists to delete.
+_ensure_cwd_importable = ensure_cwd_importable
+__all__ = ["import_graph_module", "looks_like_a_path", "load_graph_module", "run_graph_module"]
 
 
 def load_graph_module(module_path: str):  # type: ignore[no-untyped-def]

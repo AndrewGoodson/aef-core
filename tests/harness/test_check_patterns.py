@@ -191,12 +191,22 @@ def test_holds_refuses_it_too_even_when_validation_was_bypassed() -> None:
 def test_a_very_long_input_is_refused_rather_than_truncated() -> None:
     """Truncating would change the predicate — "at most 35 words" asked of the
     first 10,000 characters is a different question — so the backstop refuses
-    and says so."""
-    check = TaskCheck(path="working_memory.summary", op="regex", value=LINEAR)
-    assert _holds(check, "one two three") is True
+    and says so.
+
+    **This test used to assert the refusal for `LINEAR`, and that assertion was
+    wrong** (ADR 0177). `(?:\\s+\\S+){0,34}` is a BOUNDED repetition: it enters
+    its body at most 34 times whatever the input length, so it cannot backtrack
+    catastrophically and the length of the input says nothing new about it. The
+    backstop now keys on an UNBOUNDED quantifier, which is the only shape whose
+    iteration count grows with the input — so the pattern here is `+`, not
+    `{0,34}`. The control that `LINEAR` at this length RUNS is the next test.
+    """
+    unbounded = TaskCheck(path="working_memory.summary", op="regex", value=r"^(?:\s+\S+)+$")
+    assert _holds(unbounded, " one two three") is True
     with pytest.raises(CatastrophicPatternError) as excinfo:
-        _holds(check, "x " * 6000)
+        _holds(unbounded, " x" * 6000)
     assert "10000" in str(excinfo.value) or "10,000" in str(excinfo.value)
+    assert "unbounded" in str(excinfo.value)
 
 
 def test_a_long_input_against_a_pattern_with_no_repeated_group_is_fine() -> None:
@@ -205,6 +215,115 @@ def test_a_long_input_against_a_pattern_with_no_repeated_group_is_fine() -> None
     assert _holds(check, "x " * 6000) is True
     plain = TaskCheck(path="working_memory.summary", op="regex", value=r"\bxyzzy\b")
     assert _holds(plain, "x " * 6000) is False
+
+
+# ---------------------------------------------------------------------------
+# ADR 0177 R5(a) — the backstop counts UNBOUNDED repetition only
+# ---------------------------------------------------------------------------
+
+# ADR 0171's content patterns, copied from `corpus/train/` — the two shipped
+# checks that carry a repeated group, and the only two in the whole corpus.
+# Both are `( … )?`: bounded, linear, and refused by the old backstop.
+S3B_SHIPPED = [
+    r"(?i)(not (have been )?overloaded|no overloading|"
+    r"overloading (was )?(rejected|ruled out|discounted|dismissed))",
+    r"(?i)(not (yet )?(re)?open|no confirmed date|still closed|has not returned|"
+    r"remains closed|delayed indefinitely|still awaiting)",
+]
+
+# The family every one of ADR 0171's seven negatives belongs to: a model that
+# rambles past the word cap. 12,000 characters, over the 10,000 backstop.
+RAMBLE = ("It also observes that the licensed capacity was one hundred and twenty. " * 200)[:12000]
+
+# Bounded repetitions the backstop must NOT fire on, at any length.
+BOUNDED_REPEATS = [
+    *S3B_SHIPPED,
+    LINEAR,
+    r"^\s*\S+(?:\s+\S+){0,29}\s*$",
+    r"^\s*\S+(?:\s+\S+){0,39}\s*$",
+    r"(?:foo|bar){1,3}",
+    r"(x )?y",
+    r"(ab){2}",
+]
+
+# Unbounded repetitions the backstop must still refuse over a long input.
+UNBOUNDED_REPEATS = [
+    r"^(?:\s+\S+)+$",
+    r"(?:ab)*c",
+    r"(?:\s+\S+){2,}",
+]
+
+
+@pytest.mark.parametrize("pattern", BOUNDED_REPEATS)
+def test_a_bounded_repetition_runs_on_a_long_input_and_runs_fast(pattern: str) -> None:
+    """The reproduction, inverted (ADR 0177 R5).
+
+    `aef loop score` on a corpus whose summary is 12,000 characters printed
+
+        error: refusing to run regex check '(?i)(not (have been )?overloaded|...
+        the pattern repeats a group and the input is over 10000 characters
+
+    and exited 1 — EXIT_REJECTED — on a pattern that decides that same input in
+    under half a millisecond. A bounded quantifier enters its body a fixed
+    number of times whatever the input length; there is nothing for the length
+    of the input to make worse.
+    """
+    check = TaskCheck(path="working_memory.summary", op="regex", value=pattern)
+    started = time.perf_counter()
+    held = _holds(check, RAMBLE)  # must not raise
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    assert isinstance(held, bool)
+    assert elapsed_ms < 250, f"{pattern!r} took {elapsed_ms:.1f} ms on {len(RAMBLE)} chars"
+
+
+@pytest.mark.parametrize("pattern", UNBOUNDED_REPEATS)
+def test_an_unbounded_repetition_is_still_refused_over_a_long_input(pattern: str) -> None:
+    """The control. Narrowing the backstop must not switch it off: an
+    unbounded quantifier is the shape whose iteration count grows with the
+    input, which is the precondition the backstop exists for."""
+    check = TaskCheck(path="working_memory.summary", op="regex", value=pattern)
+    with pytest.raises(CatastrophicPatternError):
+        _holds(check, RAMBLE)
+
+
+def test_the_shipped_content_patterns_find_what_they_were_written_to_find() -> None:
+    """Not just "does not raise" — the patterns must still DECIDE, both ways,
+    on the rambling summary that provoked the refusal. A backstop that lets a
+    pattern through and a pattern that answers wrongly are different bugs and
+    this rules out the second."""
+    hit = "The inquiry found the vessel was not overloaded. " + RAMBLE
+    for pattern in S3B_SHIPPED[:1]:
+        check = TaskCheck(path="working_memory.summary", op="regex", value=pattern)
+        assert _holds(check, hit[:12000]) is True
+        assert _holds(check, RAMBLE) is False
+
+
+def test_the_original_redos_pattern_is_still_refused_at_every_length() -> None:
+    """The pattern this whole defence was built for (ADR 0166). It is refused
+    by the static detector before the length backstop is even consulted, so
+    narrowing the backstop cannot reach it."""
+    with pytest.raises(CatastrophicPatternError):
+        refuse_catastrophic_regex(PATHOLOGICAL)
+    assert _holds_outcome(PATHOLOGICAL, OVER_CAP, wall=5.0) == ("refused", None)
+    assert _holds_outcome(PATHOLOGICAL, RAMBLE, wall=5.0) == ("refused", None)
+
+
+def test_every_regex_the_corpus_ships_runs_on_a_twelve_thousand_character_answer() -> None:
+    """The producer→consumer property, over the REAL corpus rather than an
+    example. A model that rambles is the ordinary failure these checks exist to
+    catch; not one of them may abort instead of deciding."""
+    patterns = set()
+    for path in sorted(CORPUS_ROOT.rglob("*.json")):
+        if path.name == "manifest.json":
+            continue
+        payload = json.loads(path.read_text())
+        for check in payload.get("checks", ()):
+            if check.get("op") == "regex":
+                patterns.add(check["value"])
+    assert patterns, "no regex checks found — this test would pass vacuously"
+    for pattern in sorted(patterns):
+        check = TaskCheck(path="working_memory.summary", op="regex", value=pattern)
+        assert isinstance(_holds(check, RAMBLE), bool), pattern
 
 
 # ---------------------------------------------------------------------------

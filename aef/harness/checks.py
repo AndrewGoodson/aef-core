@@ -40,10 +40,16 @@ from aef.state import AEFState
 OPS: frozenset[str] = frozenset({"equals", "contains", "regex", "exists", "max_words", "min_words"})
 _WORD_COUNT_OPS: frozenset[str] = frozenset({"max_words", "min_words"})
 
-# Above this, a pattern carrying ANY repeated group is refused rather than
-# run. Truncating the input instead would change the predicate — "at most 35
-# words" asked of the first 10,000 characters is a different question — so the
-# backstop refuses loudly instead of answering a question nobody asked.
+# Above this, a pattern carrying an UNBOUNDEDLY repeated group (`+`, `*`,
+# `{n,}`) is refused rather than run. Truncating the input instead would change
+# the predicate — "at most 35 words" asked of the first 10,000 characters is a
+# different question — so the backstop refuses loudly instead of answering a
+# question nobody asked.
+#
+# It said ANY repeated group until ADR 0177, and that over-fired on bounded
+# ones: `(x )?` and `{0,34}` enter their body a fixed number of times whatever
+# the input length, so their cost is linear and the input's length says nothing
+# new about them. See `_unboundedly_repeated_group_bodies`.
 MAX_REGEX_INPUT_CHARS = 10_000
 
 
@@ -227,6 +233,60 @@ def _repeated_group_bodies(pattern: str) -> list[str]:
                 start = stack.pop()
                 quantifier, _ = _quantifier_at(pattern, i + 1)
                 if quantifier:
+                    bodies.append(_group_body(pattern[start + 1 : i]))
+            i += 1
+        else:
+            i += 1
+    return bodies
+
+
+def _unboundedly_repeated_group_bodies(pattern: str) -> list[str]:
+    """The subset of `_repeated_group_bodies` whose quantifier is UNBOUNDED —
+    `+`, `*`, `{n,}` — and so is what the length backstop keys on (ADR 0177).
+
+    ADR 0166's backstop asked "does this pattern repeat a group at all?", and
+    that is the wrong question for a length limit. A group repeated a bounded
+    number of times cannot blow up with input length: `(x )?` runs its body at
+    most once, `(?:\\s+\\S+){0,34}` at most 34 times, and the work is linear in
+    the input either way. Only an unbounded quantifier lets the number of
+    iterations grow with the input, which is the precondition for the
+    exponential path the backstop exists to stop.
+
+    Reproduced before this existed. ADR 0171's content patterns — written to
+    let one corpus tell two judges apart, and shipped in `corpus/train/` —
+    carry `( … )?` groups:
+
+        (?i)(not (have been )?overloaded|no overloading|overloading (was )?(rejected|...))
+        (?i)(not (yet )?(re)?open|no confirmed date|still closed|...)
+
+    Against a 12,000-character summary (a model rambling past a 36-word cap —
+    the whole family of negative the seven S3b scenarios were written for),
+    `aef loop score` printed `error: refusing to run regex check ...` and
+    exited 1 (EXIT_REJECTED). Both patterns run on that input in **under half
+    a millisecond**, matching and non-matching alike.
+
+    The direction of the error is still deliberate — over-refusing is a loud
+    message and under-refusing is a hang — but a bounded quantifier is not a
+    judgement call: `re` cannot backtrack catastrophically over a group it may
+    enter a fixed number of times regardless of input length.
+    """
+    bodies: list[str] = []
+    stack: list[int] = []
+    i, n = 0, len(pattern)
+    while i < n:
+        ch = pattern[i]
+        if ch == "\\":
+            i += 2
+        elif ch == "[":
+            i = _skip_class(pattern, i)
+        elif ch == "(":
+            stack.append(i)
+            i += 1
+        elif ch == ")":
+            if stack:
+                start = stack.pop()
+                quantifier, _ = _quantifier_at(pattern, i + 1)
+                if quantifier and _is_unbounded(quantifier):
                     bodies.append(_group_body(pattern[start + 1 : i]))
             i += 1
         else:
@@ -422,13 +482,22 @@ def _holds(check: TaskCheck, actual: Any) -> bool:
         # `_holds` is the only place a pattern actually meets an input, and a
         # `TaskCheck` can reach here from an unvalidated construction.
         refuse_catastrophic_regex(pattern)
-        if len(actual) > MAX_REGEX_INPUT_CHARS and _repeated_group_bodies(pattern):
+        # UNBOUNDEDLY repeated, not merely repeated (ADR 0177). A group with a
+        # bounded quantifier — `(x )?`, `{0,34}`, `{1,3}` — runs a fixed number
+        # of times whatever the input length, so its cost is linear and the
+        # length of the input tells you nothing new about it. Keying the
+        # backstop on any repetition refused ADR 0171's shipped content
+        # patterns, which run on 12,000 characters in under half a millisecond,
+        # and refusing them aborted the whole suite.
+        unbounded = _unboundedly_repeated_group_bodies(pattern)
+        if len(actual) > MAX_REGEX_INPUT_CHARS and unbounded:
             raise CatastrophicPatternError(
                 f"refusing to run regex check {pattern!r} against {len(actual)} characters: "
-                f"the pattern repeats a group and the input is over "
-                f"{MAX_REGEX_INPUT_CHARS} characters. The static detector above is "
-                f"conservative, not a proof, and truncating the input would answer a "
-                f"different question than the check asked. Narrow the path, or use "
+                f"the pattern repeats the group ({unbounded[0]}) an unbounded number of "
+                f"times and the input is over {MAX_REGEX_INPUT_CHARS} characters. The "
+                f"static detector above is conservative, not a proof, and truncating the "
+                f"input would answer a different question than the check asked. Bound the "
+                f"repetition ({{0,N}} rather than * or +), narrow the path, or use "
                 f"max_words/min_words/contains."
             )
         return re.search(pattern, actual) is not None

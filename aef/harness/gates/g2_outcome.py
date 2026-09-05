@@ -58,6 +58,40 @@ class G2ExecutionError(RuntimeError):
     pass
 
 
+# How much of a failure string the verdict carries. First line only, because a
+# traceback-shaped reason turns a one-line ledger row into a page; long enough
+# that "cannot import ...: TypeError: the 'package' argument is required" fits.
+FAILURE_EXCERPT_CHARS = 200
+
+
+def _excerpt(failure: str) -> str:
+    first = failure.strip().splitlines()[0] if failure.strip() else ""
+    if len(first) > FAILURE_EXCERPT_CHARS:
+        return first[: FAILURE_EXCERPT_CHARS - 1] + "…"
+    return first
+
+
+def _with_failure(summary: str, failure: str | None) -> str:
+    return f"{summary} — {_excerpt(failure)}" if failure else summary
+
+
+def _why_note(regressions: list[Comparison], failures: dict[str, str]) -> str:
+    """Say WHY, in the reason line, when the runner knows.
+
+    "1 previously-passing scenario(s) no longer pass" is what a candidate that
+    changed behaviour gets AND what a candidate whose entrypoint could not be
+    imported got, and those are not the same verdict (ADR 0177). The runner
+    computed the difference and `_execute` threw it away.
+    """
+    said = [failures[c.scenario_id] for c in regressions if c.scenario_id in failures]
+    if not said:
+        return ""
+    note = f" {len(said)} of them failed rather than answered: {_excerpt(said[0])}"
+    if len(said) > 1:
+        note += f" (and {len(said) - 1} more)"
+    return note
+
+
 @dataclass(frozen=True)
 class G2OutcomeNonRegression(Gate):
     id: str = "G2"
@@ -104,6 +138,9 @@ class G2OutcomeNonRegression(Gate):
                 ),
             )
 
+        # scenario id -> what the runner said went wrong. Empty when the
+        # outcomes came from the cohort run, which reports outcomes only.
+        failures: dict[str, str] = {}
         if self.precomputed is not None:
             candidate_outcomes = self.precomputed
         else:
@@ -123,7 +160,7 @@ class G2OutcomeNonRegression(Gate):
             workspace = build_candidate_workspace(
                 ctx.repo, ctx.verdict.diff, ctx.workdir / f"workspace-{self.id}", ctx.zone_policy
             )
-            candidate_outcomes = self._execute(ctx, workspace, scenarios)
+            candidate_outcomes, failures = self._execute(ctx, workspace, scenarios)
 
         comparisons: list[Comparison] = []
         missing: list[str] = []
@@ -179,9 +216,11 @@ class G2OutcomeNonRegression(Gate):
                 outcome=GateOutcome.FAIL,
                 reason=(
                     f"{len(regressions)} previously-passing scenario(s) no longer pass "
-                    f"(zero tolerance)"
+                    f"(zero tolerance)" + _why_note(regressions, failures)
                 ),
-                evidence=tuple(c.summary for c in regressions),
+                evidence=tuple(
+                    _with_failure(c.summary, failures.get(c.scenario_id)) for c in regressions
+                ),
             )
 
         return GateResult(
@@ -197,7 +236,7 @@ class G2OutcomeNonRegression(Gate):
 
     def _execute(
         self, ctx: GateContext, workspace: Path, scenarios: list[Scenario]
-    ) -> dict[str, Outcome]:
+    ) -> tuple[dict[str, Outcome], dict[str, str]]:
         """Re-execute the corpus with the candidate isolated.
 
         The candidate answers one node at a time in a worker subprocess and
@@ -220,7 +259,22 @@ class G2OutcomeNonRegression(Gate):
             # (ADR 0095).
             sandbox=ctx.sandbox_policy,
         )
-        return {sid: r.outcome for sid, r in results.items()}
+        # The failure STRINGS as well as the outcomes. Dropping them here is
+        # ADR 0177's R1 tail: when the candidate's worker could not import the
+        # entrypoint at all, the worker said
+        #
+        #   IsolationError: worker for '.claude/agents/migrated/reviewer/graph.py:
+        #   build_graph' failed: cannot import ...: TypeError: the 'package'
+        #   argument is required to perform a relative import
+        #
+        # and the verdict this method fed said only "1 previously-passing
+        # scenario(s) no longer pass (zero tolerance)". An import error and a
+        # behavioural regression are different facts about a candidate, and
+        # the ledger has to be able to tell them apart.
+        return (
+            {sid: r.outcome for sid, r in results.items()},
+            {sid: r.failure for sid, r in results.items() if r.failure},
+        )
 
 
 def recorded_outcome(scenario: Scenario) -> Outcome:
