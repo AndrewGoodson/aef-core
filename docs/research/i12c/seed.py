@@ -207,17 +207,7 @@ def dump_entries(knowledge: Any) -> list[dict[str, Any]]:
     ]
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--out", required=True)
-    args = ap.parse_args()
-
-    memory, knowledge, rows, outputs = seed_stores(verbose=True)
-    records = dump_records(memory)
-    entries = dump_entries(knowledge)
-    checked = assert_no_excerpt(records, outputs)
-
-    out = Path(args.out)
+def _write(out: Path, rows: Any, records: Any, entries: Any, checked: int) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         json.dumps(
@@ -233,6 +223,26 @@ def main() -> None:
             default=str,
         )
     )
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    # `--verify` is the shared re-runner interface (ADR 0196): re-derive the
+    # step-0 table from the committed corpus and cassettes, print it, write
+    # nothing, zero live calls. `--out` is then optional.
+    ap.add_argument("--verify", action="store_true")
+    ap.add_argument("--out")
+    args = ap.parse_args()
+    if not args.verify and not args.out:
+        ap.error("one of --verify or --out")
+
+    memory, knowledge, rows, outputs = seed_stores(verbose=True)
+    records = dump_records(memory)
+    entries = dump_entries(knowledge)
+    checked = assert_no_excerpt(records, outputs)
+
+    if args.out:
+        _write(Path(args.out), rows, records, entries, checked)
 
     fails = sum(1 for r in records if r["kind"] == "failure")
     print(f"\ntrain scenarios: {len(rows)}   live calls: 0 (cassette, on_miss='fail')")

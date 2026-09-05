@@ -53,7 +53,13 @@ def spread(values: list[float]) -> float:
 
 
 def main() -> None:
-    root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent / "results"
+    # `--verify` is the shared re-runner interface (ADR 0196): re-derive the
+    # published table from the committed raw JSON, print it, write nothing,
+    # zero live calls. That is what this script already did unconditionally,
+    # so the flag is an affirmation rather than a mode; it exists so one
+    # driver can invoke every runner the same way.
+    argv = [a for a in sys.argv[1:] if a != "--verify"]
+    root = Path(argv[0]) if argv else Path(__file__).resolve().parent / "results"
     arms = load(root)
     ids = list(arms["a"][0]["per_scenario"])
 

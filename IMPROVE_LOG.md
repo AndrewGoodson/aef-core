@@ -6319,3 +6319,149 @@ case the code that consumed the request was correct about the request and wrong
 about the world, and in each case the repair was the same: carry the fact from
 where it is known, and refuse when it is not known rather than proceeding on
 the request.
+
+## N5 — `make measure`, and it is red on purpose (ADR 0196)
+
+ADR 0188 gave dimension 5 nine of ten and named the missing point word for
+word: *"several headline numbers reach a reader as docstring prose with the
+data one directory away and no re-runner (`make measure`) that regenerates the
+tables in CI"*. ADR 0191 had already paid the bill — S1c's `+2` **withdrawn
+because its seed no longer reproduced**, found a night later, by hand.
+
+`docs/research/measure.py` + `make measure`. Eleven runners, one shared
+`--verify`: re-derive the published table from **committed raw data**, print
+it, write nothing, **zero live calls in any mode** (committed JSON/JSONL, or a
+cassette at `on_miss="fail"`). 53 rows across 13 measurements, each diffed
+against **the ADR paragraph that publishes it** — the ADR is the expectation,
+not a constant in the driver, so perturbing a number in an ADR fails exactly
+like perturbing the data.
+
+**Who needed changing.** Four already had `--report` (i14, j2, both j4) and
+gained an alias. Three printed unconditionally and gained the flag (i12b, i12c
+aggregates, and i12c's seed lost its mandatory `--out`). Four **could not
+produce their published table at all**:
+
+- `i12/aggregate.py` had raised `FileNotFoundError` on every invocation since
+  its raw JSON was flattened out of `results/`. Path fixed; ADR 0155's table
+  then reproduces exactly (0.8541 / 0.8541 / 0.8334 / 0.9166, spread 0.0833,
+  84 calls).
+- `i12b/seed.py` imports `write_check_failure_record`, removed by ADR 0180.
+  ADR 0175's step-0 table has no runner on this tree. Recorded, not "fixed" —
+  re-pointing it at a different producer would produce a different number.
+- i13 had **no aggregator**: six raw `aef loop score --json` payloads and three
+  tables typed by hand. New `i13/verify.py`; every number in ADR 0156
+  reproduces, floor 0.7639 / regression 0.7361 / fall 0.0278 included.
+- `pilot-marlin/scan_control.py` needed marlin's uncommitted `.aef/runs`; its
+  `--verify` runs the same controls against a stand-in objective.
+
+**What the first run found.** Two published numbers are stale and nobody had
+said so: **ADR 0159's oracle B is 18/18 published against 10/18 re-derived**
+(the one block `--report` recomputes live from `corpus/`, which ADR 0186 moved
+to one model — 0186 disclosed exactly this for v2 and did not check v1), and
+`j4/report-tally.txt` still says `helpful=7` where ADR 0180's own correction
+says 6. No committed result file was edited: the ADR is pinned, the artefact is
+labelled.
+
+**The key case, verbatim:**
+
+```
+=== i12c-seed — S1c step 0 — the seed ADR 0184's +2 rests on
+    ok    train scenarios                              20
+    XFAIL failure records                              ADR says '3', re-derived '7'
+    XFAIL records the excerpt property covers          ADR says '23', re-derived '27'
+    XFAIL entry recurrence (distinct runs)             ADR says '3', re-derived '7'
+    ok    consolidated entries                         1
+```
+
+Expected, recorded, and the withdrawn row's evidence. Note that `i12c-arms` —
+the arm tables, from the committed `arms.jsonl` — reproduces in full: it is the
+seed underneath that moved, which is why 0191 withdrew the score and not the
+table.
+
+**Red on purpose.** `make measure` exits 1 while ANY row drifts, explained or
+not: a published number that no longer re-derives is a number nobody should
+cite. CI runs `make measure-ci` (`--fast --against-expectations`), which fails
+when the drift set **changes** — a new drift, and equally a known drift that
+healed and left a stale note. If N2's re-run makes ADR 0184's seed reproduce,
+CI goes red until the note comes out.
+
+**Mutation.** `| (b) raw records | **0.9176** |` → `**0.9999**` in ADR 0175:
+`DRIFT (b) raw records, mean  ADR says '0.9999', re-derived '0.9176'`, and
+`make measure-ci` exits 1 with `NEW DRIFT`. Restored, `shasum -a 256` matched
+`83e9a571…`. The same mutation is automated in
+`test_a_perturbed_published_number_is_caught` against a symlinked shadow tree,
+so nothing committed is written.
+
+Green bar: `pytest -q` **2930 passed, 7 skipped, 1 xfailed** (was 2885 + the 45
+this increment adds), `mypy aef examples` clean on 135 files, `ruff check .`
+clean, `ruff format --check` clean.
+
+## N6 — the shapes this repo actually carries (ADR 0197)
+
+M6 (ADR 0163) scanned a real repo clean and named its own residual: marlin's
+boundary rule is written around a subscription UUID and the pattern list did
+not match it, because ADR 0126 removed `-` from `opaque_secret` to stop
+`migrate-the-customer-billing-pipeline-to-v2-with-zero-downtime` being redacted
+into a placeholder.
+
+Reproduced first, eleven shapes planted one at a time. **Five findings, one of
+them known:**
+
+```
+uuid                substitutions=0  -> ...(contact 7e16b0bb-b75a-4a16-9765-839cf1b96755)
+slack_token         substitutions=0  -> ...789012-1234567890123-AbCdEfGhIjKlMnOpQrStUvWx)
+jwt                 substitutions=2  -> ...ACTED:opaque_secret].[REDACTED:opaque_secret])
+github_token        substitutions=1  -> ...ion service (contact [REDACTED:opaque_secret])
+connection_string   substitutions=1  -> ...stgres://svcuser:[REDACTED:email]:5432/marlin)
+```
+
+A JWT torn into two opaque secrets, a GitHub PAT caught under the wrong name,
+and a database URL reported as an **email** with `svcuser:` surviving in the
+clear. A label is not cosmetic — "something opaque leaked" and "your production
+database URL leaked" are different incidents.
+
+Six named shapes added: `connection_string` (first, ahead of `email`), `jwt`
+(after `bearer`, so `Bearer <jwt>` stays a bearer header), `uuid`,
+`github_token`, `slack_token`, and five more AWS key prefixes. `-` is still
+absent from `opaque_secret`; the UUID gets in by structure — every group
+hex-only and length-exact — not by weakening.
+
+**And one the increment was not looking for: `api_key` did not match a real
+Anthropic key.** Its middle was `(?:live|test|ant|proj)?[-_]?`, one optional
+segment from a fixed vocabulary, so on `sk-ant-api03-<36>` the `ant` consumed
+the slot and `api03` was left in front of a class with no hyphen: **no match at
+all**. Now `(?:[-_][A-Za-z0-9]{2,10}){0,3}`.
+
+`find()` applies patterns in order now, so the labels are the ones a redaction
+would actually stamp; the detector is not weakened, and the proof is two lines
+(if any pattern matches, the first such still matches, because nothing before
+it changed the text).
+
+**The seam, found by the full suite going red.** A run id is a `uuid4` the
+harness assigns, so once `uuid` was a pattern the output scan matched the
+scenario's own `id` and `initial_state.run_id` and **every harvest of a
+recorded run was rejected "a secret survived redaction"** —
+`tests/cli/test_run.py::test_a_recorded_run_re_executes_identically_and_is_harvested`.
+That is ADR 0126's F12 exactly, one field over. `_scannable` drops the two
+harness identifiers **by exact field path**, never by teaching a pattern to
+ignore a shape, with a control that a tenant-typed UUID is still caught.
+
+**What the scanner finds in committed artefacts.** All of `docs/research/` and
+all of `corpus/`: **no credential**. 58 `uuid` matches (run ids, session ids,
+the scratch path segment), 66 `opaque_secret` (every `RecordedCall.key`,
+`prompt_sha256`, and the audit ledger's `entry_hash`/`previous_hash` chain —
+worth knowing: a harvest that ever scanned a ledger would reject it), and the
+planted controls themselves. The one real identifier is marlin's subscription
+UUID, quoted deliberately in ADR 0163 as the residual's evidence; it is an
+Azure subscription id rather than a credential, published by its owner in
+marlin's own `AGENTS.md`, and it was **not** retro-redacted — redacting the
+four places it stands would make 0163's finding untraceable and leave the value
+in marlin's repo regardless. Stated as a judgement, the owner's to overturn.
+
+**Mutation**, each pattern dropped in turn, restored with `shasum -a 256`
+verified against `beb0f1be…`: `uuid` → 4 failures, `jwt` → 2, `github_token` →
+3, `slack_token` → 3, `connection_string` → 5, and `api_key` reverted to its
+pre-0197 pattern → 1 (`sk-ant-api03-…`). Six for six.
+
+Erratum appended to ADR 0163 §5 with the new number; `make measure` pins the
+line against the erratum, so the closure is re-checked rather than asserted.
