@@ -858,6 +858,9 @@ def cmd_run(args: argparse.Namespace) -> int:
             graph=graph,
             memory=FileMemoryStore(path=Path(args.memory)) if args.memory else None,
             agent_path=args.agent_path,
+            sample_parents=args.sample_parents,
+            seed=args.seed,
+            persist_lineage=not args.no_lineage,
         )
     except (PolicyConfigError, KeptBranchCheckedOutError, CorpusGraphMismatchError) as exc:
         # Named refusals, printed as one line rather than a traceback: each
@@ -873,6 +876,16 @@ def cmd_run(args: argparse.Namespace) -> int:
         f"kept {run.kept_count}, reverted {run.reverted_count}, "
         f"{run.kept_branch}@{run.kept_ref[:12]} — review and merge by hand; "
         f"Tier-1 auto-merge is off"
+    )
+    # The archive numbers, printed rather than left in a dataclass nobody
+    # reads: distinct KEPT trees is the diversity number `--sample-parents`
+    # is judged on, and distinct GATED trees is how much search it bought.
+    print(
+        f"archive: {len(run.archive)} member(s) "
+        f"({run.resumed_members} resumed from earlier run(s)), "
+        f"{run.distinct_kept_trees} distinct kept tree(s), "
+        f"{run.distinct_gated_trees} distinct gated tree(s); "
+        f"sampling {'on' if args.sample_parents else 'off'}"
     )
     return EXIT_HALTED if "halted" in run.stopped_because else EXIT_OK
 
@@ -1383,6 +1396,29 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "--kept-branch",
         default="loop/kept",
         help="local branch that advances on every kept candidate; a person merges it",
+    )
+    p_run.add_argument(
+        "--sample-parents",
+        action="store_true",
+        help="propose each turn from a parent SAMPLED from the lineage archive — DGM's "
+        "rule, sigmoid(score)/(1+children) — instead of always from the latest kept "
+        "(ADR 0121, ADR 0160). Stepping stones, including gated-and-rejected ones that "
+        "reached a score, stay eligible. Off by default: measured, not assumed. The "
+        "kept branch still points at the best-scoring KEPT member.",
+    )
+    p_run.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="RNG seed for --sample-parents, so a sampled run is reproducible",
+    )
+    p_run.add_argument(
+        "--no-lineage",
+        action="store_true",
+        help="do not read or write <state>/lineage/<graph-id>.jsonl. By default the "
+        "lineage archive persists across invocations: tonight's run can propose from a "
+        "parent last night kept, and will not re-gate a tree an earlier run already "
+        "kept or rejected. Pass this for a self-contained run (an A/B arm, a demo).",
     )
     _proposer_flags(p_run)
     p_run.set_defaults(handler=cmd_run)

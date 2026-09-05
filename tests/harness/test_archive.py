@@ -6,6 +6,7 @@ no archive, because a rollback from it restores something other than what
 was accepted.
 """
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -14,11 +15,16 @@ import pytest
 from aef.harness.archive import (
     ArchiveError,
     ArchiveIntegrityError,
+    LineageIntegrityError,
+    LineageRecord,
+    append_lineage,
     check_never_shrinks,
     digest,
+    lineage_path,
     load_entry,
     next_version,
     read_files,
+    read_lineage,
     record,
     rollback,
     verify,
@@ -218,3 +224,83 @@ def test_deleting_a_version_is_caught(tmp_path: Path) -> None:
 def test_a_path_escaping_the_version_directory_is_refused(tmp_path: Path) -> None:
     with pytest.raises(ArchiveError, match="outside"):
         _record(tmp_path, files={"../../escape.py": b"x\n"})
+
+
+# ---------------------------------------------------------------------------
+# The lineage store (ADR 0160) — a second store, deliberately beside the
+# version archive rather than inside it
+# ---------------------------------------------------------------------------
+
+
+def _member(**kw: object) -> LineageRecord:
+    base: dict[str, object] = {
+        "run_id": "20260904T000000",
+        "turn": 1,
+        "ref": "a" * 40,
+        "tree": "b" * 40,
+        "parent_ref": "c" * 40,
+        "score": 0.7,
+        "kept": True,
+        "disposition": "escalate",
+        "recorded_at": AT,
+    }
+    base.update(kw)
+    return LineageRecord(**base)  # type: ignore[arg-type]
+
+
+def test_lineage_round_trips_kept_and_rejected_members(tmp_path: Path) -> None:
+    append_lineage(tmp_path, "planner", _member())
+    append_lineage(
+        tmp_path, "planner", _member(turn=2, ref="d" * 40, kept=False, disposition="reject")
+    )
+    got = read_lineage(tmp_path, "planner")
+
+    assert [r.turn for r in got] == [1, 2]
+    assert [r.kept for r in got] == [True, False]
+    assert [r.disposition for r in got] == ["escalate", "reject"]
+    assert got[0].recorded_at == AT
+
+
+def test_lineage_is_per_graph_and_empty_before_anything_runs(tmp_path: Path) -> None:
+    assert read_lineage(tmp_path, "planner") == ()
+    append_lineage(tmp_path, "planner", _member())
+    assert read_lineage(tmp_path, "critic") == ()
+    assert len(read_lineage(tmp_path, "planner")) == 1
+
+
+def test_an_altered_lineage_record_is_refused(tmp_path: Path) -> None:
+    """The same stance as `read_files`: raise rather than hand back something
+    other than what was recorded. A parent sampled from a doctored record is
+    not the candidate the gates measured — the score that earned it its
+    sampling weight would describe a different tree."""
+    append_lineage(tmp_path, "planner", _member(score=0.2))
+    path = lineage_path(tmp_path, "planner")
+    payload = json.loads(path.read_text())
+    payload["record"]["score"] = 0.99  # a better parent, on paper
+    path.write_text(json.dumps(payload) + "\n")
+
+    with pytest.raises(LineageIntegrityError, match="digest mismatch"):
+        read_lineage(tmp_path, "planner")
+
+
+def test_a_torn_tail_line_is_a_named_refusal_not_a_silent_member(tmp_path: Path) -> None:
+    append_lineage(tmp_path, "planner", _member())
+    path = lineage_path(tmp_path, "planner")
+    path.write_text(path.read_text() + '{"record": {"ref": "x"}\n')
+
+    with pytest.raises(LineageIntegrityError, match="not a lineage record"):
+        read_lineage(tmp_path, "planner")
+
+
+def test_the_lineage_store_never_enters_the_version_archive(tmp_path: Path) -> None:
+    """The separation is the safety property, so it is a test and not only a
+    comment. `versions()` is what `_blessed_files` reads as G5's baseline and
+    what `monitor` rolls back to; a rejected candidate must never be able to
+    reach either by being written down."""
+    _record(tmp_path)
+    append_lineage(tmp_path, "planner", _member(kept=False, disposition="reject"))
+
+    assert versions(tmp_path, "planner") == (1,)
+    assert read_files(tmp_path, "planner", 1).keys() == {"agents/planner.py"}
+    known = versions(tmp_path, "planner")
+    check_never_shrinks(tmp_path, "planner", known)  # a lineage write is not a version

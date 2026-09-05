@@ -19,6 +19,13 @@ never overwritten — `record()` refuses. A rollback does not delete the
 version it rolled back from; it appends a new version whose content is the
 old one, so the history of what was tried stays legible.
 
+A **second, deliberately separate store** lives at the bottom of this module:
+the *lineage* archive (ADR 0160), which records every candidate `run_loop`
+produced — kept and rejected alike — so DGM-style parent sampling survives
+across invocations. It is not a version store and no rollback path reads it;
+the comment above `LINEAGE_DIRNAME` says why keeping the two apart is a
+safety property rather than a filing preference.
+
 Writes use the kernel's crash-safe helper (`durability._atomic_write_text`:
 temp file in the same directory, `fsync`, `os.replace`, directory `fsync`) —
 deliberately the same implementation the checkpointer uses rather than a
@@ -29,6 +36,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -254,3 +262,140 @@ def check_never_shrinks(root: Path, graph_id: str, known: tuple[int, ...]) -> No
             f"archive for {graph_id!r} lost version(s) {missing}; history that can be "
             f"deleted is not an audit trail"
         )
+
+
+# ---------------------------------------------------------------------------
+# The lineage store — DGM's archive, across invocations (ADR 0160)
+# ---------------------------------------------------------------------------
+#
+# WHY THIS IS A SEPARATE STORE, BESIDE THE VERSIONS ABOVE RATHER THAN INSIDE
+# THEM. Everything above records *accepted content*: the bytes of every Zone A
+# file at a version an owner blessed or the loop merged, digest-verified, and
+# `check_never_shrinks` makes losing one a preflight failure. Lineage records
+# something else — every candidate a `run_loop` produced, INCLUDING the ones
+# the gates rejected, which are exactly the members whose content must never
+# be restorable by `rollback` and must never appear in `versions()`, whose
+# first element `_blessed_files` reads as the baseline G5 measures drift
+# against. Writing rejects into that store would put un-gated content one
+# `aef loop monitor` rollback away from Zone A, and would make an ordinary
+# loop run trip an integrity invariant that exists to protect merges. So:
+# same directory tree, same durability discipline, same digests, a different
+# file, and no rollback path reads it.
+#
+# It is resume state, not the audit trail — the ledger is the audit trail and
+# is hash-chained. A lineage record therefore carries a digest of its own
+# payload (corruption is detected) but no chain (a torn history is not an
+# integrity emergency): the remedy for a corrupt lineage file is to delete it,
+# which costs the loop its resume state and costs the audit trail nothing.
+
+LINEAGE_DIRNAME = "lineage"
+
+
+class LineageIntegrityError(ArchiveError):
+    """A persisted lineage record does not match its recorded digest."""
+
+
+@dataclass(frozen=True)
+class LineageRecord:
+    """One member of the lineage archive, as persisted.
+
+    `kept` is the gate verdict: True when every gate passed and the loop
+    advanced its kept branch onto this candidate, False when it was reverted.
+    Rejected members are recorded — they are DGM's stepping stones, and a
+    stepping stone nobody wrote down is not one.
+    """
+
+    run_id: str
+    turn: int
+    ref: str
+    tree: str
+    parent_ref: str | None
+    score: float | None
+    kept: bool
+    disposition: str | None
+    recorded_at: datetime
+    children: int = 0
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "run_id": self.run_id,
+            "turn": self.turn,
+            "ref": self.ref,
+            "tree": self.tree,
+            "parent_ref": self.parent_ref,
+            "score": self.score,
+            "kept": self.kept,
+            "disposition": self.disposition,
+            "recorded_at": self.recorded_at.isoformat(),
+            "children": self.children,
+        }
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any]) -> LineageRecord:
+        try:
+            return cls(
+                run_id=str(payload["run_id"]),
+                turn=int(payload["turn"]),
+                ref=str(payload["ref"]),
+                tree=str(payload["tree"]),
+                parent_ref=payload["parent_ref"],
+                score=payload["score"],
+                kept=bool(payload["kept"]),
+                disposition=payload["disposition"],
+                recorded_at=datetime.fromisoformat(payload["recorded_at"]),
+                children=int(payload.get("children", 0)),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ArchiveError(f"malformed lineage record: {exc}") from exc
+
+
+def lineage_path(root: Path, graph_id: str) -> Path:
+    return root / f"{graph_id}.jsonl"
+
+
+def _lineage_digest(payload: dict[str, Any]) -> str:
+    return digest(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+
+def append_lineage(root: Path, graph_id: str, record: LineageRecord) -> LineageRecord:
+    """Append one member. Append mode with flush+fsync, like the ledger: a
+    torn tail line fails its own digest check on the next read rather than
+    being silently absorbed as a member that was never proposed."""
+    payload = record.to_payload()
+    line = (
+        json.dumps({"record": payload, "digest": _lineage_digest(payload)}, sort_keys=True) + "\n"
+    )
+    root.mkdir(parents=True, exist_ok=True)
+    path = lineage_path(root, graph_id)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(line)
+        handle.flush()
+        os.fsync(handle.fileno())
+    return record
+
+
+def read_lineage(root: Path, graph_id: str) -> tuple[LineageRecord, ...]:
+    """Every persisted member, digest-verified, oldest first."""
+    path = lineage_path(root, graph_id)
+    if not path.is_file():
+        return ()
+    out: list[LineageRecord] = []
+    for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not raw.strip():
+            continue
+        try:
+            envelope = json.loads(raw)
+            payload = envelope["record"]
+            recorded = envelope["digest"]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise LineageIntegrityError(f"{path}:{number}: not a lineage record: {exc}") from exc
+        actual = _lineage_digest(payload)
+        if actual != recorded:
+            raise LineageIntegrityError(
+                f"{path}:{number}: digest mismatch — recorded {recorded}, found {actual}. "
+                f"The lineage archive has been altered; a parent sampled from it would not "
+                f"be the candidate that was gated. Delete the file to start a fresh lineage: "
+                f"it is resume state, and the ledger keeps the audit trail."
+            )
+        out.append(LineageRecord.from_payload(payload))
+    return tuple(out)
