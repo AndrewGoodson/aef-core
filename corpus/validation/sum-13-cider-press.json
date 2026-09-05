@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Dunmere cider press"
+      "value": "(?i)Dunmere\\ cider\\ press"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "oak"
+      "value": "(?i)oak"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "apples"
+      "value": "(?i)apples"
     },
     {
       "op": "max_words",

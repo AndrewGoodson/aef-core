@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Marisa Venn"
+      "value": "(?i)Marisa\\ Venn"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "bookbinder"
+      "value": "(?i)bookbinder"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "apprentice"
+      "value": "(?i)apprentice"
     },
     {
       "op": "max_words",

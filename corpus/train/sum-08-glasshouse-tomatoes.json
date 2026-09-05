@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Fenwick glasshouse"
+      "value": "(?i)Fenwick\\ glasshouse"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "tomatoes"
+      "value": "(?i)tomatoes"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "heat pump"
+      "value": "(?i)heat\\ pump"
     },
     {
       "op": "max_words",

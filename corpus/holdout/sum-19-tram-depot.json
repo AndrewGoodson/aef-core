@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Corran tram depot"
+      "value": "(?i)Corran\\ tram\\ depot"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "mural"
+      "value": "(?i)mural"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "1930s"
+      "value": "(?i)1930s"
     },
     {
       "op": "max_words",

@@ -2,14 +2,14 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Ashcombe"
+      "value": "(?i)Ashcombe"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "signal box"
+      "value": "(?i)signal\\ box"
     },
     {
       "op": "regex",

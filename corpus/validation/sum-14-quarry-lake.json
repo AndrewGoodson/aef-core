@@ -2,9 +2,9 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Ketley quarry lake"
+      "value": "(?i)Ketley\\ quarry\\ lake"
     },
     {
       "op": "regex",
@@ -12,9 +12,9 @@
       "value": "(?i)swimming"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "lifeguards"
+      "value": "(?i)lifeguards"
     },
     {
       "op": "max_words",

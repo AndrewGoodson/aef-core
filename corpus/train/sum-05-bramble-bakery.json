@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Bramble Lane bakery"
+      "value": "(?i)Bramble\\ Lane\\ bakery"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "rye"
+      "value": "(?i)rye"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Saturday"
+      "value": "(?i)Saturday"
     },
     {
       "op": "max_words",

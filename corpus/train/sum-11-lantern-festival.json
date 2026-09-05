@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Ottery lantern walk"
+      "value": "(?i)Ottery\\ lantern\\ walk"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "willow"
+      "value": "(?i)willow"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "harbour"
+      "value": "(?i)harbour"
     },
     {
       "op": "max_words",

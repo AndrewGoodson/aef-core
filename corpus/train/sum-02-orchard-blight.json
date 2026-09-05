@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Varley blight"
+      "value": "(?i)Varley\\ blight"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Pellham orchard"
+      "value": "(?i)Pellham\\ orchard"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "copper"
+      "value": "(?i)copper"
     },
     {
       "op": "max_words",

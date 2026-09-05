@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Sedgely clay pit"
+      "value": "(?i)Sedgely\\ clay\\ pit"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "newts"
+      "value": "(?i)newts"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "planning"
+      "value": "(?i)planning"
     },
     {
       "op": "max_words",

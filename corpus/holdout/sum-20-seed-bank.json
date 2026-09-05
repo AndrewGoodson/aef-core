@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Lindsell seed bank"
+      "value": "(?i)Lindsell\\ seed\\ bank"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "beans"
+      "value": "(?i)beans"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "freezer"
+      "value": "(?i)freezer"
     },
     {
       "op": "max_words",

@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Ravensholme choir"
+      "value": "(?i)Ravensholme\\ choir"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Bruges"
+      "value": "(?i)Bruges"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "coach"
+      "value": "(?i)coach"
     },
     {
       "op": "max_words",

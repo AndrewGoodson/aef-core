@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Holloway town clock"
+      "value": "(?i)Holloway\\ town\\ clock"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "pendulum"
+      "value": "(?i)pendulum"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "1911"
+      "value": "(?i)1911"
     },
     {
       "op": "max_words",

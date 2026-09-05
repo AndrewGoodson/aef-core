@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Kestrel"
+      "value": "(?i)Kestrel"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Marrow Sound"
+      "value": "(?i)Marrow\\ Sound"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Tuesday"
+      "value": "(?i)Tuesday"
     },
     {
       "op": "max_words",

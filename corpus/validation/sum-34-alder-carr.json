@@ -1,0 +1,352 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Alder Carr"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)willow tit"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "\\b46\\b"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 30
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-34-alder-carr",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-34-alder-carr in at most 30 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-34-alder-carr",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 30,
+      "must_mention": [
+        "Alder Carr",
+        "willow tit"
+      ],
+      "text": "The 2026 breeding-bird survey at Alder Carr counted 46 pairs of willow tit, up from 31 in 2023 and the highest since the survey began in 2011. Reed bunting fell to 12 pairs. The wet woodland on the reserve was extended by four hectares in the winter, and the survey team put the increase down to that work and to a mild spring."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "4f51779757f58d13ce5867eb4fd0b4e031c7b00faeda68d95613a790fbeb068a",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Alder Carr, willow tit.\n\nPassage:\nThe 2026 breeding-bird survey at Alder Carr counted 46 pairs of willow tit, up from 31 in 2023 and the highest since the survey began in 2011. Reed bunting fell to 12 pairs. The wet woodland on the reserve was extended by four hectares in the winter, and the survey team put the increase down to that work and to a mild spring.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Alder Carr's 2026 survey recorded 46 willow tit pairs, a record high since 2011, though reed bunting declined; surveyors credited four hectares of new wet woodland and a mild spring.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "output_tokens": 70,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code on claude-opus-5[1m] (ADR 0171). S3b content-negative candidate: the count is the survey result and four other numbers compete for the cap (ADR 0171)",
+  "recorded_at": "2026-09-05T03:21:12.529127+00:00",
+  "source": "record",
+  "split": "validation",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-34-alder-carr:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-05T03:21:12.534512+00:00",
+        "run_id": "sum-34-alder-carr",
+        "trace_id": "sum-34-alder-carr"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-34-alder-carr in at most 30 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-34-alder-carr",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Alder Carr",
+            "willow tit"
+          ],
+          "text": "The 2026 breeding-bird survey at Alder Carr counted 46 pairs of willow tit, up from 31 in 2023 and the highest since the survey began in 2011. Reed bunting fell to 12 pairs. The wet woodland on the reserve was extended by four hectares in the winter, and the survey team put the increase down to that work and to a mild spring."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-34-alder-carr:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-05T03:21:12.534586+00:00",
+        "run_id": "sum-34-alder-carr",
+        "trace_id": "sum-34-alder-carr"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-34-alder-carr in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 72,
+            "trace_id": "sum-34-alder-carr",
+            "ts": "2026-09-05T03:21:12.534586Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Alder Carr's 2026 survey recorded 46 willow tit pairs, a record high since 2011, though reed bunting declined; surveyors credited four hectares of new wet woodland and a mild spring."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-34-alder-carr in at most 30 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-34-alder-carr",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Alder Carr",
+            "willow tit"
+          ],
+          "text": "The 2026 breeding-bird survey at Alder Carr counted 46 pairs of willow tit, up from 31 in 2023 and the highest since the survey began in 2011. Reed bunting fell to 12 pairs. The wet woodland on the reserve was extended by four hectares in the winter, and the survey team put the increase down to that work and to a mild spring."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-34-alder-carr:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-05T03:21:14.638183+00:00",
+        "run_id": "sum-34-alder-carr",
+        "trace_id": "sum-34-alder-carr"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-34-alder-carr in at most 30 words",
+        "plan": {
+          "goal": "summarise sum-34-alder-carr in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 72,
+            "trace_id": "sum-34-alder-carr",
+            "ts": "2026-09-05T03:21:12.534586Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-34-alder-carr",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Alder Carr",
+            "willow tit"
+          ],
+          "summary": "Alder Carr's 2026 survey recorded 46 willow tit pairs, a record high since 2011, though reed bunting declined; surveyors credited four hectares of new wet woodland and a mild spring.",
+          "text": "The 2026 breeding-bird survey at Alder Carr counted 46 pairs of willow tit, up from 31 in 2023 and the highest since the survey began in 2011. Reed bunting fell to 12 pairs. The wet woodland on the reserve was extended by four hectares in the winter, and the survey team put the increase down to that work and to a mild spring."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-34-alder-carr:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-05T03:21:14.638391+00:00",
+        "run_id": "sum-34-alder-carr",
+        "trace_id": "sum-34-alder-carr"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-34-alder-carr in at most 30 words",
+        "plan": {
+          "goal": "summarise sum-34-alder-carr in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 72,
+            "trace_id": "sum-34-alder-carr",
+            "ts": "2026-09-05T03:21:12.534586Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-34-alder-carr",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Alder Carr",
+            "willow tit"
+          ],
+          "summary": "Alder Carr's 2026 survey recorded 46 willow tit pairs, a record high since 2011, though reed bunting declined; surveyors credited four hectares of new wet woodland and a mild spring.",
+          "text": "The 2026 breeding-bird survey at Alder Carr counted 46 pairs of willow tit, up from 31 in 2023 and the highest since the survey began in 2011. Reed bunting fell to 12 pairs. The wet woodland on the reserve was extended by four hectares in the winter, and the survey team put the increase down to that work and to a mild spring."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

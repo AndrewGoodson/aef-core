@@ -1,0 +1,352 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Quernmore"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)kiln"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)340\\s*(mm\\b|millimetres|millimeters)"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 26
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-31-quernmore-kiln",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-31-quernmore-kiln in at most 26 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-31-quernmore-kiln",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 26,
+      "must_mention": [
+        "Quernmore",
+        "kiln"
+      ],
+      "text": "The bottle kiln at Quernmore has been surveyed ahead of repair. Its brick shell leans 340 millimetres out of plumb at the crown, and the survey recommends grouting the crown ring and rebuilding the top two metres. The trust has 55,000 pounds of the 190,000 pounds needed and has applied for the rest. Firing has not taken place since 1962 and no firing is proposed."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "fee804a24d9c99efb0b667d3efd0e2567e532fde036aa2646d99e0c667bacecf",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 26 words.\nThe summary must mention each of these terms, spelled exactly as given: Quernmore, kiln.\n\nPassage:\nThe bottle kiln at Quernmore has been surveyed ahead of repair. Its brick shell leans 340 millimetres out of plumb at the crown, and the survey recommends grouting the crown ring and rebuilding the top two metres. The trust has 55,000 pounds of the 190,000 pounds needed and has applied for the rest. Firing has not taken place since 1962 and no firing is proposed.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Quernmore's bottle kiln, leaning 340mm out of plumb, needs its crown grouted and top rebuilt; the trust has £55,000 of £190,000. No firing since 1962.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "output_tokens": 67,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code on claude-opus-5[1m] (ADR 0171). S3b content-negative candidate: the headline measurement carries a unit, against three competing money figures (ADR 0171)",
+  "recorded_at": "2026-09-05T03:20:55.241902+00:00",
+  "source": "record",
+  "split": "validation",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-31-quernmore-kiln:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-05T03:20:55.246992+00:00",
+        "run_id": "sum-31-quernmore-kiln",
+        "trace_id": "sum-31-quernmore-kiln"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-31-quernmore-kiln in at most 26 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-31-quernmore-kiln",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 26,
+          "must_mention": [
+            "Quernmore",
+            "kiln"
+          ],
+          "text": "The bottle kiln at Quernmore has been surveyed ahead of repair. Its brick shell leans 340 millimetres out of plumb at the crown, and the survey recommends grouting the crown ring and rebuilding the top two metres. The trust has 55,000 pounds of the 190,000 pounds needed and has applied for the rest. Firing has not taken place since 1962 and no firing is proposed."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-31-quernmore-kiln:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-05T03:20:55.247085+00:00",
+        "run_id": "sum-31-quernmore-kiln",
+        "trace_id": "sum-31-quernmore-kiln"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-31-quernmore-kiln in at most 26 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 69,
+            "trace_id": "sum-31-quernmore-kiln",
+            "ts": "2026-09-05T03:20:55.247085Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Quernmore's bottle kiln, leaning 340mm out of plumb, needs its crown grouted and top rebuilt; the trust has £55,000 of £190,000. No firing since 1962."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-31-quernmore-kiln in at most 26 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-31-quernmore-kiln",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 26,
+          "must_mention": [
+            "Quernmore",
+            "kiln"
+          ],
+          "text": "The bottle kiln at Quernmore has been surveyed ahead of repair. Its brick shell leans 340 millimetres out of plumb at the crown, and the survey recommends grouting the crown ring and rebuilding the top two metres. The trust has 55,000 pounds of the 190,000 pounds needed and has applied for the rest. Firing has not taken place since 1962 and no firing is proposed."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-31-quernmore-kiln:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-05T03:20:58.054136+00:00",
+        "run_id": "sum-31-quernmore-kiln",
+        "trace_id": "sum-31-quernmore-kiln"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-31-quernmore-kiln in at most 26 words",
+        "plan": {
+          "goal": "summarise sum-31-quernmore-kiln in at most 26 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 69,
+            "trace_id": "sum-31-quernmore-kiln",
+            "ts": "2026-09-05T03:20:55.247085Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-31-quernmore-kiln",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 26,
+          "must_mention": [
+            "Quernmore",
+            "kiln"
+          ],
+          "summary": "Quernmore's bottle kiln, leaning 340mm out of plumb, needs its crown grouted and top rebuilt; the trust has £55,000 of £190,000. No firing since 1962.",
+          "text": "The bottle kiln at Quernmore has been surveyed ahead of repair. Its brick shell leans 340 millimetres out of plumb at the crown, and the survey recommends grouting the crown ring and rebuilding the top two metres. The trust has 55,000 pounds of the 190,000 pounds needed and has applied for the rest. Firing has not taken place since 1962 and no firing is proposed."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-31-quernmore-kiln:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-05T03:20:58.054367+00:00",
+        "run_id": "sum-31-quernmore-kiln",
+        "trace_id": "sum-31-quernmore-kiln"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-31-quernmore-kiln in at most 26 words",
+        "plan": {
+          "goal": "summarise sum-31-quernmore-kiln in at most 26 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 69,
+            "trace_id": "sum-31-quernmore-kiln",
+            "ts": "2026-09-05T03:20:55.247085Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-31-quernmore-kiln",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 26,
+          "must_mention": [
+            "Quernmore",
+            "kiln"
+          ],
+          "summary": "Quernmore's bottle kiln, leaning 340mm out of plumb, needs its crown grouted and top rebuilt; the trust has £55,000 of £190,000. No firing since 1962.",
+          "text": "The bottle kiln at Quernmore has been surveyed ahead of repair. Its brick shell leans 340 millimetres out of plumb at the crown, and the survey recommends grouting the crown ring and rebuilding the top two metres. The trust has 55,000 pounds of the 190,000 pounds needed and has applied for the rest. Firing has not taken place since 1962 and no firing is proposed."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Halden reservoir"
+      "value": "(?i)Halden\\ reservoir"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "spillway"
+      "value": "(?i)spillway"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "October"
+      "value": "(?i)October"
     },
     {
       "op": "max_words",

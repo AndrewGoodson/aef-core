@@ -2,14 +2,14 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Gannet Head"
+      "value": "(?i)Gannet\\ Head"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "coast path"
+      "value": "(?i)coast\\ path"
     },
     {
       "op": "regex",

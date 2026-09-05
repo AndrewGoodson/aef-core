@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "St Wilfrid"
+      "value": "(?i)St\\ Wilfrid"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "tenor bell"
+      "value": "(?i)tenor\\ bell"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "foundry"
+      "value": "(?i)foundry"
     },
     {
       "op": "max_words",

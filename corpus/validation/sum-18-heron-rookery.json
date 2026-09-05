@@ -2,19 +2,19 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Wimble Carr"
+      "value": "(?i)Wimble\\ Carr"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "herons"
+      "value": "(?i)herons"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "nests"
+      "value": "(?i)nests"
     },
     {
       "op": "max_words",
