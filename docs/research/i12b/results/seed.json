@@ -1,0 +1,630 @@
+{
+  "entries": [
+    {
+      "confidence": 0.42857142857142855,
+      "content": {
+        "failing_nodes": [],
+        "latest_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 208 chars: 'Vaccination clinics have relocated from Netherby Grange\u2026",
+        "objective": "summarise sum-26-netherby-clinic in at most 30 words",
+        "run_ids": [
+          "sum-22-marlowe-street",
+          "sum-25-hollin-bridge",
+          "sum-26-netherby-clinic"
+        ],
+        "signature": "failure:check:working_memory.summary:max_words"
+      },
+      "kind": "failure",
+      "occurrences": 3,
+      "runs": [
+        "db5c3594854446469280a80e3f7cfcfc",
+        "f5c7e71d19fe49a783e8bd1f067c586f",
+        "1a5006a1d24244959cf45aa36447102d"
+      ],
+      "signature": "failure:check:working_memory.summary:max_words"
+    }
+  ],
+  "records": [
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 208 chars: 'Vaccination clinics have relocated from Netherby Grange to \u2026'"
+        ],
+        "checks_passed": 4,
+        "checks_total": 5,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-26-netherby-clinic in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 208 chars: 'Vaccination clinics have relocated from Netherby Grange\u2026"
+      },
+      "id": "1a5006a1d24244959cf45aa36447102d",
+      "kind": "failure",
+      "run_id": "sum-26-netherby-clinic"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 26 words, 175 chars: 'Hollin Bridge repairs cost 152,000 pounds, not the 2019 est\u2026'"
+        ],
+        "checks_passed": 3,
+        "checks_total": 4,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-25-hollin-bridge in at most 25 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 26 words, 175 chars: 'Hollin Bridge repairs cost 152,000 pounds, not the 2019\u2026"
+      },
+      "id": "f5c7e71d19fe49a783e8bd1f067c586f",
+      "kind": "failure",
+      "run_id": "sum-25-hollin-bridge"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 210 chars: 'Marlowe Street closes to through traffic between the librar\u2026'"
+        ],
+        "checks_passed": 4,
+        "checks_total": 5,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-22-marlowe-street in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 210 chars: 'Marlowe Street closes to through traffic between the li\u2026"
+      },
+      "id": "db5c3594854446469280a80e3f7cfcfc",
+      "kind": "failure",
+      "run_id": "sum-22-marlowe-street"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-28-kellet-branch in at most 20 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "1ae88a9ce24147ac8b5090a304bbbd70",
+      "kind": "success",
+      "run_id": "sum-28-kellet-branch"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-27-sallow-vale in at most 22 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "e1a35e4425664227a78a3d29aa4d82fb",
+      "kind": "success",
+      "run_id": "sum-27-sallow-vale"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-26-netherby-clinic in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "a12599ae1ce1491697b8998c256cdf41",
+      "kind": "success",
+      "run_id": "sum-26-netherby-clinic"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-25-hollin-bridge in at most 25 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "21f6c3450caf46488e22a6bdfff31752",
+      "kind": "success",
+      "run_id": "sum-25-hollin-bridge"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-24-pellow-mill in at most 12 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "febbcc1ed11048ee98510e95da8db352",
+      "kind": "success",
+      "run_id": "sum-24-pellow-mill"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-23-cransley-cut in at most 25 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "297f12784ff9486c8b30fb025f0c9760",
+      "kind": "success",
+      "run_id": "sum-23-cransley-cut"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-22-marlowe-street in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "9048721bd12247d1aeb460d59010c275",
+      "kind": "success",
+      "run_id": "sum-22-marlowe-street"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-21-ardvey-ferry in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "1441623ffcb04e73a7de3867e0303b08",
+      "kind": "success",
+      "run_id": "sum-21-ardvey-ferry"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-12-bell-recast in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "ea1ae0d6957045b3b08af2a63def7a88",
+      "kind": "success",
+      "run_id": "sum-12-bell-recast"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-11-lantern-festival in at most 35 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "0674b5221a8a4a9aa6e86fa2c9e86b6f",
+      "kind": "success",
+      "run_id": "sum-11-lantern-festival"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-10-clay-pit in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "f99f68eeece5440b8885ee52cd16cb5e",
+      "kind": "success",
+      "run_id": "sum-10-clay-pit"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-09-choir-tour in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "c4d7bbc5fb9d46c38147d6e106cb9beb",
+      "kind": "success",
+      "run_id": "sum-09-choir-tour"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-08-glasshouse-tomatoes in at most 35 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "edee6e0faed14b92bfb781f84f8b9995",
+      "kind": "success",
+      "run_id": "sum-08-glasshouse-tomatoes"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-07-signal-box in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "1ffddc5b068f44a589447187826ca1a8",
+      "kind": "success",
+      "run_id": "sum-07-signal-box"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-06-weir-otters in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "4c626a6b2bcd42c0998fc79550784fb6",
+      "kind": "success",
+      "run_id": "sum-06-weir-otters"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-05-bramble-bakery in at most 35 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "3a1767f40b534c748eb61a1d36ea21eb",
+      "kind": "success",
+      "run_id": "sum-05-bramble-bakery"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-04-halden-reservoir in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "a275b2483721402b821e5983de652dbd",
+      "kind": "success",
+      "run_id": "sum-04-halden-reservoir"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-03-tidewell-library in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "6ca2566705c44ea79d1763c86c6387a8",
+      "kind": "success",
+      "run_id": "sum-03-tidewell-library"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-02-orchard-blight in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "cf506898fe1e4dee87b332654505831c",
+      "kind": "success",
+      "run_id": "sum-02-orchard-blight"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-01-kestrel-ferry in at most 35 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "4b613bbba0804130be140f801f536812",
+      "kind": "success",
+      "run_id": "sum-01-kestrel-ferry"
+    }
+  ],
+  "rows": [
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-01-kestrel-ferry",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-02-orchard-blight",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-03-tidewell-library",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-04-halden-reservoir",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-05-bramble-bakery",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-06-weir-otters",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-07-signal-box",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-08-glasshouse-tomatoes",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-09-choir-tour",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-10-clay-pit",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-11-lantern-festival",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-12-bell-recast",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-21-ardvey-ferry",
+      "score": 1.0
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 210 chars: 'Marlowe Street closes to through traffic between the librar\u2026'"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-22-marlowe-street",
+      "score": 0.8
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-23-cransley-cut",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-24-pellow-mill",
+      "score": 1.0
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 26 words, 175 chars: 'Hollin Bridge repairs cost 152,000 pounds, not the 2019 est\u2026'"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-25-hollin-bridge",
+      "score": 0.75
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 208 chars: 'Vaccination clinics have relocated from Netherby Grange to \u2026'"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-26-netherby-clinic",
+      "score": 0.8
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-27-sallow-vale",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-28-kellet-branch",
+      "score": 1.0
+    }
+  ],
+  "scenarios": 20
+}
