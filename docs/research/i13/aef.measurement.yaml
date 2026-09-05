@@ -1,0 +1,26 @@
+# S2 / I13 measurement config: the live noise floor of the summary agent.
+# claude_code provider = the session's own login, no API key (ADR 0112/0150).
+extends: _base
+
+model_provider:
+  impl: claude_code
+  model: claude-opus-5
+  fallback: []
+
+memory:
+  impl: in_memory
+
+evaluator:
+  suites: []
+
+tools:
+  allow: []
+
+policies:
+  require_hitl_above_risk: 0.0
+  forbid: []
+
+objectives: "Summarise a short passage within a word cap, mentioning every required term."
+
+evolution:
+  enabled: false

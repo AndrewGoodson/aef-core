@@ -2007,3 +2007,110 @@ generated graph does not have, and it is not claimed as closed. Whether any
 existing baseline anywhere already holds a link target, or any existing corpus
 holds a policy-denied recording, is **not measured** and nothing detects
 either retroactively. Every fixture here was authored by this programme.
+
+---
+
+## S2 / I13 — the live noise floor, and a planted regression that hides under it (ADR 0156)
+
+**Model: `claude-opus-5` (`claude-opus-5[1m]`), 2026-09-04.** ADR 0123's
+cassette was recorded on `claude-fable-5-1`; the incumbent arm was
+re-measured live on Opus rather than compared across models.
+
+**Preflight.** ADR 0150's corrected argv: `is_error false`, `result "OK"`,
+`usage.input_tokens 2` (+3,334 cache-creation). Quota available — the first
+live increment since the exhaustion that stopped I12/I13/I14.
+
+**Two defects had to be closed before any number existed.**
+
+- **D1 — `--cassette-miss live` on the incumbent makes zero live calls.**
+  Run as `TO_90_LOOP.md` §I13 writes it, the unchanged prompt reproduces the
+  recorded request byte-for-byte, `CassetteProvider` serves the hit, and the
+  report reads `6 cassette hit(s), 0 miss(es)` with `repeat_spread
+  0.000000`. The 18-call budget buys nothing. A defect in the increment's
+  specification, not the code — and the premise DOES hold for M2/M5, where
+  the prompt is changed and therefore misses.
+- **D2 — the corpus's word cap is a ReDoS, and it is what stopped I11.**
+  Every summary scenario checks `^(?:\s*\S+){1,N}\s*$` and
+  `checks.py::_holds` calls `re.search` with no timeout. A match
+  short-circuits in **0.05 ms**; a failure must exhaust every way of cutting
+  the string into ≤ N non-space runs and **does not terminate**. Measured:
+  the fable recording's 35-word answer matches in 0.05 ms, an Opus 36-word
+  answer does not terminate in 20 s. Every recorded cassette sits at or under
+  the cap, so the branch is unreachable from every green test in the repo and
+  reachable from every live gate pass. I11's three ten-minute walls were
+  attributed to a throttle because nothing reports where a score spends its
+  time.
+
+Both files are outside this worker's list, so both are **reported, not
+fixed**. Both arms score a scratch corpus copy with the six validation
+cassettes emptied (forcing live) and the cap rewritten to the linear
+equivalent `^\s*\S+(?:\s+\S+){0,N-1}\s*$` — the same predicate, proved by
+4,000 generated strings per cap AND by the entire replayed metric coming back
+byte-identical to ADR 0123 (train 0.9792, validation 0.9167, every
+per-scenario score including all three 0.75s).
+
+**The floor.** Six validation scenarios, one repeat per invocation, three
+invocations, foreground, `0 hits / 6 misses / on_miss=live` every time:
+
+| repeat | mean | stdev | cost |
+|---|---|---|---|
+| 1 | 0.8333 | 0.2041 | 462 |
+| 2 | 0.7917 | 0.1882 | 468 |
+| 3 | 0.6667 | 0.3764 | 370 |
+
+> **floor (Opus, 2026-09-04): mean 0.7639, spread 0.1666 over 3 repeats of 6 scenarios**
+
+This is the bar M4/M5/M6 use for prompt candidates.
+
+**The planted regression** (must-mention instruction removed from
+`draft_prompt`): 0.7083 / 0.7500 / 0.7500, mean **0.7361**.
+
+**Fall 0.0278 against a floor spread of 0.1666** — 0.32 of one stdev, every
+repeat overlapping. **The falsification stated before the run fired:
+dimension 1 does not move. It stays 19/20.** No rubric row is prepended,
+because none was earned.
+
+Two things that verdict does not say. The replayed path detects this exact
+regression perfectly (ADR 0123: 0.0000, 36 misses, no live call) — it is the
+live path that is blind. And the instruction is load-bearing per scenario:
+`sum-17` and `sum-18` fell in 3 of 3 repeats while `sum-16` rose in 2, so a
+paired sign test would flag what the mean cannot. Offered to the S-thread
+with the data; not made here.
+
+Repeat 3's `sum-13: 0.00` was attributed with **no live call** — a raising
+provider and an empty-string provider both give exactly `score 0.0000,
+cost_tokens 0`, and that repeat's split cost is 370 against ~465, one call's
+worth missing. So roughly a third of the floor's spread is transient
+live-call failure, which a real gate pass will also meet.
+
+**Two further defects reported, not fixed.** `aef loop score --json` cannot
+distinguish "the provider died" from "the answer was wrong" — it emits
+neither the `failure` string nor the check failures `run_scenario` already
+computes, so the above had to be inferred from token accounting. And
+`ClaudeCodeProvider` attributes the answer with `next(iter(modelUsage))`:
+a call issued with `--model claude-opus-5` returns
+`CompletionResult.model == "claude-haiku-4-5-20251001"` on this machine,
+which is what `Provenance.model` records and what a future recording would
+pin. Dictionary insertion order is not a model attribution.
+
+**Calls: 41.** 1 preflight, 4 diagnostic (reproducing D1/D2), 36
+measurement — the measurement budget was 36 and 36 were spent on it; the
+four diagnostic calls are over budget and are reported rather than folded in.
+
+**Restore proof.** `agents/summary/graph.py` backed up before the edit,
+restored from that backup, `shasum -a 256` equal
+(`5d915909…fede885`) and `git diff --exit-code agents/summary/graph.py`
+exit 0.
+
+**Green bar.** `pytest -q` 1999 passed, 3 skipped. `mypy aef examples` 129
+files clean. `ruff check .` clean. `ruff format --check aef tests examples`
+242 formatted. **No rubric score moves.** No code under `aef/` or `agents/`
+changed — the only mutation was the planted regression, reverted.
+
+**Deliberately left.** The rubric's dimension-1 row still reads "the live
+noise floor did not get measured"; the floor now exists, and the detection
+does not. The row's score is unchanged at 19/20 and the orchestrator may
+refresh its text without changing the total. Neither D1's specification nor
+D2's ReDoS is fixed here — D2 in particular blocks every live measurement in
+this repo until `checks.py` bounds its matcher or the corpus loses its
+nested quantifier, and either alone closes it.
