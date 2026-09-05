@@ -110,7 +110,14 @@ class CompletionRequest:
     metadata: dict[str, str] = field(default_factory=dict)
 
 
-MODEL_ATTRIBUTION_VALUES: tuple[str, ...] = ("requested", "alias", "sole", "heuristic", "unknown")
+MODEL_ATTRIBUTION_VALUES: tuple[str, ...] = (
+    "requested",
+    "alias",
+    "sole",
+    "usage_match",
+    "heuristic",
+    "unknown",
+)
 """How confident `CompletionResult.model` is, in descending order.
 
 - `requested` — the backend reported usage under exactly the name asked for.
@@ -118,6 +125,9 @@ MODEL_ATTRIBUTION_VALUES: tuple[str, ...] = ("requested", "alias", "sole", "heur
   `claude-opus-5-20260101`).
 - `sole` — the backend reported one model and there was nothing to confuse it
   with.
+- `usage_match` — several models were billed, none matched the requested
+  name, and exactly one row's token counts equal the payload's top-level
+  `usage` — which is the answering call's own usage. Deterministic.
 - `heuristic` — **a guess.** Several models were billed, none matched a
   requested name (usually because none was requested), and the name was
   picked by output volume. Measured wrong 1 time in 36 (ADR 0169): a judge

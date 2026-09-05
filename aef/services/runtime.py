@@ -112,7 +112,11 @@ def agent_services(
             )
         from aef.reasoning.llm_reflection import LLMCritic, LLMJudge
 
-        model = reflection_model or ""
+        # The provider's default is the name the CLI is asked for when the
+        # request carries none; passing it here means a judge call is
+        # attributed by the `requested` rule instead of a heuristic (ADR 0169
+        # found every judge call on the heuristic path for this reason).
+        model = reflection_model or getattr(model_provider, "default_model", None) or ""
         critic = LLMCritic(provider=model_provider, model=model)
         judge = LLMJudge(provider=model_provider, model=model, rubric=rubric)
     elif reflection != "rule_based":
