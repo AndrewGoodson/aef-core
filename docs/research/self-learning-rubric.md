@@ -19,7 +19,13 @@ A self-graded number is exactly the failure the trust case warns about.
 | 7 | Real-signal ingestion | 10 | Learns from live runs and real tenants, not a synthetic corpus; telemetry closes the loop | Arize "closing the loop"; Live-SWE-agent (on-the-fly) |
 | 8 | Adoptability / harness-native | 5 | Drops into a repo whose agents are coding-agent sessions; no key; cross-tool | — |
 
-## Current — 2026-09-04 after J0 — **69 / 100**
+## Current — 2026-09-04, J0's base (ADR 0151) plus increments measured since — **69 / 100**
+
+*The base is J0's independent score (68, ADR 0151). Every row above J0's is a
+self-graded increment measured after it — each names its ADR and the artifact,
+and each is exactly the kind of row a future J0 should re-check. A heading that
+said "after J0" over a table containing such rows was mislabelled (second seam
+hunt, S2).*
 
 *Corrected 2026-09-04 (ADR 0127): every total in this file up to and
 including this one was carried forward by hand as `previous + delta` and
