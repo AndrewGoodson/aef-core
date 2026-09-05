@@ -5588,3 +5588,112 @@ after, nothing restored with `git checkout --`.
 Green bar: `pytest -q` **2746 passed, 7 skipped, 1 xfailed** (2720 before,
 +26); `mypy aef examples` clean on 135 files; `ruff check .` clean;
 `ruff format --check aef tests examples` clean on 282 files.
+
+## S1c — the lesson was fresh, it carried no quotation, and the layer paid (ADR 0184)
+
+**Model: `claude-opus-5[1m]`**, the session default; `--model` deliberately
+absent from the argv, the answering model read back from `modelUsage` and
+`claude-opus-5[1m]` for **102 of 102** arm calls. **103 live calls of a 110
+budget** (1 preflight + 102 arms). Preflight green: `rc 0`, `result 'OK'`,
+`input_tokens 2`.
+
+**Dimension 2 moves 12 → 14, heading 72 → 74.** ADR 0175's falsification —
+*(c) ≤ (b)* — did **not** fire this time, and the difference is not the layer:
+it is the two defects ADR 0180 removed from underneath it.
+
+**What changed since S1b**, all three of the things ADR 0175's own last section
+asked for:
+
+1. **The excerpt is gone.** S1b's lesson read *"observed 31 words, 208 chars:
+   'Vaccination clinics have relocated from Netherby Grange…'"* — an example of
+   an over-long summary inside a lesson telling the model to be shorter, and ADR
+   0162 measured that shape making two at-cap runs LONGER. Checked twice here:
+   `seed.py::assert_no_excerpt` finds **0** twelve-character windows of any train
+   run's output in any of the 23 records, and `leak_check.py` finds **0** in any
+   of the **85 live lesson blocks** across five arm-repeats. *The first version
+   of that detector was wrong and it is recorded rather than quietly fixed*: it
+   scanned the whole prompt and reported 28 leaks in arm (a) — the arm with no
+   retrieve node — because a summary and the next passage share
+   `' for the first time '`. A detector that fires where there is no channel is
+   measuring the language.
+2. **The producer is on the scored split** (ADR 0180's `record_check_outcomes`,
+   the block `run_scenario(..., memory=…)` now runs). S1b's arm (c) wrote
+   `"failures": {}`. Here the entry is **rank 0 at scenario 1 and rank 0 at
+   scenario 17** — S1b's walked 0 → 25–39 — and reaches the model in **15 of 17**
+   prompts against S1b's 10. `runs_since_last_seen` climbs while the model
+   succeeds and resets the moment a scored run reproduces the cap failure.
+3. **Repeats**, paid for by cutting arm (d) on S1b's proof that it sends arm
+   (c)'s prompts byte for byte.
+
+**The arms** (17 validation scenarios, 4 owner-check negatives):
+
+| arm | repeats | mean | spread | negatives | neg spread | prompt hashes |
+|---|---|---|---|---|---|---|
+| (a) no retrieve | 1 | 0.9176 | – | 0.8500 | – | `5956e7ff…` (= S1b's) |
+| (b) raw records | 3 | **0.9059** | **0.0353** | 0.8333 | 0.0500 | `c6873a50…` ×3 (= S1b's) |
+| (c) + knowledge @ 3.0 | 2 | **0.9588** | 0.0118 | 0.9250 | 0.0500 | 2 distinct |
+
+(a) and (b) reproduce S1b's prompt hashes byte for byte, which is what makes the
+two nights a comparison. **(b)'s three repeats are byte-identical prompts**, so
+its 0.0353 is a true same-prompt live variance on the full split — with **9 of
+17 scenarios changing score** behind it, which is the useful shape: scenarios are
+noisy, the mean of seventeen is not. (c)'s two repeats are *not* a same-prompt
+sample, and that is a consequence of the fix: once the producer is on the split,
+what the model is shown depends on what the model previously said.
+
+**The pre-registered rule, evaluated by script:**
+
+```
+(c) − (b) on the mean       = +0.0529
+larger repeat spread        =  0.0353
+(c) − (b) on the negatives  = +0.0917
+larger negatives spread     =  0.0500
+BRANCH: 12 -> 14
+```
+
+**The third (b) repeat was added after seeing the first two** — two repeats had
+returned *identical* means (0.8941, 0.8941), a 0.0000 spread that is not a
+credible noise estimate from n=2 — and it is recorded because a post-hoc repeat
+is the shape of optional stopping. It cannot have been chosen to pass: it moved
+(b)'s mean **up** (delta +0.0647 → +0.0529) and widened the bar thirty-fold
+(0.0000 → 0.0353). Both against the claim; the claim survived both. No budget
+remained for a symmetric third (c).
+
+**Stated against the claim**: the delta does **not** clear S1b's 0.0857
+same-prompt band. That band was a 7-scenario mean's spread and this is a
+17-scenario mean's, measured here at 0.0353 — the ADR says which instrument it
+uses and why, and says that under S1b's the dimension does not move.
+
+**`knowledge_boost` stays 0.0 and no `aef/` file was touched.** The knob was
+never varied live — both (c) repeats ran at 3.0, because the offline sweep says
+the shipped default puts the entry at rank 20–23 of 24 and in **0/17** prompts,
+and a freshness-pinned upper bound says even a perfect producer reaches the
+top-5 in only 2/17 there. So what is measured is *the layer at 3.0 vs no layer*,
+not the coefficient. The knob's own A/B ((c)@0.0 vs (c)@3.0, 34 calls) has never
+been run in this programme, and **`knowledge_boost` cannot be set from `aef.yaml`
+at all** — `ContextConfig` carries `impl` and `token_budget`, `build_retriever`
+passes neither it, `staleness_half_life` nor `knowledge_min_occurrences`. Two of
+those three have defaults set by measurement that no adopter can act on.
+
+**Reported, not fixed** (five findings, ADR 0184): freshness is computed from
+*recorded* time, so the producing run counts against its own lesson
+(`runs_since_last_seen` floors at 1) **and six of the seventeen scored scenarios
+are timestamped before the seed's failures and can never refresh a lesson at
+all**; the three retriever knobs are unreachable from config; `run_scenario`'s
+`memory=` is a sink only, so `aef loop score --memory` gets the producer and
+never the retrieval it feeds; a graph's `consolidate` node runs before the
+check-failure record exists, so a real scored split's lessons are one scenario
+staler than they need to be; and `render_retrieved_context(max_items=5)` is
+still the real budget while `context_budget_tokens` admits 24–47 chunks and
+binds on nothing.
+
+**Green bar:** `pytest -q` **2720 passed, 7 skipped, 1 xfailed**; `mypy aef
+examples` clean (135 files); `ruff check .` clean; `ruff format --check aef
+tests examples docs/research/i12c` 286 files formatted. No test added or
+changed and no file under `aef/` touched — this worker measured; it shipped no
+behaviour. (An earlier run of the suite showed 30 failures, all
+`No such file or directory: 'python'` from sandbox subprocesses, because the
+invocation omitted the venv from `PATH`; re-running with the prefix the loop
+specifies is green. It was checked against a clean `git archive c2ae339` export
+first, which failed the identical 30 — the right answer for the wrong reason,
+and the reason is recorded so nobody reports an environment as a defect.)
