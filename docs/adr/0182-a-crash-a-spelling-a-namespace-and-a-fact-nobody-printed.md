@@ -8,6 +8,16 @@ over from another worker's "still open" or "defects outside my files": ADR
 (K3-3), ADR 0179's *Open and named* (K3-4), and one handed over mid-wave by
 the coordinator after ADR 0180's S1b (K3-5).
 
+> **Erratum (ADR 0191, F2).** K3-2's split of `graph_id` from
+> `evidence_graph_id` is right and stands, and `_build_proposer` passes
+> `config.evidence_id` to `RuleBasedPromptProposer` exactly as described. But
+> that was the ONLY proposer it reached: the default `RuleBasedProposer()` is
+> constructed with no graph id, and `MemoryEvidence.from_store` filtered only
+> validation and holdout run ids. On a two-graph corpus `--graph-id
+> demo_agent` therefore grounded a change to `agents/demo/graph.py` in three
+> `summary_agent` records (reproduced). The filter is now applied on
+> `MemoryEvidence.from_store` — one place, every proposer.
+
 Model: **`claude-opus-5[1m]`** (session default). **ZERO live model calls** —
 every reproduction below runs a local stub provider, a graph whose model path
 is never taken, or reads a directory. **No rubric dimension moves.**

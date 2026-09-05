@@ -70,7 +70,7 @@ from aef.harness.proposer import Proposal
 from aef.harness.review import Decision, Disposition, decide, render_report
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy, with_harness_login
 from aef.harness.suite import CohortBuilder
-from aef.harness.zones import DEFAULT_AGENT_PATH, ZonePolicy
+from aef.harness.zones import DEFAULT_AGENT_PATH, DEFAULT_AGENT_ROOT, ZonePolicy
 from aef.observability.base import Tracer
 from aef.providers.base import ModelProvider
 from aef.security.tool import PolicyConfig
@@ -566,6 +566,43 @@ def _policy_from_base_ref(config: LoopConfig) -> PolicyConfig | None:
     return build_policy_config(agent_config.tools, agent_config.policies)
 
 
+class AgentSourceMissingError(Exception):
+    """`--agent-path` names a file that is not in the base ref.
+
+    Not a `PolicyConfigError`, for `LiveGatingWithoutConfigError`'s reason:
+    the rules were read fine, the INVOCATION points at nothing. `EXIT_ERROR`.
+    """
+
+
+class LiveGatingWithoutConfigError(Exception):
+    """`--cassette-miss live` was asked for and NO config says which provider.
+
+    Deliberately **not** a `PolicyConfigError`, unlike its sibling below.
+    That class means "the rules could not be read", which every CLI command
+    reports as `EXIT_REJECTED` — a verdict on a candidate. This is a fault in
+    the INVOCATION: nobody typed `--config`, so there is nothing to build a
+    provider from, and reporting it as a rejection is what makes CI retry it
+    forever (ADR 0075's rule, ADR 0167's exit code). It reaches `EXIT_ERROR`.
+
+    Reproduced (ADR 0191's F1). `_live_provider_from_base_ref` returned
+    `None` for a missing config BEFORE reading the opt-in, so live mode ran
+    with no provider at all. Every scenario then failed with
+
+        ModelProviderError: cassette miss (...) and no live provider to fall
+        through to
+
+    which names a `ModelProviderError`, so ADR 0185's `is_dead_call` — gated
+    only on the mode string — classified **every scenario in the corpus** as a
+    dead call. Each was retried (the whole corpus ran twice), and up to 25% of
+    them were then EXCLUDED from G3 rather than scored 0: the identical
+    per-scenario numbers give `G3 FAIL — 1 previously-passing scenario(s) now
+    score below 0.5` when counted and `G3 PASS — candidate mean 1 beats the
+    control cohort's p95 of 0.9429` when excluded. Above the refusal floor G3
+    refused with "the model was not answering" when the truth was "you omitted
+    --config". Throughout, the ledger recorded `live_model_calls: false`.
+    """
+
+
 class LiveGatingDisabledError(PolicyConfigError):
     """`--cassette-miss live` was asked for and the repo has not opted in.
 
@@ -605,7 +642,22 @@ def _live_provider_from_base_ref(config: LoopConfig) -> dict[str, Any] | None:
         return None
     agent_config = _agent_config_from_base_ref(config)
     if agent_config is None:
-        return None
+        # NOT `return None`. That was the hole (ADR 0191's F1): live mode with
+        # no provider is not "live gating off", it is a run in which every
+        # model call is guaranteed to fail, and ADR 0185 then classifies every
+        # one of those failures as a dead call and excludes it. Refused HERE
+        # rather than in the CLI so that every caller gets it — the library
+        # entry points (`gate`, `cycle`, `run`) as well as the four commands.
+        raise LiveGatingWithoutConfigError(
+            "--cassette-miss live needs a --config: there is no aef.yaml for the gate to read "
+            f"model_provider from at {config.base_ref!r}, so no provider can be built and "
+            "EVERY model call the corpus makes would miss with 'no live provider to fall "
+            "through to'. Those misses name a ModelProviderError, so each one classifies as a "
+            "dead call, is retried once, and is then EXCLUDED from G3 — a run in which the "
+            "model was never reached would read as a run the model answered. Pass --config "
+            "<path to aef.yaml, relative to the repository root> with gates.live_model_calls: "
+            "true, or drop --cassette-miss live and score from the recorded cassettes."
+        )
     if not agent_config.gates.live_model_calls:
         raise LiveGatingDisabledError(
             f"live gating is off in {config.config_path or 'aef.yaml'}; a prompt candidate "
@@ -1537,15 +1589,40 @@ def cycle(
 
     from aef.harness.proposer import MemoryEvidence
 
-    evidence = MemoryEvidence.from_store(memory, config.corpus)
+    # `graph_id=config.evidence_id` — the filter is applied ONCE, here, where
+    # the evidence is assembled, and therefore for every proposer. It used to
+    # be `RuleBasedPromptProposer`'s alone, so `--graph-id demo_agent` with
+    # the default `rule_based` proposer grounded a change to
+    # `agents/demo/graph.py` in three `summary_agent` records (reproduced,
+    # ADR 0191's F2). `evidence_id`, not `graph_id`, for ADR 0182's reason:
+    # this is the `Graph.id` namespace, not the archive key.
+    evidence = MemoryEvidence.from_store(memory, config.corpus, graph_id=config.evidence_id)
     if evidence.excluded:
         lines.append(
             f"{len(evidence.excluded)} memory record(s) excluded as validation/holdout-derived"
         )
+    if evidence.foreign:
+        lines.append(
+            f"{len(evidence.foreign)} memory record(s) excluded as belonging to a graph other "
+            f"than {config.evidence_id!r}"
+        )
     if not evidence.records:
         # The proposer does not speculate. No recorded failures means no
         # hypothesis, which is a legitimate outcome and not an error.
-        lines.append("no admissible failure memory: no candidate this cycle")
+        #
+        # WHICH emptiness, when the answer is known: an operator whose store
+        # is full and whose cycle proposes nothing needs to be told that the
+        # records were another graph's, or the remedy ("record failures") is
+        # the opposite of the right one ("point --graph-id at the graph those
+        # runs came from"). `cmd_cycle` journals `lines[-1]` as the verdict,
+        # so it has to be on THIS line and not a note above it (ADR 0165).
+        detail = (
+            f": all {len(evidence.foreign)} record(s) came from scenarios of another graph, "
+            f"not {config.evidence_id!r}"
+            if evidence.foreign
+            else ""
+        )
+        lines.append(f"no admissible failure memory{detail}: no candidate this cycle")
         return CycleRun(harvested=harvested, lines=tuple(lines))
 
     # The BASE REF's source, not the working tree's. The candidate branch is
@@ -1560,12 +1637,30 @@ def cycle(
     # here can only mean the FILE is missing at it — which is what the
     # sentence says. Asserted rather than assumed, because the two questions
     # collapsing into this one line is exactly F-M8-1 (ADR 0187 / 0189).
+    # And a REFUSAL, not a verdict. ADR 0189 got the sentence right and left
+    # the disposition wrong: a ref that exists without the file in it is a
+    # configuration error — `--agent-path` names something that is not there —
+    # and returning `no candidate` at exit 0 makes it indistinguishable from
+    # the honest "nothing to propose". This repo's OWN nightly cycle was in
+    # exactly that state: `DEFAULT_AGENT_PATH` is `agents/migrated/graph.py`,
+    # which is what `aef migrate` writes into an ADOPTING repo (ADR 0149) and
+    # which aef-core does not have; the workflow passed no `--agent-path`; and
+    # with a non-empty memory the cycle printed
+    #
+    #     no agent source at agents/migrated/graph.py in main
+    #     (the ref exists; the file is not in it): no candidate
+    #
+    # and exited 0, one line further down the same road ADR 0188 walked
+    # (reproduced, ADR 0191's F6). The workflow now passes
+    # `--agent-path agents/demo/graph.py`; this makes the state that produced
+    # that line impossible to mistake for health from any caller.
     if not config.repo.path_exists_at(config.base_ref, agent_path):
-        lines.append(
-            f"no agent source at {agent_path} in {config.base_ref} "
-            f"(the ref exists; the file is not in it): no candidate"
+        raise AgentSourceMissingError(
+            f"no agent source at {agent_path} in {config.base_ref} (the ref exists; the file "
+            f"is not in it), so there is nothing for the proposer to edit. This is the "
+            f"invocation, not a verdict: pass --agent-path naming a graph that exists at "
+            f"{config.base_ref}." + _graph_files_at(config, agent_path)
         )
-        return CycleRun(harvested=harvested, lines=tuple(lines))
 
     source = config.repo.show(config.base_ref, agent_path)
     proposer = _build_proposer(config)
@@ -1641,6 +1736,26 @@ def _proposer_calls(proposer: Any) -> int:
     spend = getattr(proposer, "spend", None)
     calls = getattr(spend, "calls", 0)
     return int(calls) if isinstance(calls, int) else 0
+
+
+def _graph_files_at(config: LoopConfig, missing: str) -> str:
+    """ " Try these:" plus the graph files that DO exist at the base ref.
+
+    Read from the ref with `git ls-tree`, never from the working tree, for
+    the same reason every other question this function's caller asks is: the
+    candidate is built from the ref, so the ref is what an operator has to
+    point `--agent-path` into. Silent when there is nothing to suggest —
+    a list of nothing is worse than no list.
+    """
+    root = config.zone_policy.agent_root or DEFAULT_AGENT_ROOT
+    found = sorted(
+        p
+        for p in config.repo.list_tree(config.base_ref, root)
+        if p.endswith(".py") and p != missing
+    )
+    if not found:
+        return f" Nothing under {root}/ at {config.base_ref} is a Python file."
+    return f" Python files under {root}/ at {config.base_ref}: {', '.join(found)}."
 
 
 def _no_proposal_reason(proposer: Any, evidence: Any, agent_path: str, source: str) -> str:

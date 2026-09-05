@@ -8,6 +8,16 @@ over from another worker's "defects outside my files": ADR 0174's 1, 3 and 4
 **ZERO live model calls** — every reproduction here runs a graph whose model
 path is never taken, or reads a directory. **No rubric dimension moves.**
 
+> **Erratum (ADR 0191, F2).** The two spellings of "which graph" are right and
+> stand. What did not hold is the flag's reach: `--graph-id` restricted the
+> evidence for `RuleBasedPromptProposer` only. The default `RuleBasedProposer`
+> was constructed with no graph id and `MemoryEvidence.from_store` filtered
+> only validation and holdout run ids, so on this repo's two-graph corpus
+> `aef loop cycle --graph-id demo_agent` proposed a change to
+> `agents/demo/graph.py` grounded in three `summary_agent` records
+> (reproduced). The filter now lives on `MemoryEvidence.from_store`, applied
+> once where the evidence is assembled, so every proposer goes through it.
+
 Every one of the four was reproduced by RUNNING a command before anything
 changed. The four commands and their real output are below, verbatim, paths
 elided only where a `tmp` prefix would fill the page.

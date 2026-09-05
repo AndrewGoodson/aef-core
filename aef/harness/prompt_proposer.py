@@ -156,6 +156,14 @@ class RuleBasedPromptProposer:
     # another graph's scenario, and admit a run id the corpus has never heard
     # of, because that is production experience and it is exactly what this
     # exists to learn from.
+    #
+    # Since ADR 0191 the AUTHORITATIVE application of that rule is
+    # `MemoryEvidence.from_store(..., graph_id=...)`, so that every proposer
+    # gets it and not just this one — being this proposer's private filter
+    # was the defect. Kept here because a caller that builds a
+    # `MemoryEvidence` by hand (the tests, and any direct library use) never
+    # goes through `from_store`, and the filter is idempotent: applying it to
+    # already-filtered records drops nothing.
     graph_id: str | None = None
     corpus: Corpus | None = None
     max_bullet_chars: int = MAX_BULLET_CHARS

@@ -8,6 +8,18 @@ threshold is lowered.** The p95 rule, the cohort size, the zero-tolerance
 rule, the cost ratio and the prose cohort's every constant (ADR 0170) are
 byte-for-byte what they were.
 
+> **Two errata, both from ADR 0191.** (1) `is_dead_call`'s second condition
+> below is gated on the MODE STRING alone, and a mode string is a request
+> rather than a fact: `--cassette-miss live` with no `--config` builds no
+> provider, so every cassette miss raised `ModelProviderError: ... no live
+> provider to fall through to` and **every scenario in the corpus** was
+> classified dead, retried, and excluded from G3 — reproduced, with the same
+> numbers giving `G3 FAIL` counted and `G3 PASS` excluded. The classifier now
+> takes `live_provider_present` as a third condition and the unconfigured live
+> run is refused before it starts. (2) Consequence 3's cost bound is per
+> scenario execution, not per call — see the erratum on it below. Neither
+> correction lowers a threshold.
+
 Nothing here was measured with a live model call. Every number is either
 ADR 0156's committed output (`docs/research/i13/*.json`) or a stub provider —
 `impl: command` pointed at a shell script that exits non-zero on chosen
@@ -328,6 +340,18 @@ by ADR 0166; its third finding, `answered_by = next(iter(model_usage))`, by ADR
 3. **The retry costs at most one extra call per dead scenario**, and the
    evidence says when it was spent. On the six-scenario corpus the worst case a
    pass can reach before refusing is 6 + 1 extra calls per arm.
+
+   > **Erratum (ADR 0191, F7).** Wrong as written. The retry re-runs the whole
+   > SCENARIO, and a scenario costs as many calls as its graph makes.
+   > Reproduced on a two-call graph whose provider dies on its fourth
+   > invocation: a clean two-scenario run costs 4 calls, the run with one death
+   > cost **6** — two extra calls for one dead scenario. The true bound is
+   > **one extra scenario EXECUTION**: up to K extra calls for a K-call
+   > scenario, and at worst one extra full corpus pass per arm. Still bounded,
+   > which is what the retry needed to be; just not this number. The
+   > six-scenario figure above holds only because that corpus's graphs make one
+   > call each. `test_the_retry_costs_one_extra_SCENARIO_not_one_extra_CALL`
+   > pins the correction.
 4. **The residual is stated:** a candidate can still kill up to a quarter of the
    corpus and have those scenarios excluded rather than counted against it. On
    six scenarios that is one. More scenarios is the fix, as it was for the
