@@ -3472,3 +3472,104 @@ test file and it blocked the bar.
 examples` clean on 132 files; `ruff check .` clean; `ruff format --check` 257
 files formatted. 5 mutations against the new test, 5 caught, every restore
 proved by sha256. 54 live calls of 70.
+
+
+## M4c — the gates could not judge a prompt (ADR 0170)
+
+ADR 0157 shipped a proposer that writes a prompt candidate and stated its own
+limit: **the gates could reject one and never accept one.** Three defects, all
+reproduced offline by running before anything was changed, **zero live model
+calls**.
+
+**D1 — two gates, one scratch directory.** `g1_builds.py:49` and
+`g2_outcome.py:111` both named `ctx.workdir / "workspace"`;
+`trust._prepare_empty_destination` refuses a non-empty destination. Every
+candidate that reached G2 without a precomputed cohort — which was every prompt
+candidate, since the cohort could not be built for one — was rejected by a gate
+that never judged it:
+
+```
+G1 pass  1 build command(s) succeeded against the merged workspace
+G2 fail  gate raised TrustBoundaryError: scratch destination …/work/workspace
+         must be empty. A gate that could not judge has not cleared this candidate.
+```
+
+Not prose-specific: two gates and a directory name. ADR 0148 met this message
+and reasonably read it as a red herring. Fixed with a directory per gate —
+**not** by having G2 reuse G1's tree, because G1 has just run build commands in
+its copy and the emptiness rule is what guarantees a gate runs against base-ref
++ Zone A overlay and nothing else. The regression test asserts the property,
+not the name: a build command that writes `artefact.txt` leaves it in
+`workspace-G1` and not in `workspace-G2`.
+
+**D2 — no null hypothesis for prose.** `ControlCohortGenerator` mutates
+module-level numeric constants; a `.md` has none, so `CohortBuilder` raised and
+G3 refused. This is **ADR 0139's requirement 2 arriving from a third
+direction** — 0139 measured it on the proposer, ADR 0148 re-measured it as the
+cohort's, and here it is the cohort's again and finally answered.
+`ProseControlCohortGenerator` builds the real null: N placebo bullets in the
+same section at the same insertion point, **matched to the treatment's token
+count**, drawn from a task-neutral vocabulary, seeded from `cohort_seed` and
+the candidate's SHA-256 so the threshold can be re-derived. A member is the
+candidate with the bullet's *text* substituted, so the only variable between
+the arms is the words.
+
+Three alternatives argued and rejected: another graph's lesson (it *was*
+reasoned about, so it is not what "changes that were not reasoned about"
+score); the word-shuffle (it preserves every content word, and ADR 0157 showed
+the active ingredient is a literal token — that is the leak shape, not a
+control); deleting the bullet (the incumbent, zero variance, p95 collapses onto
+it and "beats the cohort" degenerates into "beats the incumbent").
+`ProseCohortLeakError` refuses any placebo sharing a content word with the
+treatment — the mutation the brief named kills 13 tests.
+
+**Stated rather than discovered**: the placebo controls for a bullet's
+presence, shape, position and length, **not for the plausibility of its
+content**. A plausible-but-wrong null needs a model, and `gates/base.py`
+requires every gate to be deterministic — so that stronger control is forbidden
+by the gate contract, not merely unbuilt.
+
+**D3 (0157's defect 5) — a spent call nobody counted.** `--proposer llm`
+against a `.md` spends one call, the reply fails `ast.parse`, the rule-based
+fallback has no constant to edit, and the rejection vanished with the rationale
+it lived in. Not in the summary, not in the ledger (a cycle that proposes
+nothing writes none), not in `cycles.jsonl`. `ProposerSpend` counts **attempts**
+— incremented before the provider returns, because a request that errors after
+it left has still been spent — and the note is appended to the line
+`cmd_cycle` journals, so it reaches `cycles.jsonl` with `aef/cli/` untouched.
+
+**Both verdicts, offline.** `tests/harness/test_prose_gate_path.py` runs the
+real six-gate pipeline on a prompt-file repo with cassettes:
+
+```
+G3 pass  candidate mean 1 beats the control cohort's p95 of 0.5
+         → escalate — every gate passed, but Tier-1 auto-merge is not enabled
+```
+
+and, on a fixture identical except that the **placebos** also produce the
+verdict line:
+
+```
+G3 fail  candidate does not beat the p95 of the random control cohort — this is
+         the null hypothesis, not an improvement
+         → reject
+```
+
+The second is the one that matters: a test demanding acceptance can be met by
+weakening G3, and this one can only be met by G3 still binding. **No threshold,
+no accept/reject rule, no `PolicyEngine`, and no existing test changed** — the
+one existing test that a refactor would have broken was kept green by keeping
+the materialisation loop in one place instead, which is what it exists to
+enforce.
+
+**Mutations: 11 perturbed, 11 killed**, each restored from a shasum-verified
+byte backup with the final hash asserted equal to the pre-edit hash.
+
+**Green bar.** `pytest -q` **2236 passed, 5 skipped**; collected **2205 → 2241
+(+36, none removed)**. `mypy aef examples` clean, 133 files. `ruff check .`
+clean. `ruff format --check aef tests examples` clean, 259 files.
+
+**No rubric score moves.** What would earn a dimension-2 point is an accept
+verdict on a prompt candidate scored **live**, against S2's noise floor (0.7639
+± 0.1666) — M5's and M6's evidence, not this worker's. The fixtures here are
+plumbing proofs and their own docstring says so.
