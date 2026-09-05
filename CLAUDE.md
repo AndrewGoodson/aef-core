@@ -56,8 +56,13 @@ claimed otherwise:**
   S2's measured noise floor (mean 0.7639, spread 0.1666 on Opus, ADR 0156).
   `tests/cli/test_prompt_repo_acceptance.py` runs the whole sequence —
   `adopt -> migrate -> bootstrap --memory -> bless -> doctor -> cycle` — and
-  ADR 0158 records what it measured, including the two defects that stop a
-  live gate pass today.
+  ADR 0158 records what it measured. **Scoring a prompt candidate live is a
+  per-repo opt-in**: `gates.live_model_calls: true` in `aef.yaml` (default
+  false, read from the base ref) is what lets the gates' sandbox worker
+  inherit your harness login, and therefore what lets a candidate's code
+  spend your quota — `--cassette-miss live` is refused by name without it,
+  and every `gated` ledger event records which passes ran with it (ADR
+  0181, closing 0158's two defects).
 
 Only five things are allowed to differ per agent: **Knowledge, Policies,
 Tools, Objectives, Evaluation Metrics** — see the prime directive below.
