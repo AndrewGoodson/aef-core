@@ -139,6 +139,78 @@ the one that most damages criterion 1.**
   A7 reach harness code through evaluator.suites          held
 ```
 
+**These attacks are now code.** `tests/adversarial/`, one module per attack,
+`pytest -m adversarial` or `tests/adversarial/redteam.sh` — see §2.0, which is
+first because it changes how the rest of this section should be read.
+
+### 2.0 The round is executable, not remembered
+
+Until ADR 0194 this section was **prose plus a grep**: a test asserted the
+document still contained the string `BROKE IT` twice, and a comment inside it
+mapped each attack to whichever test happened to exercise the same control. An
+independent reviewer, given the code and not this document, scored dimension 4
+down for exactly that (ADR 0188): *"adversarial rounds exist as a document I
+was not allowed to read, not as an executable red-team suite."*
+
+Each module now does three things, in order, and the third is the one that
+makes it a red team rather than a green bar:
+
+1. **Builds the hostile input** — the candidate, the tag, the manifest, the
+   diff, the config — rather than describing it.
+2. **Runs it through the real control**, imported from `aef/`, and asserts the
+   refusal.
+3. **Mutates the control away and asserts the attack then LANDS.** A test that
+   passes because the exploit was never viable looks, from outside, exactly
+   like a test that passes because the defence worked. Every module
+   distinguishes those two cases by removing its own defence in-process
+   (`monkeypatch`) and watching the attack succeed.
+
+The list of attacks below is checked against the suite by
+`tests/harness/test_trust_case.py`: every `A<n>` this document names must have
+a `tests/adversarial/test_a<n>_*.py`, and every module must correspond to an
+attack named here. **The document can no longer drift away from the round it
+reports** — which was the whole of what the grep test was trying, and failing,
+to buy.
+
+Eleven attacks were added at the same time, and ten of them are *better
+evidence than the original seven*, because each has a known-good exploit: they
+were found and reproduced on this system rather than imagined for this
+document.
+
+```
+  A8  escape Zone A with a symlink (bless side + gate side)   found, fixed
+  A9  a candidate whose diff leaves Zone A                    held
+  A10 inflate the drift budget with committed bytecode        found, fixed
+  A11 write outside the archive with a `../escape` graph id   found, fixed
+  A12 a reward hack: stop reading the inputs, report success  found, fixed
+  A13 a placebo carrying the treatment's own text             held
+  A14 kill the provider on the scenarios you lose             found, fixed
+  A15 a provider property recorded as the agent's failure     found, fixed
+  A16 a balanced marker pair in the adopter's own prose       found, fixed
+  A17 grant yourself the login in your own branch's aef.yaml  found, fixed
+  A18 delete the halt channel in your own branch's aef.yaml   held (new, 0195)
+```
+
+**Seven of those ten broke something.** That is not a better base rate than
+§2.5 reports; it is the same base rate, which is the point of recording it.
+
+A18 is the exception, and it is new rather than found: it is the attack the
+halt channel *creates*. Until ADR 0195 there was nothing to silence — `aef
+loop digest` printed `Halt channel configured: NO`, accurately, and a halt at
+3am wrote `HALT.md` into a checkout nobody was looking at. A channel makes the
+halt reach someone, and therefore makes "stop the halt reaching someone" a
+thing a candidate might want. It is read from the base ref for the same reason
+`gates.live_model_calls` is (A17): the halt most worth delivering is the one a
+candidate caused.
+
+Three limits of the suite, stated rather than left to be discovered. It is
+still written by the party that wrote the defences — §3 prices that in and no
+amount of automation removes it. A mutation shows a control is load-bearing
+against *the exploit that module builds*, not against every exploit of its
+class. And a control removed in-process is not the same as a control removed in
+a released build: `monkeypatch` proves the code path is reached and matters, it
+does not prove the deployment cannot be configured around it.
+
 ### 2.1 The shadow's containment — bypass found, then closed
 
 **A5 was a demonstrated bypass, not an argument.** A shadow node that opens a
