@@ -416,10 +416,12 @@ def render_aef_block_body(
         n = surface.agents
         prompt_line = (
             f"- **Your agents are prompt files** ({n} under `.claude/agents/`). There is no call "
-            f"site to convert: `aef migrate` registers each `.claude/agents/*.md` as its "
-            f"own graph at `{_PROMPT_AGENT_OUT_SHAPE}`, and the node runs that prompt as "
-            f"the system prompt of one harness model call. The prompt runs; the agent's "
-            f"tools do not.\n"
+            f"site to convert: `aef migrate` registers each `.claude/agents/**/*.md` as its "
+            f"own four-node graph at `{_PROMPT_AGENT_OUT_SHAPE}`, and the `prompt_agent` "
+            f"node runs that persona as one model call. The persona's `tools:` frontmatter "
+            f"is parsed, reported and never obeyed; what else the call may do is the "
+            f"provider's answer, differs per `model_provider.impl`, and every run records "
+            f'the one it got in `working_memory["prompt_agent__containment"]`.\n'
         )
     return f"""## AEF scaffold ({repo_name}) — generated section
 
@@ -937,14 +939,19 @@ def prompt_agent_checklist_item(agents: int) -> str:
     register."""
     count = f"{agents} prompt agent{'s' if agents != 1 else ''}" if agents else "your prompt agents"
     return (
-        f"Run `aef migrate --dir .` — it registers {count} (`.claude/agents/*.md`) as "
-        f"graphs, one graph per agent at `{_PROMPT_AGENT_OUT_SHAPE}` (the graph's `graph_id` "
-        f"is the agent's name), inside Zone A. There is no call site to convert: each node "
-        f"runs that agent's prompt as the system prompt of a single harness model call. The "
-        f"prompt runs; the agent's tools do not. NOTE which file the loop may then edit: the "
-        f"GRAPH is Zone A, the PERSONA `.md` is Zone C by default, so a candidate editing the "
-        f"prompt itself is rejected until you widen the agent root — `aef migrate --agent-root "
-        f"...` is opt-in per repo and its report says what that adds to the loop's blast radius."
+        f"Run `aef migrate --dir .` — it registers {count} (`.claude/agents/**/*.md`, "
+        f"recursively) as graphs, one four-node graph per agent at "
+        f"`{_PROMPT_AGENT_OUT_SHAPE}` (`retrieve -> prompt_agent -> reflect -> consolidate "
+        f"-> END`; the graph's `graph_id` is the agent's name), inside Zone A. There is no "
+        f"call site to convert: each `prompt_agent` node runs that agent's persona as one "
+        f"model call, reading the file at execution time. The persona's `tools:` frontmatter "
+        f"is parsed, reported and never obeyed — but WHAT ELSE the call may do is the "
+        f"provider's answer and not migrate's, it differs per `model_provider.impl`, and "
+        f"migrate's own report prints the measured table (aef-core ADR 0169). NOTE which "
+        f"file the loop may then edit: the GRAPH is Zone A, the PERSONA `.md` is Zone C by "
+        f"default, so a candidate editing the prompt itself is rejected until you widen the "
+        f"agent root — `aef migrate --agent-root ...` is opt-in per repo and its report says "
+        f"what that adds to the loop's blast radius."
     )
 
 

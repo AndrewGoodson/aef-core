@@ -39,8 +39,12 @@ def render_prompt_repo_sequence(prompt_agents: int = 0) -> str:
     The generated kit described the other shape only, so the adopter whose
     agents are prompts had a document about a repo they do not have.
     """
-    module = f"{_module_path(DEFAULT_MIGRATED_OUT).rsplit('.', 1)[0]}.<agent>.graph"
     path = f"{DEFAULT_MIGRATED_OUT.rsplit('/', 1)[0]}/<agent>/graph.py"
+    # The same shape under a WIDENED root. Derived from the same constant, so
+    # a change to migrate's default moves both (ADR 0153's rule).
+    wide_root = ".claude/agents"
+    wide_path = f"{wide_root}/{path.split('/', 1)[1]}"
+    persona = f"{wide_root}/<agent>.md"
     counted = (
         f"This repo has **{prompt_agents}** of them."
         if prompt_agents
@@ -51,30 +55,55 @@ def render_prompt_repo_sequence(prompt_agents: int = 0) -> str:
 `.claude/agents/*.md`, skills, `AGENTS.md`, a `.codex/` — agents that a coding
 harness runs, with no `anthropic`/`openai` call site anywhere. {counted}
 
-There is nothing to convert, and `aef migrate` does not look for one:
-it registers each agent file as **its own graph** at `{path}` — inside Zone A,
-`graph_id` = the agent's name — and that graph's node runs the agent's prompt
-as the system prompt of a single harness model call.
-`model_provider.impl: claude_code` uses the coding agent's own login, so no API
-key is involved. **The prompt runs; the agent's tools do not**, which is the
-safety property rather than a limitation.
+There is nothing to convert, and `aef migrate` does not look for one: it
+registers each agent file (recursively — nested directories included) as **its
+own graph**, four nodes wired `retrieve -> prompt_agent -> reflect ->
+consolidate -> END`, `graph_id` = the agent's name. The `prompt_agent` node
+reads the persona **at execution time**, so a lesson appended to the `.md`
+changes the next run with no regeneration step in between.
 
-**Which harness runs the call is `model_provider.impl` in `aef.yaml`**, and
-four are wired: `claude_code` (default — the Claude Code login, reproduced end
-to end), `codex` (built from the CLI's documented flags, **not** reproduced),
-`grok` (measured: it answers through the provider, and `--cwd <an empty
-directory>` is the load-bearing isolation flag — with it, **~17.9k tokens of
-the operator's own session still reach the model and there is no flag that
-stops that**, which is the honest number rather than an isolation claim), and
-`command`, a generic CLI harness you configure with an argv template
-(aef-core ADR 0154). **GitHub Copilot's CLI is `impl: command`, configured by
-you when you install it** — this repo ships no guess about its flags, because
-a flag's shape is not a flag's value (aef-core ADR 0150).
+**Which harness runs the call is `model_provider.impl` in `aef.yaml`, and
+what containment you get is that provider's answer — not migrate's.** The
+persona's own `tools:` frontmatter is parsed, reported and **never obeyed**
+under all five; beyond that they differ, and the differences were measured
+rather than read off a `--help` (aef-core ADR 0169):
+
+- **`claude_code`** (the default) — persona in the **system** message.
+  `--tools ""` (documented as "disable all tools"), `--max-turns 1`,
+  `--safe-mode`, an empty strict MCP config. The Claude Code login is the
+  credential, so there is no API key anywhere. Reproduced end to end.
+- **`codex`** — persona in the **user turn**, because there is no system flag.
+  `--sandbox read-only` and nothing else: no `--tools`, no `--max-turns`.
+  Not reproduced live on the box that wrote this.
+- **`grok`** — persona in the **system** message, and its `--tools ""`
+  **suppresses nothing** on 1.0.5: the same argv read a planted file when one
+  more turn was allowed. There is no `--safe-mode`, and even with
+  `--cwd <an empty directory>` about **17.9k tokens of the operator's own
+  session still reach the model**, with no flag that stops it.
+- **`command`** — persona in the **system** message if your argv template has
+  a `{{system}}` slot and in the **user turn** if it does not. Its isolation is
+  whatever you assert in `isolation:`, recorded as *your* assertion and never
+  verified against your binary; omit it and nothing is claimed but the
+  channel. The template's own flags are deliberately not read as evidence —
+  `--tools ""` means opposite things on the two CLIs above.
+- **`anthropic`** — persona in the **system** parameter. Structural: no
+  `tools` parameter is sent, one request and one response, no project
+  discovery, no subprocess.
+
+**GitHub Copilot's CLI is `impl: command`, configured by you when you install
+it** — this repo ships no guess about its flags, because a flag's shape is not
+a flag's value (aef-core ADR 0150), and it is the path every harness released
+after this file was written takes.
+
+Every run writes what it actually got to
+`working_memory["prompt_agent__containment"]`, and adds a
+`prompt_agent.persona_in_user_turn` error when the persona went in the user
+turn. Read that rather than this list when you want to know what one run did.
 
 **Which file the loop may edit is a decision you have to make, and the default
 is the narrow one.** The generated GRAPH is Zone A; the persona `.md` it reads
 is Zone C, so a candidate that edits the prompt itself is rejected by G0 until
-you widen the agent root. `aef migrate --agent-root .claude/agents` is that
+you widen the agent root. `aef migrate --agent-root {wide_root}` is that
 opt-in, per repo, and its report states in words what it adds to the loop's
 blast radius. Widening it means agent-authored diffs to the files your coding
 harness loads on every session — decide that deliberately, not to make a
@@ -84,19 +113,45 @@ The whole day, for that shape:
 
 ```
 aef adopt --dir .
-aef migrate --dir .
-aef loop bootstrap {module} --corpus corpus \\
+aef migrate --dir . --agent-root {wide_root}
+aef loop bootstrap {wide_path} --corpus corpus \\
     --inputs inputs.json --state ~/.aef-loop-state \\
     --memory ~/.aef-loop-state/memory.jsonl --config aef.yaml
-aef loop bless --repo . --state ~/.aef-loop-state --agent-path {path}
+aef loop bless --repo . --state ~/.aef-loop-state --agent-root {wide_root} \\
+    --agent-path {wide_path} --graph-id <agent-name>
 aef loop doctor --repo . --state ~/.aef-loop-state --corpus corpus \\
-    --agent-path {path}
+    --agent-root {wide_root} --agent-path {persona}
 aef loop cycle --repo . --state ~/.aef-loop-state --workdir /tmp/loop \\
-    --module {module} --corpus corpus \\
-    --entrypoint {module}:build_graph --agent-path {path} \\
+    --corpus corpus --entrypoint {wide_path}:build_graph \\
+    --graph-id <agent-name> --proposer rule_based_prompt \\
+    --agent-root {wide_root} --agent-path {persona} \\
     --memory ~/.aef-loop-state/memory.jsonl --config aef.yaml \\
     --cassette-miss live --build-command "<your green bar>"
 ```
+
+**Under a widened root there is no dotted module name**, because `{wide_root}`
+is not an importable package — which is why every graph reference above is a
+**file path**: `{wide_path}`, and `--entrypoint {wide_path}:build_graph`.
+Every `aef loop` subcommand and `aef run` accept that form alongside the two
+dotted ones (aef-core ADR 0176/0177). `--agent-path` names the **persona**
+itself in the last two steps, and the readiness report resolves it to that
+persona's generated graph through migrate's own mapping, saying which file it
+read (aef-core ADR 0178).
+
+**`--proposer rule_based_prompt` is the one that can write a prompt
+candidate.** The default `rule_based` mutates module-level numeric constants,
+and a persona has none; run it here and the cycle says so and names this one.
+The prompt proposer appends a single consolidated lesson as a bullet under a
+`## Lessons (aef)` section at the end of the persona, computed from your
+recorded failures with **no model call**, carrying its own provenance
+(`<!-- aef sig=... runs=2 -->`), and it never rewrites a bullet you wrote.
+
+**`--graph-id` names your corpus's graph, and it has to agree with what you
+blessed.** `aef loop bless` writes the baseline under an archive key; the
+proposer admits failure records by the corpus's `graph_id`. If the two
+disagree the cycle prints a warning naming the re-bless that fixes it and then
+drops every record as another graph's — which looks exactly like having no
+evidence.
 
 **`--config` on bootstrap, and `--cassette-miss live --config` on the cycle,
 are not optional here — and the reason is a property of prompts, not a
@@ -106,10 +161,32 @@ the default `--cassette-miss fail` the candidate's nodes fail and it scores 0,
 which is a rejection that measured nothing and reads exactly like a real one.
 
 **So every gate pass of a prompt candidate is a LIVE pass, and it spends real
-model calls.** Start on one scenario, not forty. And read the live noise floor
-as the bar: two runs of an *unchanged* prompt do not score identically, so a
+model calls** — a prompt candidate is gated live or not at all. The bar is the
+live noise floor: two runs of an *unchanged* prompt do not score identically, so a
 candidate beating the incumbent by less than that spread has not been shown to
-beat it at all — it has been shown to be within the noise.
+beat it at all. On aef-core's own six-scenario suite that floor was measured at
+**mean 0.7639, spread 0.1666** — wide enough that only a whole scenario
+flipping, consistently, is visible in the mean. Start on one scenario, not
+forty, and compare per scenario rather than on the mean.
+
+**Today the answer is "not at all", and you should know it before you spend
+anything.** Inside the gates, the sandbox worker that executes a candidate
+cannot log in — its environment allowlist deliberately carries no credential,
+so every `claude -p` it spawns exits `Not logged in` in about 30 ms — and the
+one provider that needs no credential, `impl: command`, cannot be rebuilt on
+the far side of that boundary at all, because only `{{impl, model}}` crosses
+it. **So a prompt candidate can be proposed and can be rejected, and cannot
+yet be accepted on live evidence.** No flag changes that; both defects are
+pinned as failing tests in aef-core so that fixing them makes a test go green
+rather than a document go quietly stale (aef-core ADR 0158).
+
+**A lesson computed from a check does not contain the check's answer, and
+that costs something.** The bullet names which output was graded and how, and
+omits the value the check required — deliberately, because a bullet carrying
+the literal expected string is teaching to the test. Measured consequence:
+against a `contains` check, candidate and incumbent scored identically, so the
+lesson changed nothing. That is the honest price of feedback at all, and it
+argues for checks that describe outcomes rather than tokens.
 """
 
 
@@ -142,9 +219,11 @@ the top rather than in step five because each one makes `aef loop cycle` exit
    `the proposer produced nothing from the available evidence`
 3. **A node that actually returns `"reflect"` as its route.** Otherwise:
    `no admissible failure memory: no candidate this cycle`
-   *`aef migrate` now does this for you too: the graph it generates is wired
-   `<call site> -> reflect -> consolidate -> END`. If you write the graph by
-   hand, this one is yours.*
+   *`aef migrate` now does this for you too: a call-site graph is wired
+   `<call site> -> reflect -> consolidate -> END`, and a prompt-agent graph
+   `retrieve -> prompt_agent -> reflect -> consolidate -> END` — four nodes,
+   with `retrieve` as the entry so the lessons the loop learns reach the
+   model. If you write the graph by hand, this one is yours.*
 4. **Failure memory in the file `aef loop cycle --memory` reads.**
    Otherwise: the same line as 3.
    *`aef loop bootstrap --memory <file>` now does this for you (aef-core ADR
@@ -206,9 +285,10 @@ alternative is to start the loop on a graph that calls no model.
 
 **Check `__pycache__/` is in `.gitignore` before you bless.** `aef adopt`
 writes one now (aef-core ADR 0142), and when you already had one it **appends
-the two patterns inside a `# aef:begin` / `# aef:end` block** rather than
-leaving you to notice (aef-core ADR 0153) — every byte you had stays outside
-that block, untouched. It appends nothing when the file already covers
+the two patterns inside a signed `# aef:begin sha256=...` / `# aef:end`
+block** rather than leaving you to notice (aef-core ADR 0153/0172) — every
+byte you had stays outside that block, untouched, and is re-checked before the
+write. It appends nothing when the file already covers
 bytecode some other way, so check rather than assume. Compiled bytecode
 committed under `{DEFAULT_AGENT_ROOT}/` by an ordinary `git add -A` is Zone A
 content the baseline does not have, and G5 charges it as drift: measured at
@@ -398,9 +478,15 @@ green on day one: it needs production runs you have not made yet.
 
 | Zone | Path | Agent-writable |
 |---|---|---|
-| A | `agents/**` | yes |
+| A | `{DEFAULT_AGENT_ROOT}/**`, or whatever you pass to `--agent-root` | yes |
 | B | gate code, `corpus/`, `evals/`, `.github/workflows/` | **never** |
 | C | everything else | no |
+
+Zone A is `{DEFAULT_AGENT_ROOT}/` unless you widen it. Pass the **same**
+`--agent-root` to `migrate`, `bless`, `doctor`, `cycle` and `gate`: bless
+archives the whole Zone A tree and G5 measures drift against it, so two
+commands that disagree about which tree that is are comparing different
+things.
 
 A diff reaching Zone B is a **security event** that halts the loop, not a
 rejection to be retried. This is enforced structurally rather than by policy:
@@ -446,15 +532,33 @@ repo may not have, and the failure would arrive as an import error buried in
 a ledger note, reading like an ordinary gate rejection. Without it the gate
 report says so explicitly.
 
-**`--memory` must point at the file your reflect node writes.** Without it
-the proposer has no recorded failures to ground in and will never propose —
-it will report "no admissible failure memory" every cycle and look broken.
+**One of `--memory <file>` / `--no-memory` is REQUIRED** by both commands that
+run a turn (`cycle` and `run`), and `--memory` must point at the file your
+reflect node writes. Without evidence the proposer never proposes; silence
+used to mean "do not check", and aef-core's own scheduled cycle was a no-op
+every night while exiting 0. Refusing costs one flag; not refusing cost six
+months of green ticks (aef-core ADR 0165/0167). `--no-memory` keeps the old
+behaviour precisely and says in the summary that the silence was chosen.
 
 **`--state` must be outside this repository.** Inside, `git add -A` sweeps
 the ledger and archive into candidate diffs, making the audit trail part of
 what it audits. The driver refuses it.
 
-Exit codes: `0` escalated · `1` rejected · `2` halted (do not retry).
+**Exit codes — four, and each names a different action:**
+
+| code | meaning | what to do |
+|---|---|---|
+| `0` | escalated to a human — the NORMAL path, Tier-1 is off | review it |
+| `1` | the candidate was rejected | read the ledger; retry is fine |
+| `2` | **HALTED**, or a usage refusal | clear the halt or fix the flags; never retry |
+| `3` | it could not do its job | fix the invocation |
+
+`3` covers a crash, a bad config, a missing corpus, a provider that is down,
+and an import error — anything that stopped the command before it could judge
+a candidate. Fail CI on **`>= 2`**. `3` exists because a catch-all used to return `1` for
+any exception, so a bad config and a provider that is down both read as a
+healthy rejection and the nightly job stayed green (aef-core ADR 0167/0178).
+A halt prints `HALTED:` on stdout; a usage refusal prints `error:` on stderr.
 
 ## Driving it with a coding agent
 
@@ -471,7 +575,10 @@ self-paces; it does not need an interval.
     --build-command "<your green bar>"
 
 Exit 0 = escalated to a human (the NORMAL outcome; Tier-1 is off).
-Exit 1 = rejected. Exit 2 = HALTED — do not retry, investigate.
+Exit 1 = rejected. Exit 2 = HALTED or a usage refusal — do not retry,
+investigate. Exit 3 = the command could not do its job (crash, bad config,
+missing corpus, import error) — fix the invocation, do not treat it as a
+verdict on the candidate.
 
 Each run:
   - If it says "no admissible failure memory", the reflect node is producing
@@ -937,23 +1044,44 @@ write and the sequence gains two flags — the next section is yours.
 `loop monitor`, a daily `loop cycle` at 03:00 UTC and a weekly digest, all
 `workflow_dispatch`-able. Until that file is committed, the loop runs when you
 type the command and at no other time. Edit the three `AEF_*` env values in
-the cycle step first; the generated ones are placeholders, and a cycle with no
-`--memory` reports `no memory store configured` and exits 0 every night, which
-reads like a healthy run and is a loop that never ran.
+the cycle step first; the generated ones are placeholders. A cycle with no
+`--memory` used to report `no memory store configured` and exit **0** every
+night, which reads like a healthy run and is a loop that never ran — so one of
+`--memory <file>` / `--no-memory` is now **required**, refused in the handler
+rather than only in the parser, and the refusal exits **2** (aef-core ADR
+0165/0167). Every attempt, including the ones that raise, is journalled to
+`<your state dir>/cycles.jsonl`, and `aef loop monitor` warns
+`SCHEDULED CYCLE PRODUCING NOTHING` after three consecutive quiet cycles —
+which the ledger alone provably cannot tell you, because a cycle that proposes
+nothing writes nothing to it.
 
 {render_prompt_repo_sequence(prompt_agents)}
 ## 1. `aef adopt` — what you got, and what you did not
 
-It wrote 17 files and **never overwrites** a file it did not write: an existing
-file of the same name is skipped and reported. Five are the exception, and
-appending is not overwriting: `CLAUDE.md`, `AGENTS.md`,
+It wrote 17 files and **never DESTROYS** one: an existing file of a name it
+would write is skipped and reported. Five are the exception, and appending is
+not overwriting: `CLAUDE.md`, `AGENTS.md`,
 `.github/copilot-instructions.md`, `.cursor/rules/aef.mdc` and `.gitignore`
-get a block between `<!-- aef:begin -->` and `<!-- aef:end -->` markers
-(`# aef:begin` / `# aef:end` in `.gitignore`, whose syntax has no HTML
-comments) appended to whatever was already there. **Every byte you had is
-still there, unmodified, outside the block**; re-running adopt replaces only
-what is between the markers, and deleting the block undoes it exactly. The
-report says `appended` rather than `wrote` or `skipped` for each one.
+get a **signed** block appended to whatever was already there —
+
+```
+<!-- aef:begin sha256=1a2b3c4d5e6f7081 -->
+...
+<!-- aef:end -->
+```
+
+— and `# aef:begin sha256=...` / `# aef:end` in `.gitignore`, whose syntax has
+no HTML comments. **Only a signed pair is adopt's.** A bare
+`<!-- aef:begin -->` sitting in your own prose is inert text: never searched,
+never matched, never touched, and adopt's block goes after it.
+
+**Every byte you had is still there, unmodified, outside the block**, and that
+is checked rather than claimed: adopt re-reads the bytes before and after the
+block and refuses to write the file at all if either moved. Bytes in, bytes
+out — a CRLF file stays CRLF, and a mixed one keeps the author's minority line
+endings exactly as they were. Re-running replaces only adopt's own block, and
+deleting the block undoes it exactly. The report says `appended` rather than
+`wrote` or `skipped` for each one.
 
 That rule exists because of a measurement, not a preference: on a real repo
 with eight `.claude/agents/*.md` agents, adopt wrote a `CLAUDE.md` the repo
@@ -1007,9 +1135,20 @@ structurally forbidden to propose changes to. If you have a graph left over
 from an older run, move it.
 
 **It wires the graph to learn:** `<call site> -> reflect -> consolidate ->
-END`. The reflect node is the only thing that writes failure memory and
+END` for a call-site graph, and `retrieve -> prompt_agent -> reflect ->
+consolidate -> END` — **four** nodes, `retrieve` first — for a prompt agent,
+so what the loop learned is put back in front of the model rather than only
+stored. The reflect node is the only thing that writes failure memory and
 failure memory is the only evidence the proposer acts on. Route a node back to
 `END` and nothing raises — the loop goes silent, exiting 0 every cycle.
+
+A run that answers and gets **your check** wrong now leaves failure memory
+too: the checks are evaluated against the run's final state and, when any
+fail, a `failure` record is written in the same shape the reflect node writes,
+so the consolidator and the proposer read it with no change. Two such runs
+make a lesson. Before that, a wrong answer that did not crash left nothing
+behind and the loop had nothing to learn from on exactly the repos it is for
+(aef-core ADR 0174).
 
 ### The two forms, and how it chooses
 
@@ -1083,21 +1222,37 @@ records each run as a **train** scenario. The inputs file is a JSON list;
 each entry needs `objective` and may set `id` and `working_memory` — the
 latter is how you reach the agent's failing cases.
 
+An entry may also carry `checks` — a dotted path into the final state, an
+operator and a value — and that is what turns a wrong answer into evidence.
+
+Real output, from this command run against a repo whose two inputs both got
+the owner's check wrong (the graph named is that repo's; everything below the
+command is verbatim):
+
 ```
 $ aef loop bootstrap {module} --corpus corpus --inputs inputs.json \\
-      --state ~/.aef-loop-state --memory ~/.aef-loop-state/memory.jsonl
-recorded 4 scenario(s) in the train split
-  passed  bootstrap-1
-  passed  bootstrap-2
-  FAILED  beyond-the-budget
-  FAILED  bootstrap-4
-2 of 4 recorded run(s) FAILED.
-  Bootstrap labels nothing: only an owner can say a task SHOULD have failed (ADR 0060).
-  Consider marking one of these a tripwire — beyond-the-budget, bootstrap-4
+      --state ~/.aef-loop-state --memory ~/.aef-loop-state/memory.jsonl --config aef.yaml
+recorded 2 scenario(s) in the train split
+  WRONG   accela-clearwater
+  WRONG   accela-pinellas
+2 of 2 recorded run(s) FAILED: 0 raised or ended with a failed plan, 2 failed an owner
+  check — the task metric, which fails without an error (ADR 0113).
+  recording spent 2 live model call(s). Recording is the one pass that is SUPPOSED to be
+  live: the gates replay these from each scenario's cassette and need no credential.
   4 memory record(s) written to the durable store — what the graph's own reflect node
   observed, nothing bootstrap decided. `aef loop cycle --memory <the same file>` proposes
   from these.
+  2 of them is/are a check-derived FAILURE record: the owner's check, evaluated against
+  what the run produced. A signature recurring in two distinct runs becomes a lesson.
 ```
+
+**Three labels, and the difference between them is what you fix.** `passed`
+is a run that did what it should. `FAILED` raised, or ended with a failed
+plan. `WRONG` answered and got your check wrong — a crash and a wrong answer
+need different fixes, and one label for both hides which you have. The
+headline count is one number with one definition of failure, split into its
+two halves; it used to be the crash count alone, printed underneath a list of
+content failures the checks had already caught (aef-core ADR 0174).
 
 Three flags, and **no generated document mentioned two of them until now**.
 
@@ -1224,13 +1379,43 @@ Loop readiness — 6 things you must supply
   [OK] corpus + tripwire       5 scenario(s), 1 tripwire(s)
   [OK] reflect node routed to  src_my_agent__run_agent() returns 'reflect' as its Route
   [--] observations            0 recorded run(s) at ~/.aef-loop-state/observations.jsonl
-       fix: pass --observations from your production runs, then `aef loop monitor`
+       fix: pass --observations from your production runs, then
+            `aef loop monitor --observations <path>`
   [--] halt channel            none — a halt would tell nobody
        fix: set AEF_HALT_WEBHOOK in your environment (never in this repo)
-  [OK] blessed baseline        1 archived version(s)
+  [OK] blessed baseline        1 archived version(s) of 'agents'
   [OK] model calls visible     1 reachable module(s), none imports a model SDK
                                                                         exit=1
 ```
+
+**Point `--agent-path` at your PERSONA if that is what you are improving**, and
+it resolves. Real output, from the prompt-file sequence above run against a
+clone of a real repo with eight `.claude/agents/*.md`:
+
+```
+$ aef loop doctor --repo . --state ~/.aef-loop-state --corpus corpus \\
+      --agent-root .claude/agents --agent-path .claude/agents/<agent>.md
+Loop readiness — 6 things you must supply
+
+  [--] corpus + tripwire       2 scenario(s), 0 tripwire(s)
+  [OK] reflect node routed to  .claude/agents/migrated/<agent>/graph.py:
+       make_prompt_agent_node(route='reflect') builds a node that routes to it
+  [--] observations            0 recorded run(s) at .../observations.jsonl
+  [--] halt channel            none — a halt would tell nobody
+  [OK] blessed baseline        1 archived version(s) of '.claude/agents'
+  [OK] model calls visible     10 graphs scanned, none reaches a model SDK the
+       harness cannot see
+```
+
+Two things in that are worth naming. It **says which file it read**, because
+the answer is about a file you did not type — the persona is resolved to its
+generated graph through `aef migrate`'s own mapping, not a second copy of that
+mapping (aef-core ADR 0178). And under a widened root the last obligation
+scans **every** graph it finds rather than one, which is the case the widening
+exists for and the case it used to be unreachable in (aef-core ADR 0158's
+F-M5-1). Where there is no generated graph, it says exactly that and prints
+`aef migrate` as the fix — never "no reflect node in the graph", which is a
+claim about a file that does not exist.
 
 **The six obligations are ADVISORY, not gating** (aef-core ADR 0141), and
 earlier versions of this kit implied otherwise. `aef loop doctor` is the only
@@ -1313,12 +1498,20 @@ graph shape where the structural transformation does not apply you get a
 different and clearer refusal instead — `the proposer produced nothing from
 the available evidence`. Either way the remedy is the same: name your numbers.
 
+**A prompt agent has no constants, and does not need one — use the proposer
+that fits it.** `--proposer rule_based_prompt` appends a lesson to a persona
+rather than mutating a number, and the gates build its control cohort by
+perturbing the prose instead (aef-core ADR 0157/0170). Point the default
+`rule_based` at a `.md` and it proposes nothing and names the one that fits,
+rather than reporting the same blank line it reported for four other
+situations.
+
 **Whether `--proposer llm` needs one is unmeasured.** `aef loop cycle
 --proposer llm` writes the whole file rather than mutating a constant and may
 not need one at all; the measurement is blocked on model quota (aef-core
-`INGEST_LOOP.md` L4). Until it runs, assume the constant is required, because
-the cohort that judges the candidate is built by mutating constants whatever
-proposed it.
+`INGEST_LOOP.md` L4). Until it runs, assume the constant is required for the
+Python shape, because the cohort that judges such a candidate is built by
+mutating constants whatever proposed it.
 
 ## 7. What still needs a person
 
@@ -1336,13 +1529,27 @@ proposed it.
 - **`--build-command`** is your green bar, not ours, and the default
   `pytest -q` exits 5 in a repo with no tests.
 
-## What has never been tried
+## What has been tried, and what has not
 
-**No part of this has run against a repo aef-core did not write.** Every
-sequence above, this project's own end-to-end test included, drives a fixture
-this project authored — smaller and less helpful each time, but authored. The
-first real pilot is an owner decision and it is the only open item. When you
-run it, the most valuable thing you can send back is **anything this document
+**It has now run against a repo aef-core did not write** — a clone of a real
+production repo with eight `.claude/agents/*.md` personas, no SDK call site
+anywhere, and its own `AGENTS.md` and `.gitignore` to append to. The whole
+prompt-file sequence above goes through on it: `adopt` (15 written, 2
+appended, nothing destroyed), `migrate` (8 graphs, one per persona),
+`bootstrap` (2 scenarios, both WRONG on the owner's check, 2 check-derived
+failure records), `bless`, `doctor`, and a `cycle` that **proposed** a
+candidate whose diff was exactly one `.md` under `.claude/agents` and drove it
+through G0/G1/G4/G5 to a G2 verdict, drift 0.003 of 0.500. That sentence used
+to read "no part of this has run against a repo aef-core did not write", and
+it was true until aef-core ADR 0158.
+
+**What has not**: acceptance. The verdict that sequence reaches is a
+rejection, in both the offline and the live arm, and in neither arm is it a
+judgement of the prompt — offline it is the changed-prompt-cannot-replay rule,
+live it is the two defects named earlier in this file. Nobody has yet seen a
+prompt candidate pass all six gates.
+
+The most valuable thing you can send back is still **anything this document
 told you to do that did not work**: several defects in aef-core were generated
 documents printing commands the CLI rejects, and they were found only by
 someone being the adopter.
