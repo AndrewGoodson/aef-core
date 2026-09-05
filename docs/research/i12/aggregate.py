@@ -1,15 +1,41 @@
-"""Aggregate the eight arm-repeat JSONs into the ADR 0155 table."""
+"""Aggregate the eight arm-repeat JSONs into the ADR 0155 table.
+
+`--verify` is the shared re-runner interface (ADR 0196): re-derive the
+published table from the committed raw JSON, print it, write nothing, and
+make zero live calls. `docs/research/measure.py` drives it.
+
+The raw JSONs were flattened into this directory at some point after the
+measurement ran, and `HERE` still pointed at a `results/` subdirectory that
+does not exist — so this script raised `FileNotFoundError` on every
+invocation, and ADR 0155's table had no working re-runner at all. `_data_dir`
+accepts either layout.
+"""
 
 from __future__ import annotations
 
+import argparse
 import json
 import statistics
 from pathlib import Path
 
-HERE = Path(__file__).parent / "results"
+
+def _data_dir() -> Path:
+    here = Path(__file__).resolve().parent
+    return here / "results" if (here / "results" / "a_r0.json").exists() else here
 
 
-def main() -> None:
+HERE = _data_dir()
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--verify", action="store_true", help="print the table only (the default; no writes)"
+    )
+    parser.add_argument(
+        "--write", action="store_true", help="also rewrite summary.json beside the raw JSON"
+    )
+    args = parser.parse_args(argv)
     table = {}
     total_calls = 0
     for arm in ("a", "b", "c", "d"):
@@ -60,24 +86,26 @@ def main() -> None:
         f"{'yes' if abs(d - c) > within_arm_spread else 'NO — not a gain'}"
     )
 
-    out = Path(__file__).parent / "results" / "summary.json"
-    out.write_text(
-        json.dumps(
-            {
-                "arms": table,
-                "max_within_arm_spread": within_arm_spread,
-                "total_calls": total_calls,
-                "deltas": {
-                    "b_minus_a": round(b - a, 4),
-                    "c_minus_b": round(c - b, 4),
-                    "d_minus_c": round(d - c, 4),
+    if args.write:
+        out = HERE / "summary.json"
+        out.write_text(
+            json.dumps(
+                {
+                    "arms": table,
+                    "max_within_arm_spread": within_arm_spread,
+                    "total_calls": total_calls,
+                    "deltas": {
+                        "b_minus_a": round(b - a, 4),
+                        "c_minus_b": round(c - b, 4),
+                        "d_minus_c": round(d - c, 4),
+                    },
                 },
-            },
-            indent=2,
-            sort_keys=True,
+                indent=2,
+                sort_keys=True,
+            )
         )
-    )
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
