@@ -42,11 +42,40 @@ import signal
 import subprocess
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 
 DEFAULT_ENV_ALLOWLIST = frozenset({"PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TZ"})
+
+HARNESS_LOGIN_ENV = frozenset({"USER"})
+"""What a harness CLI needs to find the operator's login — **measured**, not
+guessed, and deliberately not in `DEFAULT_ENV_ALLOWLIST`.
+
+The default allowlist exists so that *no credential is inherited* (this
+module's own docstring), and `claude -p` under it answers
+`Not logged in · Please run /login` — which is the allowlist working, not
+failing. Adding this set is therefore a widening of the blast radius and
+never a typo correction: with it, code the candidate wrote runs in a process
+that can spend the operator's quota. It is applied only where an owner has
+said so in `aef.yaml` (`gates.live_model_calls: true`, ADR 0181).
+
+The contents are one variable because that is what the measurement found, on
+macOS with `claude` 2.1.x (ADR 0181, four probes of the exact argv
+`ClaudeCodeProvider` builds):
+
+  - allowlist as shipped               -> `is_error: true`, `Not logged in`
+  - allowlist + `LOGNAME`              -> `is_error: true`, `Not logged in`
+  - allowlist + `USER`                 -> `is_error: false`, `OK`
+  - allowlist minus `HOME`, + `USER`   -> `is_error: false`, `OK`
+  - `PATH` + `USER` only               -> `is_error: false`, `OK`
+
+So it is `USER` specifically: not `HOME` (the credential is not read out of
+the config directory), and not `LOGNAME` (the other conventional spelling of
+the same fact does not substitute). A harness whose login needs more than
+this on some other platform will fail the same visible way — a provider error
+naming the CLI's own message — rather than silently.
+"""
 
 _GIB = 1024**3
 _MIB = 1024**2
@@ -221,6 +250,19 @@ def child_preexec(policy: SandboxPolicy) -> Callable[[], None]:
 def scrubbed_env(policy: SandboxPolicy) -> dict[str, str]:
     """The child's environment. Public for the same reason as above."""
     return _scrubbed_env(policy)
+
+
+def with_harness_login(policy: SandboxPolicy) -> SandboxPolicy:
+    """`policy`, widened by exactly `HARNESS_LOGIN_ENV` and nothing else.
+
+    A named function rather than an inline `|` at the one call site, because
+    the widening is the whole security decision of ADR 0181 and a reader
+    grepping for "how does a credential reach the worker" should land on a
+    docstring rather than on a set literal. The returned policy is a copy:
+    `SandboxPolicy` is frozen, so no caller's policy is mutated into a
+    credential-carrying one behind its back.
+    """
+    return replace(policy, env_allowlist=policy.env_allowlist | HARNESS_LOGIN_ENV)
 
 
 def kill_process_group(pid: int) -> None:
