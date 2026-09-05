@@ -762,3 +762,32 @@ def test_a_repo_with_no_adopt_skill_is_unchanged(tmp_path: Path) -> None:
 
     assert discover_adopter_skills(root) == discover_skills(root)
     assert len(discover_adopter_skills(root)) == 4
+
+
+def test_the_report_wiring_string_is_the_rendered_modules_node_order(tmp_path: Path) -> None:
+    """ADR 0183 found the report printing a three-node wiring while the module
+    it wrote in the same run had four. One constant now; this reads the
+    module back and asserts its `add_node` order is what the report says."""
+    import re
+
+    from aef.cli.migrate import PROMPT_AGENT_WIRING, run_migrate
+
+    root = _prompt_repo(tmp_path, names=("wiring-probe",), skills=0)
+    result = run_migrate(root)
+    (site,) = result.prompt_agents
+    source = (root / site.out_relative).read_text(encoding="utf-8")
+    # The rendered module declares the order as an entry node plus a chain of
+    # edges; walk it.
+    entry = re.search(r'entry_node="([a-z_]+)"', source)
+    assert entry is not None, source[:400]
+    edges = dict(re.findall(r'Edge\(from_node="([a-z_]+)", to_node="([a-z_]+)"\)', source))
+    walked, node = [], entry.group(1)
+    while node in edges and node not in walked:
+        walked.append(node)
+        node = edges[node]
+    walked.append(node)
+    expected = [n.strip() for n in PROMPT_AGENT_WIRING.replace("END", "").split("->") if n.strip()]
+    assert walked == expected, (walked, expected)
+    from aef.cli.migrate import report
+
+    assert PROMPT_AGENT_WIRING in "\n".join(report(result))
