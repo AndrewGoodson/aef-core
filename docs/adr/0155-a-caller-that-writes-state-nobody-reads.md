@@ -249,3 +249,7 @@ out to fix and the 4,684 it claimed. The isolation flags work.
 **Calls made: 84** (the briefed budget exactly) plus 4 spent on the preflight
 and latency probes, plus at most 2 lost to the two regex hangs — 90 total,
 of which 84 are in the table.
+
+## Note (orchestrator, at merge)
+
+Written against the pre-J0 rubric: dim 2 was 17/20 on this branch and is **12/20** on `main` after ADR 0151 — J0 deducted precisely for the open retrieval→prompt link this ADR closes. The delta claimed is 0 either way; no row moves. The two defects reported here (the word-cap regex, the first-key model attribution) were fixed on `main` by ADRs 0166 and 0154 before this merge.
