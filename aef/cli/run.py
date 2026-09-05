@@ -29,7 +29,7 @@ import importlib
 import importlib.util
 import sys
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
 
@@ -40,8 +40,10 @@ from aef.config import (
     build_retriever,
     load_agent_config,
 )
-from aef.config.schema import ContextConfig
+from aef.config.factory import build_containment_mode
+from aef.config.schema import ContextConfig, ShadowConfig
 from aef.harness.memory_store import FileMemoryStore
+from aef.harness.shadow import ContainmentMode
 from aef.kernel import (
     DurabilityBackend,
     FileDurabilityBackend,
@@ -76,6 +78,16 @@ class RunConfig:
     `None` config path means no `aef.yaml` was given, and every field keeps
     the unconfigured default — a graph calling `require_model_provider()`
     then gets a clear refusal, never a silent no-op.
+
+    **`containment_mode` has no consumer inside `aef/` yet, and that is
+    stated rather than covered over.** Shadow execution still has no
+    production caller (ADR 0161, ADR 0173): what this field buys is that when
+    one is written it reads the owner's choice from here instead of accepting
+    a signature default, and that `shadow_for` will no longer let it forget.
+    A field carried for a caller that does not exist is a promise; the reason
+    it is not the kind ADR 0101 deleted is that the wire is short, it is
+    exercised end-to-end by tests through `shadow_for`, and its absence was a
+    live defect rather than a deferred feature.
     """
 
     model_provider: ModelProvider | None = None
@@ -83,6 +95,19 @@ class RunConfig:
     context: ContextConfig | None = None
     reflection: str = "rule_based"
     reflection_model: str | None = None
+    # `shadow.containment`, as the enum the shadow harness runs on (ADR 0173).
+    # THE one place a caller reads the owner's containment choice from: before
+    # this, the field validated in `aef.yaml`, `build_containment_mode` had
+    # zero callers, and `shadow_for`'s `mode` defaulted to `auto` — so an owner
+    # who wrote `off` got a container and an owner who wrote `fallback` got
+    # `auto`'s refusal. Reproduced both ways; ADR 0173.
+    #
+    # The unconfigured value is DERIVED from `ShadowConfig()` rather than
+    # written as `ContainmentMode.AUTO`, so "no aef.yaml" and "an aef.yaml
+    # with no shadow block" cannot drift into two different answers.
+    containment_mode: ContainmentMode = field(
+        default_factory=lambda: build_containment_mode(ShadowConfig())
+    )
 
 
 def build_run_config(config_path: str | Path | None) -> RunConfig:
@@ -117,6 +142,7 @@ def build_run_config(config_path: str | Path | None) -> RunConfig:
         context=config.context,
         reflection=config.reflection.impl,
         reflection_model=config.model_provider.model,
+        containment_mode=build_containment_mode(config.shadow),
     )
 
 

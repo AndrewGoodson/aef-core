@@ -3216,3 +3216,50 @@ assert `sys.modules` itself. That is what the mutation pass is for.
 Green bar: `pytest -q` 2195 passed, 5 skipped (2153 -> 2195, **+42**, none
 removed) · `mypy aef examples` 131 files clean · `ruff check .` clean ·
 `ruff format --check aef tests examples` 252 files clean · **0 model calls.**
+
+## Fix wave H2 — the containment field that was read by nothing (ADR 0173)
+
+R5 of the second seam hunt, MEDIUM. ADR 0161 shipped
+`shadow.containment: auto|fallback|off` with a validator, a drift test against
+the enum, a test that the default is the contained one — and no wire.
+`build_containment_mode` had zero callers; `shadow_for`'s `mode` defaulted to
+`ContainmentMode.AUTO` in the signature. The config surface read as wired.
+
+**Reproduced by running, both directions.** An owner who wrote
+`containment: "off"` on a box with docker and `aef-worker:test` got
+`decision.mode = auto`, `contained = True`, `owner_opted_out = False` — a
+container they had declined. An owner who wrote `fallback` on a runtime-less
+box got `UncontainedShadowError` instead of the fallback that mode exists to
+give them. The harmless direction and the one that costs work.
+
+**Fixed:** both `mode` parameters (`shadow_for`, `resolve_containment`) lose
+their defaults — ADR 0101's rule applied to a parameter, since a default that
+silently overrides the owner's config is a promise the signature makes and the
+code breaks. `RunConfig` gains `containment_mode = build_containment_mode(
+config.shadow)`, one derivation, its unconfigured value derived from
+`ShadowConfig()` rather than restated as `AUTO`. After: `off → off,
+contained=False, owner_opted_out=True` with the ledger entry carrying
+`security_event`; `fallback → it RAN`; omitting `mode` → `TypeError`.
+
+**Not done, on purpose:** shadow execution still has no production caller.
+Adding one is a design decision, not a patch; the ADR states what it would
+need (a worker image containing the adopter's own `aef`, a decision on which
+live requests may be duplicated onto a candidate, an owner who has read trust
+case §2.1) and `RunConfig`'s docstring states that the field's only reader
+today is `RunConfig`.
+
+**Rubric: no dimension moves.** S5's +1 on dim 4 survives, argued in the ADR:
+the gap applied the CONTAINED-or-refuse mode unconditionally, so nothing
+weaker than `auto` was reachable through it and no run was ever less contained
+than 0161 claimed. The real cost was to the audit trail — `owner_opted_out:
+True` had no path an owner could take to it. Erratum filed on ADR 0161 for the
+two sentences that were false when written.
+
+5 mutations, 5 caught, every restore sha256-verified. M1's first form failed
+with an `IsolationError` from a real container rather than on the property
+being pinned, and the TEST was rebuilt around `inspect.signature` rather than
+the mutation dropped.
+
+**Green bar:** 2269 passed / 5 skipped (2264 → 2269, +5), `mypy aef examples`
+clean (132 files), `ruff check .` and `ruff format --check aef tests examples`
+clean. Zero live model calls.
