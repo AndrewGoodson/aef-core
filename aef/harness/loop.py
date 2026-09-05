@@ -98,6 +98,22 @@ OBSERVATIONS_FILENAME = "observations.jsonl"
 EXIT_OK = 0
 EXIT_REJECTED = 1
 EXIT_HALTED = 2
+# The command could not do its job — an unexpected exception, or a
+# configuration error that stops the turn before it starts.
+#
+# Distinct from `EXIT_REJECTED` because `aef/cli/main.py`'s catch-all returns
+# **1** for any exception, and 1 is also "this candidate is no good, the system
+# is working". The rendered nightly workflow fails the job on `status >= 2`,
+# so a bad config, a missing corpus, an import error, a provider that is down,
+# or the `agents.migrated.graph` placeholder whose `build_graph()` raises
+# `NotImplementedError` all read as a healthy rejection and the job stays
+# green — and, since the exception escaped before the attempt was journalled,
+# `cycles.jsonl` gained nothing and the staleness alarm could never fire for
+# those nights either (reproduced, ADR 0167).
+#
+# 3 rather than reusing 2: a halt and a crash call for different actions
+# (release the kill switch versus fix the invocation), and `>= 2` catches both.
+EXIT_ERROR = 3
 
 
 @dataclass(frozen=True)

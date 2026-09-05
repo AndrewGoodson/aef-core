@@ -65,6 +65,14 @@ class ArchiveEntry:
     gate_report: tuple[str, ...] = ()
     rolled_back_from: int | None = None
     notes: str = ""
+    # WHICH Zone A tree this entry is the baseline of. A baseline is the whole
+    # agent root, so the root is part of what was blessed — and nothing wrote
+    # it down until ADR 0167, so a baseline blessed under `--agent-root
+    # .claude/agents` and a later cycle at the default `agents` root compared
+    # two disjoint trees and charged the first candidate 1.000 drift.
+    # Defaults to "" so every entry written before this field existed still
+    # loads, and "" means "not recorded" rather than "the repo root".
+    agent_root: str = ""
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -77,6 +85,7 @@ class ArchiveEntry:
             "gate_report": list(self.gate_report),
             "rolled_back_from": self.rolled_back_from,
             "notes": self.notes,
+            "agent_root": self.agent_root,
         }
 
     @classmethod
@@ -92,6 +101,7 @@ class ArchiveEntry:
                 gate_report=tuple(payload.get("gate_report", ())),
                 rolled_back_from=payload.get("rolled_back_from"),
                 notes=payload.get("notes", ""),
+                agent_root=str(payload.get("agent_root", "")),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise ArchiveError(f"malformed archive entry: {exc}") from exc
@@ -163,6 +173,7 @@ def record(
     gate_report: tuple[str, ...] = (),
     rolled_back_from: int | None = None,
     notes: str = "",
+    agent_root: str = "",
 ) -> ArchiveEntry:
     """Append a new version. Refuses to overwrite an existing one."""
     version = next_version(root, graph_id)
@@ -180,6 +191,7 @@ def record(
         gate_report=gate_report,
         rolled_back_from=rolled_back_from,
         notes=notes,
+        agent_root=agent_root,
     )
 
     files_dir = directory / FILES_DIRNAME
