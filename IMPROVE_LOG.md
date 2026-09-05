@@ -2888,3 +2888,99 @@ scores. No generated document lists the check ops — `grep "contains"` across
 nothing — so nothing under `adopt` needed an edit, recorded so M2 does not go
 looking. ADR 0156's third defect (`next(iter(modelUsage))`) is ADR 0154's and
 is not touched here.
+
+---
+
+## S3b — a corpus that can tell two judges apart (ADR 0171)
+
+**Branch:** `upgrade/s3b-content-negatives`, off `2a201f1` (D2's ReDoS fix).
+**Rubric claim:** dimension 3, +1. Total before: 69.
+**Model:** `claude-opus-5[1m]`, the harness session's default, for both the
+recordings and the judge — the recording config passes `model: ""` so no
+`--model` reaches the CLI, and `run_i14.py` is invoked without one.
+
+**Reproduce (RUN, before any change).** `aef loop score
+agents.summary.graph:build_graph --corpus corpus --splits train,validation
+--json`: train 0.9792, validation 0.9167, and `attribution` naming exactly
+three failures — `sum-07 contains 'volunteers'` against "Volunteers restored
+Ashcombe…", `sum-14 contains 'swimming'` against "Swimming will be
+permitted…", `sum-16 contains 'landslip'` against "Landslip after heavy
+rain…". All three summaries mention the term. These were the corpus's only
+negatives, and ADR 0159 had already measured what that means: the split is
+15/18 pass, so a judge answering "pass" to everything scores 15/18, the LLM
+judge scored exactly 15/18, and the AUC was 0.322.
+
+**Expectation, pre-registered before any judge call** (`prereg-v2.txt`):
+dimension 3 moves 6 → 7 only if (1) the corpus ends with ≥ 6 scenarios whose
+recorded answer fails an owner check, ≥ 2 in validation, (2) the LLM judge's
+AUC on the enriched validation split is ≥ 0.70, and (3) the position delta
+stays ≤ 0.20. Stated in advance because it changes how a 0.5 should be read:
+`LLMJudge` is asked for a "quality" score and nothing tells it to count words,
+so an AUC near 0.5 would have been evidence that the judge does not measure
+what the owner's checks measure — a more useful finding than ADR 0159's, and
+still +0.
+
+**Measurement.**
+
+*Hygiene.* The three case defects became `regex` with an inline `(?i)` — the
+transformation `run_i14.py`'s own `_case_insensitive` oracle already applied,
+made permanent, because `checks.py` has no case-insensitive op and `aef/` was
+not this worker's. train 0.9792 → 1.0000, validation 0.9167 → 1.0000,
+`attribution` empty: **20/20 pass and no negatives at all**, exactly as ADR
+0159 predicted. The 20 word caps then moved to `max_words` + `min_words: 1`;
+both of ADR 0166's objections are discharged rather than dodged (`min_words:
+1` restores the predicate exactly; the 0.75 → 0.80 move it was protecting no
+longer exists), and `loop score --json` before and after is identical byte for
+byte. The scale did move — a score is `k/5` now, not `k/4` — and that is fine:
+checks are the owner's data, the cassettes are untouched, and
+`test_rubric_arithmetic` reads the rubric rather than the corpus.
+
+*The unplanned find.* The new test asserting "no case-sensitive `contains` on
+a summary" went red on **57 more checks in 20 files** — `Kestrel`, `otters`,
+`copper`, `planning`, `1874` — every one passing today only because the model
+happened not to open a sentence with it. All 57 corrected; score identical
+before and after.
+
+*Negatives.* 19 scenarios recorded live — `sum-21`…`sum-28` via `aef loop
+bootstrap` (train only, by rule), `sum-29`…`sum-39` via `aef loop record
+--split validation`, **checks written before every run**. **7 fail an owner
+check**, 3 in train and 4 in validation. All 7 fail `max_words`, by one to
+three words. Every content trap — negation, superseded figure, similar names,
+a dropped unit, conditionality, direction-of-change — was handled correctly,
+and the three apparent content failures were my checks written too narrowly
+(`not overloaded` vs "no overloading"; `divers` vs "diverted"; `3.1 million`
+vs "£3.1m"), each widened before anything was called a negative. On this task,
+at this cap range, this agent's one reproducible failure is length.
+
+*The A/B, re-run on the enriched validation split, 34 calls, same script.*
+Rule-based 4/17 and constant-fail. **LLM 16/17, against a 13/17 constant
+baseline, AUC 1.000** — every owner-fail state 0.275–0.635, every owner-pass
+state 0.850–0.910, margin 0.215, and the failures ordered by the size of the
+overrun (1 word → 0.635, 2 → 0.375/0.325, 3 → 0.275). Agreement by threshold
+13/16/16/16/17 across 0.25–0.75, so the headline does not rest on one cut.
+Position delta max **0.17**, and the maximum is the one-word overrun, the
+single state the judge gets wrong at 0.5 — least stable where least certain.
+The second oracle now rewrites nothing and reports identical numbers, because
+the defect it existed to route around is gone from the data.
+
+**Verdict: +1, dimension 3 6 → 7, total 69 → 70.** All three pre-registered
+conditions fired. Not +2: J0's third gap for this row — a self-preference
+control — is untouched and is S6's, and AUC 1.000 is perfect separation of
+**one failure family with n = 4**, so what is shown is that this judge detects
+word-cap overruns, not that it detects failure. The row's "Remaining" says so.
+
+**Reported, not fixed.** `answering_model`'s rule 3 misattributed one call of
+34 to `claude-haiku-4-5-20251001` — ADR 0159's defect 1, reproducing at the
+same rate. `aef loop bootstrap` printed "0 of 8 recorded run(s) failed" on a
+batch that produced three content negatives, because its failure notion is the
+outcome class and none of the runs raised; the message it then prints is the
+one about a corpus where everything passes demonstrating nothing, which is
+misleading at exactly the moment an adopter is judging their inputs.
+`tests/harness/test_cassette_replay.py` had the corpus's size pinned as
+`n == 12 and n == 6` inside a test about live calls; fixed here, since it is a
+test file and it blocked the bar.
+
+**Green bar.** `pytest -q` 2251 passed / 5 skipped (from 2178); `mypy aef
+examples` clean on 132 files; `ruff check .` clean; `ruff format --check` 257
+files formatted. 5 mutations against the new test, 5 caught, every restore
+proved by sha256. 54 live calls of 70.
