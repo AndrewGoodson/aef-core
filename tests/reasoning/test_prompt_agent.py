@@ -153,7 +153,16 @@ def test_the_persona_is_the_system_message_and_the_objective_is_the_user_turn(
     assert roles == ["system", "user"]
     assert request.messages[0].content.startswith("# Marlin Accela agent")
     assert request.messages[1].content == "Reconcile the Sarasota cap counts."
-    assert delta.working_memory == {"prompt_agent": "the answer"}
+    # The reply, plus the run's own record of what contained it (ADR 0169).
+    # `_Recorder` declares nothing, so the containment is honestly unknown —
+    # never defaulted to the guarantee `ClaudeCodeProvider` happens to give.
+    assert delta.working_memory["prompt_agent"] == "the answer"
+    assert delta.working_memory["prompt_agent__containment"] == {
+        "provider": "recorder",
+        "isolation": [],
+        "persona_role": "unknown",
+    }
+    assert set(delta.working_memory) == {"prompt_agent", "prompt_agent__containment"}
 
 
 def test_the_request_carries_no_tools_and_no_capability_from_the_frontmatter(
@@ -291,3 +300,107 @@ def _ctx():  # type: ignore[no-untyped-def]
         trace_id="t1",
         now=datetime(2026, 9, 4, tzinfo=UTC),
     )
+
+
+# ---------------------------------------------------------------------------
+# Containment is recorded per run, not stamped at migrate time (ADR 0169, F4)
+# ---------------------------------------------------------------------------
+class _Declaring(ModelProvider):
+    """A provider that declares an isolation set, like the real ones do."""
+
+    def __init__(self, name: str, isolation: frozenset[str]) -> None:
+        self.name = name
+        self._isolation = isolation
+
+    @property
+    def isolation(self) -> frozenset[str]:
+        return self._isolation
+
+    def complete(self, request: CompletionRequest) -> CompletionResult:
+        return CompletionResult(
+            content="the answer",
+            model="m",
+            input_tokens=2,
+            output_tokens=4,
+            cache_read_input_tokens=4_600,
+            cache_creation_input_tokens=82,
+        )
+
+
+def _run(
+    provider: ModelProvider, tmp_path: Path
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    (tmp_path / "persona.md").write_text(PERSONA, encoding="utf-8")
+    node = make_prompt_agent_node(
+        agent_file=str(tmp_path / "persona.md"), agent_name="marlin-accela"
+    )
+    state = AEFState(run_id="r1", agent_id="a1", objective="go")
+    delta, _ = node.fn(state, _ctx(), _services(provider))
+    return delta.working_memory["prompt_agent__containment"], list(delta.errors)
+
+
+def test_the_run_records_the_containment_it_actually_got(tmp_path: Path) -> None:
+    """The fix for F4. `aef migrate` stamped "THE PROMPT RUNS; THE AGENT'S
+    TOOLS DO NOT ... `--tools ''` with `--max-turns 1`" into every generated
+    module as a fact about the path, while `CommandProvider` sends whatever an
+    owner's template says and `CodexProvider` sends neither flag. A claim that
+    varies per provider belongs in the trace, per run."""
+    containment, errors = _run(
+        _Declaring("claude_code", frozenset({"no_tools", "single_turn", "system_role"})),
+        tmp_path,
+    )
+    assert containment == {
+        "provider": "claude_code",
+        "isolation": ["no_tools", "single_turn", "system_role"],
+        "persona_role": "system",
+    }
+    assert errors == []
+
+
+def test_a_persona_sent_in_the_user_turn_is_warned_about_and_not_refused(
+    tmp_path: Path,
+) -> None:
+    """`codex exec` has no system-prompt flag, and a `command:` template with
+    no `{system}` slot prepends the persona to the prompt. ADR 0152's safety
+    story is that the persona IS the system message; here it is
+    untrusted-channel text, so the run says so.
+
+    Not a refusal: some CLIs genuinely have no system flag, and a node that
+    refused would be unusable on them."""
+    containment, errors = _run(
+        _Declaring("codex", frozenset({"read_only_fs", "user_turn_persona"})), tmp_path
+    )
+    assert containment["persona_role"] == "user"
+    assert len(errors) == 1
+    assert errors[0]["type"] == "prompt_agent.persona_in_user_turn"
+    assert errors[0]["node_id"] == "prompt_agent"
+    assert errors[0]["provider"] == "codex"
+    assert "USER turn" in str(errors[0]["message"])
+
+
+def test_a_provider_that_claims_nothing_is_recorded_as_claiming_nothing(
+    tmp_path: Path,
+) -> None:
+    """Three states, not two. A replay-only `CassetteProvider` and any
+    hand-built double declare nothing, and manufacturing a channel claim out
+    of that absence is the failure this ADR exists to close — so the run
+    records `unknown` and does NOT warn."""
+    containment, errors = _run(_Declaring("mystery", frozenset()), tmp_path)
+    assert containment == {"provider": "mystery", "isolation": [], "persona_role": "unknown"}
+    assert errors == []
+
+
+def test_token_cost_counts_the_cached_context_too(tmp_path: Path) -> None:
+    """`input_tokens` is the uncached remainder and was 2 on the calls ADR
+    0126's figures came from. A provenance `token_cost` of 6 for a 4,684-token
+    call is not a cheap run, it is an unrecorded one (ADR 0169)."""
+    (tmp_path / "persona.md").write_text(PERSONA, encoding="utf-8")
+    node = make_prompt_agent_node(
+        agent_file=str(tmp_path / "persona.md"), agent_name="marlin-accela"
+    )
+    delta, _ = node.fn(
+        AEFState(run_id="r1", agent_id="a1", objective="go"),
+        _ctx(),
+        _services(_Declaring("claude_code", frozenset({"system_role"}))),
+    )
+    assert delta.provenance[0].token_cost == 4_688  # 2 + 4600 + 82 uncached/cached + 4 out

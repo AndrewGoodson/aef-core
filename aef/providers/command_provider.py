@@ -63,6 +63,33 @@ string for a shell to reparse, because there is no shell. The prompt may
 instead be written to the child's stdin (`stdin: true`), which is the same
 guarantee by a different door.
 
+## Isolation is the OWNER'S ASSERTION here, and is recorded as one
+
+Every other provider in this package derives `isolation` from argv it built
+itself, or from an API call it makes itself. This one cannot: `--tools ""`
+means "disable all tools" to `claude` and "no restriction given" to `grok`
+(measured — ADR 0169), so reading flag semantics off an unknown binary's
+template would be a guess dressed as evidence.
+
+So the containment half of `isolation` comes from the owner:
+
+```yaml
+    isolation: [no_tools, single_turn, no_project_context]
+```
+
+It is **an assertion, not a measurement**, it is never verified against the
+CLI, and `PromptAgentNode` writes it into the trace labelled as the owner's.
+Declaring nothing is the default and is honest — an undeclared
+`CommandProvider` claims no containment at all, which is what F4 found this
+class silently doing while `aef migrate` stamped the opposite into every
+generated module as fact.
+
+The one half this class DOES derive is the persona's channel, because that is
+its own behaviour rather than the CLI's: a template with a `{system}` slot
+gets `system_role`, and one without gets `user_turn_persona` — the
+concatenation below. `system_role`/`user_turn_persona` are therefore refused
+in the owner's list; the template already answers that question.
+
 ## Two things this provider will not do silently
 
 - **A system message is never dropped.** If the template declares no
@@ -90,8 +117,14 @@ from aef.providers.base import (
     CompletionResult,
     ModelProvider,
     ModelProviderError,
+    validate_isolation,
 )
-from aef.providers.harness_provider import HarnessRun, split_request
+from aef.providers.harness_provider import (
+    PROBE_REQUEST,
+    HarnessRun,
+    persona_channel,
+    split_request,
+)
 
 PROMPT_PLACEHOLDER = "{prompt}"
 MODEL_PLACEHOLDER = "{model}"
@@ -220,6 +253,32 @@ def validate_template(
             )
 
 
+CHANNEL_PROPERTIES: frozenset[str] = frozenset({"system_role", "user_turn_persona"})
+
+
+def validate_command_isolation(isolation: Sequence[str]) -> frozenset[str]:
+    """The owner's containment assertion, checked for spelling and for reach.
+
+    Called from `CommandProvider.__init__` and from
+    `aef.config.schema.CommandProviderConfig`, the same one-rule-two-doors
+    arrangement `validate_template` uses (ADR 0091).
+
+    The channel properties are refused rather than accepted-and-overridden:
+    whether the persona reaches a system channel is decided by the presence of
+    a `{system}` slot in the template, which this class can read, so an owner
+    asserting it is either agreeing with something already known or claiming
+    something false. An error naming the template is more use than either."""
+    names = validate_isolation(isolation, where="command.isolation")
+    overreach = sorted(names & CHANNEL_PROPERTIES)
+    if overreach:
+        raise ValueError(
+            f"command.isolation names {overreach}, which is not the owner's to assert: the "
+            f"persona's channel is derived from whether command.argv has a {SYSTEM_PLACEHOLDER} "
+            f"slot. Add or remove the slot instead."
+        )
+    return names
+
+
 def resolve_pointer(document: object, pointer: str) -> object | None:
     """RFC 6901 JSON pointer, returning `None` for anything absent.
 
@@ -257,6 +316,27 @@ class CommandProvider(ModelProvider):
     def default_model(self) -> str | None:
         return self._default_model
 
+    @property
+    def asserted_isolation(self) -> frozenset[str]:
+        """Exactly what the owner wrote in `command.isolation`, unverified.
+
+        Kept separate from `isolation` so a reader — and the trace — can tell
+        the asserted half from the derived half without re-deriving it."""
+        return self._asserted_isolation
+
+    @property
+    def isolation(self) -> frozenset[str]:
+        """The owner's assertion, plus the channel this class derives itself.
+
+        The channel is read back off `build()` for a fixed probe request
+        rather than from `self._system_argv` directly, so it is the argv that
+        actually goes to the CLI that decides — the same evidence the three
+        hand-written adapters use, and the reason `PROBE_REQUEST` carries
+        sentinels no template can collide with."""
+        argv, stdin_text = self.build(PROBE_REQUEST)
+        scanned = [*argv, stdin_text] if stdin_text is not None else argv
+        return self._asserted_isolation | persona_channel(scanned)
+
     def __init__(
         self,
         *,
@@ -268,11 +348,13 @@ class CommandProvider(ModelProvider):
         output_pointer: str | None = None,
         usage_pointer: str | None = None,
         output_usage_pointer: str | None = None,
+        isolation: Sequence[str] = (),
         default_model: str | None = None,
         timeout_s: float = 600.0,
         runner: CommandRunner = subprocess_command_runner,
     ) -> None:
         validate_template(argv, model_argv=model_argv, system_argv=system_argv, stdin=stdin)
+        self._asserted_isolation = validate_command_isolation(isolation)
         if output not in OUTPUT_MODES:
             raise ValueError(f"command.output={output!r} is not one of {sorted(OUTPUT_MODES)}")
         if output == "json_pointer" and output_pointer is None:

@@ -41,6 +41,15 @@ class CommandProviderConfig(_StrictModel):
     output_pointer: str | None = None
     usage_pointer: str | None = None
     output_usage_pointer: str | None = None
+    isolation: list[str] = []
+    """What the owner ASSERTS this CLI's argv enforces, e.g.
+    `[no_tools, single_turn, no_project_context]`. Never verified against the
+    binary and recorded in the trace as an assertion (ADR 0169) — because
+    `--tools ""` disables every tool on `claude` and disables nothing on
+    `grok`, so no amount of reading an unknown template can tell this repo
+    which one an owner has. The default is the empty list, which claims
+    nothing; `system_role`/`user_turn_persona` are refused here because the
+    `{system}` slot already decides them."""
     timeout_s: float = 600.0
 
     @model_validator(mode="after")
@@ -50,7 +59,11 @@ class CommandProviderConfig(_StrictModel):
         # `test_importing_aef_config_does_not_require_anthropic` pins.
         # `aef.providers.command_provider` imports no SDK, but the lazy
         # import keeps that guarantee independent of what it grows into.
-        from aef.providers.command_provider import OUTPUT_MODES, validate_template
+        from aef.providers.command_provider import (
+            OUTPUT_MODES,
+            validate_command_isolation,
+            validate_template,
+        )
 
         validate_template(
             self.argv,
@@ -58,6 +71,7 @@ class CommandProviderConfig(_StrictModel):
             system_argv=self.system_argv,
             stdin=self.stdin,
         )
+        validate_command_isolation(self.isolation)
         if self.output not in OUTPUT_MODES:
             raise ValueError(f"command.output={self.output!r} is not one of {sorted(OUTPUT_MODES)}")
         if self.output == "json_pointer" and self.output_pointer is None:

@@ -344,3 +344,50 @@ smaller ones would leave less margin, and nothing tells the owner that.
 Low, and unchanged, on anything about Copilot's CLI — it is not installed
 here and this ADR makes no claim about its flags, which is the point of
 `impl: command`.
+
+
+## Erratum (2026-09-04, ADR 0169, fix wave G2)
+
+Two claims in this ADR are corrected by measurement, and one field changes
+meaning.
+
+**1. `--tools ""` is not a suppression on Grok.** §2 says the tool flags "are
+kept because tool-less is the *safety* property the adapter promises". They
+buy the token savings recorded here and they do not buy that property. With
+`--cwd` pointed at a directory holding one file whose first line is a canary
+string, this adapter's exact tool flags, and the prompt "List the files in the
+current directory and print the first line of each":
+
+- `--max-turns 1` (what ships): exit 1, `stopReason: "cancelled"`, stderr
+  `Error: max turns reached`, and a reply that is a **tool preamble** — the
+  model was offered tools and reached for one.
+- `--max-turns 3`: exit 0, `num_turns: 2`, and the reply contains the canary.
+
+An empty `--tools` value is "no restriction given" to `grok`, while `claude
+--help` documents it as "Use \"\" to disable all tools". `GrokProvider` keeps
+sending it (it costs nothing and a future release may honour it) and no longer
+counts it: its `isolation` set omits `no_tools`. What contains the shipped
+adapter is `--max-turns 1`, which contains by *cancelling the run*; whether
+the read executed before the cancellation is not established.
+`--disallowed-tools <TOOLS>` is the right lever and is not used, because
+`grok --help` lists no built-in tool names and this repo ships no guessed flag
+values — §5's own rule.
+
+**2. The `CommandProvider` section describes the template's sufficiency and
+says nothing about its containment.** That gap is what fix wave G2's F4 found:
+`impl: command` is how every harness after Grok is wired, and `aef migrate`
+was stamping a tool-suppression guarantee into every generated module as if it
+covered this class. `command.isolation:` is now the owner's explicit,
+**unverified** assertion, recorded as theirs; the template's flags are
+deliberately never read as evidence, for the reason in point 1.
+
+**3. `CompletionResult.input_tokens` on `GrokProvider` is no longer the sum.**
+§"the finding" folded `cache_read_input_tokens` and
+`cache_creation_input_tokens` into `input_tokens` because that was the only
+field there was, and the live guard read it. `CompletionResult` now carries
+both counters with a `total_input_tokens` property, so `input_tokens` means
+the uncached remainder on every provider and both live guards read the
+property. The sum they check is identical. The same fix was overdue on
+`ClaudeCodeProvider`, whose guard was reading a number measured at **2** on 36
+recorded calls — the defect this ADR found in Grok's guard, still standing in
+Claude's.
