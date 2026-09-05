@@ -272,6 +272,26 @@ def test_run_adopt_is_idempotent_on_second_run(tmp_path: Path) -> None:
     assert len(second.skipped_files) == 17
 
 
+def test_the_checklist_says_so_when_no_entry_file_could_take_the_block(tmp_path: Path) -> None:
+    """The third arm of ADR 0189's step 1. Both `CLAUDE.md` and `AGENTS.md` are
+    symlinks, so adoption — which never writes through a link — puts its block
+    in neither. `Read the generated CLAUDE.md` would then be an instruction to
+    open a file with no aef content in it, which is F-M8-3 at its worst: step 1
+    is the first thing a fresh coding-agent session in that repo reads."""
+    (tmp_path / "README.md").write_text("# scratch\n")
+    for name in ("CLAUDE.md", "AGENTS.md"):
+        (tmp_path / name).symlink_to("README.md")
+
+    result = run_adopt(tmp_path)
+
+    step_one = result.checklist[0]
+    assert "Read the generated" not in step_one, step_one
+    assert "NO entry file" in step_one, step_one
+    # It names WHY, from the same reason the report prints beside the skip.
+    assert "symlink" in step_one, step_one
+    assert "aef:begin" not in (tmp_path / "README.md").read_text()
+
+
 def test_checklist_nonempty_for_every_framework() -> None:
     for framework in ("langgraph", "crewai", "raw_sdk", "none"):
         checklist = render_migration_checklist(framework)

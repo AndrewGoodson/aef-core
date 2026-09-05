@@ -63,7 +63,64 @@ class GitRepo:
         """
         return self.run("show", f"{ref}:{path}")
 
+    def ref_exists(self, ref: str) -> bool:
+        """Does `ref` resolve to a commit in this repository?
+
+        Exists because `path_exists_at` below CANNOT answer it. `git cat-file
+        -e <ref>:<path>` fails identically for a missing file and a missing
+        ref, so a caller that only has `path_exists_at` reports "no agent
+        source at <persona> in main" for a repository that has no `main` at
+        all — blaming a file that is present, on the exit code that means
+        nothing was wrong (reproduced on a real repo whose default branch is
+        `azure-agent/uptime-monitoring`; ADR 0187's F-M8-1, fixed in 0189).
+
+        Two questions, two methods, and the caller has to say which it is
+        asking.
+        """
+        try:
+            self.rev_parse(ref)
+        except GitError:
+            return False
+        return True
+
+    def is_repo(self) -> bool:
+        """Is `root` inside a git repository at all?
+
+        Asked so that "this ref does not exist" and "there are no refs here
+        because this is a plain directory" stay two different answers. The
+        second is not a base-ref mistake: nothing named a ref wrongly, and the
+        diagnostics (`aef loop doctor`) must still run and report what IS
+        missing rather than crash on the first call out to git.
+        """
+        try:
+            self.run("rev-parse", "--git-dir")
+        except GitError:
+            return False
+        return True
+
+    def branch_names(self) -> tuple[str, ...]:
+        """Every local branch, in git's own order.
+
+        For error messages only: a refusal that names a ref the repository
+        does not have is only actionable next to the refs it does.
+        """
+        try:
+            out = self.run("branch", "--format=%(refname:short)")
+        except GitError:  # pragma: no cover - a repo with no refs at all
+            return ()
+        return tuple(line.strip() for line in out.splitlines() if line.strip())
+
+    def symbolic_ref(self, name: str) -> str | None:
+        """`git symbolic-ref --short <name>`, or `None` when it is not one."""
+        try:
+            return self.run("symbolic-ref", "--quiet", "--short", name).strip() or None
+        except GitError:
+            return None
+
     def path_exists_at(self, ref: str, path: str) -> bool:
+        """Does `path` exist at `ref`? **Assumes `ref` exists** — ask
+        `ref_exists` first if that is not already established, or a False here
+        means one of two very different things (see above)."""
         try:
             self.run("cat-file", "-e", f"{ref}:{path}")
         except GitError:

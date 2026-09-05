@@ -1812,15 +1812,26 @@ def _prompt_agent_lines(result: MigrateResult) -> list[str]:
 def _skill_lines(result: MigrateResult) -> list[str]:
     if not result.skills_seen:
         return []
-    # The COUNT excludes aef's own `new-model-check` skill and the LISTING
-    # still names it, marked. Dropping it from the listing would make `aef
-    # migrate` silent about a file it declined to migrate, which is the one
-    # thing this block exists not to be; counting it made adopt say 5 and
-    # migrate say 6 about the same tree (ADR 0176).
+    # The LISTING names every skill, aef's own included and marked. Dropping
+    # it from the listing would make `aef migrate` silent about a file it
+    # declined to migrate, which is the one thing this block exists not to be.
+    #
+    # The HEADER counts the rows under it, and then says how that total splits.
+    # It used to print only the adopter's subtotal — ADR 0172's D4, so that the
+    # number stops changing the moment adoption runs, and ADR 0176's reason
+    # that counting aef's own made adopt say 5 and migrate say 6 about one
+    # tree. Both reasons survive here: the stable adopter subtotal is still
+    # stated, by name. What did not survive is a header whose number was not
+    # the number of rows it headed — `found 4 skill(s)` over five rows on
+    # keystone, `found 6` over seven on datamining, reproduced at two-over-three
+    # on a scratch repo (F-M8-2, ADR 0187). A report that is wrong about itself
+    # teaches the reader to stop counting.
     ours = [p for p in result.skills_seen if p in set(result.skills_own)]
+    yours = len(result.skills_seen) - len(ours)
+    split = f" ({yours} yours + {len(ours)} aef's own)" if ours else ""
     lines = [
         "",
-        f"found {len(result.skills_seen) - len(ours)} skill(s) and did NOT migrate any of them:",
+        f"found {len(result.skills_seen)} skill(s) and did NOT migrate any of them{split}:",
     ]
     lines += [
         f"  SKILL    {p}" + ("   (aef's own — not yours)" if p in ours else "")

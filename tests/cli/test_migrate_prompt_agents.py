@@ -728,7 +728,13 @@ def test_migrate_does_not_count_the_skill_adopt_wrote(tmp_path: Path) -> None:
 def test_the_report_counts_two_and_still_names_the_third_marked(tmp_path: Path) -> None:
     """Excluding it from the LISTING as well would make `aef migrate` silent
     about a file it declined to migrate, which is the one thing that block
-    exists not to be."""
+    exists not to be.
+
+    The header used to read `found 2 skill(s) and did NOT migrate any of them:`
+    over THREE rows, and this test pinned it (F-M8-2, ADR 0187 / 0189). ADR
+    0172's D4 reason for the two — a subtotal that does not change the moment
+    adoption runs — survives as the parenthetical; what does not survive is a
+    leading number that was not the number of rows beneath it."""
     from aef.harness.zones import ADOPT_SKILL_PATH
 
     root = _prompt_repo(tmp_path, names=("pilot-accela",), skills=2)
@@ -738,9 +744,25 @@ def test_the_report_counts_two_and_still_names_the_third_marked(tmp_path: Path) 
 
     text = report(run_migrate(root, write=False))
 
-    assert "found 2 skill(s) and did NOT migrate any of them:" in text, text
+    assert "found 3 skill(s) and did NOT migrate any of them (2 yours + 1 aef's own):" in text, text
+    assert text.count("  SKILL    ") == 3, "the header counts the rows it heads"
     assert f"SKILL    {ADOPT_SKILL_PATH}   (aef's own — not yours)" in text, text
     assert text.count("  SKILL    ") == 3, "all three are still named"
+
+
+def test_the_skill_header_counts_its_rows_with_no_aef_skill_present(tmp_path: Path) -> None:
+    """The other shape of ADR 0189's fix: with aef's own skill absent there is
+    no split to report, so the header is the bare count — and it still equals
+    the number of rows beneath it, which is the property that broke (F-M8-2)."""
+    root = _prompt_repo(tmp_path, names=("pilot-accela",), skills=3)
+
+    text = report(run_migrate(root, write=False))
+
+    header = next(ln for ln in text.splitlines() if "skill(s) and did NOT migrate" in ln)
+    rows = [ln for ln in text.splitlines() if ln.strip().startswith("SKILL ")]
+    assert header.strip() == "found 3 skill(s) and did NOT migrate any of them:", header
+    assert int(header.strip().split()[1]) == len(rows) == 3
+    assert "aef's own" not in header, header
 
 
 def test_adopt_and_migrate_agree_on_the_same_tree(tmp_path: Path) -> None:
