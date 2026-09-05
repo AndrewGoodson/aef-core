@@ -1,0 +1,43 @@
+{
+  "cassette": {
+    "hits": 0,
+    "misses": 6,
+    "on_miss": "live"
+  },
+  "entrypoint": "agents.summary.graph:build_graph",
+  "graph_id": "summary_agent",
+  "repeat": 1,
+  "skipped_other_graph": [
+    "boundary-3",
+    "easy-1",
+    "easy-2",
+    "hard-both-4",
+    "hard-both-5",
+    "tripwire-impossible-train",
+    "tripwire-impossible-val",
+    "val-boundary",
+    "val-easy",
+    "val-hard-4",
+    "val-hard-5"
+  ],
+  "validation": {
+    "ci95": [
+      0.5711,
+      0.9289
+    ],
+    "cost_tokens": 485,
+    "mean": 0.75,
+    "n": 6,
+    "per_scenario": {
+      "sum-13-cider-press": 1.0,
+      "sum-14-quarry-lake": 0.5,
+      "sum-15-bookbinder": 1.0,
+      "sum-16-cliff-path": 0.75,
+      "sum-17-clockmaker": 0.5,
+      "sum-18-heron-rookery": 0.75
+    },
+    "repeat_mean_spread": 0.0,
+    "stdev": 0.2236,
+    "with_checks": 6
+  }
+}
