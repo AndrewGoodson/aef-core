@@ -87,6 +87,8 @@ def render_skill(entry: KnowledgeEntry) -> str:
         f"- runs since last seen: {entry.runs_since_last_seen}",
         f"- in context and the run avoided this failure (helpful): {entry.helpful}",
         f"- in context and this failure recurred anyway (harmful): {entry.harmful}",
+        f"- in context, this failure resolved, another failed (harmful elsewhere): "
+        f"{entry.harmful_elsewhere}",
         f"- first seen: {first}",
         f"- last seen: {last}",
         f"- run ids: {', '.join(str(r) for r in runs) if runs else 'n/a'}",

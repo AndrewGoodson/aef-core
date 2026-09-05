@@ -32,6 +32,7 @@ from aef.kernel.graph import Graph
 from aef.providers.base import ModelProvider
 from aef.providers.cassette_provider import CassetteProvider
 from aef.security.tool import PolicyConfig
+from aef.services.memory.base import MemoryStore
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.services.runtime import agent_services
 
@@ -147,8 +148,16 @@ def run_scenario(
     *,
     cassette_miss: str = "fail",
     live_provider: ModelProvider | None = None,
+    memory: MemoryStore | None = None,
 ) -> dict[str, Any]:
     """One scenario, answering both gates' questions from one execution.
+
+    `memory` — a durable store to record a FAILED OWNER CHECK into as failure
+    memory (ADR 0174's producer, made one idempotent function by ADR 0180).
+    Default `None` keeps every gate path exactly as it was: a gate that wrote
+    to the durable store would let scoring a candidate manufacture the next
+    one's evidence, which ADR 0174 refused. Only a caller that owns the store
+    (`aef loop score --memory`, the scored half of a measurement) passes one.
 
     Model calls are served from the scenario's cassette (ADR 0123).
     `cassette_miss="fail"` — the default — makes a request the recording
@@ -258,6 +267,23 @@ def run_scenario(
             "failure": f"unusable check: {exc}",
             "cassette": {"hits": cassette.hits, "misses": cassette.misses},
         }
+    if memory is not None:
+        # Without this, a scored split writes a success record per run and
+        # `runs_since_last_seen` climbs while the lesson can never be re-seen
+        # (S1b: 17 by the seventeenth scenario, 0 with the producer here).
+        from aef.harness.check_memory import record_check_outcomes
+
+        record_check_outcomes(
+            memory=memory,
+            checks=scenario.checks,
+            final_state=result.final_state,
+            critic=services.require_critic(),
+            judge=services.require_judge(),
+            run_id=scenario.id,
+            agent_id=scenario.initial_state.agent_id or "",
+            created_at=scenario.recorded_at,
+            graph_version=graph.version,
+        )
     payload: dict[str, Any] = {
         "outcome": outcome.to_payload(),
         "score": score_of(record),

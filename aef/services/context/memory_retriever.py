@@ -255,6 +255,7 @@ class MemoryRetriever(Retriever):
                                 "runs_since_last_seen": entry.runs_since_last_seen,
                                 "helpful": entry.helpful,
                                 "harmful": entry.harmful,
+                                "harmful_elsewhere": entry.harmful_elsewhere,
                                 "source_record_ids": list(entry.source_record_ids),
                             },
                         ),

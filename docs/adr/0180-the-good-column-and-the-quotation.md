@@ -384,3 +384,7 @@ asserted end to end through the consolidator.
 which is all that was claimed, but it is a superset of the shape ADR 0162
 wanted, its n on the only real corpus is 1, and nothing ranks on it. A count of
 1 is not yet evidence of anything.
+
+## Addendum (orchestrator): the follow-ups
+
+`run_scenario` gains `memory: MemoryStore | None = None` and calls `record_check_outcomes` when given one (the second wiring site; default None keeps every gate path unchanged; mutation-checked — disabling the call fails the test). `harmful_elsewhere` is surfaced in the retriever's chunk metadata and the skills draft. `cmd_score --memory` is K3's (ADR 0182).
