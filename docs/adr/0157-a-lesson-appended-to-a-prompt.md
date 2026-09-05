@@ -341,3 +341,37 @@ that changed the answer is 0170.
 - A lesson computed from a check contains the check. That is the honest cost
   of ACE's method against a metric written as a string match, and it argues
   for checks that describe outcomes rather than tokens.
+
+## Erratum (ADR 0174, worker M4b)
+
+Two sentences above are now out of date, and both were this ADR's own
+"Undone".
+
+**"That a failed owner check never becomes failure memory — is a wire nobody
+owns yet, and until it exists the proposer runs on evidence a real deployment
+does not produce."** The wire exists: `aef/harness/check_memory.py`, wired into
+`aef loop bootstrap`. The reproduction quoted at the top of this ADR was re-run
+offline and then live, and it now ends `1 FAILED AN OWNER CHECK … 1 of them
+is/are a check-derived FAILURE record`, two such runs consolidate to one
+`KnowledgeEntry`, and the cycle that printed `no admissible failure memory`
+proposes a candidate the gates reach a verdict on. **The evidence for a prompt
+candidate is no longer synthesised**; `<scratch>/make_evidence.py` describes how
+it was done before a producer existed and is superseded.
+
+**"A lesson derived from a check carries the check's own answer … nothing in
+the loop distinguishes the two."** The producer's rendering never reads
+`check.value`: the bullet the same pilot now produces says *"working_memory.prompt_agent
+does not contain a required substring the owner declared; observed 406 words,
+2836 chars: '…'"* where this ADR's said ``contains 'VERDICT:'``. Two tests grep
+the whole record and the rendered prompt for a planted literal. **The caveat is
+narrowed, not retired**: ADR 0174 §4 lists four things the lesson still leaks —
+the state path, the operator (which for an `equals` check on a binary field
+leaks the answer completely), the observed value, and the pass/fail counts. What
+is now true is only that a lesson cannot be satisfied by pasting a string out of
+itself.
+
+Unchanged: **defects 1 and 2 above reproduce exactly** — G2 still raises
+`TrustBoundaryError` on every non-Python candidate that clears G1, and G3 still
+has no null hypothesis for a `.md`, so a prompt candidate can still be rejected
+and never accepted. The L4 table's live flip (0.0 → 1.0) is **not** re-claimed
+under the new rendering and has not been re-measured.

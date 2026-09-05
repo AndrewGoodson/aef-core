@@ -3697,3 +3697,190 @@ non-empty and correct.
 **Green bar:** 2291 passed / 5 skipped (2269 → 2296 collected, +27),
 `mypy aef examples` clean over 132 files, `ruff check .` clean,
 `ruff format --check aef tests examples` clean. Zero live model calls.
+
+## M4b — a failed check is what the run did (ADR 0174)
+
+The wire M4 and S1 hit from opposite sides on the same night, and which ADR
+0157's "Undone" says nobody owned. Model: `claude-opus-5[1m]`. **3 live calls**
+(budget 8). **No rubric dimension moves.**
+
+### Both reproductions, RUN, before anything changed
+
+M4's, on a copy of the marlin clone, offline (a stub provider replaying the
+answers M4's live bootstrap recorded — byte-identical replies, zero quota):
+
+```
+recorded 2 scenario(s) in the train split
+  passed  accela-preconditions
+  passed  accela-missing-credentials
+0 of 2 recorded run(s) failed. A corpus where everything passes cannot
+demonstrate an improvement …
+
+accela-preconditions       -> success | no failure signals: 0 error(s) recorded, 0 tool call(s), none failed
+accela-missing-credentials -> success | no failure signals: 0 error(s) recorded, 0 tool call(s), none failed
+```
+
+— while the scorer, from the same cassette, says
+`0.0000 accela-missing-credentials / check failed: working_memory.prompt_agent
+contains 'VERDICT:'` — and the cycle says
+`no admissible failure memory: no candidate this cycle`.
+
+S1's, the six summary validation scenarios through the real
+`retrieve → draft → reflect → consolidate` graph with one durable store:
+
+```
+memory: 6 success record(s), 0 failure record(s)   (six unique signatures)
+CONSOLIDATED: 0 knowledge entr(ies)
+```
+
+**and two of those six FAIL an owner check** (`sum-14` wants `swimming` and got
+`Swimming`; `sum-16` wants `landslip` and got `Landslip`). One cause:
+`make_reflect_node` writes `kind="failure"` only from `state.errors` /
+`state.tool_results`, and a check is the task metric the harness evaluates
+afterwards (ADR 0113).
+
+### The producer
+
+`aef/harness/check_memory.py`. When a run raised nothing and an owner check
+failed, it runs the **real** `Critic`/`Judge` over that state with the check
+failures as evidence and writes one `kind="failure"` record in
+`make_reflect_node`'s own content shape.
+
+**Design (a) — a LOCAL derived state — and (b) rejected by measurement.**
+Injecting the failures into the run's real `state.errors` instead:
+
+```
+  as run:    task_completion=0.7500  checks=3/4
+  injected:  task_completion=0.0000  checks=3/4
+  classify().passed  as run=True  injected=False
+```
+
+`score_scenario` stops counting the check fraction the moment errors exist, so
+the score falls to zero *because* the checks failed — a metric that changes
+when you measure it — and `classify` reports a wrong answer as a crash.
+
+**The signature drops the expected value** (`check:<path>:<op>`), and that is
+load-bearing twice. Recurrence, measured:
+
+| corpus | shipped (`path:op`) | value-keyed |
+|---|---|---|
+| summary validation split (S1's) | **1 entry** | **0** |
+| marlin pilot (M4's) | **1 entry** | 1 |
+
+and leakage: the signature is a prompt surface (`render_retrieved_context`'s
+`[label]`, the proposer's `<!-- aef sig=… -->`).
+
+**Teaching to the test.** The rendering never reads `check.value`:
+
+```
+check failed: working_memory.prompt_agent does not contain a required substring
+the owner declared; observed 406 words, 2836 chars: '**No. The Accela connector…'
+```
+
+where ADR 0157's bullet said ``contains 'VERDICT:'``. Uniform across all six
+ops — a `max_words` failure gives the observed word count and never the cap.
+**What it still leaks, named rather than claimed away:** the state path, the
+operator (for an `equals` check on a binary field that leaks the answer
+completely), the observed value, and the pass/fail counts. The defensible claim
+is only that a lesson can no longer be satisfied by pasting a string out of it.
+
+### The falsification, stated first, did not fire
+
+`BootstrapInput`'s own docstring already distinguishes `expected` — *"a
+judgement about what the run turned out to do"*, refused by name — from
+`checks` — *"a specification of the task written before the run"*. The check is
+the owner's and predates the run; the observed value is the run's. ADR 0145's
+"a graph with no reflect node leaves an empty sink" is narrowed **in writing,
+with a test**; ADR 0060 is untouched, and with no checks declared bootstrap
+still authors nothing at all.
+
+One call site (`bootstrap`); two refusals with reasons already in the code —
+`score`/`run_scenario` by its own invariant that a gate run must not mutate the
+evidence a later proposal is built from, and `run --record-runs`/`harvest`
+because a production run carries no owner check and `RecordedRun` has no field
+for one.
+
+### End to end
+
+```
+0 of 2 recorded run(s) raised, and 1 FAILED AN OWNER CHECK …
+  1 of them is/are a check-derived FAILURE record …
+CONSOLIDATED 1 entr(ies)
+  failure:check:working_memory.prompt_agent:contains | runs=2
+    ['accela-missing-credentials', 'accela-pinellas']
+
+  proposed cycle-20260905T032809-prompt … (proposer=rule_based_prompt)
+  G0 pass · G1 pass · G4 pass · G5 pass (drift 0.007/0.500) · G2 fail (TrustBoundaryError)
+```
+
+G2's failure there is ADR 0157's defect 1 — **fixed on `main` by M4c (ADR
+0170) mid-increment**. Re-run on the merged code, the gates build a prose
+control cohort and execute **21 scenarios** (`1 candidate + 1 incumbent + 5
+random control(s)`), and G2 rejects for a different reason: `3
+previously-passing scenario(s) no longer pass`. Confirmed at zero live cost —
+incumbent `3 cassette hit(s), 0 miss(es)` mean 0.3333, candidate `0 hits, 3
+misses` mean 0.0000. That is precisely the artifact UPGRADE_LOOP's own rule
+names ("never let a cassette miss score a changed prompt as 0 and call that a
+rejection"); the correct invocation is `--cassette-miss live`, 21 live
+executions, beyond the 5 calls left in budget — so **no live gate verdict is
+claimed**. `grep -c VERDICT memory.jsonl → 0`.
+
+**Live, 3 calls**: preflight (`is_error False`, `input_tokens 2`,
+`claude-opus-5[1m]`) plus two bootstrap recordings against
+`model_provider.impl: claude_code` — two real objectives, two runs failing one
+check, one entry, the same candidate, the same gate verdicts. **Nothing
+synthesised**, which retires ADR 0157's `make_evidence.py`.
+
+**S1's side**: the same six scenarios now give 2 failure records under one
+signature → 1 entry → the lesson appears in the next run's draft prompt, where
+every bullet previously read *"no failure signals"*.
+
+**Re-run on S3b's corpus** (ADR 0171, merged from `main` mid-increment): 17
+summary validation scenarios, **four content negatives**, and before the
+producer `17 success record(s), 0 failure record(s)` — seventeen unique
+signatures, `CONSOLIDATED: 0 knowledge entr(ies)`. With it: 4 failure records
+under one signature `failure:check:working_memory.summary:max_words`, **1 entry
+across 4 distinct runs**. Two unflattering observations recorded with it: on
+this corpus the cap is *in the objective* ("summarise … in at most 28 words"),
+so redacting `max_words`' value buys nothing here even though the record's own
+text is clean; and the lesson is **retrieved and does not reach the model** —
+chunk 14 of 24, score 0.125, while `render_retrieved_context(max_items=5)`
+shows five `no failure signals` successes.
+
+**`aef loop bootstrap` now counts a wrong answer as a failure.** S3b
+reproduced the old line — eight inputs, three content negatives, `0 of 8
+recorded run(s) failed. A corpus where everything passes cannot demonstrate an
+improvement`. One count now, same definition the producer uses, split into its
+halves: `2 of 3 recorded run(s) FAILED: 1 raised or ended with a failed plan, 1
+failed an owner check`, with per-scenario `FAILED` / `WRONG` / `passed`.
+
+### Mutations, green bar, and what is not claimed
+
+6 mutations, 6 kills, every restore sha256-verified against a pre-edit hash
+(never `git checkout --`). The headline one: drop the producer from
+`bootstrap`, re-run the whole pilot → `no admissible failure memory: no
+candidate this cycle`.
+
+`pytest -q`: **2482 passed, 6 skipped**; collected 2438 → **2488 (+50, none
+removed)** after two `origin/main` merges (2262 → 2305 on the pre-merge base).
+`mypy aef examples` clean (134 files), `ruff check .` clean, `ruff format
+--check` clean (270 files). S1's golden is green.
+
+**No rubric change.** No task score was measured; the artifact is a capability
+that was absent and is now present. S1's four arms are runnable as a real
+comparison for the first time, and what they need is a corpus whose failures
+recur — **S3b is building it tonight**. Re-running (a)/(b)/(c)/(d) against that
+corpus is the measurement that could move dimension 2, not this increment.
+
+**Defects found outside this worker's files.** `knowledge_boost = 0.0` hides
+the only lesson there is, and now has a counter-example: over S3b's split the
+single check-derived entry ranks **14 of 24** at the default and **3 of 24** at
+0.5, so it survives `render_retrieved_context`'s top-5 only when boosted — ADR
+0110 swept 0/0.5/1/3 and found no change, on a corpus that could not produce
+seventeen near-identical successes crowding one lesson. Also: `aef loop cycle` silently drops
+all evidence without `--graph-id` (`2 record(s) dropped as another graph's
+scenario`) though the graph id is in the corpus it already loaded; ADR 0157's
+G2/G3 defects reproduce unchanged; `loop score` wants `module:factory` where
+`loop bootstrap` wants `module`; and a copied corpus's stale `manifest.json`
+makes the next cycle refuse with `corpus shrank`, with no command to reconcile
+it.

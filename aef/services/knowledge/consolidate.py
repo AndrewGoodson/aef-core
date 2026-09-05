@@ -53,12 +53,25 @@ _EPOCH = datetime.min.replace(tzinfo=UTC)
 
 
 def default_signature(record: MemoryRecord) -> str | None:
-    """`(kind, failing_nodes)` for failures, `(kind, objective)` for successes.
+    """`(kind, failed_checks | failing_nodes)` for failures, `(kind,
+    objective)` for successes.
 
     `failing_nodes` is the key because ADR 0096 established it as the field a
     structural proposer cannot begin without — *"add a fallback to the flaky
     node" requires knowing which node was flaky* — and `make_reflect_node`
     records it for exactly that reason.
+
+    `failed_checks` is read FIRST and comes from `harness.check_memory`, whose
+    records describe a run that answered cleanly and failed the owner's task
+    metric (ADR 0174). It is a different failure with a different key because
+    no node failed: `failing_nodes` is empty on those records by construction,
+    which under the node rule alone made them unsignable and therefore
+    invisible to this layer. Each key is the check's identity *without its
+    expected value* (`check:<path>:<op>`), which is what lets the same field
+    failing the same kind of check on two different inputs recur — the
+    condition ADR 0155 found the summary split could never meet — and what
+    keeps a target string out of every provenance marker rendered into a
+    prompt.
 
     Returns `None` when the record carries nothing stable to key on. A failure
     with no recorded failing node is unattributable, and the precedent for
@@ -70,6 +83,13 @@ def default_signature(record: MemoryRecord) -> str | None:
     read here is defensive by necessity, not by superstition.
     """
     if record.kind == "failure":
+        checks = record.content.get("failed_checks")
+        if isinstance(checks, (list, tuple)):
+            keys = [c for c in checks if isinstance(c, str) and c]
+            if keys:
+                # Order preserved for the same reason `failing_nodes` is: the
+                # checks are the owner's, in the order they declared them.
+                return "failure:" + ">".join(keys)
         raw = record.content.get("failing_nodes")
         if not isinstance(raw, (list, tuple)):
             return None

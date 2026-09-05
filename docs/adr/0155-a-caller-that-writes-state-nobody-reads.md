@@ -250,6 +250,32 @@ out to fix and the 4,684 it claimed. The isolation flags work.
 and latency probes, plus at most 2 lost to the two regex hangs — 90 total,
 of which 84 are in the table.
 
+## Erratum (ADR 0174, worker M4b)
+
+**"The validation split cannot exercise the knowledge layer"** was true of the
+producers that existed, not of the split. Re-run offline, the six scenarios
+give the numbers above — six `success` records, six unique signatures, **0
+knowledge entries** — *and two of the six FAIL an owner check*
+(`sum-14-quarry-lake`, `sum-16-cliff-path`). Nothing turned that into failure
+memory, because `make_reflect_node` reads only `state.errors` and a check is
+the task metric evaluated afterwards. The identical gap M4 hit from the other
+side (ADR 0157).
+
+With `aef/harness/check_memory.py` in place the same six runs produce **2
+failure records sharing one signature** (`failure:check:working_memory.summary:contains`)
+and consolidate to **1 knowledge entry**, which `render_retrieved_context` then
+carries into the next run's draft prompt — where every bullet previously read
+*"no failure signals"*. The recurrence lives in the CHECK rather than in the
+objective, which is what makes it reachable on a corpus of distinct scenarios;
+keyed on the check's expected value instead, this split still yields 0 entries
+(measured, ADR 0174 §3).
+
+**No arm is re-measured and no number above changes.** The four arms are now
+runnable as a real comparison for the first time and re-running them needs
+**live quota and a corpus whose failures recur** — this ADR's own consequences
+asked for exactly that, and S3b is building it. The demotion of ADR 0110's
+coverage result to an unconfirmed proxy stands until those arms are re-run.
+
 ## Note (orchestrator, at merge)
 
 Written against the pre-J0 rubric: dim 2 was 17/20 on this branch and is **12/20** on `main` after ADR 0151 — J0 deducted precisely for the open retrieval→prompt link this ADR closes. The delta claimed is 0 either way; no row moves. The two defects reported here (the word-cap regex, the first-key model attribution) were fixed on `main` by ADRs 0166 and 0154 before this merge.
