@@ -2286,3 +2286,90 @@ otherwise.
 `claude_code / codex / anthropic`. It should name the two new backends; the
 line is reported rather than edited, because `aef/cli/` belongs to another
 worker this wave.
+
+## M4 — a lesson appended to a prompt (ADR 0157)
+
+**The reproduction was not the one the increment predicted.** On a copy of the
+marlin clone, after `aef migrate` (8 graphs) and a bootstrap of two inputs —
+one of which fails an owner check the persona does not satisfy —
+`aef loop cycle --proposer rule_based --cassette-miss live` printed:
+
+```
+  ledger verified: 1 entr(ies)
+  no admissible failure memory: no candidate this cycle
+```
+
+It never reached the proposer. An owner **check** is the task metric and is
+evaluated by the harness after the run (ADR 0113); `make_reflect_node` writes
+`kind="failure"` only when `state.errors`/`state.tool_results` carry a signal;
+and `make_prompt_agent_node` declares no `fallback_node_id`, so a node that
+raises aborts the run rather than recording an error. **A prompt-file agent
+that answers cannot produce failure memory** — both bootstrapped runs, the
+failing one included, wrote `kind="success"` with `"no failure signals: 0
+error(s) recorded"`.
+
+**Built anyway, and measured on evidence written by the real reflect node**
+over a state carrying the check failure as an error — synthetic in origin,
+real in shape, and labelled as such everywhere it appears.
+`RuleBasedPromptProposer` (`aef/harness/prompt_proposer.py`) takes the
+highest-recurrence admissible failure entry — consolidated through
+`RuleBasedConsolidator`, so ADR 0110's two-run rule, 0116's staleness and
+0118's tallies are the measured ones rather than a second copy — and appends
+**one** bullet under `## Lessons (aef)`, carrying its signature and run count
+in an HTML comment. No model call. Existing bullets are copied byte for byte;
+eviction ranks by staleness among the bullets this loop wrote and never
+touches an owner's; a path outside Zone A is `PromptOutsideZoneAError`, raised.
+
+**It is nobody's default, and the reason is written down**: `Node` carries no
+kind, `_build_proposer` is handed a `LoopConfig` and never a `Graph`, and the
+agent path's suffix is a filename convention — switching proposers on it would
+make `--proposer` mean different things in different repos.
+
+**L4 — one cycle each, `--cassette-miss live --config aef.yaml`:**
+
+| | `rule_based_prompt` | `llm` (claude-opus-5) |
+|---|---|---|
+| candidate | **yes** | **no** |
+| lines changed | 4 | — |
+| G5 drift | **0.007 / 0.500** | not reached |
+| gates | G0 pass · G1 pass · G4 pass · G5 pass · **G2 fail** (could not judge) · G3 not run (no cohort) | none ran |
+| live calls | **0** | **1**, discarded |
+
+The `llm` arm's reply was rejected by `ast.parse` — *"invalid character '—'"*.
+ADR 0122's finding, restated for prose: **`LLMProposer` validates only Python,
+so it cannot propose a prompt at all.** The drift budget was never reached and
+was not raised.
+
+**Paired, all-live, on a cassette-stripped corpus, run twice:** the failing
+scenario goes **0.0000 → 1.0000**, mean 0.5 → 1.0, identical both times. The
+"lesson reached the prompt and changed nothing" falsification did **not** fire
+— **and the caveat is the finding**: the lesson's text is the critic's
+rendering of the failure, and the failure names the check, so the appended
+bullet contains the literal `contains 'VERDICT:'` and the agent then said
+`VERDICT:`. ACE's method and teaching to the test are the same operation here,
+and nothing in the loop distinguishes them.
+
+**Three defects reported, not fixed** (other workers' files): G2 always raises
+`TrustBoundaryError` on a non-Python candidate, because with no cohort it
+re-materialises the workspace G1 already built; **G3 has no null hypothesis
+for a prompt candidate**, so one can be rejected but never accepted — the
+load-bearing limit on this increment; and `aef migrate --agent-root
+.claude/agents` prints a run command Python cannot import. Two smaller ones:
+`bless` accepts an in-repo `--state` that `cycle` refuses, and a live call the
+`llm` proposer spends is invisible when its fallback also proposes nothing.
+
+**Mutations: 6 perturbed, 6 detected**, each restored from a shasum-verified
+byte backup with the final hash asserted equal to the pre-edit hash.
+
+**Live calls: 15** (budget ≤ 30): 1 quota preflight (`input_tokens: 2`), 2
+bootstrap, 1 `llm` cycle, 1 rejection probe, 10 scoring across three paired
+passes.
+
+**Green bar.** `pytest -q` **2163 passed, 5 skipped**; collected **2136 →
+2168 (+32, none removed)**. `mypy aef examples` clean, 132 files. `ruff check
+.` clean. `ruff format --check aef tests examples` clean, 254 files.
+
+**No rubric score moves.** What would earn a dimension-2 point is a prompt
+candidate an executing gate reaches an *accept* verdict on, which needs the
+two gate defects above answered; ADR 0157 also states what S1's
+retrieval→prompt wiring changes about that claim.
