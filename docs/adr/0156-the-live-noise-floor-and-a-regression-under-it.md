@@ -333,3 +333,44 @@ corpus's resolution, and consequence 2 says what would change it.
 ## Note (orchestrator, at merge)
 
 Written against the pre-J0 rubric: dim 1 was 19/20 on this branch and is **15/20** on `main` after ADR 0151. The delta claimed here is 0 either way, so no row moves; the floor line and the ReDoS finding stand unchanged.
+
+
+## Erratum (ADR 0185, worker S2b): the floor above includes a dead call
+
+**The floor as published — mean 0.7639, spread 0.1666 — is the floor of a
+scorer that has since been changed.** This ADR identified repeat 3's
+`sum-13: 0.00` as a harness/model failure rather than a content failure, and
+then deliberately kept it: *"that is a property of live scoring, not an
+artefact to be excluded — a gate pass will meet it too."*
+
+Right about the world, wrong about the gate. A gate pass does meet transient
+call failure, which is why G3 now **retries such a call once and, if it dies
+again, declines to score that scenario** in any arm rather than recording a
+0.0 it never observed (ADR 0185). So the number a live claim on this suite has
+to clear is no longer this one.
+
+Re-aggregated from the data in `docs/research/i13/` under that rule — the
+exclusion is symmetric, so the regression arm moves too (0.7361 → 0.7194):
+
+| | floor repeats | mean of means | spread | the planted regression's fall |
+|---|---|---|---|---|
+| as published above | 0.8333 / 0.7917 / 0.6667 | 0.7639 | 0.1667 | 0.0278 = 0.17× the spread |
+| dead call excluded | 0.8333 / 0.7917 / 0.8000 | **0.8083** | **0.0417** | 0.0889 = **2.13×** the spread |
+
+> **floor (Opus, dead calls excluded, re-aggregated not re-measured): mean
+> 0.8083, spread 0.0417** — the bar a future live increment should clear.
+
+Under that rule this ADR's planted regression **would have been detectable by
+the mean**, at 4.0 standard deviations of the means. That does not change this
+ADR's verdict — dimension 1 did not move on the evidence available when it was
+written, and no rubric dimension moves on a re-aggregation. It is arithmetic on
+three repeats with one exclusion, and removing the worst score of the worst
+repeat mechanically raises the floor and shrinks the spread. It has to be
+re-run to be a floor.
+
+Consequence 3 above ("per-scenario, paired comparison beats the mean … offered
+to the S-thread") was taken up: `paired_sign_test` is in G3's evidence line and
+gates nothing. On this ADR's own 18 observations it reads **7 down / 3 up / 8
+same, p=0.3438** — the direction the mean could not see, at a significance the
+sample cannot support. `sum-13` repeat 3's dead 0.00 was also a wrong-signed
+paired "up"; excluding it gives 7/2, p=0.1797.

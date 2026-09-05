@@ -46,6 +46,67 @@ class EntrypointError(RuntimeError):
     pass
 
 
+# The exception an adapter raises when a call could not be answered. Adapters
+# "must not let vendor-specific exception types leak past their own module"
+# (`aef/providers/base.py`), so this one name covers every backend.
+MODEL_DEATH_ERRORS = frozenset({"ModelProviderError"})
+
+
+def _error_type_chain(failure: str) -> tuple[str, ...]:
+    """The exception type names in a runner failure string, outermost first.
+
+    Both scoring paths format a failure as `f"{type(exc).__name__}: {exc}"`,
+    and the isolated path nests one inside another because the worker frames
+    a node's exception the same way before the parent re-raises it — so a
+    provider death arrives as
+    `"NodeEvaluationError: ModelProviderError: <adapter's message>"`.
+    Only the leading segments that look like exception classes are type
+    names — a bare identifier in CapWords, the convention every exception in
+    this repo and the standard library follows. The message that follows may
+    contain anything, colons included, and stops the walk:
+    `"...: ModelProviderError: claude: exited 1"` yields the two type names
+    and not `claude`.
+
+    What this cannot do is tell a real `ModelProviderError` from a candidate
+    that raised one itself, or that spelled the name into another exception's
+    message. Nothing reading a string can. The exclusion those feed is
+    bounded by a retry and a refusal floor instead of by this function
+    (see `G3Improvement`, ADR 0185).
+    """
+    names: list[str] = []
+    for segment in failure.split(": "):
+        if segment.isidentifier() and segment[:1].isupper():
+            names.append(segment)
+            continue
+        break
+    return tuple(names)
+
+
+def is_dead_call(failure: str | None, *, cassette_miss: str) -> bool:
+    """Did the model call RAISE, as distinct from answering wrongly?
+
+    Two conditions, and the second is load-bearing.
+
+    1. Some exception in the chain is a `ModelProviderError`.
+    2. **The run was live.** Under `cassette_miss="fail"` — the default, and
+       what every replayed gate pass uses — no call is ever attempted, so
+       nothing can die: a `ModelProviderError` there is `CassetteProvider`
+       reporting a MISS, which is a behavioural difference and the exact
+       signal the replayed path detects a changed prompt with (ADR 0123
+       measured the planted regression as 0.0000 with 36 misses). Calling
+       that a dead call would excuse the strongest evidence the gates have.
+       So a dead call is only possible on the live path K1 opened.
+
+    A candidate can of course raise `ModelProviderError` from its own node
+    body under `--cassette-miss live`, and this function cannot tell that
+    apart. That is why the exclusion is bounded twice over — one retry, then
+    a refusal floor — rather than trusted (see `G3Improvement`, ADR 0185).
+    """
+    if failure is None or cassette_miss != "live":
+        return False
+    return bool(MODEL_DEATH_ERRORS & set(_error_type_chain(failure)))
+
+
 def load_graph(entrypoint: str) -> Graph:
     """`package.module:factory` **or** `path/to/graph.py:factory` -> the
     `Graph` that factory returns.
@@ -227,7 +288,8 @@ def run_scenario(
             "paused": f"{exc}",
         }
     except Exception as exc:  # noqa: BLE001 - any failure is an outcome, not a crash
-        return {
+        failure = f"{type(exc).__name__}: {exc}"
+        failed: dict[str, Any] = {
             "outcome": {
                 "terminated": False,
                 "plan_status": None,
@@ -237,9 +299,15 @@ def run_scenario(
             },
             "score": 0.0,
             "cost_tokens": 0,
-            "failure": f"{type(exc).__name__}: {exc}",
+            "failure": failure,
             "cassette": {"hits": cassette.hits, "misses": cassette.misses},
         }
+        if is_dead_call(failure, cassette_miss=cassette_miss):
+            # The SAME classifier the isolated path uses, from the same
+            # string, for the reason ADR 0091 states: two constructions of
+            # one judgement drift, and the drift is a phantom.
+            failed["dead_call"] = True
+        return failed
 
     elapsed_ms = (time.monotonic() - started) * 1000.0
     outcome = classify(result.final_state, result.trace, terminated=True)

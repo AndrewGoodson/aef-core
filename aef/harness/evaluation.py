@@ -131,6 +131,13 @@ def score_of(record: EvaluationRecord) -> float:
     return record.task_completion
 
 
+def _without(scores: ScoreSet, drop: frozenset[str]) -> ScoreSet:
+    return _replace(
+        scores,
+        per_scenario={sid: v for sid, v in scores.per_scenario.items() if sid not in drop},
+    )
+
+
 def build_score_set(label: str, records: dict[str, EvaluationRecord]) -> ScoreSet:
     return ScoreSet(
         label=label,
@@ -148,10 +155,41 @@ class CohortVerdict:
     incumbent: ScoreSet
     cohort: tuple[ScoreSet, ...]
     percentile: float = 95.0
+    # Scenarios whose MODEL CALL DIED — in any arm — rather than being
+    # answered (ADR 0185). Empty on every replayed run, because a replay
+    # attempts no call that can die; populated only under
+    # `--cassette-miss live`. G3 reads this; nothing else does.
+    dead_scenarios: frozenset[str] = frozenset()
+    # Of those, the ones the runner retried once and that survived the
+    # retry. Reported so the bounded retry is visible rather than silent.
+    retried_scenarios: frozenset[str] = frozenset()
 
     @property
     def cohort_means(self) -> tuple[float, ...]:
         return tuple(s.mean for s in self.cohort)
+
+    def without(self, scenario_ids: frozenset[str] | set[str]) -> CohortVerdict:
+        """The same verdict with `scenario_ids` dropped from EVERY arm.
+
+        Symmetry is the whole point. Dropping a scenario from the candidate
+        alone would compute its mean over one scenario set and the threshold
+        it must beat over another, which is not a comparison. Dropping it
+        everywhere leaves candidate, incumbent and every control judged on
+        exactly the scenarios that were actually answered.
+
+        `cost_tokens` is a per-arm total and is carried through unchanged: a
+        scenario whose call died contributed zero tokens to it, so there is
+        nothing to subtract.
+        """
+        drop = frozenset(scenario_ids)
+        if not drop:
+            return self
+        return _replace(
+            self,
+            candidate=_without(self.candidate, drop),
+            incumbent=_without(self.incumbent, drop),
+            cohort=tuple(_without(s, drop) for s in self.cohort),
+        )
 
     @property
     def threshold(self) -> float:

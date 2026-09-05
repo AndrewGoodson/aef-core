@@ -52,6 +52,11 @@ class VariantRun:
     # Why individual scenarios produced nothing, as the runner reported it.
     # Carried so a harness fault is distinguishable from a bad candidate.
     failures: tuple[str, ...] = ()
+    # Scenarios whose model call DIED (after one retry) rather than being
+    # answered wrongly, and the ones a retry rescued. Empty on every
+    # replayed run — see `scenario_runner.is_dead_call` (ADR 0185).
+    dead: frozenset[str] = frozenset()
+    retried: frozenset[str] = frozenset()
 
     @property
     def scenario_ids(self) -> frozenset[str]:
@@ -107,6 +112,8 @@ def run_variant(
             cost_tokens=sum(r.cost_tokens for r in results.values()),
         ),
         failures=tuple(f"{sid}: {r.failure}" for sid, r in sorted(results.items()) if r.failure),
+        dead=frozenset(sid for sid, r in results.items() if r.dead_call),
+        retried=frozenset(sid for sid, r in results.items() if r.retried),
     )
 
 
@@ -199,7 +206,7 @@ class CohortBuilder:
             live_provider=self.live_provider,
         )
 
-        cohort = tuple(
+        controls = tuple(
             run_variant(
                 ws,
                 scenarios,
@@ -209,13 +216,25 @@ class CohortBuilder:
                 policy_config=self.policy_config,
                 cassette_miss=self.cassette_miss,
                 live_provider=self.live_provider,
-            ).scores
+            )
             for label, ws in self._control_workspaces(diff, workroot)
         )
 
         plan = self.plan(scenarios)
+        # The UNION across every arm, and it has to be the union. A scenario
+        # dropped from the candidate alone would leave its mean computed over
+        # one scenario set and the p95 it must beat over another — see
+        # `CohortVerdict.without`. A dead call in a CONTROL matters most of
+        # all: scored 0.0 it drags that control's mean down, which drags p95
+        # down, which LOWERS the bar the candidate has to clear. Excluding it
+        # raises the bar back (ADR 0185).
+        runs = (candidate, incumbent, *controls)
         verdict = CohortVerdict(
-            candidate=candidate.scores, incumbent=incumbent.scores, cohort=cohort
+            candidate=candidate.scores,
+            incumbent=incumbent.scores,
+            cohort=tuple(run.scores for run in controls),
+            dead_scenarios=frozenset().union(*(run.dead for run in runs)),
+            retried_scenarios=frozenset().union(*(run.retried for run in runs)),
         )
         return verdict, candidate, plan.describe()
 
