@@ -32,7 +32,18 @@ at budget 800 it falls 6 -> 5 -> 4 -> 3 -> 1 as R rises, because near-duplicate
 records about one failure crowd out every other lesson. More experience makes
 the un-consolidated agent retrieve worse. Wiki holds at 6.
 
-The knob did not survive. See `test_the_boost_buys_no_coverage_at_any_setting`.
+The knob did not survive. See `test_the_boost_buys_no_coverage_at_any_setting`,
+whose docstring records what ADR 0175 later narrowed about it, and
+`test_the_shipped_boost_default_is_the_measured_one`, which pins the default to
+the two measurements that produced it.
+
+**What ADR 0175 did to the headline above.** The coverage numbers in that table
+are unchanged and were never disputed. What 0175 measured is the thing this file
+could not: whether coverage predicts the TASK metric. Re-running ADR 0155's four
+ACE arms on a corpus that forms a real knowledge entry, arm (c) scored 0.9059
+against arm (b)'s 0.9176 with the consolidated lesson in ten of seventeen
+prompts. Coverage is therefore a proxy that has been shown NOT to predict task
+outcome on that corpus. This layer's mechanism works; its payoff is unproven.
 """
 
 from datetime import UTC, datetime
@@ -181,6 +192,22 @@ def test_the_boost_buys_no_coverage_at_any_setting() -> None:
     A knob that changes ordering but never changes the metric the layer is
     justified by is not a tuning parameter, it is an unjustified default. It is
     now 0.0, which ADR 0110 named in advance as the honest kill for it.
+
+    **Narrowed by ADR 0175, deliberately.** The assertion below is still true of
+    this corpus and is unchanged. What is no longer true is the generalisation
+    the paragraph above reads as: on a real corpus the boost DOES change the
+    ordering that matters. Over S1b's seed — one check-derived entry (ADR 0174)
+    against seventeen near-identical `success` records — the entry reaches
+    `render_retrieved_context`'s five bullets in 0 of 17 scenarios at 0.0, 0.5
+    and 1.0, and in 10 of 17 at 3.0. This corpus cannot produce that shape (it
+    has six distinct lessons, not one lesson buried under duplicates of a
+    non-lesson), which is why the numbers here are flat.
+
+    The default survives anyway, and for the stronger reason: S1b ran arm (c)
+    LIVE at boost 3.0, with the lesson demonstrably in ten prompts, and the task
+    metric was 0.9059 against arm (b)'s 0.9176. The knob moves what the model
+    sees and does not move the answer. See
+    `test_the_shipped_default_is_the_measured_one` and ADR 0175.
     """
     for budget in (200, 400, 800):
         for r in (2, 3, 5, 10):
@@ -235,7 +262,19 @@ def test_a_raised_boost_walks_a_stale_entry_toward_displacing_a_fresh_record() -
 
 def test_the_shipped_default_is_the_measured_one() -> None:
     """Guards the conclusion itself: raising this default again should require
-    re-running the A/B, not just editing a number."""
+    re-running the A/B, not just editing a number.
+
+    There are now TWO A/Bs behind it, against two different metrics on two
+    corpora, and it survived both:
+
+    - ADR 0110 (this file): distinct-lesson coverage identical at 0/0.5/1/3.
+    - ADR 0175 (`docs/research/i12b/`): on a corpus where the boost decides
+      whether the store's only lesson reaches the model at all — 0 of 17
+      scenarios at 0.0/0.5/1.0, 10 of 17 at 3.0 — arm (c) run LIVE at boost 3.0
+      on `claude-opus-5[1m]` scored 0.9059 against arm (b)'s 0.9176, worse on
+      the mean AND worse on the four owner-check negatives (0.8500 vs 0.9000).
+      The knob changes what the model sees; the answers do not follow.
+    """
     assert MemoryRetriever(memory=InMemoryMemoryStore(), agent_id="a1").knowledge_boost == 0.0
 
 

@@ -3987,3 +3987,88 @@ no cassette hit/miss count, so "scored live" and "replayed" are
 indistinguishable from its output — the same reporting gap ADR 0156 named for
 `aef loop score`; and `run_loop`'s wall-clock stop ends an arm mid-experiment
 with no signal beyond `stopped_because`.
+
+## S1b — the arms were real this time, and the layer still did not pay (ADR 0175)
+
+**Model `claude-opus-5[1m]`, the session default; 120 live calls of a budget of
+130** (1 preflight + 17 + 17 + 17 + 68). Every number re-measured on Opus; none
+of ADR 0155's is reused.
+
+ADR 0155 ran the four ACE arms and found the falsification `(c) <= (b)` fired
+for a reason that made the number meaningless — **zero knowledge entries formed
+in any arm**, so (b) and (c) were the same arm. ADR 0174 built the producer that
+makes recurrence reachable and ADR 0171 built a corpus with owner-check
+negatives in both splits. This increment re-ran the arms with the layer actually
+engaged.
+
+**Step 0 — the seed, at zero live cost.** The 20-scenario TRAIN split was
+replayed from each scenario's committed cassette with `on_miss="fail"`, so a
+single changed prompt byte would abort rather than spend quota. Three train
+scenarios (`sum-22`, `sum-25`, `sum-26`) failed
+`check:working_memory.summary:max_words`; `RuleBasedConsolidator` folded them
+into **1 knowledge entry across 3 distinct runs**. The arms are scored on
+VALIDATION, which the seed never saw.
+
+**The reproduction, before quota, changed the plan.** Hashing every rendered
+draft prompt under a recording provider:
+
+```
+arm=a boost=0.0  hash=5956e7ff…  lesson in prompt  0/17
+arm=b boost=0.0  hash=c6873a50…                    0/17
+arm=c boost=0.0  hash=c6873a50…  <- byte-identical to (b)
+arm=c boost=0.5  hash=c6873a50…  <- byte-identical to (b)
+arm=c boost=1.0  hash=c6873a50…  <- byte-identical to (b)
+arm=c boost=3.0  hash=77db3dc3…                   10/17
+```
+
+At the shipped `knowledge_boost` default the store's only lesson never enters
+`render_retrieved_context`'s five bullets, so arm (c) is arm (b). Running it
+there would have repeated ADR 0155's mistake *with an entry present*, which is
+worse — the null would have read as a result about the layer. The live (c) and
+(d) ran at **boost 3.0**, the first swept value that surfaces the lesson.
+
+**The four arms, 17 validation scenarios, 119 live calls:**
+
+| arm | mean | negatives (n=4) | calls |
+|---|---|---|---|
+| (a) no retrieve | 0.8941 | 0.8500 | 17 |
+| (b) raw records | **0.9176** | **0.9000** | 17 |
+| (c) + knowledge @ boost 3.0 | 0.9059 | 0.8500 | 17 |
+| (d) + LLM reflection | 0.9529 | 0.8500 | 68 |
+
+**Falsification `(c) <= (b)`: FIRED, this time with the layer engaged.** One
+entry, three source runs, the lesson in ten of seventeen prompts — and (c) still
+scored below (b) on the mean and below (b) on the four owner-check negatives,
+the scenarios a word-cap lesson had to move. **ADR 0110's coverage result is
+therefore disproved as a predictor of task outcome on this corpus**, superseding
+ADR 0155's "unconfirmed proxy". The mechanism works; the payoff is not there.
+
+**Arm (c) and arm (d) sent byte-identical draft prompts on 17/17 scenarios.**
+Arm (d)'s 51 extra `LLMCritic`/`LLMJudge` calls produce records that rank below
+seventeen near-identical successes and never reach a bullet, so `+0.0470` is
+same-prompt variance by construction. `reflection.impl: llm` stays off for the
+fourth time (0115, 0123, 0155, here), now with a mechanism rather than a null.
+
+**The noise bar was measured inside the experiment**, because a/b/c/d cost 119
+of 130 calls and no repeat fit. From the pairs that sent identical prompts:
+(c) vs (d) 17/17 identical, mean diff +0.0471, 4 scenarios changed; (b) vs (c)
+7/17 identical, mean diff −0.0857, 5 changed. **Every arm delta (+0.0235,
+−0.0117, +0.0470) sits inside that band.**
+
+**Rubric: dimension 2 stays 12/20, delta 0.** No row prepended — the artifact
+shows the opposite of an improvement. `knowledge_boost` stays 0.0 and **no file
+under `aef/` was modified**; the two boost tests in
+`tests/services/knowledge/test_ab_coverage.py` gained the second measurement in
+their docstrings, deliberately, because ADR 0110's generalisation ("a knob that
+changes ordering but never changes the metric") is now half false: it changes
+ordering decisively and still does not change the metric.
+
+**Defects found outside this worker's files** (reported, not fixed). ADR 0116's
+staleness demotion walks a *training* lesson out of the prompt as a scored split
+proceeds and nothing re-freshens it — the entry is rank 0 for nine scenarios and
+rank 25–39 by the seventeenth, so the two negatives late in the split never saw
+the lesson at all, halving the power of the comparison this increment exists
+for. Arm (d)'s reflection output has no path to a prompt. And
+`render_retrieved_context(max_items=5)` — not `context_budget_tokens` — is the
+budget that actually binds: the retriever admits all 24–40 chunks and a constant
+five decides what the model reads.
