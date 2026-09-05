@@ -261,33 +261,35 @@ def test_a_timed_out_container_is_actually_dead(tmp_path: Path) -> None:
     container ran on.
     """
     import subprocess
+    import uuid
 
-    def running() -> set[str]:
-        # Only THIS harness's containers. `docker ps --quiet` alone snapshots
-        # the whole daemon, and a concurrent test run on the same box reads
-        # as a leak: this assertion flaked on five parallel workers in one
-        # night before the filter existed. Every gate container is started
-        # with `--name aef-gate-<id>` (see `container_argv`), so the name
-        # prefix is the honest scope.
+    # THIS run's container, by a name nobody else can be using. Filtering
+    # `docker ps` by the `aef-gate-` prefix (the previous fix) still raced
+    # with a concurrent full-suite run of this very test on the same
+    # daemon; the fourth flake in one night. The assertion is about the one
+    # container this test started, so ask the daemon about exactly that.
+    mine = f"aef-gate-test-{uuid.uuid4().hex[:12]}"
+
+    def still_running() -> set[str]:
         out = subprocess.run(
-            [_RUNTIMES[0], "ps", "--quiet", "--filter", "name=aef-gate-"],
+            [_RUNTIMES[0], "ps", "--quiet", "--filter", f"name=^{mine}$"],
             capture_output=True,
             text=True,
             check=False,
         )
         return set(out.stdout.split())
 
-    before = running()
     result = run_containerized(
         ["python", "-c", "import time; time.sleep(60)"],
         workdir=tmp_path,
         runtime=detect_container_runtime(IMAGE, verify=False),
         policy=_policy(timeout_s=3.0),
+        name=mine,
     )
     assert result.timed_out, "the fixture did not time out; this test proves nothing"
 
-    leaked = running() - before
-    assert not leaked, f"container(s) still running after the timeout: {leaked}"
+    leaked = still_running()
+    assert not leaked, f"container {mine} still running after the timeout: {leaked}"
 
 
 def test_the_run_is_named_so_there_is_something_to_kill() -> None:

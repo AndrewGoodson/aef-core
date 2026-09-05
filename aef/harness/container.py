@@ -298,6 +298,7 @@ def run_containerized(
     workdir: Path,
     runtime: ContainerRuntime,
     policy: SandboxPolicy | None = None,
+    name: str | None = None,
 ) -> SandboxResult:
     """Run `argv` inside a container and report what was ACTUALLY enforced.
 
@@ -313,7 +314,9 @@ def run_containerized(
     if not workdir.is_dir():
         raise SandboxUnavailableError(f"sandbox workdir {workdir} does not exist")
 
-    name = f"aef-gate-{uuid4().hex[:16]}"
+    # A caller may name its container so it can ask the daemon about exactly
+    # that one afterwards (the leak test does); the default stays unique.
+    name = name or f"aef-gate-{uuid4().hex[:16]}"
     command = container_argv(argv, runtime=runtime, policy=policy, workdir=workdir, name=name)
 
     started = time.monotonic()

@@ -126,7 +126,9 @@ LOAD_BEARING = (
 CORPUS_README_PINS = (
     "claude-fable-5-1",
     "quota is exhausted",
-    "cannot be regenerated",
+    "every cassette key unchanged",
+    "holdout",
+    "owner's act",
 )
 
 
@@ -263,15 +265,17 @@ def test_the_load_bearing_detector_would_notice_a_loss() -> None:
 
 
 def test_the_corpus_readme_records_which_model_wrote_what() -> None:
-    """`corpus/README.md` is the only place the twenty `claude-fable-5-1`
-    recordings are named, and their quota is exhausted — the scenarios cannot
-    be remade, so a measurement that assumes one model is wrong by 6/17 on the
-    validation split (ADR 0162's defect 1)."""
+    """`corpus/README.md` is where the recordings' models are named. ADR 0162
+    found twenty `claude-fable-5-1` recordings nobody had declared; ADR 0186
+    re-recorded the eighteen in train and validation on Opus with every
+    cassette key unchanged and left the two HOLDOUT ones on Fable by decision
+    (spending the holdout is the owner's act). The README must say all of
+    that, and its counts must match the files."""
     text = _flat((REPO / "corpus" / "README.md").read_text())
     for needle in CORPUS_README_PINS:
         assert needle in text, f"corpus/README.md lost the provenance note {needle!r}"
-    # Not just the words: the split that matters, with its count.
-    assert "6/17" in text, "the affected fraction of the validation split is not stated"
+    # Not just the words: the re-recording's own count.
+    assert "8 of 18" in text, "how many verdicts the re-recording moved is not stated"
     # And the table is derived from the files rather than typed, so it cannot
     # drift from them. Re-derive it here; the counts must still hold.
     import collections
@@ -288,8 +292,9 @@ def test_the_corpus_readme_records_which_model_wrote_what() -> None:
             )
         )
         agg[models] += 1
-    assert agg[("claude-fable-5-1",)] == 20, agg
-    assert agg[("claude-opus-5[1m]",)] == 19, agg
+    # Was 20 / 19 until ADR 0186; the holdout pair is the declared exception.
+    assert agg[("claude-fable-5-1",)] == 2, agg
+    assert agg[("claude-opus-5[1m]",)] == 37, agg
 
 
 @pytest.mark.parametrize(

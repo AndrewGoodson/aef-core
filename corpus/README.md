@@ -23,11 +23,16 @@ become a measurement of memorisation.
 
 ## Provenance — which model wrote each recording
 
-**This corpus is not one model's output, and nothing said so until now.** Six
-validation scenarios were recorded on a model whose quota is exhausted, and a
-judge A/B ran across the mixture without knowing it — a judge grading its own
-writing and a judge grading a stranger's are not the same measurement, and
-that is the entire variable in a self-preference rig (ADR 0162, amendment 1).
+**Train and validation are one model's output; the holdout is another's, and
+this section says so.** Twenty scenarios (`sum-01`…`sum-20`) were recorded on
+`claude-fable-5-1`, whose quota is exhausted; a judge A/B ran across the
+mixture without knowing it (ADR 0162, amendment 1). ADR 0186 re-recorded the
+eighteen in train and validation on `claude-opus-5[1m]` with every cassette
+key unchanged — same prompts, same checks, only the answers moved (8 of 18
+verdicts, all length, none content). The two **holdout** scenarios stay on
+Fable: spending the holdout is the owner's act, so they are declared
+exceptions, not current behaviour. `tests/harness/test_corpus_provenance.py`
+asserts this table.
 
 Each scenario carries its answering model in
 `model_calls[].result.model`, so the table is derived rather than remembered:
@@ -43,11 +48,9 @@ $ python -c "import json,glob,collections;
 
 holdout     claude-fable-5-1       n= 2  sum-19-tram-depot .. sum-20-seed-bank
 train       (no model call)        n= 6  boundary-3 .. tripwire-impossible-train
-train       claude-fable-5-1       n=12  sum-01-kestrel-ferry .. sum-12-bell-recast
-train       claude-opus-5[1m]      n= 8  sum-21-ardvey-ferry .. sum-28-kellet-branch
+train       claude-opus-5[1m]      n=20  sum-01-kestrel-ferry .. sum-28-kellet-branch
 validation  (no model call)        n= 5  tripwire-impossible-val .. val-hard-5
-validation  claude-fable-5-1       n= 6  sum-13-cider-press .. sum-18-heron-rookery
-validation  claude-opus-5[1m]      n=11  sum-29-brindle-viaduct .. sum-39-coldbeck-society
+validation  claude-opus-5[1m]      n=17  sum-13-cider-press .. sum-39-coldbeck-society
 ```
 
 | recording model | scenarios | splits | can it be re-recorded? |
