@@ -64,7 +64,13 @@ namespace_packages = true
 explicit_package_bases = true
 
 [tool.pytest.ini_options]
-markers = ["slow: end-to-end pipeline runs (N+2 corpus passes in subprocesses)"]
+markers = [
+    "slow: end-to-end pipeline runs (N+2 corpus passes in subprocesses)",
+    # The executable red team (ADR 0194). Every test under tests/adversarial/
+    # carries it, applied by that directory's conftest rather than by hand, so
+    # `pytest -m adversarial` cannot silently run less than the suite.
+    "adversarial: builds a hostile input, runs it through the real control, and mutates the control away",
+]
 testpaths = ["tests"]
 # Multiple test dirs share basenames (e.g. tests/state/test_schema.py and
 # tests/config/test_schema.py); importlib mode keys modules by full path

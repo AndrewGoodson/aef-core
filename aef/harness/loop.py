@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from aef.config import build_policy_config
+from aef.config.factory import build_halt_channel
 from aef.config.loader import AgentConfigError, load_agent_config_text
 from aef.config.schema import AgentConfig
 from aef.harness import archive, ledger
@@ -58,6 +59,7 @@ from aef.harness.git import GitError, GitRepo
 from aef.harness.monitoring import (
     Action,
     Digest,
+    HaltChannel,
     KillSwitch,
     MonitorPolicy,
     Observation,
@@ -116,6 +118,15 @@ LOOP_BRANCH_PREFIX = "loop/"
 # real repo whose default branch is `azure-agent/uptime-monitoring` reached it
 # from the documented defaults (ADR 0187's F-M8-1, reproduced; ADR 0189).
 FALLBACK_BASE_REF = "main"
+
+# Where the halt channel is read from when the invocation named no `--config`
+# (ADR 0195). Not a guess: `aef adopt` writes `aef.yaml` at the repo root, the
+# whole onboarding kit names it, and every other `--config` in this repo
+# defaults an owner to typing it. It matters that this constant exists rather
+# than being spelled at two call sites, because `_halt` and `digest` MUST
+# resolve the same channel — a digest reporting `yes` while a halt found
+# nothing is the exact failure this feature closes, one level up.
+DEFAULT_CONFIG_PATH = "aef.yaml"
 
 EXIT_OK = 0
 EXIT_REJECTED = 1
@@ -240,6 +251,12 @@ class LoopConfig:
     # branch is gone (ADR 0182). `None` means "the same as `graph_id`", so
     # every caller that never heard of this field behaves exactly as before.
     evidence_graph_id: str | None = None
+    # The owner's halt channel, when a caller has already built one (ADR
+    # 0195). `None` does NOT mean "no channel": it means "not supplied here",
+    # and `_halt_channel` then reads `halt_channel:` from the agent config at
+    # the BASE REF — same read as every other rule a candidate is judged by,
+    # so a candidate cannot silence its own halt by editing its branch.
+    halt_channel: HaltChannel | None = None
 
     @property
     def evidence_id(self) -> str:
@@ -495,16 +512,64 @@ def _preflight(config: LoopConfig) -> tuple[ledger.LedgerEntry, ...]:
     return entries
 
 
+def _halt_channel(config: LoopConfig) -> HaltChannel | None:
+    """The command to run when this loop halts, or `None` (ADR 0195).
+
+    Read from the BASE REF, like every other rule a candidate is judged by
+    (ADR 0082/0181). A halt channel a candidate could edit on its own branch
+    is one a candidate could delete on its own branch, and the halt most worth
+    delivering is the one a candidate caused.
+
+    **One resolver, used by both `_halt` and `digest`.** That is the whole
+    point of the function existing: a digest reporting `Halt channel
+    configured: yes` while a halt found nothing to run would be the same class
+    of defect as the line this feature replaces, one level up.
+
+    Every failure resolves to `None` — no config, no `halt_channel:` block, an
+    unreadable file, a repo `git show` cannot read. The digest then says `NO`,
+    which is true: nothing would run. Raising here instead would mean a
+    malformed config could stop a halt from being recorded, and the halt
+    matters more than the notification.
+    """
+    if config.halt_channel is not None:
+        return config.halt_channel
+    path = config.config_path or DEFAULT_CONFIG_PATH
+    if Path(path).is_absolute():
+        return None
+    try:
+        if not config.repo.path_exists_at(config.base_ref, path):
+            return None
+        agent_config = load_agent_config_text(
+            config.repo.show(config.base_ref, path), source=f"{config.base_ref}:{path}"
+        )
+    except (AgentConfigError, GitError, OSError):
+        return None
+    return build_halt_channel(agent_config.halt_channel)
+
+
 def _halt(config: LoopConfig, *, at: datetime, proposal_id: str, reasons: tuple[str, ...]) -> None:
     joined = "; ".join(reasons)
     config.paths.kill_switch.engage(joined)
+
+    # The channel runs BEFORE the ledger entry so that the entry can record
+    # what it managed — and AFTER the kill switch, so a channel that hangs to
+    # its timeout cannot leave the loop running. `HaltChannel.notify` converts
+    # every failure into a recorded result rather than raising, for the reason
+    # the ADR states plainly: a failed notification must never mask the halt.
+    channel = _halt_channel(config)
+    detail: dict[str, Any] = {"reasons": list(reasons)}
+    if channel is not None:
+        existing = ledger.read(config.paths.ledger_dir)
+        notification = channel.notify(joined, at=at, last_entry=existing[-1] if existing else None)
+        detail["halt_notification"] = notification.to_payload()
+
     ledger.append(
         config.paths.ledger_dir,
         kind=ledger.EventKind.HALTED,
         at=at,
         proposal_id=proposal_id,
         summary=joined,
-        detail={"reasons": list(reasons)},
+        detail=detail,
     )
 
 
@@ -1450,12 +1515,22 @@ def digest(
     # Deliberately NOT behind the kill switch: reading the record of why the
     # loop halted is exactly what you want to do while it is halted.
     entries = ledger.read(config.paths.ledger_dir)
+    # THE SAME resolver `_halt` uses (ADR 0195). The caller's flag is OR-ed in
+    # rather than overriding, because `aef loop digest` passes the webhook it
+    # read from the environment and the config block is a second channel, not
+    # a competing answer.
+    channel = _halt_channel(config)
     return build_digest(
         entries,
         since=since,
         until=until,
         owner_edits=owner_edits,
-        halt_channel_configured=halt_channel_configured,
+        halt_channel_configured=halt_channel_configured or channel is not None,
+        halt_channel=(
+            channel.description
+            if channel is not None
+            else ("webhook (AEF_HALT_WEBHOOK)" if halt_channel_configured else "")
+        ),
         runs_recorded=runs_recorded,
     )
 

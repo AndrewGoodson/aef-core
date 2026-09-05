@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 from aef.harness.ledger import EventKind, LedgerEntry
 
@@ -228,6 +229,143 @@ class KillSwitch:
             )
 
 
+REASON_PLACEHOLDER = "{reason}"
+# Long enough for a stack of ledger detail, short enough that a channel
+# cannot be used to exfiltrate a corpus through the notifier.
+MAX_NOTIFICATION_BYTES = 16_384
+
+
+@dataclass(frozen=True)
+class HaltNotification:
+    """What one attempt to reach the owner actually did.
+
+    `delivered` is the command's exit status, not the owner's attention. This
+    type cannot know whether anybody read anything, and it says so by naming
+    the field after the thing it can observe.
+    """
+
+    at: datetime
+    argv: tuple[str, ...]
+    delivered: bool
+    detail: str
+
+    def render(self) -> str:
+        mark = "delivered" if self.delivered else "FAILED"
+        return f"{self.at.isoformat()} {mark}: {self.argv[0]} — {self.detail}"
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "at": self.at.isoformat(),
+            # argv[0] only. The rest of an owner's command line is where a
+            # token ends up when somebody writes one there, and this payload
+            # goes into the ledger, which is committed evidence.
+            "command": self.argv[0],
+            "delivered": self.delivered,
+            "detail": self.detail,
+        }
+
+
+@dataclass(frozen=True)
+class HaltChannel:
+    """The command an owner named to be told the loop stopped (ADR 0195).
+
+    An argv template, run as a subprocess. No network code, no dependency, no
+    SDK: this repo does not know how its owner is paged, so it runs what it is
+    given. `{reason}` in any argv element is replaced by the halt's reason; the
+    whole notification — reason, time, and the ledger's last entry — is written
+    to the command's stdin as one JSON object, so a channel that wants
+    everything reads stdin and a channel that wants a subject line uses the
+    slot.
+
+    **Three things it deliberately is not.** It does not retry: a channel that
+    retried would be a queue, and a queue that loses its process loses the
+    message anyway — the durable record is the ledger, and this is the
+    doorbell. It does not page anyone by itself; it runs a command, and whether
+    that command reaches a human is the command's business. And it is exactly
+    as reliable as what the owner wrote, which is why `notify` returns what it
+    managed rather than raising, and why a failure is recorded beside the halt
+    instead of replacing it.
+    """
+
+    argv: tuple[str, ...]
+    timeout_s: float = 30.0
+    # Injected for tests and for a caller that wants to route the command
+    # somewhere else. `None` means a real subprocess.
+    runner: Callable[[tuple[str, ...], str, float], tuple[int, str]] | None = None
+
+    def __post_init__(self) -> None:
+        if not self.argv:
+            raise ValueError("a halt channel with no argv would tell nobody; name a command")
+        if self.timeout_s <= 0:
+            raise ValueError(f"halt channel timeout must be positive; got {self.timeout_s}")
+
+    @property
+    def description(self) -> str:
+        """What the digest prints. argv[0] and the argument count — never the
+        arguments, which is where an owner's token ends up."""
+        return f"{self.argv[0]} ({len(self.argv) - 1} argument(s))"
+
+    def notify(
+        self, reason: str, *, at: datetime, last_entry: LedgerEntry | None
+    ) -> HaltNotification:
+        payload = json.dumps(
+            {
+                "event": "halt",
+                "at": at.isoformat(),
+                "reason": reason,
+                "last_ledger_entry": (
+                    {
+                        "sequence": last_entry.sequence,
+                        "kind": last_entry.kind.value,
+                        "at": last_entry.at.isoformat(),
+                        "proposal_id": last_entry.proposal_id,
+                        "summary": last_entry.summary,
+                    }
+                    if last_entry is not None
+                    else None
+                ),
+            },
+            sort_keys=True,
+        )[:MAX_NOTIFICATION_BYTES]
+        argv = tuple(part.replace(REASON_PLACEHOLDER, reason) for part in self.argv)
+
+        try:
+            code, detail = (self.runner or _run_halt_command)(argv, payload, self.timeout_s)
+        except Exception as exc:  # noqa: BLE001 - a failed channel must not mask the halt
+            return HaltNotification(
+                at=at,
+                argv=argv,
+                delivered=False,
+                detail=f"{type(exc).__name__}: {exc}; the halt still stands",
+            )
+        return HaltNotification(
+            at=at,
+            argv=argv,
+            delivered=code == 0,
+            detail=detail or (f"exit {code}" if code else "exit 0"),
+        )
+
+
+def _run_halt_command(argv: tuple[str, ...], payload: str, timeout_s: float) -> tuple[int, str]:
+    """The default runner: one subprocess, the payload on stdin, bounded.
+
+    `shell=False` and no `env=` widening. A halt channel runs while the loop is
+    already in a bad state, so it gets the narrowest invocation that can work.
+    """
+    import subprocess
+
+    completed = subprocess.run(  # noqa: S603 - argv is owner-supplied by construction
+        list(argv),
+        input=payload,
+        capture_output=True,
+        text=True,
+        timeout=timeout_s,
+        check=False,
+    )
+    tail = (completed.stderr or completed.stdout or "").strip().splitlines()
+    return completed.returncode, (tail[-1][:200] if tail else f"exit {completed.returncode}")
+
+
 @dataclass(frozen=True)
 class HaltNotifier:
     """Getting a halt in front of the owner (Q-A5).
@@ -238,24 +376,46 @@ class HaltNotifier:
 
     1. `HALT.md` at the repo root — impossible to miss on the next checkout
     2. a ledger entry — durable and bisectable
-    3. a POST to a webhook the owner configures **outside the repo**
+    3. a POST to a webhook the owner configures **outside the repo**, or a
+       `HaltChannel` command the owner names in `aef.yaml` (ADR 0195)
 
-    The URL is passed in, never read here and never committed: no secret
-    ships in this repository. If it is unset the digest says so **loudly on
-    every run** — an unconfigured alarm that stays quiet is worse than none,
-    because it looks like a working one.
+    The webhook URL is passed in, never read here and never committed: no
+    secret ships in this repository. The channel is an argv template read from
+    the config, which is why it can exist in the repo at all — it names a
+    program, not a credential. If NEITHER is set the digest says so **loudly on
+    every run**, because an unconfigured alarm that stays quiet is worse than
+    none: it looks like a working one.
     """
 
     webhook_url: str | None = None
     # Injected so the notifier is testable without a network, and so the
     # harness is not the thing that decides how to reach the outside world.
     poster: Callable[[str, str], None] | None = None
+    # The owner's `halt_channel:` block, already built. `None` means none.
+    channel: HaltChannel | None = None
 
     @property
     def configured(self) -> bool:
-        return bool(self.webhook_url)
+        return bool(self.webhook_url) or self.channel is not None
 
-    def notify(self, reason: str, *, repo_root: Path, at: datetime) -> tuple[str, ...]:
+    @property
+    def description(self) -> str:
+        """What the digest prints. Both channels named, neither's arguments."""
+        parts = []
+        if self.channel is not None:
+            parts.append(f"command {self.channel.description}")
+        if self.webhook_url:
+            parts.append("webhook (AEF_HALT_WEBHOOK)")
+        return ", ".join(parts)
+
+    def notify(
+        self,
+        reason: str,
+        *,
+        repo_root: Path,
+        at: datetime,
+        last_entry: LedgerEntry | None = None,
+    ) -> tuple[str, ...]:
         """Returns what it actually managed to do, not what it attempted."""
         done: list[str] = []
 
@@ -270,17 +430,25 @@ class HaltNotifier:
 
         if not self.configured:
             done.append(
-                "NO HALT CHANNEL CONFIGURED — nothing was sent to anyone. Set the halt "
-                "webhook so a halt reaches you without you looking for it."
+                "NO HALT CHANNEL CONFIGURED — nothing was sent to anyone. Name a command in "
+                "`halt_channel:` (aef.yaml) so a halt reaches you without you looking for it."
             )
             return tuple(done)
 
-        assert self.webhook_url is not None
-        try:
-            self._post(self.webhook_url, f"aef loop HALTED at {at.isoformat()}: {reason}")
-            done.append("posted to the configured halt webhook")
-        except Exception as exc:  # noqa: BLE001 - a failed notification must not hide the halt
-            done.append(f"halt webhook POST FAILED ({type(exc).__name__}); the halt still stands")
+        if self.channel is not None:
+            # Never raises: `HaltChannel.notify` converts every failure into a
+            # recorded `HaltNotification`, because a channel that threw here
+            # would replace the halt with the channel's own error.
+            done.append(self.channel.notify(reason, at=at, last_entry=last_entry).render())
+
+        if self.webhook_url:
+            try:
+                self._post(self.webhook_url, f"aef loop HALTED at {at.isoformat()}: {reason}")
+                done.append("posted to the configured halt webhook")
+            except Exception as exc:  # noqa: BLE001 - a failed notification must not hide the halt
+                done.append(
+                    f"halt webhook POST FAILED ({type(exc).__name__}); the halt still stands"
+                )
         return tuple(done)
 
     def _post(self, url: str, body: str) -> None:
@@ -333,6 +501,16 @@ class Digest:
     # because a system that reports nothing looks identical to one with
     # nothing to report.
     halt_channel_configured: bool = False
+    # What the channel IS, when there is one — `argv[0]` and an argument
+    # count, never the arguments (ADR 0195). `""` when unconfigured, which is
+    # the same fact `halt_channel_configured` carries and is rendered instead
+    # of it so the owner reads the command rather than a yes.
+    halt_channel: str = ""
+    # The last few halt notifications, read from the ledger's own HALTED
+    # entries. Reported because a channel that is configured and FAILING looks
+    # exactly like a working one from the config alone — which is the failure
+    # this whole line exists to end.
+    halt_notifications: tuple[str, ...] = ()
     runs_recorded: int = 0
 
     @property
@@ -383,14 +561,27 @@ class Digest:
             + ("" if self.blessed else " (no baseline blessed in this window)"),
             f"- Out-performing you editing code directly: {benefit}",
             f"- Production runs recorded: {self.runs_recorded}",
-            f"- Halt channel configured: {'yes' if self.halt_channel_configured else 'NO'}",
+            "- Halt channel configured: "
+            + (f"yes — {self.halt_channel}" if self.halt_channel_configured else "NO"),
         ]
         if not self.halt_channel_configured:
             lines += [
                 "",
                 "**No halt channel is configured.** If the loop halts, nothing will tell "
-                "you — you will find out by noticing it stopped. Set the halt webhook.",
+                "you — you will find out by noticing it stopped. Name a command in "
+                "`halt_channel:` (aef.yaml); it is run with the halt's reason and the "
+                "ledger's last entry, and this repo ships no guess about how you are paged.",
             ]
+        if self.halt_notifications:
+            # A configured channel that fails looks identical to a working one
+            # from the config alone. These lines are the difference.
+            lines += ["", "Halt notifications, most recent last:"]
+            lines += [f"- {line}" for line in self.halt_notifications]
+            if any("FAILED" in line for line in self.halt_notifications):
+                lines += [
+                    "  **A halt notification FAILED.** The halt still stands; what did not "
+                    "happen is you being told about it. Fix the command, not the loop.",
+                ]
         if self.runs_recorded == 0:
             lines += [
                 "",
@@ -463,6 +654,9 @@ class Digest:
                 "owner_edits": self.owner_edits,
                 "acceptance_rate": self.acceptance_rate,
                 "beating_manual_editing": self.beating_manual_editing,
+                "halt_channel_configured": self.halt_channel_configured,
+                "halt_channel": self.halt_channel,
+                "halt_notifications": list(self.halt_notifications),
             },
             indent=2,
             sort_keys=True,
@@ -492,12 +686,15 @@ def build_digest(
     scenarios_added: int = 0,
     owner_edits: int = 0,
     halt_channel_configured: bool = False,
+    halt_channel: str = "",
+    max_halt_notifications: int = 5,
     runs_recorded: int = 0,
 ) -> Digest:
     counts = dict.fromkeys(_COUNTED.values(), 0)
     security_events = 0
     containment_events = 0
     containment_reasons: list[str] = []
+    notifications: list[str] = []
 
     for entry in entries:
         if not since <= entry.at <= until:
@@ -512,7 +709,27 @@ def build_digest(
             reason = str(entry.detail.get("reason") or entry.summary or "no reason recorded")
             if reason not in containment_reasons:
                 containment_reasons.append(reason)
+        # Read from the ledger rather than passed in, so the digest reports
+        # what the loop actually managed at halt time — including from a
+        # process that is long gone (ADR 0195).
+        if entry.kind is EventKind.HALTED:
+            payload = entry.detail.get("halt_notification")
+            if isinstance(payload, dict):
+                mark = "delivered" if payload.get("delivered") else "FAILED"
+                notifications.append(
+                    f"{payload.get('at', entry.at.isoformat())} {mark}: "
+                    f"{payload.get('command', '?')} — {payload.get('detail', '')}"
+                )
+            else:
+                notifications.append(
+                    f"{entry.at.isoformat()} NOT SENT: no halt channel was configured "
+                    f"when the loop halted"
+                )
 
+    # A channel description implies a configured channel; the two cannot
+    # disagree, because a digest that printed a command beside `NO` would be
+    # unreadable.
+    configured = halt_channel_configured or bool(halt_channel)
     return Digest(
         since=since,
         until=until,
@@ -522,7 +739,9 @@ def build_digest(
         scenarios_added=scenarios_added,
         drift=drift,
         owner_edits=owner_edits,
-        halt_channel_configured=halt_channel_configured,
+        halt_channel_configured=configured,
+        halt_channel=halt_channel,
+        halt_notifications=tuple(notifications[-max_halt_notifications:]),
         runs_recorded=runs_recorded,
         **counts,
     )

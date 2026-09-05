@@ -23,6 +23,7 @@ from aef.config.schema import (
     CONTEXT_IMPLS,
     CommandProviderConfig,
     ContextConfig,
+    HaltChannelConfig,
     ModelProviderConfig,
     PoliciesConfig,
     ShadowConfig,
@@ -35,6 +36,7 @@ from aef.services.knowledge.base import KnowledgeStore
 from aef.services.memory.base import MemoryStore
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, see build_containment_mode
+    from aef.harness.monitoring import HaltChannel
     from aef.harness.shadow import ContainmentMode
 
 # `claude_code` first: in the repos this scaffold is built for, the harness
@@ -197,3 +199,23 @@ def build_containment_mode(config: ShadowConfig) -> ContainmentMode:
     from aef.harness.shadow import ContainmentMode
 
     return ContainmentMode(config.containment)
+
+
+def build_halt_channel(config: HaltChannelConfig | None) -> HaltChannel | None:
+    """`halt_channel:` as the thing the loop actually runs (ADR 0195).
+
+    `None` in, `None` out — an absent block means no channel, which is what
+    `aef loop digest` reports as `Halt channel configured: NO`. Deliberately
+    not a default: a channel this repo invented would be an alarm the owner
+    never chose and cannot be reached by, which is worse than the honest `NO`
+    it replaces.
+
+    A local import for `build_containment_mode`'s reason: `aef.config` must not
+    depend on `aef.harness` at module scope, or neither is importable alone.
+    """
+    if config is None:
+        return None
+
+    from aef.harness.monitoring import HaltChannel
+
+    return HaltChannel(argv=tuple(config.argv), timeout_s=config.timeout_s)

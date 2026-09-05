@@ -110,40 +110,84 @@ def test_the_residual_risk_is_a_number_with_a_basis(text: str) -> None:
 
 def test_the_adversarial_section_reports_failures_not_only_successes(text: str) -> None:
     """A list of attacks that all held is a claim of completeness, which this
-    program has three ADRs recording as a mistake.
-
-    This test greps the DOCUMENT, and that is all it is for: keeping the prose
-    from drifting away from the attacks it reports. It is not the record of
-    the round — an independent reviewer read it as one (ADR 0151, dim 4), so
-    the executable record is named here rather than left to be found:
-
-      A1 Tier-1 from config/env/flag
-         this file::test_the_document_still_describes_a_disabled_switch
-         test_loop_driver.py (a fully passing candidate ESCALATEs)
-      A2 forged manifest, guessed key
-         test_promotion_safety.py::test_a_different_key_does_not_verify
-      A3 signature replayed onto another commit
-         test_promotion_safety.py
-             ::test_altering_the_promoted_commit_invalidates_the_signature
-      A4 shadow a MUTATING node
-         test_promotion_safety.py
-             ::test_a_mutating_candidate_is_refused_before_any_live_request
-      A5 shadow node does direct file I/O
-         test_contained_shadow.py
-             ::test_the_bypass_is_still_real_under_the_opt_out_and_is_announced
-             ::test_the_container_is_the_default_when_a_runtime_and_image_are_available
-      A6 tenant tag evading the candidate arm
-         test_promotion_safety.py
-             ::test_an_untagged_request_is_refused_rather_than_defaulted
-      A7 harness code via evaluator.suites
-         tests/harness/test_zones.py
-
-    The two that BROKE IT are re-executed, not asserted: A4 constructs the
-    mutating candidate and asserts the refusal, A5 runs the escaping candidate
-    both ways and checks the host.
-    """
+    program has three ADRs recording as a mistake."""
     assert text.count("BROKE IT") >= 2
     assert "demonstrated bypass" in text
+
+
+def test_every_attack_the_document_names_has_a_module_that_runs_it() -> None:
+    """The replacement for a grep, and the reason it is a replacement.
+
+    This test used to be a comment. It listed each attack beside whichever
+    existing test happened to exercise the same control, and asserted the
+    document still said `BROKE IT` twice — a mapping maintained by hand, in
+    prose, inside a test that could not detect it going stale. An independent
+    reviewer read the result exactly as it deserved (ADR 0188, dim 4):
+    *"adversarial rounds exist as a document I was not allowed to read, not as
+    an executable red-team suite."*
+
+    `tests/adversarial/` is that suite (ADR 0194). What this test does now is
+    the one job the grep was attempting: keep the DOCUMENT and the SUITE from
+    drifting apart. It is deliberately bidirectional —
+
+      * an attack named here with no module is a claim with nothing behind it;
+      * a module with no attack named here is a control being exercised that
+        the owner reading this document is never told about.
+
+    Neither direction can be satisfied by editing prose.
+    """
+    import re
+
+    root = CASE.resolve().parents[2]
+    suite = root / "tests" / "adversarial"
+    assert suite.is_dir(), "the adversarial suite is gone; this document's §2 is prose again"
+
+    # `A1 ... A17` as the document writes them: at a line start or after a
+    # space, followed by a space. Not a bare `\bA\d+\b`, which would also match
+    # "ADR" numbers and section references.
+    named = {
+        int(m.group(1))
+        for m in re.finditer(r"(?:^| )A(\d{1,2}) ", " ".join(CASE.read_text().split()))
+    }
+    modules = {
+        int(m.group(1))
+        for path in suite.glob("test_a*.py")
+        if (m := re.match(r"test_a(\d{1,2})_", path.name))
+    }
+
+    assert named, "no attack ids found in the trust case; the parser or the document moved"
+    missing = sorted(named - modules)
+    assert not missing, (
+        f"the trust case names attacks {missing} with no module in tests/adversarial/ — "
+        f"a claim with nothing behind it"
+    )
+    unlisted = sorted(modules - named)
+    assert not unlisted, (
+        f"tests/adversarial/ runs attacks {unlisted} the trust case never mentions — "
+        f"an owner reading §2 is not being told what was tried"
+    )
+
+
+def test_every_adversarial_module_carries_a_mutation() -> None:
+    """The property that makes the suite a red team rather than a green bar.
+
+    A module that only asserts refusals passes identically whether the defence
+    works or the exploit was never viable. Every module must therefore also
+    remove its own control and assert the attack lands — named by convention,
+    `test_a<n>_the_control_is_load_bearing`, so this check is a fact about the
+    files rather than a hope about their contents.
+    """
+    import re
+
+    suite = CASE.resolve().parents[2] / "tests" / "adversarial"
+    without = [
+        path.name
+        for path in sorted(suite.glob("test_a*.py"))
+        if not re.search(r"def test_a\d{1,2}_the_control_is_load_bearing", path.read_text())
+    ]
+    assert not without, (
+        f"{without} assert refusals with no mutation proving the control is what refused"
+    )
 
 
 def test_the_known_canary_limit_is_still_a_limit() -> None:

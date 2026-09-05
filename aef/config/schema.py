@@ -89,6 +89,55 @@ class CommandProviderConfig(_StrictModel):
         return self
 
 
+class HaltChannelConfig(_StrictModel):
+    """`halt_channel:` — the command run when the loop halts (ADR 0195).
+
+    Until this existed `aef loop digest` printed `Halt channel configured: NO`
+    on every run, and that line was accurate: a halt at 3am wrote `HALT.md`
+    into a checkout nobody was looking at and appended a ledger entry nobody
+    was reading. The loop stopped, correctly, and told no one.
+
+    **An argv template, the same shape as `model_provider.impl: command`**
+    (ADR 0154), and for the same reason: this repo has no idea how its owner
+    is paged. It ships no webhook, no SDK, no dependency and no guess — the
+    owner writes the command, and what the command reaches is the owner's
+    business. `["/usr/bin/curl", "-fsS", "-XPOST", "-d{reason}", "https://…"]`
+    and `["/usr/bin/logger", "-t", "aef", "{reason}"]` are both this block.
+
+    `{reason}` is a slot, not a value: each occurrence is replaced by the
+    halt's reason. It is optional, because the same information — plus the
+    ledger's last entry, which is what says WHICH candidate and WHEN — is
+    written to the command's stdin as one JSON object regardless. A channel
+    that wants everything reads stdin; a channel that wants a subject line
+    uses the slot.
+
+    **What this block does not do** is as important as what it does, and it is
+    stated in the ADR too: it does not retry, it does not queue, it does not
+    page anyone by itself, and it is exactly as reliable as the command the
+    owner writes. A failure of the channel is recorded and **never masks the
+    halt** — the loop is halted either way.
+    """
+
+    argv: list[str]
+    timeout_s: float = 30.0
+
+    @model_validator(mode="after")
+    def _the_command_must_be_runnable(self) -> HaltChannelConfig:
+        if not self.argv:
+            raise ValueError(
+                "halt_channel.argv is empty: there is no program to run, so a halt would "
+                "still tell nobody. Remove the block or name a command."
+            )
+        if not self.argv[0].strip():
+            raise ValueError("halt_channel.argv[0] is blank; it must name the program to run")
+        if self.timeout_s <= 0:
+            raise ValueError(
+                f"halt_channel.timeout_s must be positive; got {self.timeout_s}. A channel "
+                f"that is never given time to run is an unconfigured one wearing a config."
+            )
+        return self
+
+
 class ModelProviderConfig(_StrictModel):
     impl: str
     model: str
@@ -405,5 +454,9 @@ class AgentConfig(_StrictModel):
     policies: PoliciesConfig = PoliciesConfig()
     shadow: ShadowConfig = ShadowConfig()
     gates: GatesConfig = GatesConfig()
+    # `None` means no channel, which is what the digest reports as `NO` — an
+    # absence stated loudly rather than a default that looks configured
+    # (ADR 0195).
+    halt_channel: HaltChannelConfig | None = None
     objectives: str
     evolution: EvolutionSettings = EvolutionSettings()
