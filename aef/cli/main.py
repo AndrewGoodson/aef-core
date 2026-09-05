@@ -16,6 +16,7 @@ from aef.cli.migrate import DEFAULT_MIGRATED_OUT, LEGACY_MIGRATED_OUT
 from aef.cli.run import run_graph_module
 from aef.cli.trace import trace_run
 from aef.harness.zones import DEFAULT_AGENT_ROOT
+from aef.reasoning.prompt_agent import DEFAULT_PROMPT_AGENT_DIR
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
@@ -30,7 +31,13 @@ def _cmd_init(args: argparse.Namespace) -> int:
 def _cmd_migrate(args: argparse.Namespace) -> int:
     from aef.cli.migrate import report, run_migrate
 
-    result = run_migrate(Path(args.dir), force=bool(args.force), out=args.out)
+    result = run_migrate(
+        Path(args.dir),
+        force=bool(args.force),
+        out=args.out,
+        agent_root=args.agent_root,
+        prompt_agents_dir=args.prompt_agents,
+    )
     print(report(result))
     return 0
 
@@ -172,6 +179,28 @@ def build_parser() -> argparse.ArgumentParser:
             f"self-rewiring loop may propose changes to. Writing it anywhere else means "
             f"a candidate touching it is rejected by G0 (ADR 0143); the report names the "
             f"zone of whatever path you choose."
+        ),
+    )
+    p_migrate.add_argument(
+        "--agent-root",
+        default=DEFAULT_AGENT_ROOT,
+        help=(
+            f"the Zone A root the generated graphs land under (default: "
+            f"{DEFAULT_AGENT_ROOT}). Set it to {DEFAULT_PROMPT_AGENT_DIR} to put the "
+            f"generated graphs BESIDE the persona files, which is what makes the "
+            f"personas themselves Zone A — the only way the loop can ever propose a "
+            f"change to a prompt (ADR 0152). Widening Zone A is a scope decision, so it "
+            f"is opt-in and the report says in words what it added. Pass the same value "
+            f"to every `aef loop` command, or bless and the gate describe different trees."
+        ),
+    )
+    p_migrate.add_argument(
+        "--prompt-agents",
+        default=DEFAULT_PROMPT_AGENT_DIR,
+        help=(
+            f"directory of markdown persona files to migrate, one graph each "
+            f"(default: {DEFAULT_PROMPT_AGENT_DIR}). Searched recursively, because the "
+            f"Claude Code CLI reads subdirectories too."
         ),
     )
     p_migrate.add_argument(

@@ -111,13 +111,21 @@ from __future__ import annotations
 
 import ast
 import json
+import keyword
+import re
 import textwrap
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from aef.harness.vendor_scan import MODEL_SDK_ROOTS, SKIP_DIRS
-from aef.harness.zones import DEFAULT_AGENT_PATH, DEFAULT_AGENT_ROOT, inspect_path
+from aef.harness.zones import DEFAULT_AGENT_PATH, DEFAULT_AGENT_ROOT, ZonePolicy, inspect_path
 from aef.providers.base import CompletionRequest
+from aef.reasoning.prompt_agent import (
+    DEFAULT_PROMPT_AGENT_DIR,
+    MIGRATED_DIR_NAME,
+    PromptAgentDefinition,
+    load_agent_file,
+)
 
 # Where the generated graph lands, repo-relative (ADR 0143). Derived from
 # `DEFAULT_AGENT_ROOT` rather than spelled out: a second literal `agents` here
@@ -245,6 +253,22 @@ class MigrateResult:
     # zone of the path it wrote from this, so the adopter is told at the
     # moment of writing whether the loop may ever touch the file (ADR 0143).
     out_relative: str | None = None
+    # ADR 0152. Prompt-file agents — `.claude/agents/*.md` — discovered, and
+    # the graphs written for them. A separate list from `sites` because they
+    # are a different kind of thing found a different way: `sites` come from an
+    # AST scan of Python, these from a directory the harness convention names.
+    prompt_agents: list[PromptAgentSite] = field(default_factory=list)
+    prompt_written: list[Path] = field(default_factory=list)
+    # Prompt graphs NOT written because a file was already there (no --force).
+    prompt_existing: list[str] = field(default_factory=list)
+    # `SKILL.md` files seen and deliberately not migrated — see
+    # `discover_skills` for why. Reported, never silently dropped.
+    skills_seen: list[str] = field(default_factory=list)
+    # The Zone A root the prompt graphs were written under, and the directory
+    # the personas were read from. Both are reported, because together they
+    # decide whether the loop may propose a change to the persona itself.
+    agent_root: str = DEFAULT_AGENT_ROOT
+    prompt_agents_dir: str = DEFAULT_PROMPT_AGENT_DIR
 
     @property
     def total_found(self) -> int:
@@ -700,6 +724,225 @@ def scan(root: Path) -> MigrateResult:
     return result
 
 
+DEFAULT_SKILLS_DIR = ".claude/skills"
+
+
+@dataclass(frozen=True)
+class PromptAgentSite:
+    """One `.claude/agents/*.md` persona, and the graph generated for it."""
+
+    definition: PromptAgentDefinition
+    # Repo-relative POSIX path of the persona file.
+    source: str
+    # The sanitised directory name the graph lands in, and therefore the last
+    # importable component of `aef run agents.migrated.<module>.graph`.
+    module: str
+    # Repo-relative POSIX path of the generated graph.
+    out_relative: str
+
+    @property
+    def graph_id(self) -> str:
+        return self.definition.name
+
+    @property
+    def dotted(self) -> str:
+        return self.out_relative.removesuffix(".py").replace("/", ".")
+
+
+def _module_name(name: str) -> str:
+    """A persona name as an importable module component.
+
+    `marlin-accela` is not a module. Lowercased, every run of non-identifier
+    characters folded to one `_`, and a leading digit or a Python keyword
+    prefixed — because `aef run agents.migrated.<this>.graph` has to import
+    it, and a directory named `2fa` or `class` cannot be imported at all.
+    """
+    slug = re.sub(r"[^0-9a-zA-Z_]+", "_", name.strip().lower()).strip("_")
+    if not slug:
+        slug = "agent"
+    if slug[0].isdigit() or keyword.iskeyword(slug) or keyword.issoftkeyword(slug):
+        slug = f"agent_{slug}"
+    return slug
+
+
+def discover_prompt_agents(
+    root: Path,
+    *,
+    agents_dir: str = DEFAULT_PROMPT_AGENT_DIR,
+    agent_root: str = DEFAULT_AGENT_ROOT,
+) -> list[PromptAgentSite]:
+    """Every persona file under `agents_dir`, one graph path each.
+
+    **Recursive**, because the Claude Code CLI is: a scratch repo holding
+    `.claude/agents/probe-one.md` and `.claude/agents/sub/probe-two.md` had
+    the CLI list *both* (`claude -p --agent <unknown>` names every agent it
+    found, and is rejected before any model call — so this was measured, not
+    assumed). A flat glob would have migrated some of an adopter's agents and
+    silently left the organised ones behind.
+
+    Its own output tree is excluded by name: `migrate` under the agents
+    directory is what this command writes when the adopter widens Zone A to
+    `.claude/agents`, and a second run must not read its own graphs.
+
+    Nothing here is filtered on "looks like an agent". A `.md` under
+    `.claude/agents` is one, by the convention that directory *is*; a file
+    with no frontmatter gets its filename as its name (see
+    `aef.reasoning.prompt_agent`), which is what the harness does too.
+    """
+    base = root / Path(agents_dir)
+    if not base.is_dir():
+        return []
+
+    sites: list[PromptAgentSite] = []
+    used: dict[str, int] = {}
+    for path in sorted(base.rglob("*.md")):
+        rel = path.relative_to(root).as_posix()
+        if MIGRATED_DIR_NAME in path.relative_to(base).parts[:-1]:
+            continue
+        definition = load_agent_file(path, source=rel)
+        module = _module_name(definition.name)
+        # Two personas whose names sanitise to one module would otherwise have
+        # the second silently overwrite the first's graph. Disambiguate and
+        # keep going: refusing the whole run because two names collide would
+        # migrate none of the other six.
+        seen = used.get(module, 0) + 1
+        used[module] = seen
+        if seen > 1:
+            module = f"{module}_{seen}"
+        out = f"{agent_root}/{MIGRATED_DIR_NAME}/{module}/graph.py"
+        sites.append(
+            PromptAgentSite(definition=definition, source=rel, module=module, out_relative=out)
+        )
+    return sites
+
+
+def discover_skills(root: Path, *, skills_dir: str = DEFAULT_SKILLS_DIR) -> list[str]:
+    """`SKILL.md` paths found, **and deliberately not migrated** (ADR 0152).
+
+    A skill is not an agent, and running one as a persona would produce a
+    convincing wrong thing:
+
+    - A `SKILL.md` body is *instructions injected into a session already in
+      progress* when its description matches. It presumes the session's own
+      task, tools and files. A persona body is the whole of who the agent is.
+    - Skills routinely reference bundled material — `references/*.md`,
+      scripts, templates — that a **tool-less single completion cannot open**
+      (the safety property `make_prompt_agent_node` documents). A graph built
+      from `SKILL.md` would send an instruction sheet stripped of the half it
+      points at, and return an answer that looks like an agent's.
+    - A skill has no objective of its own, so `state.objective` — the user
+      turn every generated graph sends — has nothing to be about.
+
+    So they are *counted and named* in the report rather than skipped
+    silently, which is the same rule the call-site scanner follows for the
+    functions it declines to wrap.
+    """
+    base = root / Path(skills_dir)
+    if not base.is_dir():
+        return []
+    # `<skills>/<name>/SKILL.md`, one level, which is the convention exactly.
+    # `rglob` found ten on the pilot instead of six: two were fixtures *inside*
+    # a skill's own test corpus. Counting those would have made the report's
+    # first number wrong about the repo it was describing.
+    return sorted(p.relative_to(root).as_posix() for p in base.glob("*/SKILL.md"))
+
+
+_PROMPT_GRAPH = '''"""{headline}
+
+Source of truth:
+
+    {source}
+
+This module does not copy the persona; it names it, and
+`make_prompt_agent_node` reads that file **at execution time**. So an edit to
+the `.md` changes what the next run sends, with no regeneration step in
+between — which is what makes it worth putting the `.md` in Zone A.
+
+THE PROMPT RUNS; THE AGENT'S TOOLS DO NOT. The persona body becomes the
+`system` message of one `CompletionRequest`, `state.objective` is the user
+turn, and the harness adapters send `--tools ""` with `--max-turns 1`. A
+persona written to read files, edit configs or call an API produces text
+*describing* that and touches nothing. Its frontmatter `tools:` key is read
+and never honoured.{unhonoured}
+
+WIRED `prompt_agent -> reflect -> consolidate -> END`. The reflect node is the
+only thing that writes the failure memory the self-rewiring loop's proposer
+reads; route the first node to `END` instead and the loop does not break, it
+goes silent — `aef loop cycle` exits 0 with `no admissible failure memory: no
+candidate this cycle`, every cycle (ADR 0139/0143).
+
+Running it needs `critic`, `judge`, `memory` and `knowledge` on `Services`;
+`aef.services.runtime.agent_services()` supplies all four, so `aef run
+--config`, `aef loop bootstrap` and the gates are unaffected. A hand-built
+bare `Services(model_provider=...)` is not.
+
+Regenerate with `aef migrate --dir .`; it never overwrites without --force.
+"""
+
+from __future__ import annotations
+
+from aef.kernel import END, Edge, Graph
+from aef.reasoning.nodes import make_consolidate_node, make_reflect_node
+from aef.reasoning.prompt_agent import make_prompt_agent_node
+
+AGENT_NAME = {agent_name_literal}
+AGENT_FILE = {source_literal}
+
+
+def build_graph() -> Graph:
+    return Graph(
+        id=AGENT_NAME,
+        version="0.1.0",
+        nodes={{
+            "prompt_agent": make_prompt_agent_node(
+                agent_file=AGENT_FILE,
+                agent_name=AGENT_NAME,
+                # Repo-relative resolution falls back to walking up from here,
+                # so the graph still finds its persona when the gates run it
+                # from a materialised candidate workspace.
+                module_file=__file__,
+                route="reflect",
+            ),
+            "reflect": make_reflect_node(route="consolidate"),
+            "consolidate": make_consolidate_node(route=END),
+        }},
+        edges=[
+            Edge(from_node="prompt_agent", to_node="reflect"),
+            Edge(from_node="reflect", to_node="consolidate"),
+        ],
+        entry_node="prompt_agent",
+    )
+'''
+
+
+def render_prompt_agent(site: PromptAgentSite, repo_name: str) -> str:
+    """The generated graph module for one persona."""
+    unhonoured = ""
+    if site.definition.unhonoured_keys:
+        keys = ", ".join(f"`{k}`" for k in site.definition.unhonoured_keys)
+        unhonoured = _wrap(f"Frontmatter keys read and NOT acted on: {keys}.", indent="")
+        unhonoured = f"\n\n{unhonoured}"
+    # Wrapped at 97, not 100: the opening `"""` sits on the same line, and a
+    # repo name plus a persona name is enough to push it over on its own —
+    # `test_the_generated_graph_passes_the_repos_own_ruff` caught seven E501s
+    # here on names no longer than the pilot's.
+    headline = textwrap.fill(
+        f"Generated by `aef migrate` for {repo_name} — the prompt agent `{site.definition.name}`.",
+        width=97,
+    )
+    return _PROMPT_GRAPH.format(
+        headline=headline,
+        source=site.source,
+        # `json.dumps` rather than `!r`: it emits double quotes, which is what
+        # the adopter's own `ruff format` run will want, and a generated file
+        # that fails the lint of the repo it lands in is a chore handed over
+        # rather than work done (the same rule `_key_fn_kwarg` follows).
+        agent_name_literal=json.dumps(site.definition.name),
+        source_literal=json.dumps(site.source),
+        unhonoured=unhonoured,
+    )
+
+
 _NO_SITES_BODY = """
 # No wrappable call site was found. See the command's report for what was
 # skipped and why — an empty file here is a finding, not a failure.
@@ -1073,8 +1316,31 @@ def _resolve_out(root: Path, out: str | Path | None) -> tuple[Path, str | None]:
     return absolute, relative
 
 
+def _write_prompt_agents(root: Path, result: MigrateResult, *, force: bool) -> None:
+    """Write one graph per discovered persona. Same never-overwrite rule.
+
+    No `.bak` dance here, unlike the call-site graph: these files name the
+    persona rather than embedding it, so there is nothing in one an adopter
+    would have hand-finished. An existing file is left alone and reported.
+    """
+    for site in result.prompt_agents:
+        target = root / Path(site.out_relative)
+        if target.exists() and not force:
+            result.prompt_existing.append(site.out_relative)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(render_prompt_agent(site, root.name), encoding="utf-8")
+        result.prompt_written.append(target)
+
+
 def run_migrate(
-    target_dir: Path, *, force: bool = False, write: bool = True, out: str | Path | None = None
+    target_dir: Path,
+    *,
+    force: bool = False,
+    write: bool = True,
+    out: str | Path | None = None,
+    agent_root: str = DEFAULT_AGENT_ROOT,
+    prompt_agents_dir: str = DEFAULT_PROMPT_AGENT_DIR,
 ) -> MigrateResult:
     """Scan `target_dir` and write the generated graph to `out`.
 
@@ -1092,8 +1358,20 @@ def run_migrate(
     """
     root = target_dir.resolve()
     result = scan(root)
+    result.agent_root = agent_root
+    result.prompt_agents_dir = prompt_agents_dir
+    result.prompt_agents = discover_prompt_agents(
+        root, agents_dir=prompt_agents_dir, agent_root=agent_root
+    )
+    result.skills_seen = discover_skills(root)
     if not write:
         return result
+
+    # Written BEFORE the early return below, because the call-site graph
+    # already existing is not a reason to leave eight personas unmigrated —
+    # and on every repo this command was built for there are no call sites at
+    # all, so an early return here would make the whole feature unreachable.
+    _write_prompt_agents(root, result, force=force)
 
     target, result.out_relative = _resolve_out(root, out)
     if target.exists() and not force:
@@ -1161,6 +1439,119 @@ def _zone_note(relative: str | None) -> str:
         f"will archive a Zone A tree that does not contain it. Pass "
         f"`--out {DEFAULT_MIGRATED_OUT}` (the default) to put it inside Zone A."
     )
+
+
+def _blast_radius(result: MigrateResult) -> list[str]:
+    """What this run added to the loop's write scope, in words (ADR 0152).
+
+    Widening Zone A is a scope decision, not a default, so the report says
+    out loud which of the two states the repo is in — and the sentence is
+    computed from the classifier the gates themselves use, not from a string
+    comparison here.
+    """
+    policy = ZonePolicy(agent_root=result.agent_root)
+    persona = result.prompt_agents[0].source
+    verdict = inspect_path(persona, policy)
+    lines = [
+        "",
+        "BLAST RADIUS — what the self-rewiring loop may now propose changes to.",
+        f"  Zone A is {result.agent_root!r}. The generated graphs are inside it.",
+    ]
+    if verdict.zone.value == "A":
+        lines += [
+            f"  The PERSONA FILES are inside it too ({persona} is Zone A).",
+            "  This is the widened setting, and it is the point: a proposer can edit the",
+            "  prompt an agent runs on, and `aef loop bless` archives a baseline that",
+            "  contains the prompt rather than only the wrapper around it.",
+            f"  It also means a candidate may rewrite any file under {result.agent_root!r} —",
+            "  including every persona your harness loads. Pass the SAME --agent-root to",
+            "  every `aef loop` command (bless, gate, cycle, doctor), or bless and the",
+            "  gate describe different trees and G5's drift metric is measured against",
+            "  a baseline of something else.",
+        ]
+    else:
+        lines += [
+            f"  The PERSONA FILES are NOT ({persona} is Zone {verdict.zone.value}).",
+            "  So the loop may improve the generated GRAPH and never the PROMPT: a",
+            f"  candidate touching a `.md` under {result.prompt_agents_dir} is rejected by G0 with",
+            "  `candidate touches paths outside Zone A`, and `aef loop bless` archives a",
+            "  baseline that does not contain the persona.",
+            "  This is the default on purpose — widening the tree an agent may rewrite is",
+            "  a scope decision an owner makes, not one a migration makes for them.",
+            "  To widen it, re-run as",
+            f"    aef migrate --dir . --agent-root {result.prompt_agents_dir}",
+            f"  and pass `--agent-root {result.prompt_agents_dir}` to every `aef loop`",
+            "  command as well. Verified before it was offered: the Claude Code CLI",
+            f"  enumerates only `*.md` under {result.prompt_agents_dir} — a `.py` written",
+            "  there is inert to it, so the graphs can live beside the personas.",
+        ]
+    return lines
+
+
+def _prompt_agent_lines(result: MigrateResult) -> list[str]:
+    lines = [
+        "",
+        f"found {len(result.prompt_agents)} prompt agent(s) under {result.prompt_agents_dir}",
+    ]
+    if not result.prompt_agents:
+        lines.append(
+            "  none — this repo's agents are not markdown personas in that directory, "
+            "or it does not exist"
+        )
+        return lines
+    for site in result.prompt_agents:
+        lines.append(f"  AGENT    {site.definition.name}  ({site.source})")
+        lines.append(f"            -> {site.out_relative}")
+        lines.append(f'            -> aef run {site.dotted} --objective "..." --config aef.yaml')
+        lines.append(
+            f"            graph_id={site.graph_id!r}, wired prompt_agent -> reflect "
+            f"-> consolidate -> END"
+        )
+        if site.definition.unhonoured_keys:
+            lines.append(
+                "            frontmatter read and NOT honoured: "
+                + ", ".join(site.definition.unhonoured_keys)
+            )
+    lines += [
+        "",
+        "THE PROMPT RUNS; THE AGENT'S TOOLS DO NOT. Each persona body becomes the system",
+        'message of one tool-less, single-turn completion (`--tools ""`, `--max-turns 1`).',
+        "A persona written to read files, edit configs or call an API now produces text",
+        "describing that and touches nothing — a real reduction in what it can do, said",
+        "here rather than discovered at the first run.",
+    ]
+    if result.prompt_written:
+        lines += ["", f"wrote {len(result.prompt_written)} prompt agent graph(s):"]
+        lines += [f"  {p}" for p in result.prompt_written]
+    if result.prompt_existing:
+        lines += [
+            "",
+            f"{len(result.prompt_existing)} prompt agent graph(s) already existed and were "
+            "NOT overwritten (pass --force):",
+        ]
+        lines += [f"  {p}" for p in result.prompt_existing]
+    lines += _blast_radius(result)
+    return lines
+
+
+def _skill_lines(result: MigrateResult) -> list[str]:
+    if not result.skills_seen:
+        return []
+    lines = [
+        "",
+        f"found {len(result.skills_seen)} skill(s) and did NOT migrate any of them:",
+    ]
+    lines += [f"  SKILL    {p}" for p in result.skills_seen]
+    lines += [
+        "  A skill is not an agent. Its body is instructions injected into a session",
+        "  already in progress, it presumes that session's task and tools, and it",
+        "  routinely points at bundled files a tool-less completion cannot open — so a",
+        "  graph built from SKILL.md would send an instruction sheet stripped of half",
+        "  its content and return something that looks like an agent's answer. It also",
+        "  has no objective of its own, and the objective is the user turn every",
+        "  generated graph sends. Named here rather than skipped in silence.",
+    ]
+    return lines
 
 
 def report(result: MigrateResult) -> str:
@@ -1267,4 +1658,6 @@ def report(result: MigrateResult) -> str:
             "saw. Routing one by hand is a trade — read the reason it was not",
             "routed automatically before you make it.",
         ]
+    lines += _prompt_agent_lines(result)
+    lines += _skill_lines(result)
     return "\n".join(lines)

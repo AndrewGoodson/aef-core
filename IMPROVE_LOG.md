@@ -2007,3 +2007,104 @@ generated graph does not have, and it is not claimed as closed. Whether any
 existing baseline anywhere already holds a link target, or any existing corpus
 holds a policy-denied recording, is **not measured** and nothing detects
 either retroactively. Every fixture here was authored by this programme.
+
+## M1 — a prompt-file agent is a graph (ADR 0152)
+
+Increment M1 of `UPGRADE_LOOP.md`. Model: `claude-opus-5[1m]`. **No rubric
+dimension moves** — adoption work claims no rubric point.
+
+**Reproduced by running.** `aef migrate --dir .` on a copy of the marlin pilot
+clone — 8 `.claude/agents/*.md` personas, 6 skills, `AGENTS.md`, `.codex/`,
+already adopted:
+
+```
+scanned 38 Python file(s)
+found 0 call site(s): 0 wrapped, 0 skipped
+
+wrote .../agents/migrated/graph.py
+```
+
+Exit 0, and the file it wrote has a `build_graph()` whose body is `raise
+NotImplementedError`. Every eligible repo in the 2026-09-04 survey has zero SDK
+call sites, so that was the answer for all of them.
+
+**Built.** `aef/reasoning/prompt_agent.py` —
+`make_prompt_agent_node(agent_file=, agent_name=, route="reflect")`: persona
+body as the `system` message, `state.objective` as the user turn, through
+`services.require_model_provider().complete(...)`, reply to `working_memory`,
+`deterministic=False`, `EXTERNAL_CALL`, idempotency key from (agent name,
+objective). The persona is read **at execution time**, never copied into the
+generated module, so an edit to the `.md` changes the next run. **The prompt
+runs; the agent's tools do not** (`--tools ""`, `--max-turns 1`); the persona's
+`tools:` frontmatter is parsed, reported and never obeyed.
+
+`aef migrate` gains `--agent-root` and `--prompt-agents`: it discovers
+`.claude/agents/**/*.md` **recursively** and writes one graph per agent at
+`<agent-root>/migrated/<module>/graph.py`, `graph_id` = the persona name, wired
+`prompt_agent → reflect → consolidate → END`. Skills are found, counted and
+deliberately NOT migrated, with the reason in the report — a `SKILL.md` is
+instructions injected into a session already in progress, points at bundled
+files a tool-less completion cannot open, and has no objective of its own.
+
+**Zone A: design (a), and the count that chose it.** `--agent-root
+.claude/agents` puts the graphs beside the personas and the personas in Zone A.
+Chosen over a multi-root `ZonePolicy` because it changes **no
+containment-boundary code at all** — `zones.py`, `candidate.py`, `preflight.py`,
+`workspace.py`, `trust.py`, `gates/base.py` and `aef/cli/loop.py`'s existing
+`--agent-root` are untouched; (b) would have changed all of them plus the test
+pinning `ZonePolicy`'s single field. Opt-in, default `agents` unchanged, and
+migrate's report states the blast radius in words either way.
+
+**Two CLI facts measured, not assumed, at zero model cost.** `claude -p --agent
+<unknown>` is rejected before any model call and names every agent the CLI
+found. With `.claude/agents/probe-one.md`, `.claude/agents/sub/probe-two.md` and
+`.claude/agents/migrated/probe_one/graph.py` on disk it listed `probe-one,
+probe-two` and nothing from the `.py` — so discovery recurses, and a `.py` under
+`.claude/agents` is inert to the harness.
+
+**G0 on a `.md` in Zone A — ran it.** It did not crash. It *skipped silently*:
+`pass ... all Zone A, no static-safety violations` over a candidate whose only
+file `_scan` never opened. It now counts the Python files it scanned and names
+the ones it did not, as evidence. Nothing loosened — a `.py` beside the `.md` is
+still scanned and still rejected for a forbidden import.
+
+**Measured, 4 live calls (budget ≤ 6).** Quota preflight OK (`input_tokens: 2`).
+`aef migrate` on the clone: 8 agents found, 8 graphs written, 6 skills named, 0
+call sites. `aef run agents.migrated.marlin_accela.graph --config aef.yaml`
+returned real persona-grounded text with the reflect tail run. `aef loop
+bootstrap` on two inputs recorded 2 scenarios, each `graph_id: marlin-accela`
+with a one-entry cassette carrying the persona as its system message.
+
+**Mutation-checked, five for five**, each restored byte-identical against a
+`shasum -a 256` taken before the edit: drop the system message → 3 tests fail;
+`rglob` → `glob` → the subdirectory test fails; G0 stops naming unscanned files →
+2 tests fail; no module sanitisation → 2 tests fail; idempotency key drops the
+agent name → 1 test fails. The ruff-on-generated-output test caught a real
+defect on first run: seven `E501`s where the repo name plus the persona name
+pushed the generated docstring's first line past 100 columns.
+
+**Green bar.** `pytest -q` **2039 passed, 3 skipped** (2042 collected, from a
+baseline of **2002** read by exporting HEAD with `git archive` and collecting
+there rather than asserted — **+40, none removed**). `mypy aef examples` 130
+files clean. `ruff check .` clean. `ruff format --check aef tests examples` 246
+formatted.
+
+**One flake, pre-existing.** `tests/harness/test_container_sandbox.py::
+test_a_timed_out_container_is_actually_dead` failed once under full-suite load
+and passed on its own (25 passed) and in an earlier full run of the same tree.
+A container-timeout race, untouched by this increment; reported rather than
+re-run until green and left unmentioned.
+
+**Defect found outside this increment's files, reported not fixed.**
+`ClaudeCodeProvider.complete` takes `answered_by = next(iter(model_usage),
+None)` — the first key of the CLI's `modelUsage` map. With `--model
+claude-opus-5` passed, that key was `claude-haiku-4-5-20251001` (a helper model
+the CLI bills alongside the requested one), so the run's provenance and the
+recorded corpus name the wrong model. `aef/providers/` is M3's.
+
+**Deliberately left.** The `aef.yaml` binding for the widened agent root: the
+opt-in surface today is the `--agent-root` flag, because `aef/config/` is held
+by another worker this wave. `CLAUDE.md`'s "narrower and honest pitch"
+paragraph is untouched — M5 replaces it when the acceptance test passes. The
+corpus this increment recorded has **no failing input**, so nothing here shows a
+changed prompt surviving the gates; that is M4/M5.
