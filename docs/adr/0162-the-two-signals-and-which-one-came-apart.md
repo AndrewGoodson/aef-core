@@ -385,6 +385,12 @@ ruff check .              All checks passed!
 ruff format --check aef tests examples docs/research/j4   267 files already formatted
 ```
 
+`tests/harness/test_container_sandbox.py::test_a_timed_out_container_is_actually_dead`
+failed on a later full-suite run and passes in isolation (25 passed). It is the
+same docker-timing flake ADR 0171 recorded, on the same test, and is noted here
+so the next reader does not attribute it to this increment — nothing here goes
+near the container path.
+
 ## Live budget
 
 **90 of the 90 allowed** — the cap exactly, with nothing left for a retry,

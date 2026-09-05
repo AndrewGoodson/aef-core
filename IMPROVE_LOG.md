@@ -3552,4 +3552,6 @@ compared prompts. (3) `_tally`'s inversion.
 examples` clean on 132 files; `ruff check .` clean; `ruff format --check aef
 tests examples docs/research/j4` 267 files formatted. 5 mutations against the
 new test, 5 caught, control green before and after, every restore proved by
-sha256 equality with a byte backup.
+sha256 equality with a byte backup. `test_a_timed_out_container_is_actually_dead`
+failed on a later full-suite run and passes in isolation — ADR 0171's docker
+flake on the same test, noted rather than attributed here.
