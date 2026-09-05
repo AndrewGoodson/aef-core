@@ -19,7 +19,13 @@ A self-graded number is exactly the failure the trust case warns about.
 | 7 | Real-signal ingestion | 10 | Learns from live runs and real tenants, not a synthetic corpus; telemetry closes the loop | Arize "closing the loop"; Live-SWE-agent (on-the-fly) |
 | 8 | Adoptability / harness-native | 5 | Drops into a repo whose agents are coding-agent sessions; no key; cross-tool | — |
 
-## Current — 2026-09-04 after J0 — **69 / 100**
+## Current — 2026-09-04, J0's base (ADR 0151) plus increments measured since — **70 / 100**
+
+*The base is J0's independent score (68, ADR 0151). Every row above J0's is a
+self-graded increment measured after it — each names its ADR and the artifact,
+and each is exactly the kind of row a future J0 should re-check. A heading that
+said "after J0" over a table containing such rows was mislabelled (second seam
+hunt, S2).*
 
 *Corrected 2026-09-04 (ADR 0127): every total in this file up to and
 including this one was carried forward by hand as `previous + delta` and
@@ -30,6 +36,7 @@ from the rows, so a total nobody checked cannot recur.*
 
 | # | Score | What moved and the artifact |
 |---|---|---|
+| 3 | 7/10 | S3b (ADR 0171): ADR 0159 could not grade a judge because the corpus had no true negatives — its only three were case-sensitive `contains` defects, and correcting them left it 20/20 pass, AUC 0.322. Corpus rebuilt: 3 case defects corrected, 57 more of the same shape found latent and corrected, 20 word caps moved to `max_words`+`min_words`, and 19 scenarios recorded live on `claude-opus-5[1m]` against inputs chosen to be handled badly (negation, superseded figure, similar names, dropped unit, conditionality, direction-of-change, caps 12–38). **7 fail an owner check, 4 of them in validation.** The A/B re-run on the enriched validation split, same script, same model, 34 calls: rule-based 4/17 (constant-fail), **LLM 16/17 against a 13/17 constant baseline, AUC 1.000** (every owner-fail state 0.275–0.635, every owner-pass state 0.850–0.910), position delta max 0.17. All three pre-registered conditions fired. Remaining: all 7 negatives are word-cap overruns, so AUC 1.000 is perfect separation of ONE failure family with n=4; no self-preference control (J0's third gap, still open) |
 | 4 | 15/15 | S5 / J3 (ADR 0161): the 14 read "one point off: shadow containment is opt-in". Reproduced by running — on a box WITH docker and the worker image, `ShadowRunner(incumbent, candidate)` refused exactly as it does with neither, and the one-line way past it was `uncontained=True`; the escaping node's write landed on the host. `shadow_for` now resolves a runtime, verifies isolation both directions and returns a contained runner: same node, same box, no arguments, host marker **False**. `shadow.containment: auto` is the default and **refuses rather than falling back** (an automatic fallback would be weaker than ADR 0105's refusal); `fallback`/`off` are owner statements in `aef.yaml`, announced on stderr and written to the ledger as `EventKind.CONTAINMENT` with `security_event: True`, which `build_digest` counts. J0's deduction answered in both halves: the renamed `test_the_in_process_bypass_exists_only_when_an_owner_opts_out_and_is_logged` keeps proving the bypass real under opt-out and adds that the default cannot reach it, and the adversarial-round record's two BROKE-IT attacks are named at the tests that re-execute them. 5 mutations, 5 caught; +15 tests |
 | 1 | 15/20 | J0 (ADR 0151): the repo's own scheduled `aef loop cycle` passes no `--memory` and exits 0 every night with `no memory store configured … no candidate`; the adopter's rendered workflow has no cycle step. Verified. "Automatically" is unmet |
 | 2 | 12/20 | J0 (ADR 0151): `make_retrieve_node` writes `retrieved_context` and no prompt reads it — `draft_node` builds from `working_memory` alone; the knowledge A/B measures a retrieval-coverage proxy, never a task score. Verified. I12 as designed would have measured four identical arms |

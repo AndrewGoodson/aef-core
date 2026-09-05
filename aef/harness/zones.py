@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 # Zone B is deliberately NOT configurable. There is no constructor argument
 # below that shrinks it, because a configurable judge is not a judge — the
@@ -57,6 +58,71 @@ DEFAULT_AGENT_ROOT = "agents"
 # `aef.cli.migrate.DEFAULT_MIGRATED_OUT` is now an alias for this constant, so
 # the writer and the default cannot drift apart again.
 DEFAULT_AGENT_PATH = f"{DEFAULT_AGENT_ROOT}/migrated/graph.py"
+
+# The two graph files that live OUTSIDE the agent root, named here for the
+# same reason `DEFAULT_AGENT_PATH` is: `discover_graph_files` below is shared
+# with `aef/cli/doctor.py`, and the harness does not import the CLI, so a copy
+# of either string in `aef.cli.migrate` would be the ADR 0091 drift shape
+# again. `aef.cli.migrate.LEGACY_MIGRATED_OUT` is now an alias for the second.
+#
+# `ADAPTER_SHIM` is what `aef adopt` writes and the documented adoption path
+# ends at; `LEGACY_AGENT_PATH` is where `aef migrate` wrote before ADR 0143,
+# kept ONLY so that a repo migrated by an older `aef` does not silently drop
+# out of discovery the day the default moved.
+ADAPTER_SHIM = "aef_adapter.py"
+LEGACY_AGENT_PATH = "aef_migrated.py"
+
+
+def discover_graph_files(root: Path, *, agent_root: str = DEFAULT_AGENT_ROOT) -> list[str]:
+    """Every file in `root` that is "a graph this repo runs", repo-relative.
+
+    ONE function, because there were two answers and both were wrong in the
+    same direction. `aef doctor` globbed `<agent root>/*/graph.py` — one level
+    — while ADR 0152's `aef migrate` writes `<agent root>/migrated/<module>/
+    graph.py`, which is two. Reproduced on the pilot clone with **nine**
+    graphs on disk: doctor's model-call advisory scanned two entries
+    (`aef_adapter.py` and `agents/migrated/graph.py`, the call-site stub whose
+    `build_graph()` raises `NotImplementedError`), passed obligation 6 on a
+    file that makes no model call at all, and never opened the eight graphs
+    that do.
+
+    So the search is `rglob`, not `glob`, and it is deliberately shaped like
+    `discover_prompt_agents`' own recursion — which was itself measured
+    against the Claude Code CLI rather than assumed (ADR 0152 §2). A depth
+    limit here is a promise about a layout `migrate` is free to change; the
+    filename is the contract.
+
+    The three named entries are outside the agent root and cannot be found by
+    walking it: the adapter shim, `DEFAULT_AGENT_PATH` (which `--agent-root`
+    does NOT move — `aef migrate --agent-root .claude/agents` still writes the
+    call-site graph to `agents/migrated/graph.py`, so widening the root must
+    not make it invisible), and the pre-0143 legacy path.
+
+    Order is stable and de-duplicated: named entries first in adoption order,
+    then the walk, sorted. Nothing is filtered on content — whether a graph
+    file is *interesting* is the caller's question, and a file this function
+    hides is a file no diagnostic can report on.
+    """
+    entries: list[str] = []
+
+    def add(relative: str) -> None:
+        if relative not in entries:
+            entries.append(relative)
+
+    for name in (ADAPTER_SHIM, DEFAULT_AGENT_PATH, LEGACY_AGENT_PATH):
+        if (root / name).is_file():
+            add(name)
+
+    base = root / Path(agent_root) if agent_root else root
+    if base.is_dir():
+        for graph in sorted(base.rglob("graph.py")):
+            if not graph.is_file():  # pragma: no cover - a directory named graph.py
+                continue
+            try:
+                add(graph.relative_to(root).as_posix())
+            except ValueError:  # pragma: no cover - agent_root escaping the repo
+                continue
+    return entries
 
 
 class Zone(StrEnum):
@@ -131,6 +197,29 @@ def _segments(raw: str) -> tuple[tuple[str, ...] | None, str]:
     if not parts:
         return None, "path resolves to the repo root, not a file"
     return tuple(parts), ""
+
+
+def segment_refusal(name: str) -> str:
+    """`""` if `name` is exactly one safe path segment, else why it is not.
+
+    The same deny-by-default rule `_segments` already applies to diff paths,
+    exposed for the other places a caller-supplied string is joined onto a
+    directory. `aef/harness/archive.py` builds `root / graph_id` and a
+    `graph_id` is whatever a persona's `name:` frontmatter says: `../escape`
+    wrote `state/escape/v000001/` — one level ABOVE the archive root it was
+    handed, with the archive root left empty (reproduced, ADR 0168).
+
+    Normalisation is refused rather than applied. `./x` and `x` name the same
+    file, and a checker that silently accepted the first would let two spellings
+    of one graph id disagree about which directory they mean; the caller is told
+    to pass the segment it means.
+    """
+    segments, reason = _segments(name)
+    if segments is None:
+        return reason
+    if segments != (name,):
+        return f"{name!r} is not a single path segment (normalises to {'/'.join(segments)!r})"
+    return ""
 
 
 def _under(segments: tuple[str, ...], root: tuple[str, ...]) -> bool:

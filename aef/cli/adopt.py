@@ -603,10 +603,23 @@ def render_gitignore() -> str:
     return _GITIGNORE_BODY
 
 
+# The directory is named as a RULE, not as a path. `aef adopt` runs BEFORE
+# `aef migrate`, and `aef migrate --agent-root` is what decides where Zone A
+# is, so adopt cannot know it — it can only say which directory the rule
+# applies to. Naming `agents/` outright (which this string did, interpolated
+# from `DEFAULT_AGENT_ROOT`) told an operator who widened the root about the
+# wrong directory: reproduced on the pilot clone, where `.gitignore` covers no
+# bytecode, one generated module was compiled, and `git add -A` tracked
+# `.claude/agents/migrated/marlin_accela/__pycache__/graph.cpython-313.pyc` —
+# Zone A content under a root this sentence did not mention (ADR 0168).
 _DRIFT_COST = (
-    f"Committed bytecode under `{DEFAULT_AGENT_ROOT}/` is Zone A content the loop never "
-    f"wrote, and G5 charges it as drift: measured 0.4675 of a 0.500 budget for a one-line "
-    f"candidate, against 0.0238 with the bytecode excluded (ADR 0142)."
+    f"Committed bytecode under your AGENT ROOT is Zone A content the loop never wrote, and "
+    f"G5 charges it as drift: measured 0.4675 of a 0.500 budget for a one-line candidate, "
+    f"against 0.0238 with the bytecode excluded (ADR 0142). The agent root is `"
+    f"{DEFAULT_AGENT_ROOT}/` by default and whatever you pass to `aef migrate --agent-root` "
+    f"otherwise (`.claude/agents/` for a prompt-file repo) — `aef adopt` runs before "
+    f"`aef migrate` and cannot know which you will choose, so both patterns are "
+    f"repo-wide and cover either."
 )
 
 

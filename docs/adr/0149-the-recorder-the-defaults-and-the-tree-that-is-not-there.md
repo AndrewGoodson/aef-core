@@ -583,3 +583,33 @@ now run: `bless` accepted it and archived 16 bytes of `../real/graph.py` as
 the baseline (F5 above). The reasoning that made it look safe is exactly the
 reason it was not: both sides coming from `git ls-tree` is what makes a
 symlink pass a containment check that compares names.
+
+
+---
+
+## Erratum on THIS ADR, added by ADR 0168 (fix wave G1b)
+
+F2's Decision put one string behind every `--agent-path` default, and that
+part holds. But the docstring it wrote onto `aef/cli/doctor.py::_graph_entries`
+claimed more than derivation can buy:
+
+> Every path here is derived from `DEFAULT_AGENT_ROOT` via `aef.cli.migrate`,
+> so moving the agent root or migrate's default cannot leave this list naming a
+> directory nothing writes to.
+
+**True for one writer; false the day there were two.** ADR 0152 added a second
+— one graph per prompt agent at `<agent root>/migrated/<module>/graph.py` —
+while the glob here stayed `<agent root>/*/graph.py`, one level. Derivation kept
+the ROOT correct and says nothing about the DEPTH.
+
+Reproduced on the pilot clone with **nine** graphs on disk: `aef doctor` listed
+two entries and obligation 6 passed on `agents/migrated/graph.py`, the call-site
+stub whose `build_graph()` raises `NotImplementedError` and which makes no model
+call at all. The eight graphs that do make one were never opened (ADR 0168, F3).
+
+A shared constant proves that two names spell one string. It cannot prove that a
+glob matches what another command writes — only running one into the other can.
+Discovery is now one function (`aef.harness.zones.discover_graph_files`) and the
+invariant is enforced behaviourally, by running the real `run_migrate` into the
+real `_graph_entries` and asserting doctor's list contains every graph migrate
+reported writing.

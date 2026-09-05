@@ -82,6 +82,9 @@ def _build_single(
             output_pointer=command.output_pointer,
             usage_pointer=command.usage_pointer,
             output_usage_pointer=command.output_usage_pointer,
+            # The owner's containment assertion, carried through unverified so
+            # `PromptAgentNode` can record it as theirs (ADR 0169).
+            isolation=command.isolation,
             default_model=model,
             timeout_s=command.timeout_s,
         )

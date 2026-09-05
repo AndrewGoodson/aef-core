@@ -1,0 +1,342 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Hollin Bridge"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "152,?000"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 25
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-25-hollin-bridge",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-25-hollin-bridge in at most 25 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-25-hollin-bridge",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 25,
+      "must_mention": [
+        "Hollin Bridge"
+      ],
+      "text": "The council's 2019 outline estimate for repairing Hollin Bridge was 86,000 pounds, a figure still quoted in local reporting. The tender accepted in July is 152,000 pounds, and the difference is almost entirely the temporary footbridge the earlier estimate omitted. Work starts in March and the bridge will carry pedestrians throughout."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "d23f43b27b127e61e748205fbd878fdc599402d04f7b29155054c9dc1cb0f3ca",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 25 words.\nThe summary must mention each of these terms, spelled exactly as given: Hollin Bridge.\n\nPassage:\nThe council's 2019 outline estimate for repairing Hollin Bridge was 86,000 pounds, a figure still quoted in local reporting. The tender accepted in July is 152,000 pounds, and the difference is almost entirely the temporary footbridge the earlier estimate omitted. Work starts in March and the bridge will carry pedestrians throughout.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Hollin Bridge repairs cost 152,000 pounds, not the 2019 estimate of 86,000, the gap being an omitted temporary footbridge; work begins March with pedestrian access maintained.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "output_tokens": 70,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code on claude-opus-5[1m] (ADR 0171). S3b content negative: the passage opens with the superseded estimate and the operative figure is in the second sentence (ADR 0171)",
+  "recorded_at": "2026-09-05T03:18:13.580490+00:00",
+  "source": "bootstrap",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-25-hollin-bridge:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-05T03:18:23.788288+00:00",
+        "run_id": "sum-25-hollin-bridge",
+        "trace_id": "sum-25-hollin-bridge"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-25-hollin-bridge in at most 25 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-25-hollin-bridge",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 25,
+          "must_mention": [
+            "Hollin Bridge"
+          ],
+          "text": "The council's 2019 outline estimate for repairing Hollin Bridge was 86,000 pounds, a figure still quoted in local reporting. The tender accepted in July is 152,000 pounds, and the difference is almost entirely the temporary footbridge the earlier estimate omitted. Work starts in March and the bridge will carry pedestrians throughout."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-25-hollin-bridge:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-05T03:18:23.788346+00:00",
+        "run_id": "sum-25-hollin-bridge",
+        "trace_id": "sum-25-hollin-bridge"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-25-hollin-bridge in at most 25 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 72,
+            "trace_id": "sum-25-hollin-bridge",
+            "ts": "2026-09-05T03:18:23.788346Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Hollin Bridge repairs cost 152,000 pounds, not the 2019 estimate of 86,000, the gap being an omitted temporary footbridge; work begins March with pedestrian access maintained."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-25-hollin-bridge in at most 25 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-25-hollin-bridge",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 25,
+          "must_mention": [
+            "Hollin Bridge"
+          ],
+          "text": "The council's 2019 outline estimate for repairing Hollin Bridge was 86,000 pounds, a figure still quoted in local reporting. The tender accepted in July is 152,000 pounds, and the difference is almost entirely the temporary footbridge the earlier estimate omitted. Work starts in March and the bridge will carry pedestrians throughout."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-25-hollin-bridge:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-05T03:18:26.667599+00:00",
+        "run_id": "sum-25-hollin-bridge",
+        "trace_id": "sum-25-hollin-bridge"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-25-hollin-bridge in at most 25 words",
+        "plan": {
+          "goal": "summarise sum-25-hollin-bridge in at most 25 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 72,
+            "trace_id": "sum-25-hollin-bridge",
+            "ts": "2026-09-05T03:18:23.788346Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-25-hollin-bridge",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 25,
+          "must_mention": [
+            "Hollin Bridge"
+          ],
+          "summary": "Hollin Bridge repairs cost 152,000 pounds, not the 2019 estimate of 86,000, the gap being an omitted temporary footbridge; work begins March with pedestrian access maintained.",
+          "text": "The council's 2019 outline estimate for repairing Hollin Bridge was 86,000 pounds, a figure still quoted in local reporting. The tender accepted in July is 152,000 pounds, and the difference is almost entirely the temporary footbridge the earlier estimate omitted. Work starts in March and the bridge will carry pedestrians throughout."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-25-hollin-bridge:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-05T03:18:26.667786+00:00",
+        "run_id": "sum-25-hollin-bridge",
+        "trace_id": "sum-25-hollin-bridge"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-25-hollin-bridge in at most 25 words",
+        "plan": {
+          "goal": "summarise sum-25-hollin-bridge in at most 25 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 72,
+            "trace_id": "sum-25-hollin-bridge",
+            "ts": "2026-09-05T03:18:23.788346Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-25-hollin-bridge",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 25,
+          "must_mention": [
+            "Hollin Bridge"
+          ],
+          "summary": "Hollin Bridge repairs cost 152,000 pounds, not the 2019 estimate of 86,000, the gap being an omitted temporary footbridge; work begins March with pedestrian access maintained.",
+          "text": "The council's 2019 outline estimate for repairing Hollin Bridge was 86,000 pounds, a figure still quoted in local reporting. The tender accepted in July is 152,000 pounds, and the difference is almost entirely the temporary footbridge the earlier estimate omitted. Work starts in March and the bridge will carry pedestrians throughout."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

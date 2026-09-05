@@ -41,6 +41,15 @@ class CommandProviderConfig(_StrictModel):
     output_pointer: str | None = None
     usage_pointer: str | None = None
     output_usage_pointer: str | None = None
+    isolation: list[str] = []
+    """What the owner ASSERTS this CLI's argv enforces, e.g.
+    `[no_tools, single_turn, no_project_context]`. Never verified against the
+    binary and recorded in the trace as an assertion (ADR 0169) — because
+    `--tools ""` disables every tool on `claude` and disables nothing on
+    `grok`, so no amount of reading an unknown template can tell this repo
+    which one an owner has. The default is the empty list, which claims
+    nothing; `system_role`/`user_turn_persona` are refused here because the
+    `{system}` slot already decides them."""
     timeout_s: float = 600.0
 
     @model_validator(mode="after")
@@ -50,7 +59,11 @@ class CommandProviderConfig(_StrictModel):
         # `test_importing_aef_config_does_not_require_anthropic` pins.
         # `aef.providers.command_provider` imports no SDK, but the lazy
         # import keeps that guarantee independent of what it grows into.
-        from aef.providers.command_provider import OUTPUT_MODES, validate_template
+        from aef.providers.command_provider import (
+            OUTPUT_MODES,
+            validate_command_isolation,
+            validate_template,
+        )
 
         validate_template(
             self.argv,
@@ -58,6 +71,7 @@ class CommandProviderConfig(_StrictModel):
             system_argv=self.system_argv,
             stdin=self.stdin,
         )
+        validate_command_isolation(self.isolation)
         if self.output not in OUTPUT_MODES:
             raise ValueError(f"command.output={self.output!r} is not one of {sorted(OUTPUT_MODES)}")
         if self.output == "json_pointer" and self.output_pointer is None:
@@ -299,6 +313,24 @@ class ShadowConfig(_StrictModel):
     # dependencies (trust case §2.1). `None` under `auto` is a refusal that
     # names the missing image, not a silent downgrade.
     image: str | None = None
+
+    @field_validator("containment", mode="before")
+    @classmethod
+    def _yaml_off_is_a_word_here(cls, value: object) -> object:
+        """YAML 1.1 reads a bare `off` as the boolean false (and `on` as true),
+        so `containment: off` — the exact spelling the mode is named by —
+        arrives here as `False` and used to fail with a type error that
+        never mentioned YAML. `False` can only have been `off`, so it is
+        accepted as that mode; `True` has no mode to map to and is refused
+        with the fix (quote it). Found by fix wave H2 (ADR 0173)."""
+        if value is False:
+            return "off"
+        if value is True:
+            raise ValueError(
+                "shadow.containment: YAML read a bare word as the boolean true (`on`/`yes`); "
+                'quote the mode — containment: "auto" | "fallback" | "off"'
+            )
+        return value
 
     @field_validator("containment")
     @classmethod

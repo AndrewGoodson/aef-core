@@ -317,6 +317,15 @@ class Digest:
     halts: int = 0
     blessed: int = 0
     security_events: int = 0
+    # The subset of `security_events` that are `EventKind.CONTAINMENT` — a
+    # shadow that ran without container containment and said so. Counted in
+    # `security_events`, because the owner must know the candidate was not
+    # contained; rendered separately, because the ordinary cause is no Docker
+    # on the runner or `containment: off` in the config, and reporting S5's
+    # fallback every Monday as "a proposal reached for the harness" is an
+    # alarm firing on the normal case (ADR 0167).
+    containment_events: int = 0
+    containment_reasons: tuple[str, ...] = ()
     scenarios_added: int = 0
     drift: float = 0.0
     owner_edits: int = 0
@@ -389,8 +398,24 @@ class Digest:
                 "gates keep measuring what the agent used to do. Pass `--record-runs` "
                 "from your deployment.",
             ]
-        if self.security_events:
+        # Two different things wearing one sentence. `security_event: True` was
+        # rendered as "a proposal reached for the harness" whatever wrote it,
+        # so an uncontained shadow — a runner with no Docker, or an owner who
+        # wrote `containment: off` — was reported to that owner every Monday
+        # as an attack (ADR 0167). Counted the same; named differently.
+        if self.security_events > self.containment_events:
             lines += ["", "**A proposal reached for the harness. Read the ledger.**"]
+        if self.containment_events:
+            lines += ["", "**Shadow runs were not contained.**"]
+            lines += [
+                f"- shadow ran uncontained: {reason}"
+                for reason in (self.containment_reasons or ("no reason recorded",))
+            ]
+            lines += [
+                "  Counted as a security event because the candidate was not contained, "
+                "not because it attacked anything. Install docker or podman, or say so "
+                "deliberately in the config.",
+            ]
         if self.beating_manual_editing is False:
             lines += [
                 "",
@@ -412,6 +437,8 @@ class Digest:
                 "rolled_back": self.rolled_back,
                 "halts": self.halts,
                 "security_events": self.security_events,
+                "containment_events": self.containment_events,
+                "containment_reasons": list(self.containment_reasons),
                 "scenarios_added": self.scenarios_added,
                 "drift": self.drift,
                 "owner_edits": self.owner_edits,
@@ -450,6 +477,8 @@ def build_digest(
 ) -> Digest:
     counts = dict.fromkeys(_COUNTED.values(), 0)
     security_events = 0
+    containment_events = 0
+    containment_reasons: list[str] = []
 
     for entry in entries:
         if not since <= entry.at <= until:
@@ -459,11 +488,18 @@ def build_digest(
             counts[field_name] += 1
         if entry.detail.get("security_event"):
             security_events += 1
+        if entry.kind is EventKind.CONTAINMENT:
+            containment_events += 1
+            reason = str(entry.detail.get("reason") or entry.summary or "no reason recorded")
+            if reason not in containment_reasons:
+                containment_reasons.append(reason)
 
     return Digest(
         since=since,
         until=until,
         security_events=security_events,
+        containment_events=containment_events,
+        containment_reasons=tuple(containment_reasons),
         scenarios_added=scenarios_added,
         drift=drift,
         owner_edits=owner_edits,
@@ -549,28 +585,49 @@ DEFAULT_QUIET_CYCLES = 3
 
 @dataclass(frozen=True)
 class CycleAttempt:
-    """One invocation of `aef loop cycle`, whatever it produced."""
+    """One TURN of the loop, whatever it produced.
+
+    A turn, not an invocation, and the distinction is load-bearing. `aef loop
+    cycle` runs one turn per invocation, so for it the two coincide; `aef loop
+    run --turns 10` runs ten, each of which is a separate chance to propose.
+    Journalling a `run` as a single attempt would make ten quiet turns count
+    once, and the staleness alarm — which counts consecutive quiet attempts —
+    would need thirty turns to fire instead of three (ADR 0167).
+    """
 
     at: datetime
     proposed: bool
-    # The last line the cycle printed — the reason, in the cycle's own words.
+    # The last line the turn printed — the reason, in the loop's own words.
     verdict: str = ""
+    # Which subcommand produced it: "cycle", "run". Recorded because the two
+    # write into ONE journal and "which command has gone quiet" is the first
+    # question anyone reading a stale loop asks. Empty for entries written
+    # before ADR 0167, which is why nothing keys off it.
+    command: str = ""
 
 
 def record_cycle_attempt(
-    state_root: Path, *, at: datetime, proposed: bool, verdict: str = ""
+    state_root: Path, *, at: datetime, proposed: bool, verdict: str = "", command: str = ""
 ) -> None:
-    """Append one attempt. Called by `aef loop cycle` after every turn.
+    """Append one attempt. Called by every `aef loop` subcommand that runs a
+    turn — `cycle` and `run` — on EVERY path, including the ones that raise.
 
     Deliberately NOT the ledger: the ledger is a tamper-evident hash chain of
     decisions about candidates, and "a cycle ran and decided nothing" is not
     a decision about a candidate. Putting non-decisions in it would also mean
     the cycle mutates the audit trail on every no-op run.
+
+    "On every path" is the ADR 0167 correction. This call used to sit after
+    `cmd_cycle`'s `try`, so a turn that died on a halt or a config error
+    returned before reaching it — and a nightly cycle failing the same way
+    every night left a journal as empty as one nobody had ever run, which is
+    the exact ambiguity the journal exists to remove.
     """
     state_root.mkdir(parents=True, exist_ok=True)
-    line = json.dumps(
-        {"at": at.isoformat(), "proposed": proposed, "verdict": verdict}, sort_keys=True
-    )
+    payload: dict[str, object] = {"at": at.isoformat(), "proposed": proposed, "verdict": verdict}
+    if command:
+        payload["command"] = command
+    line = json.dumps(payload, sort_keys=True)
     with (state_root / CYCLE_JOURNAL_FILENAME).open("a", encoding="utf-8") as handle:
         handle.write(line + "\n")
 
@@ -596,6 +653,7 @@ def read_cycle_attempts(state_root: Path) -> tuple[CycleAttempt, ...]:
                     at=datetime.fromisoformat(str(payload["at"])),
                     proposed=bool(payload["proposed"]),
                     verdict=str(payload.get("verdict", "")),
+                    command=str(payload.get("command", "")),
                 )
             )
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):

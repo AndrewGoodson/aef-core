@@ -42,6 +42,22 @@ REPO = Path(__file__).resolve().parents[2]
 RECORDED_AT = datetime(2026, 9, 3, tzinfo=UTC)
 
 
+def _summary_scenarios_per_split() -> dict[str, int]:
+    """How many `summary_agent` scenarios each split holds, per the corpus on
+    disk. Read rather than pinned so growing the corpus is not a failure of the
+    no-live-call test (ADR 0171)."""
+    from collections import Counter
+
+    from aef.harness.corpus import load_corpus
+
+    counts = Counter(
+        s.split.value
+        for s in load_corpus(REPO / "corpus").scenarios
+        if s.graph_id == "summary_agent"
+    )
+    return dict(counts)
+
+
 class _Scripted(ModelProvider):
     """Answers with a fixed reply and counts calls."""
 
@@ -309,7 +325,14 @@ def test_scoring_the_summary_corpus_makes_no_live_call(monkeypatch, capsys) -> N
     assert report["graph_id"] == "summary_agent"
     assert report["cassette"]["misses"] == 0
     assert report["cassette"]["hits"] > 0
-    assert report["train"]["n"] == 12 and report["validation"]["n"] == 6
+    # Every summary scenario in each split is scored, read off the corpus
+    # rather than pinned as a literal: the numbers were 12 and 6 until ADR 0171
+    # recorded the corpus's first true content negatives, and a size literal
+    # here turns "the corpus grew" into a test failure that says nothing about
+    # whether a live call was made — which is all this test is for.
+    expected = _summary_scenarios_per_split()
+    assert report["train"]["n"] == expected["train"]
+    assert report["validation"]["n"] == expected["validation"]
     assert report["train"]["repeat_mean_spread"] == 0.0
     assert report["validation"]["repeat_mean_spread"] == 0.0
     # The demo's scenarios sit in the same corpus and are not this graph's.

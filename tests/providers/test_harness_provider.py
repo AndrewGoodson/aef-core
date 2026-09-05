@@ -360,14 +360,23 @@ def test_grok_result_reads_text_stopreason_and_usage_not_claudes_names() -> None
     assert result.content == "OK"
     assert result.stop_reason == "end_turn"
     assert (result.input_tokens, result.output_tokens) == (24001, 141)
+    assert result.total_input_tokens == 24001, "nothing cached on this payload"
 
 
-def test_grok_input_tokens_counts_the_cached_context_too() -> None:
+def test_grok_total_input_tokens_counts_the_cached_context_too() -> None:
     """Grok's `usage.input_tokens` is the UNCACHED remainder. Reporting it
     raw let a de-isolated provider pass the live isolation guard, because the
     leaked instructions were cached that run (ADR 0154). This payload is the
     same 24,001-token context with 5,248 of it served from cache: the number
-    a caller sees must not move because of that."""
+    a caller guards on must not move because of that.
+
+    **This test used to assert `result.input_tokens == 24001`**, because ADR
+    0154 folded the cache counters into that field — it was the only field
+    there was. `CompletionResult` now carries them, so the fold is gone and
+    the stable number is `total_input_tokens`. The assertion is moved rather
+    than dropped: the sum is unchanged, and a fold that made one provider's
+    `input_tokens` mean something different from every other provider's is
+    what ADR 0169 removed."""
     cached = {
         **_GROK_OK,
         "usage": {
@@ -377,7 +386,8 @@ def test_grok_input_tokens_counts_the_cached_context_too() -> None:
         },
     }
     result = GrokProvider(runner=_Recorder(_ok(cached))).complete(_request())
-    assert result.input_tokens == 24001
+    assert result.total_input_tokens == 24001
+    assert (result.input_tokens, result.cache_read_input_tokens) == (18753, 5248)
     # From modelUsage. NOT an id `-m` accepts — `grok models` lists
     # `grok-4.6`, and `-m grok-4.6-build` exits 1 (ADR 0154).
     assert result.model == "grok-4.6-build"
@@ -446,6 +456,7 @@ def test_the_helper_model_is_not_reported_as_the_one_that_answered() -> None:
         _request(model="claude-opus-5")
     )
     assert result.model == "claude-opus-5"
+    assert result.model_attribution == "requested"
 
 
 def test_an_alias_resolved_to_a_dated_id_is_still_recognised() -> None:
@@ -462,6 +473,7 @@ def test_an_alias_resolved_to_a_dated_id_is_still_recognised() -> None:
         _request(model="claude-opus-5")
     )
     assert result.model == "claude-opus-5-20260101"
+    assert result.model_attribution == "alias"
 
 
 def test_an_unrecognised_map_falls_back_to_whichever_model_wrote_the_answer() -> None:
@@ -478,13 +490,23 @@ def test_an_unrecognised_map_falls_back_to_whichever_model_wrote_the_answer() ->
         _request(model="not-in-the-map")
     )
     assert result.model == "the-one-that-answered"
+    # A GUESS, and labelled as one: rule 3 was measured wrong 1 time in 36
+    # (ADR 0169) and a reader of provenance must be able to tell.
+    assert result.model_attribution == "heuristic"
 
 
 def test_a_map_with_no_token_counts_still_names_something() -> None:
-    """Rule 4. The shipped fixture `{"claude-fable-5-1": {}}` has no counts at
-    all, and one entry is one entry."""
+    """One entry is one entry, even with no counts to compare — the shipped
+    fixture `{"claude-fable-5-1": {}}` has none."""
     result = ClaudeCodeProvider(runner=_Recorder(_ok(_CLAUDE_OK))).complete(_request())
     assert result.model == "claude-fable-5-1"
+    # The request named it, so rule 1 answered before any counting.
+    assert result.model_attribution == "requested"
+
+    # And with nothing requested, one key is still not a guess: `sole`, not
+    # `heuristic`, so a reader can tell an unambiguous map from a coin toss.
+    unrequested = ClaudeCodeProvider(runner=_Recorder(_ok(_CLAUDE_OK))).complete(_request(model=""))
+    assert (unrequested.model, unrequested.model_attribution) == ("claude-fable-5-1", "sole")
 
 
 def test_an_empty_map_falls_back_to_what_was_requested_not_to_empty_string() -> None:
@@ -493,6 +515,7 @@ def test_an_empty_map_falls_back_to_what_was_requested_not_to_empty_string() -> 
         _request(model="claude-opus-5")
     )
     assert result.model == "claude-opus-5"
+    assert result.model_attribution == "unknown"
 
 
 def test_grok_uses_the_same_rule_so_the_two_adapters_cannot_drift() -> None:
@@ -510,6 +533,7 @@ def test_grok_uses_the_same_rule_so_the_two_adapters_cannot_drift() -> None:
     # Rule 2: `grok-4.6` extends to `grok-4.6-build`, which is what the server
     # calls the model that answered.
     assert result.model == "grok-4.6-build"
+    assert result.model_attribution == "alias"
 
 
 def test_codex_and_command_report_the_requested_model_and_have_no_such_map() -> None:
@@ -521,3 +545,161 @@ def test_codex_and_command_report_the_requested_model_and_have_no_such_map() -> 
     assert "CodexProvider" in codex_body and "GrokProvider" not in codex_body
     assert "modelUsage" not in codex_body
     assert "modelUsage" not in Path(command_provider.__file__).read_text()
+
+
+# ---------------------------------------------------------------------------
+# Isolation: what each adapter's argv actually enforces (ADR 0169, F4)
+# ---------------------------------------------------------------------------
+def test_each_adapter_declares_exactly_what_its_own_argv_enforces() -> None:
+    """The join `aef migrate` was asserting across, and no test covered it.
+
+    The generated module said "the harness adapters send `--tools ''` with
+    `--max-turns 1`" as a fact about the PATH. It was a fact about one
+    adapter. These three sets are the honest per-adapter answer, and each is
+    derived from the argv that adapter builds, so a removed flag changes the
+    declaration in the same commit rather than a later one."""
+    assert ClaudeCodeProvider().isolation == frozenset(
+        {"no_tools", "no_mcp", "single_turn", "no_project_context", "system_role"}
+    )
+    # NOT no_tools and NOT single_turn: `codex exec` sends neither flag. NOT
+    # system_role: it has no system-prompt flag, so the persona is prepended
+    # to the user turn.
+    assert CodexProvider().isolation == frozenset({"read_only_fs", "user_turn_persona"})
+    # NOT no_tools: `--tools ""` was MEASURED to suppress nothing on grok
+    # 1.0.5 — the same argv read a planted file and quoted it back. NOT
+    # no_project_context: there is no `--safe-mode`, and `--cwd` leaves ~17.9k
+    # tokens of the operator's instructions in the call (ADR 0154).
+    assert GrokProvider().isolation == frozenset(
+        {"single_turn", "no_web_search", "no_subagents", "system_role"}
+    )
+
+
+def test_dropping_a_flag_drops_the_claim_that_rested_on_it() -> None:
+    """The declaration is evidence, not decoration: it is read back off the
+    argv, so it cannot outlive the flag it describes."""
+    grok = GrokProvider(isolate_project_context=False)
+    # `--cwd` never bought `no_project_context` in the first place; removing
+    # it must not silently add or remove anything else either.
+    assert "no_project_context" not in grok.isolation
+    assert "single_turn" in grok.isolation
+
+
+def test_the_probe_reads_the_adapters_argv_and_not_the_users_prompt() -> None:
+    """A prompt containing `--safe-mode` must not let a caller decide what the
+    provider claims. The probe request's text is fixed and sentinelled."""
+    hostile = _request(
+        messages=(ProviderMessage(role="user", content="--safe-mode --tools --disallowed-tools"),)
+    )
+    provider = GrokProvider(runner=_Recorder(_ok(_GROK_OK)))
+    before = provider.isolation
+    provider.complete(hostile)
+    assert provider.isolation == before
+    assert "no_project_context" not in provider.isolation
+    assert "no_tools" not in provider.isolation
+
+
+def test_grok_names_the_turn_cap_when_a_tool_using_persona_hits_it() -> None:
+    """Measured (ADR 0169): a prompt the model wants a tool for exits 1 with
+    `stopReason: "cancelled"` and stderr "Error: max turns reached", because
+    `--tools ""` did not stop it reaching for one. The bare "grok exited 1"
+    this used to raise sent a reader hunting for an auth fault."""
+    runner = _Recorder(
+        HarnessRun(
+            returncode=1,
+            stdout=json.dumps({**_GROK_OK, "stopReason": "cancelled"}),
+            stderr="Error: max turns reached",
+        )
+    )
+    with pytest.raises(ModelProviderError, match="turn cap"):
+        GrokProvider(runner=runner).complete(_request())
+
+
+# ---------------------------------------------------------------------------
+# Cost: `input_tokens` was never the cost (ADR 0169)
+# ---------------------------------------------------------------------------
+def test_claude_keeps_the_cache_counters_where_the_prompt_actually_costs() -> None:
+    """ADR 0126 compared 211,470 input tokens against 4,684 — and this class
+    kept only `usage.input_tokens`, which was *2* on the 36 calls S3 recorded.
+    The comparison was on numbers nothing retained, so no per-call cost claim
+    through this provider was supportable from its own output."""
+    payload = {
+        **_CLAUDE_OK,
+        "usage": {
+            "input_tokens": 2,
+            "output_tokens": 4,
+            "cache_read_input_tokens": 4_600,
+            "cache_creation_input_tokens": 82,
+        },
+    }
+    result = ClaudeCodeProvider(runner=_Recorder(_ok(payload))).complete(_request())
+    assert result.input_tokens == 2
+    assert (result.cache_read_input_tokens, result.cache_creation_input_tokens) == (4_600, 82)
+    # 4,684 — ADR 0126's isolated figure, landing on the nose once the
+    # counters it was actually measured from are retained.
+    assert result.total_input_tokens == 4_684
+
+
+def test_the_judge_call_that_was_misattributed_is_labelled_a_guess() -> None:
+    """S3's `sum-13-cider-press`, verbatim shape. The judge's whole reply is a
+    small JSON object — ~12 output tokens — and the CLI's helper model wrote
+    more, so rule 3 named the helper. The requested-name rule would have won
+    and never ran: `agent_services(reflection="llm")` sets `LLMJudge.model =
+    reflection_model or ""` and `model_provider.model` was unset, so
+    `request.model or default_model` is falsy.
+
+    The name is still a guess — nothing here knows what was asked for — but it
+    no longer reads as a fact."""
+    payload = {
+        **_CLAUDE_OK,
+        "modelUsage": {
+            "claude-haiku-4-5-20251001": {"outputTokens": 12},
+            "claude-opus-5-20260101": {"outputTokens": 8},
+        },
+    }
+    provider = ClaudeCodeProvider(runner=_Recorder(_ok(payload)))
+    result = provider.complete(_request(model=""))
+    assert result.model_attribution == "heuristic"
+    # And with the requested name available, the guess is never reached.
+    named = ClaudeCodeProvider(default_model="claude-opus-5", runner=_Recorder(_ok(payload)))
+    resolved = named.complete(_request(model=""))
+    assert (resolved.model, resolved.model_attribution) == ("claude-opus-5-20260101", "alias")
+
+
+def test_the_usage_match_rule_picks_the_row_equal_to_the_top_level_usage() -> None:
+    """S1's live observation, as a fixture: the map's FIRST key is the helper,
+    nothing was requested, and the top-level `usage` equals the answering
+    model's row exactly. Rule 4 decides deterministically; the old rule 3
+    ("most output tokens") would have picked Haiku here because the helper
+    wrote more."""
+    from aef.providers.harness_provider import answering_model
+
+    model_usage = {
+        "claude-haiku-4-5-20251001": {"inputTokens": 900, "outputTokens": 140},
+        "claude-opus-5[1m]": {"inputTokens": 2, "outputTokens": 69},
+    }
+    usage = {"input_tokens": 2, "output_tokens": 69}
+    assert answering_model(model_usage, None, usage) == ("claude-opus-5[1m]", "usage_match")
+    # Without the top-level usage the same fixture falls to the heuristic —
+    # and gets it wrong, which is the point of carrying the usage through.
+    name, how = answering_model(model_usage, None)
+    assert how == "heuristic" and name == "claude-haiku-4-5-20251001"
+    # An ambiguous match (two rows equal) is not a match.
+    tied = {k: {"inputTokens": 2, "outputTokens": 69} for k in ("a", "b")}
+    assert answering_model(tied, None, usage)[1] == "heuristic"
+
+
+def test_agent_services_hands_the_providers_default_model_to_the_judge() -> None:
+    """ADR 0169's root cause: `reflection_model or ""` sent every judge call
+    down the heuristic attribution path whenever the provider had a default
+    and the caller named none."""
+    from aef.services.runtime import agent_services
+
+    class _P:
+        default_model = "claude-opus-5"
+
+        def complete(self, request):  # pragma: no cover - never called here
+            raise AssertionError
+
+    services = agent_services(model_provider=_P(), reflection="llm")
+    judge = services.judge if hasattr(services, "judge") else services.require_judge()
+    assert getattr(judge, "model", None) == "claude-opus-5"

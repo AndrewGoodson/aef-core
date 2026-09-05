@@ -117,6 +117,13 @@ class RecordedCall:
                 "input_tokens": self.result.input_tokens,
                 "output_tokens": self.result.output_tokens,
                 "stop_reason": self.result.stop_reason,
+                # Added by ADR 0169. Absent in every cassette recorded before
+                # it, which `from_payload` reads as 0 / "requested" — the
+                # values those recordings implied, since `input_tokens` was
+                # the only input number anything kept.
+                "cache_read_input_tokens": self.result.cache_read_input_tokens,
+                "cache_creation_input_tokens": self.result.cache_creation_input_tokens,
+                "model_attribution": self.result.model_attribution,
             },
         }
 
@@ -143,6 +150,9 @@ class RecordedCall:
                     stop_reason=(
                         None if result.get("stop_reason") is None else str(result["stop_reason"])
                     ),
+                    cache_read_input_tokens=int(result.get("cache_read_input_tokens", 0)),
+                    cache_creation_input_tokens=int(result.get("cache_creation_input_tokens", 0)),
+                    model_attribution=str(result.get("model_attribution", "requested")),
                 ),
             )
         except (KeyError, TypeError, ValueError) as exc:
@@ -208,6 +218,27 @@ class CassetteProvider(ModelProvider):
         self._recorded: list[RecordedCall] = []
         self.hits = 0
         self.misses = 0
+
+    @property
+    def isolation(self) -> frozenset[str]:
+        """The inner provider's declaration, forwarded unchanged; nothing at
+        all when there is no inner provider.
+
+        A wrapper cannot be more isolated than what it wraps: under
+        `on_miss="live"` the inner provider is what actually runs, so its
+        properties are the chain's properties, and a cassette that reported
+        its own (a replay spawns no process, opens no file) would let a
+        recording launder an unisolated backend's guarantees.
+
+        With `inner=None` — the gates' replay-only configuration — this
+        returns the empty set, which reads as **no claim**, not as "nothing is
+        enforced". A pure replay genuinely executes nothing, but the answers
+        it serves were produced by a provider this object no longer holds, and
+        inventing that provider's properties is the failure mode ADR 0169
+        exists to close. `PromptAgentNode` records the empty set as no claim
+        and does not warn on it, so replaying the corpus is unaffected.
+        """
+        return self._inner.isolation if self._inner is not None else frozenset()
 
     @property
     def on_miss(self) -> OnMiss:
