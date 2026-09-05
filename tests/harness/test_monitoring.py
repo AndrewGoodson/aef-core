@@ -328,3 +328,81 @@ def test_the_digest_reports_drift_and_scenarios_added() -> None:
     rendered = digest.render()
     assert "0.420" in rendered
     assert "Scenarios added to the corpus: 3" in rendered
+
+
+# --------------------------------------------------------------------------
+# An uncontained shadow is a security event, not an attack (ADR 0167)
+#
+# `render()` printed `**A proposal reached for the harness. Read the ledger.**`
+# for any ledger entry carrying `security_event: True`, whatever wrote it. So
+# S5's containment FALLBACK — no Docker on the runner, or an owner who wrote
+# `containment: off` — was reported to that owner every Monday as an attack.
+# An alarm that fires on the normal case is an alarm nobody reads, which is
+# the same argument ADR 0165 makes for not warning about an unstarted loop.
+# --------------------------------------------------------------------------
+
+
+def test_a_containment_event_is_not_reported_as_a_proposal_reaching_the_harness() -> None:
+    entries = (
+        _entry(
+            1,
+            EventKind.CONTAINMENT,
+            security_event=True,
+            reason="no container runtime found (docker/podman)",
+        ),
+    )
+    digest = build_digest(entries, since=MERGED_AT, until=MERGED_AT + timedelta(days=7))
+    rendered = digest.render()
+
+    # Still a security event — the candidate was NOT contained and the owner
+    # must know. Only the sentence changes.
+    assert digest.security_events == 1
+    assert digest.containment_events == 1
+    assert "- Security events: 1" in rendered
+
+    assert "reached for the harness" not in rendered, rendered
+    assert "**Shadow runs were not contained.**" in rendered
+    assert "- shadow ran uncontained: no container runtime found (docker/podman)" in rendered, (
+        rendered
+    )
+
+
+def test_a_real_security_event_still_says_a_proposal_reached_for_the_harness() -> None:
+    """The control. A guard that silenced the sentence for every event would
+    be the alarm removed rather than the alarm fixed."""
+    entries = (
+        _entry(1, EventKind.REJECTED, security_event=True),
+        _entry(2, EventKind.CONTAINMENT, security_event=True, reason="containment: off"),
+    )
+    rendered = build_digest(entries, since=MERGED_AT, until=MERGED_AT + timedelta(days=7)).render()
+
+    assert "reached for the harness" in rendered
+    assert "- shadow ran uncontained: containment: off" in rendered
+
+
+def test_a_containment_event_with_no_reason_still_renders_one_line() -> None:
+    entries = (_entry(1, EventKind.CONTAINMENT, security_event=True),)
+    rendered = build_digest(entries, since=MERGED_AT, until=MERGED_AT + timedelta(days=7)).render()
+    assert "- shadow ran uncontained: no reason recorded" in rendered
+
+
+def test_repeated_containment_reasons_are_reported_once() -> None:
+    entries = tuple(
+        _entry(i, EventKind.CONTAINMENT, security_event=True, reason="containment: off")
+        for i in range(1, 4)
+    )
+    digest = build_digest(entries, since=MERGED_AT, until=MERGED_AT + timedelta(days=7))
+    assert digest.containment_events == 3
+    assert digest.render().count("- shadow ran uncontained:") == 1
+
+
+def test_the_containment_count_reaches_the_json() -> None:
+    import json
+
+    entries = (_entry(1, EventKind.CONTAINMENT, security_event=True, reason="containment: off"),)
+    payload = json.loads(
+        build_digest(entries, since=MERGED_AT, until=MERGED_AT + timedelta(days=7)).to_json()
+    )
+    assert payload["security_events"] == 1
+    assert payload["containment_events"] == 1
+    assert payload["containment_reasons"] == ["containment: off"]

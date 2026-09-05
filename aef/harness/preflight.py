@@ -96,13 +96,54 @@ class Preflight:
         return "\n".join(lines)
 
 
+def _reasoning_factory_names(tree: ast.Module) -> set[str]:
+    """Names bound by `from aef.reasoning... import make_*_node`.
+
+    The set is deliberately narrow: only `make_*_node` factories, only from
+    `aef.reasoning`, and the local binding name (so `import make_x_node as f`
+    is followed). Anything else that happens to take a `route=` keyword is
+    somebody's own function and this file vouches for nothing about it.
+    """
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if not node.module or not node.module.startswith("aef.reasoning"):
+            continue
+        for alias in node.names:
+            if alias.name.startswith("make_") and alias.name.endswith("_node"):
+                names.add(alias.asname or alias.name)
+    return names
+
+
 def _reflect_is_routed_to(agent_source: Path) -> tuple[bool, str]:
-    """A reflect node must exist AND a node must ROUTE to it.
+    """A reflect node must exist AND something must ROUTE to it.
 
     Checking only that the node exists is not enough, and this is the trap
     that has now caught two people: an `Edge` to a reflect node does not wire
     it. Routing is chosen by node code, so a work node returning `END` never
     reaches reflect however the edges are drawn (ADR 0070).
+
+    **Two shapes count, because there are two shapes.**
+
+    1. A hand-written node — a three-argument `(state, ctx, services)`
+       function whose `Return` carries the reflect node's id.
+    2. A node built by an `aef.reasoning` factory with `route="reflect"`.
+       `aef migrate` generates exactly this for a prompt agent (ADR 0152):
+       `make_prompt_agent_node(agent_file=..., route="reflect")`, with the
+       closure living in `aef/reasoning/prompt_agent.py` and no node function
+       in the generated module at all.
+
+    Shape 2 was invisible here until ADR 0167, so obligation 2 was
+    **permanently red on every graph `aef migrate` writes for a prompt-file
+    repo** — while the graph routed correctly. Reproduced: `loop doctor` on a
+    freshly migrated `agents/migrated/marlin_accela/graph.py` printed
+    `[--] reflect node routed to  a reflect node exists but nothing routes to
+    it` and exited 1, and executing that same graph with a stub provider gave
+    the trace `['prompt_agent', 'reflect', 'consolidate']`.
+
+    The factory that BUILDS the reflect node is excluded: `make_reflect_node`
+    routing to `"reflect"` would be a self-loop, not something arriving at it.
     """
     if not agent_source.is_file():
         return False, f"no agent source at {agent_source}"
@@ -144,9 +185,29 @@ def _reflect_is_routed_to(agent_source: Path) -> tuple[bool, str]:
                     if isinstance(literal, ast.Constant) and literal.value == reflect_id:
                         return True, f"{fn.name}() returns {reflect_id!r} as its Route"
 
+    # Shape 2: a factory node built with `route="reflect"`. The route is the
+    # node's whole control flow — `make_prompt_agent_node` returns exactly
+    # this constant as its `Route` — so a keyword naming the reflect id is
+    # the same evidence a `return delta, "reflect"` is.
+    factories = _reasoning_factory_names(tree)
+    for call in ast.walk(tree):
+        if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Name):
+            continue
+        callee = call.func.id
+        if callee not in factories or callee == "make_reflect_node":
+            continue
+        for kw in call.keywords:
+            if (
+                kw.arg == "route"
+                and isinstance(kw.value, ast.Constant)
+                and kw.value.value == reflect_id
+            ):
+                return True, f"{callee}(route={reflect_id!r}) builds a node that routes to it"
+
     return (
         False,
-        "a reflect node exists but nothing routes to it — an Edge does not wire it",
+        "a reflect node exists but nothing routes to it — an Edge does not wire it, and no "
+        "aef.reasoning factory in this module was given route='reflect' either",
     )
 
 
@@ -365,7 +426,16 @@ def preflight(
     graph_id: str,
     halt_channel_configured: bool,
     observations: Path,
+    agent_root: str = DEFAULT_AGENT_ROOT,
 ) -> Preflight:
+    """The obligations, reported against ONE Zone A tree.
+
+    `agent_root` defaults rather than being required because every existing
+    caller passed the default implicitly; obligation 5 is the only one that
+    reads it, and it reads it to answer a question nothing could answer
+    before — *is the archived baseline a baseline of the tree this loop is
+    measuring?* (ADR 0167).
+    """
     checks: list[Obligation] = []
 
     # 1 — corpus with at least one tripwire
@@ -427,14 +497,50 @@ def preflight(
         )
     )
 
-    # 5 — blessed baseline
+    # 5 — blessed baseline, OF THE TREE THIS LOOP IS ACTUALLY MEASURING
     versions = archive.versions(state_root / "archive", graph_id)
+    root_flag = f" --agent-root {agent_root}" if agent_root != DEFAULT_AGENT_ROOT else ""
+    bless_fix = f"aef loop bless --repo . --state {state_root} --agent-path {agent_path}{root_flag}"
+    blessed_root = ""
+    if versions:
+        try:
+            blessed_root = archive.load_entry(
+                state_root / "archive", graph_id, versions[-1]
+            ).agent_root
+        except archive.ArchiveError:  # pragma: no cover - a broken entry is its own alarm
+            blessed_root = ""
+    # "" means the entry predates ADR 0167 and recorded no root. It is NOT
+    # treated as a mismatch: a baseline blessed before the field existed is
+    # not evidence of disagreement, and failing every one of them would be a
+    # control that fires on the ordinary case.
+    root_mismatch = bool(versions) and blessed_root not in ("", agent_root)
+    if root_mismatch:
+        detail = (
+            f"{len(versions)} archived version(s), but v{versions[-1]} was blessed with "
+            f"--agent-root {blessed_root!r} and this loop is running under {agent_root!r} — "
+            f"G5 would measure every candidate's drift between two different trees"
+        )
+    else:
+        recorded = f"of {blessed_root!r}" if blessed_root else "(root not recorded)"
+        detail = (
+            f"{len(versions)} archived version(s) {recorded}"
+            if versions
+            else "0 archived version(s)"
+        )
     checks.append(
         Obligation(
             name="blessed baseline",
-            met=bool(versions),
-            detail=f"{len(versions)} archived version(s)",
-            fix=f"aef loop bless --repo . --state {state_root} --agent-path {agent_path}",
+            met=bool(versions) and not root_mismatch,
+            detail=detail,
+            fix=(
+                f"the baseline and this invocation must name the SAME Zone A tree. Either "
+                f"re-run with --agent-root {blessed_root!r}, or start a new graph id and "
+                f"bless it under {agent_root!r} — re-blessing the same graph is refused, "
+                f"because the drift budget is measured against the baseline and silently "
+                f"replacing it resets that budget without anyone deciding to (ADR 0053)."
+                if root_mismatch
+                else bless_fix
+            ),
         )
     )
 
@@ -522,7 +628,29 @@ def bless(
     rate-limited by G5 (ADR 0053), and a `bless` that silently replaced the
     baseline would route around that — the drift budget is measured against
     this, so overwriting it resets drift to zero without anyone deciding to.
+
+    **And refuses a `state_root` inside the repository**, which it did not
+    until ADR 0167. `harness.loop._preflight` has refused that since ADR 0090
+    — the ledger and archive swept into a candidate's own commit by `git add
+    -A` make the audit trail part of what it audits — but `bless` does not go
+    through `_preflight`, so `aef loop bless --state <repo>/state` printed
+    "blessed agents/demo/graph.py as baseline v1" and left `archive/` and
+    `ledger.jsonl` inside the working tree, while `aef loop cycle` with the
+    same `--state` refused (reproduced). The baseline is the one artefact that
+    must sit outside the candidate's reach: under a widened `--agent-root` it
+    could otherwise end up archived into its own next baseline.
+
+    The check is here as well as in the CLI for L6's reason: `bless` is
+    importable, and a control that only binds when argparse is involved does
+    not bind on the path a library caller takes.
     """
+    from aef.harness.loop import LoopConfig, LoopPaths, _check_state_is_outside_the_repo
+
+    # The SAME function the driver calls, not a second copy of its predicate.
+    _check_state_is_outside_the_repo(
+        LoopConfig(repo=GitRepo(root=repo_root), paths=LoopPaths(root=state_root))
+    )
+
     existing = archive.versions(state_root / "archive", graph_id)
     if existing:
         raise BlessError(
@@ -609,6 +737,14 @@ def bless(
         head_sha="0" * 40,
         recorded_at=at,
         notes=note or "owner-blessed baseline",
+        # WHICH tree this is the baseline of. Both sides of G5's drift metric
+        # must describe the same tree, and until ADR 0167 the entry recorded
+        # only the files — so a baseline blessed under `--agent-root
+        # .claude/agents` and a cycle run at the default root produced a
+        # union of two disjoint key sets and `cumulative drift: 1.000`,
+        # reproduced end to end. Recording it lets preflight say so by name
+        # instead of leaving it to be read off a rejection.
+        agent_root=agent_root,
     )
     ledger.append(
         state_root,

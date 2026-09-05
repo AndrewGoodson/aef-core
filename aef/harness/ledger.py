@@ -61,6 +61,14 @@ class EventKind(StrEnum):
     KEPT = "kept"
     ROLLED_BACK = "rolled_back"
     HALTED = "halted"
+    # A shadow ran WITHOUT container containment, and said so. A security
+    # event — the owner must know the candidate was not contained — but not
+    # an ATTACK: the ordinary cause is no Docker on the runner, or the owner
+    # writing `containment: off`. The digest renders it under its own heading
+    # for that reason; reporting the fallback every Monday as "a proposal
+    # reached for the harness" is an alarm that fires on the normal case, and
+    # an alarm that fires on the normal case is one nobody reads (ADR 0167).
+    CONTAINMENT = "containment"
 
 
 @dataclass(frozen=True)
