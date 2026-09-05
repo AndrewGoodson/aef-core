@@ -4164,3 +4164,100 @@ was rejected, the system is working". Only `cycle`, `run`, `doctor` and `bless`
 return `EXIT_ERROR`. That is ADR 0167's R3 still standing across the rest of the
 surface, and it is a `cli/loop.py`-wide change two other workers held during
 this wave. `loop-gate.yml`'s new comment says so in the file where it matters.
+## M5 — the acceptance test for a prompt-file repo (ADR 0158)
+
+Branch `upgrade/m5-acceptance`, merged from `origin/main` at `db2987a` so M4b
+(ADR 0174) is in. Model `claude-opus-5[1m]`. **15 live model calls** of a 40
+budget. No file under `aef/` was modified. No rubric change — adoption work
+claims no rubric point.
+
+**The increment.** `tests/cli/test_prompt_repo_acceptance.py` runs the whole
+documented sequence through the real CLI, as subprocesses, twice.
+
+*Offline* (CI, `slow`, no credential): a synthetic repo shaped like the marlin
+pilot — three personas under `.claude/agents/` with one nested in `sub/`, an
+`AGENTS.md` whose own prose QUOTES the bare `aef:begin`/`aef:end` markers with
+house rules between them, a CRLF `.gitignore`, a `.codex/`, a skill — driven
+`adopt -> migrate -> bootstrap --memory --config -> bless -> doctor -> cycle
+--proposer rule_based_prompt`. The provider is `impl: command` with
+`argv: ["/bin/echo", "{system}", "{prompt}"]`: a real `CommandProvider`
+running a real subprocess with the persona in the system channel, not a mock.
+Asserted: adopt's diff is **insertions only** (41/0 on `AGENTS.md`, 5/0 on
+`.gitignore`), `RULE 7` and `RULE 8` each survive once, the quoted bare marker
+is untouched prose, adopt's own marker is the signed form, and the `.gitignore`
+block is rendered in CRLF; migrate writes 3 graphs including the nested
+persona's and every printed run command `shlex`-parses to a target the CLI
+accepts; bootstrap reports `2 failed an owner check` and writes two
+check-derived failure records under two distinct `run_id`s with one signature;
+`entry.json` carries `agent_root: .claude/agents` and six digests all under it;
+a defaulted `--agent-path` under a widened root is refused with `EXIT_USAGE`;
+and the cycle's ledger holds `proposed` with `paths ==
+['.claude/agents/accela-agent.md']` and a `gated` entry whose evidence is
+`1 candidate + 1 incumbent + 5 random control(s)` over 21 executions — ADR
+0170's prose cohort reached end-to-end through the CLI for the first time —
+with G0/G1/G4/G5 pass, drift 0.012/0.500, and a verdict. ADR 0139's failure
+shape is gone: every exit code checked, `cycles.jsonl` written while rejecting.
+
+*Live* (`AEF_LIVE_HARNESS=1`, a COPY of the read-only pilot clone,
+`impl: claude_code`, `model: claude-opus-5`): same sequence, same assertions.
+`proposed paths ['.claude/agents/accela-agent.md']`, evidence `1 candidate +
+1 incumbent + 5 random control(s)` over 14 executions, drift **0.007/0.500**,
+verdict **REJECT**.
+
+**Neither rejection is a judgement of the prompt, and that is the finding.**
+Offline it is the changed-prompt-cannot-replay rule under `--cassette-miss
+fail`. Live it is a defect.
+
+- **F-M5-3 (HIGH).** `aef/harness/sandbox.py::DEFAULT_ENV_ALLOWLIST` has no
+  `USER`, so `claude -p` answers `Not logged in - Please run /login` inside the
+  gate's worker. Narrowed to that one variable: allowlist alone ->
+  `is_error: true`; allowlist + `USER` alone -> `OK`. `ClaudeCodeProvider`'s
+  whole premise (ADR 0112 — the operator's login IS the credential) therefore
+  fails in the only place the gates execute a candidate, and
+  `UPGRADE_LOOP.md`'s "a prompt candidate is gated live or not at all"
+  resolves to *not at all*. Reported, not fixed: widening a scrubbing
+  allowlist so a shadow run can spend the operator's quota is an owner
+  decision, not a typo correction.
+- **F-M5-2 (HIGH).** `_live_provider_from_base_ref` carries only
+  `{impl, model}` across the sandbox boundary and `node_worker._configure`
+  rebuilds `ModelProviderConfig` from them, so `impl: command` — the one
+  provider needing no credential, and the one ADR 0154 points every new
+  adopter at — cannot be rebuilt worker-side. Reproduced through
+  `run_corpus_isolated`: `IsolationError: worker refused configuration ...
+  no `command:` block is present`, every scenario, every cohort member.
+  With F-M5-3: **no** provider serves a live cassette miss inside the gates.
+- **F-M5-1 (MEDIUM).** Obligation 6's every-graph scan (G1b, ADR 0168) is
+  passed only when `--agent-path` is DEFAULTED, and G1a (ADR 0167) refuses a
+  defaulted `--agent-path` under a non-default `--agent-root`. On a widened
+  root, 5 graphs are discoverable and 1 is ever scanned.
+- **Seams R1 and R2**, handed over mid-run by the third hunt, were both hit
+  and worked around rather than papered over: migrate at the DEFAULT root so
+  `--entrypoint` is dotted-importable, and doctor's obligation 3/6 asserted as
+  they actually behave under a persona `--agent-path`.
+
+All four are pinned `xfail(strict=True)`, so the day any of them is fixed the
+suite says so.
+
+**The measurement the gate could not make.** `aef loop score` runs in-process,
+so F-M5-3 does not block it. Both arms live, cassettes stripped so neither
+replays: incumbent mean **0.0000**, candidate mean **0.0000**, n=2.
+**ADR 0157's L4 result does not reproduce on merged main.** M4's lesson gained
++0.5 because its text contained the literal `contains 'VERDICT:'` — 0157 named
+that as teaching to the test — and ADR 0174 redacts the check's value from the
+failure text. Both increments are right; their composition buys nothing on a
+`contains` check. What a rule-based prompt lesson can do when the answer is
+withheld is an open design question.
+
+**`CLAUDE.md`.** The prompt-file bullet was replaced, in its own commit, with
+the measured statement: what `migrate` does with prompt-file agents, that
+containment is the PROVIDER's answer (with `codex` and a `{system}`-less
+`command` template putting the persona in the user turn, and `impl: command`'s
+`isolation:` being the owner's unverified assertion), Zone A `agents/` by
+default and `--agent-root .claude/agents` opt-in with its blast radius stated,
+`--proposer rule_based_prompt` plus the prose cohort, and that a prompt
+candidate is scored live or not at all with S2's floor as the bar.
+`tests/test_prompt_surface.py` passes on the new text unchanged.
+
+**Green bar.** `pytest -q`: 2511 passed, 7 skipped, 4 xfailed (2522 collected,
+2516 before — +6, none removed). `mypy aef examples`: 134 files clean.
+`ruff check .` clean. `ruff format --check aef tests examples`: 271 files clean.

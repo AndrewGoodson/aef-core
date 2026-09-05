@@ -26,14 +26,38 @@ claimed otherwise:**
   raising `NotImplementedError` (Phase 3/5). The rule-based reflection slice
   is real (ADR 0046).
 - **If your "agents" are prompt files rather than Python** — Claude Code
-  subagents, `.md` personas — there is no call site to convert. The runtime
-  attaches at the model layer instead: `model_provider.impl: claude_code`
-  (the default) runs each node's model call as one headless `claude -p`
-  under the harness's own login — no API key anywhere — and `codex` does the
-  same through `codex exec` (ADR 0112). A persona file is a system prompt to
-  that call. The previous version of this bullet said the runtime "has
-  nothing to attach to" here; that was true until the harness provider
-  existed and is not now.
+  subagents, `.md` personas — this is the ordinary case, not the exception:
+  every eligible repo in the 2026-09-04 survey had **zero** SDK call sites.
+  `aef migrate` discovers `.claude/agents/**/*.md` recursively and writes
+  **one graph per persona**, `prompt_agent -> reflect -> consolidate -> END`,
+  with the persona read at execution time and sent as the *system* message
+  of one completion (ADR 0152). Skills are found, counted and deliberately
+  not migrated, with the reason printed. Under `claude_code`, `codex`,
+  `grok` and `anthropic` the persona's own `tools:` frontmatter is parsed,
+  reported and never obeyed — but **containment is the provider's answer,
+  not migrate's**: only `claude_code` sends `--tools "" --max-turns 1
+  --safe-mode`; `codex` and a `command:` template with no `{system}` slot
+  put the persona in the *user* turn; and for `impl: command` the
+  `isolation:` list is **the owner's assertion, recorded as one, never
+  verified against the binary** (ADR 0169). Every run writes what it
+  actually got to `working_memory["prompt_agent__containment"]`.
+  **Zone A stays `agents/` by default**, which makes the generated graph
+  agent-writable and the persona Zone C — so the loop may improve the
+  wrapper and never the prompt. `aef migrate --agent-root .claude/agents`
+  widens it, opt-in per repo, and the report says in words what that adds to
+  the blast radius: a candidate may then rewrite any persona your harness
+  loads. Pass the same `--agent-root` to every `aef loop` command.
+  With that root, `--proposer rule_based_prompt` appends one consolidated
+  lesson as a bullet under `## Lessons (aef)` — computed from records, no
+  model call, provenance in the bullet (ADR 0157) — and the gates judge it
+  with a prose control cohort (ADR 0170). **A prompt candidate is scored
+  live or not at all:** a changed prompt is a changed cassette key, so
+  replay scores it 0 and that is an artifact, not a verdict; the bar is
+  S2's measured noise floor (mean 0.7639, spread 0.1666 on Opus, ADR 0156).
+  `tests/cli/test_prompt_repo_acceptance.py` runs the whole sequence —
+  `adopt -> migrate -> bootstrap --memory -> bless -> doctor -> cycle` — and
+  ADR 0158 records what it measured, including the two defects that stop a
+  live gate pass today.
 
 Only five things are allowed to differ per agent: **Knowledge, Policies,
 Tools, Objectives, Evaluation Metrics** — see the prime directive below.
