@@ -41,14 +41,27 @@ from aef.cli.main import build_parser, main
 MODULE = "agents.demo.graph"
 GRAPH_FILE = str(Path(__file__).resolve().parents[2] / "agents" / "demo" / "graph.py")
 
-# The subcommands that take a graph reference in-process. `run` is the sixth
-# and is DELIBERATELY absent: `cmd_run` is another worker's file this wave
-# (S4's `--sample-parents`/archive region), so `run --module` still goes
-# through `cli.run.load_graph_module`. If you have just converted it, add
-# "run" here and delete it from PENDING below — the pin exists so that day is
-# a deliberate edit and not a silent drift.
-COVERED = {"record", "bootstrap", "harvest", "cycle", "score"}
-PENDING = {"run"}
+# The subcommands that take a graph reference in-process.
+#
+# `run` was PENDING here through ADR 0176's wave — `cmd_run` was another
+# worker's file, so `run --module` still went through
+# `cli.run.load_graph_module`, which took a dotted module and a file path and
+# refused `module:factory`, and which lacks ADR 0085's `BaseException` guard.
+# ADR 0182 converted it. That is the deliberate edit the PENDING pin existed
+# to force, and `test_the_pending_subcommand_is_still_the_only_one_left` is
+# the test that failed on the day it happened — exactly as its docstring said
+# it would. PENDING is empty now, and the test stays: it is the shape that
+# catches the NEXT dialect.
+COVERED = {"record", "bootstrap", "harvest", "cycle", "score", "run"}
+PENDING: set[str] = set()
+
+# The subcommands whose `--entrypoint` names a graph for the OUT-OF-PROCESS
+# gates. It was the FOURTH spelling: `scenario_runner.load_graph` demanded
+# `module:factory` and refused both other forms, so
+# `aef loop cycle --module agents/x/graph.py --entrypoint agents/x/graph.py`
+# accepted the first and refused the second inside one invocation (reproduced,
+# ADR 0182). Derived from the parser below, never trusted from this list.
+ENTRYPOINT_SUBCOMMANDS = {"gate", "cycle", "run"}
 
 
 def _loop_subparsers() -> dict[str, argparse.ArgumentParser]:
@@ -95,7 +108,9 @@ def test_the_one_help_string_names_all_three_forms() -> None:
 
 def test_the_pending_subcommand_is_still_the_only_one_left() -> None:
     """A pin on a KNOWN gap, kept deliberately (see COVERED's comment). It
-    fails the day `run` is converted, which is when someone should read it."""
+    fired the day `run` was converted (ADR 0182), which is when it was read.
+    PENDING is empty now; the loop is kept so a gap re-declared here is
+    checked rather than remembered."""
     subs = _loop_subparsers()
     for name in PENDING:
         assert name in subs, name
@@ -103,6 +118,125 @@ def test_the_pending_subcommand_is_still_the_only_one_left() -> None:
             f"`aef loop {name}` now shares the graph-reference help — move it from "
             f"PENDING into COVERED and make sure its handler calls load_graph_reference"
         )
+
+
+def test_run_no_longer_uses_the_old_loader() -> None:
+    """`cmd_run` was the sixth in-process caller and the last on
+    `cli.run.load_graph_module`, which refused `module:factory` and carried no
+    `BaseException` guard. An AST scan rather than a behaviour test, because
+    the property is "there is no second loader left", and a behaviour test
+    passes the day someone adds a fallback."""
+    import ast
+
+    tree = ast.parse(Path("aef/cli/loop.py").read_text(encoding="utf-8"))
+    called = {
+        node.func.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "load_graph_module" not in called, (
+        "aef/cli/loop.py calls the OLD loader again; every subcommand that names a "
+        "graph must go through load_graph_reference (ADR 0176/0182)"
+    )
+    assert "load_graph_reference" in called
+
+
+# ---------------------------------------------------------------------------
+# `--entrypoint`, the fourth spelling
+# ---------------------------------------------------------------------------
+
+
+def _entrypoint_argument(sub: argparse.ArgumentParser) -> argparse.Action | None:
+    for arg in sub._actions:
+        if "--entrypoint" in arg.option_strings:
+            return arg
+    return None
+
+
+def test_every_entrypoint_flag_shares_one_help_string() -> None:
+    """It had three, all three wrong about what it accepted:
+    "module:factory that builds your graph, e.g. …" (gate),
+    "module:factory that builds your graph; G2/G3 refuse without it" (cycle),
+    "module:factory; G2/G3 refuse without it" (run). Derived from the real
+    parser, so a fourth `--entrypoint` with its own wording fails here."""
+    from aef.cli.loop import ENTRYPOINT_HELP
+
+    subs = _loop_subparsers()
+    with_flag = {name for name, sub in subs.items() if _entrypoint_argument(sub) is not None}
+
+    assert with_flag == ENTRYPOINT_SUBCOMMANDS, sorted(with_flag)
+    for name in with_flag:
+        arg = _entrypoint_argument(subs[name])
+        assert arg is not None
+        assert arg.help == ENTRYPOINT_HELP, name
+    # And it says the SAME three forms `--module` says — one sentence, one
+    # splitter, one loader.
+    assert GRAPH_REFERENCE_HELP in ENTRYPOINT_HELP
+
+
+@pytest.mark.parametrize("subcommand", sorted(ENTRYPOINT_SUBCOMMANDS))
+@pytest.mark.parametrize("reference", [MODULE, f"{MODULE}:build_graph", GRAPH_FILE])
+def test_entrypoint_accepts_each_of_the_three_forms(
+    subcommand: str, reference: str, tmp_path: Path
+) -> None:
+    """Parser -> the loader the OUT-OF-PROCESS gates actually use.
+
+    `scenario_runner.load_graph` is the one the in-process gate path calls and
+    `node_worker.load_graph` the one the subprocess calls; both split through
+    `graph_loading.split_entrypoint`, so both are covered by asserting the
+    split and running one of them.
+    """
+    from aef.harness.scenario_runner import load_graph
+
+    args = build_parser().parse_args(_entrypoint_argv_for(subcommand, reference, tmp_path))
+    assert args.entrypoint == reference
+
+    graph = load_graph(args.entrypoint)
+    assert graph.id == "demo_agent"
+
+
+def test_the_two_flags_of_one_invocation_agree_on_one_spelling(tmp_path: Path) -> None:
+    """THE reproduction, as a test. `--module agents/demo/graph.py --entrypoint
+    agents/demo/graph.py` used to accept the first and refuse the second."""
+    from aef.harness.scenario_runner import load_graph
+
+    args = build_parser().parse_args(
+        [
+            "loop",
+            "cycle",
+            "--repo",
+            str(tmp_path),
+            "--state",
+            str(tmp_path / "state"),
+            "--workdir",
+            str(tmp_path / "w"),
+            "--module",
+            GRAPH_FILE,
+            "--entrypoint",
+            GRAPH_FILE,
+            "--no-memory",
+        ]
+    )
+
+    assert load_graph_reference(args.module).id == "demo_agent"
+    assert load_graph(args.entrypoint).id == "demo_agent"
+
+
+def test_node_worker_and_the_runner_split_an_entrypoint_identically() -> None:
+    """Both sides of G2. ADR 0177 gave them one IMPORTER and left them two
+    splitters' worth of tolerance apart; they share the splitter now, so a
+    spelling one side accepts cannot be a G2 regression on the other."""
+    import ast
+
+    for path in (Path("aef/harness/scenario_runner.py"), Path("aef/harness/node_worker.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        imported = {
+            alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module == "aef.harness.graph_loading"
+            for alias in node.names
+        }
+        assert "split_entrypoint" in imported, path
 
 
 # ---------------------------------------------------------------------------
@@ -160,8 +294,32 @@ def _argv_for(name: str, reference: str, tmp_path: Path) -> list[str]:
             reference,
             "--no-memory",
         ]
+    if name == "run":
+        return [
+            "loop",
+            "run",
+            *common,
+            "--workdir",
+            str(tmp_path / "w"),
+            "--module",
+            reference,
+            "--no-memory",
+        ]
     if name == "score":
         return ["loop", "score", reference, "--corpus", str(tmp_path / "c")]
+    raise AssertionError(name)
+
+
+def _entrypoint_argv_for(name: str, reference: str, tmp_path: Path) -> list[str]:
+    """A minimal accepted invocation carrying `--entrypoint`."""
+    common = ["--repo", str(tmp_path), "--state", str(tmp_path / "state")]
+    workdir = ["--workdir", str(tmp_path / "w")]
+    if name == "gate":
+        return ["loop", "gate", *common, *workdir, "--head", "HEAD", "--entrypoint", reference]
+    if name == "cycle":
+        return ["loop", "cycle", *common, *workdir, "--entrypoint", reference, "--no-memory"]
+    if name == "run":
+        return ["loop", "run", *common, *workdir, "--entrypoint", reference, "--no-memory"]
     raise AssertionError(name)
 
 

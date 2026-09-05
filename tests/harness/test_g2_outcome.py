@@ -207,13 +207,34 @@ def test_an_unchanged_scenario_says_so() -> None:
 
 
 def test_a_malformed_entrypoint_is_refused() -> None:
-    """The message changed deliberately in ADR 0177: an entrypoint's left half
-    may be a FILE PATH now — `.claude/agents/migrated/<x>/graph.py` has no
-    dotted spelling — so "module:factory" would name half the accepted forms.
-    The property under test is unchanged."""
+    """Updated twice, deliberately, and the history is the point.
+
+    ADR 0177 changed the MESSAGE: an entrypoint's left half may be a FILE PATH
+    now — `.claude/agents/migrated/<x>/graph.py` has no dotted spelling — so
+    "module:factory" would name half the accepted forms.
+
+    ADR 0182 changed the CASE. `no_colon_here` is no longer malformed: a
+    reference with no colon is a dotted module whose factory defaults to
+    `build_graph`, which is the form `--module` had accepted since ADR 0168
+    and `--entrypoint` refused, inside the same invocation. What remains
+    malformed is a HALF-WRITTEN reference — a colon with nothing on one side
+    of it — and that is what this now pins.
+    """
     from aef.harness.scenario_runner import EntrypointError, load_graph
 
-    with pytest.raises(EntrypointError, match=r"<module or file path>:<factory>"):
+    with pytest.raises(EntrypointError, match="names no module before"):
+        load_graph(":build_graph")
+    with pytest.raises(EntrypointError, match="names no factory"):
+        load_graph("mod:")
+
+
+def test_a_bare_module_entrypoint_is_no_longer_malformed() -> None:
+    """The other half of the change above: the same string the test above used
+    to pin as refused now reaches the IMPORTER, which is what makes
+    `--entrypoint agents/x/graph.py` work at all (ADR 0182)."""
+    from aef.harness.scenario_runner import EntrypointError, load_graph
+
+    with pytest.raises(EntrypointError, match="cannot import"):
         load_graph("no_colon_here")
 
 

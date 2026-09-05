@@ -543,6 +543,36 @@ decoration.
   exists to protect is unchanged, and is what the "keep the key and warn" branch
   defends.
 
+## Erratum — outside-defects 1, 2 and 3 are CLOSED (ADR 0182)
+
+**Defects 1 and 2 (K3-2).** `--entrypoint`'s refusal of a bare module and a
+bare file path was **verified against current main before being fixed**, which
+mattered: ADR 0177 landed between these two ADRs and gave the loaders one
+*importer* while leaving the *splitter* demanding both halves, so this ADR's
+sentence — "`aef loop cycle --module agents/x/graph.py --entrypoint
+agents/x/graph.py` accepts the first and refuses the second, inside one
+invocation" — was still true after that merge, and the reproduction is pasted
+in ADR 0182. `split_entrypoint` is now the union rule this ADR wrote for the
+CLI, moved into `aef/harness/graph_loading.py` (with `GRAPH_REFERENCE_HELP`)
+because the harness may not import the CLI. `cmd_run` uses
+`load_graph_reference`; `COVERED` gains `run` and `PENDING` is empty. The
+prediction that the `PENDING` pin "fails the day `run` is converted, which is
+when someone should read it" held exactly.
+
+**Defect 3 (K3-3), and the narrowing it forces on F2's own rule.**
+`LoopConfig.evidence_graph_id` exists, read by `_build_proposer` alone.
+F2's rule — *"derive when there is no baseline to orphan; say so loudly when
+there is"* — is replaced by **"derive the evidence id always, and never move
+the archive key"**. Both of this ADR's warn-instead-of-fix branches (the third
+and sixth rows of its table) become derivations; the refusal on an ambiguous
+corpus is unchanged and is the only warning left. The verdict line now reads
+`[evidence graph id derived from --corpus: 'demo_agent']`, because the flag is
+no longer what moved. Four tests in `tests/cli/test_loop_cycle_graph_id.py`
+that pinned the one-field behaviour were rewritten with that history rather
+than silently re-pinned.
+
+Defects 4, 5 and 6 are untouched.
+
 ## Confidence
 
 High on all four reproductions — each is a command whose real output is pasted

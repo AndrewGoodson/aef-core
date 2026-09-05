@@ -337,6 +337,30 @@ the surface, and `loop-gate.yml`'s new comment says so in the file where it
 matters. It is deliberately not fixed here: it is a change across the whole
 of `aef/cli/loop.py`, which two other workers held during this wave.
 
+## Erratum — the "Still open" item is CLOSED (ADR 0182)
+
+**K3-1 of the K wave closed it.** Every `aef loop` subcommand now returns
+`EXIT_ERROR` for an unexpected exception, with the exception's TYPE named on
+stderr, applied as one wrapper over everything `add_loop_parser` registers so a
+fourteenth cannot forget. The three reproductions — `score` on a bad
+`--splits`, `record` under a plain file, `harvest` on a missing module, each
+`exit=1   <- EXIT_REJECTED` before and `exit=3` after — are in ADR 0182.
+
+Two corrections to the paragraph above, both from running the enumeration
+rather than reading:
+
+- the count was thirteen subcommands, and there are **fourteen handlers**:
+  `loop corpus reconcile` is nested under a group and appears in neither
+  ADR 0178's count nor `loop --help`'s top-level list. It was in the eleven
+  that returned 1, and it is covered.
+- the fix is **not** in `aef/cli/main.py`'s catch-all, and the paragraph's
+  reason for expecting it there — "it is a change across the whole of
+  `aef/cli/loop.py`" — turned out to argue the opposite way. Changing the
+  catch-all would also move `aef adopt`, `migrate`, `init`, `run`, `eval`,
+  `trace` and `doctor`, which issue no verdicts and for which 1 is the
+  ordinary "this command failed". ADR 0182 states the argument and asserts
+  the catch-all's code is unchanged.
+
 ## Confidence
 
 High on both reproductions: each is a command, its real output and its exit

@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
@@ -33,6 +34,8 @@ from aef.harness.corpus import (
     load_manifest,
 )
 from aef.harness.git import GitRepo
+from aef.harness.graph_loading import DEFAULT_GRAPH_FACTORY as DEFAULT_GRAPH_FACTORY
+from aef.harness.graph_loading import GRAPH_REFERENCE_HELP, split_entrypoint
 from aef.harness.loop import (
     EXIT_ERROR,
     EXIT_HALTED,
@@ -60,6 +63,7 @@ from aef.providers.base import ModelProvider
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from aef.kernel import Graph
+    from aef.state import AEFState
 
 # `DEFAULT_AGENT_PATH` is one string behind four `--agent-path` flags and
 # `_warn_unmet_obligations`, which is five places for one default.
@@ -97,8 +101,6 @@ _AGENT_PATH_HELP = (
 # has a value of its own rather than being required.
 DEFAULT_GRAPH_ID = "default"
 
-DEFAULT_GRAPH_FACTORY = "build_graph"
-
 # ONE spelling of "which graph", shared by every `aef loop` subcommand that
 # takes one, and one help string so no two of them can describe it differently.
 #
@@ -115,42 +117,36 @@ DEFAULT_GRAPH_FACTORY = "build_graph"
 #
 # The union is what every one of them accepts now. Nothing was narrowed: each
 # subcommand still accepts every spelling it accepted before.
-GRAPH_REFERENCE_HELP = (
-    "which graph, in any of three forms — a dotted module exposing "
-    "build_graph() ('agents.mine.graph'); 'module:factory' "
-    "('agents.mine.graph:build_graph'); or a path to the .py file that "
-    "defines it ('.claude/agents/migrated/x/graph.py', optionally with "
-    "':factory'). The file form is the one to use under a widened "
-    "--agent-root, whose `.claude/agents/...` path has no importable dotted "
-    "spelling — a leading dot means relative import (ADR 0168)."
+#
+# There were, in fact, THREE. ADR 0176 fixed the five in-process callers and
+# left `--entrypoint` — the string handed to the OUT-OF-PROCESS gates — on
+# `harness.scenario_runner.load_graph`, which demanded `module:factory` and
+# refused both other forms. Both the string and the splitter now live in
+# `aef/harness/graph_loading.py`, which the harness and the CLI can each read
+# and neither has to copy (ADR 0182).
+#
+# `split_graph_reference` is the name ADR 0176 published; it IS
+# `split_entrypoint` now rather than a second implementation of it.
+# `DEFAULT_GRAPH_FACTORY` is re-exported from this module for the same reason
+# (`import X as X` above), so both names keep working from both import paths
+# while there is only one definition of each.
+split_graph_reference = split_entrypoint
+
+# ONE help string for `--entrypoint` too, on all three subcommands that take
+# it. It had three: "module:factory that builds your graph, e.g. …" (gate),
+# "module:factory that builds your graph; G2/G3 refuse without it" (cycle) and
+# "module:factory; G2/G3 refuse without it" (run) — three descriptions of one
+# flag, all three of them wrong about what it accepts (ADR 0182). The shared
+# sentence is `GRAPH_REFERENCE_HELP`, so `--module` and `--entrypoint` now
+# describe the same three forms in the same words, which is the point:
+# `--module agents/x/graph.py --entrypoint agents/x/graph.py` used to accept
+# the first and refuse the second inside one invocation.
+ENTRYPOINT_HELP = (
+    "the graph the OUT-OF-PROCESS gates build to re-execute the corpus. G2 and G3 "
+    "refuse without it — they have to execute the corpus to have anything to say. "
+    "There is deliberately no default: one would name a layout your repo may not have "
+    "and fail as an import error inside a gate rejection. " + GRAPH_REFERENCE_HELP
 )
-
-
-def split_graph_reference(reference: str) -> tuple[str, str]:
-    """`reference` -> (module-or-path, factory name).
-
-    The factory defaults to `build_graph`, which is the name `aef migrate`
-    writes and the name every generated graph exposes.
-
-    The split is on the LAST colon, and only when what follows is a Python
-    identifier — so `agents/x/graph.py` (no colon), `agents/x/graph.py:make`
-    and a Windows-shaped `C:\\x\\graph.py` all resolve the way they read.
-    """
-    head, sep, tail = reference.rpartition(":")
-    if not sep:
-        return reference, DEFAULT_GRAPH_FACTORY
-    if not head:
-        raise ValueError(f"{reference!r} names no module before the ':'. {GRAPH_REFERENCE_HELP}")
-    if not tail.isidentifier():
-        # Not a factory name: a colon inside a path, or an empty tail. Treat
-        # the whole string as the module/path rather than guessing, so the
-        # error the importer raises is about the thing the user typed.
-        if not tail:
-            raise ValueError(
-                f"{reference!r} ends in ':' and names no factory. {GRAPH_REFERENCE_HELP}"
-            )
-        return reference, DEFAULT_GRAPH_FACTORY
-    return head, tail
 
 
 def load_graph_reference(reference: str) -> Graph:
@@ -234,8 +230,8 @@ class GraphIdResolution(NamedTuple):
 
 
 def resolve_graph_id_from_corpus(args: argparse.Namespace) -> GraphIdResolution:
-    """Settle `--graph-id` against the corpus, mutating `args`. Raises
-    `GraphIdError` when it cannot be settled.
+    """Settle the EVIDENCE graph id against the corpus, mutating `args`.
+    Raises `GraphIdError` when it cannot be settled.
 
     THE DEFECT (reproduced, ADR 0176). `aef loop cycle` without `--graph-id`
     took the archive key `"default"`, and `RuleBasedPromptProposer` drops every
@@ -248,34 +244,37 @@ def resolve_graph_id_from_corpus(args: argparse.Namespace) -> GraphIdResolution:
     and exit 0, while the same command with `--graph-id demo_agent` proposed.
     The graph id was sitting in the corpus the command had already loaded.
 
-    THE COMPLICATION, and it is why this is not three lines. `--graph-id` is
-    TWO things: the archive key G5 reads its blessed baseline under, and — via
+    THE COMPLICATION, AND WHY IT IS GONE. `--graph-id` used to be TWO things:
+    the archive key G5 reads its blessed baseline under, and — via
     `_build_proposer` — a `Graph.id` the prompt proposer matches scenarios
-    against. ADR 0125 separated those namespaces deliberately, and
-    `_scenarios_for_graph` still gates every scenario when the corpus records
-    one graph for exactly that reason. So deriving unconditionally would move
-    the archive key out from under a baseline the owner had already blessed,
-    and G5 would then reject every candidate for having nothing to compare to.
-    Measured, not guessed: `test_an_adopted_repo_gates_a_candidate_end_to_end`
-    went from a gated candidate to `not built: G5 rejected the candidate
-    first, so its code was never executed` the first time this derived
-    unconditionally.
+    against. ADR 0125 separated those namespaces deliberately, so deriving
+    unconditionally moved the archive key out from under a baseline the owner
+    had already blessed, and G5 then rejected every candidate for having
+    nothing to compare to. Measured, not guessed:
+    `test_an_adopted_repo_gates_a_candidate_end_to_end` went from a gated
+    candidate to `not built: G5 rejected the candidate first`. ADR 0176 could
+    therefore only derive when there was nothing to orphan, and WARNED in the
+    two configurations where there was — leaving the evidence dropped and
+    saying so instead of fixing it.
 
-    So the rule is: **derive when there is no baseline to orphan; say so
-    loudly when there is.**
+    `LoopConfig` has two fields now (ADR 0182). `graph_id` is the archive key
+    and this function NEVER moves it; `evidence_graph_id` is the `Graph.id`
+    the proposer admits records under, and deriving it cannot orphan anything.
+    So the rule is one rule with one refusal:
 
-    - several graphs and no `--graph-id` -> refuse, listing them. There is no
-      defensible choice and guessing picks the proposer's evidence;
-    - one graph, and no baseline blessed under an id this would move away
-      from -> derive, and SAY so, because a silently derived value is one
-      nobody can audit from the log;
-    - one graph, but a baseline IS blessed under the archive default -> keep
-      the archive key, and warn with the command that moves it. Silently
-      re-keying is the G5 failure above; refusing would break the documented
-      adoption sequence, in which `bless` takes no corpus at all;
-    - `--graph-id` given and naming no graph in the corpus: a typo when
-      nothing is blessed under it, so refuse; the documented archive-key
-      namespace when something is, so warn.
+    - no `--corpus`, or an empty one -> derive nothing;
+    - `--graph-id` given and naming a graph in the corpus -> that value is
+      both, exactly as before, and nothing is said;
+    - `--graph-id` given and naming NO graph in the corpus: the archive-key
+      namespace (ADR 0125). The key is kept and the EVIDENCE id is derived
+      from the corpus when that is unambiguous — which is what the second
+      warning used to describe instead of doing. With nothing blessed under it
+      either, it is neither namespace, so it is a typo and is refused;
+    - `--graph-id` omitted, corpus records one graph -> derive the evidence
+      id, say so, leave the key alone;
+    - `--graph-id` omitted, corpus records several -> refuse, listing them.
+      There is no defensible choice, and guessing picks the evidence the
+      proposer is grounded in.
     """
     corpus_dir = Path(args.corpus) if getattr(args, "corpus", None) else None
     if corpus_dir is None or not corpus_dir.is_dir():
@@ -290,22 +289,40 @@ def resolve_graph_id_from_corpus(args: argparse.Namespace) -> GraphIdResolution:
     if given is not None:
         if given in present:
             return GraphIdResolution()
-        if _blessed_under(args, given):
-            return GraphIdResolution(
-                f"--graph-id {given!r} names no graph in the corpus at {corpus_dir} "
-                f"({listed}), and IS the key a blessed baseline sits under — so it is "
-                f"being read as the archive key (ADR 0125). WARNING: --proposer "
-                f"rule_based_prompt drops every failure record tied to those scenarios "
-                f"as another graph's, and reports having no evidence while holding all "
-                f"of it. Bless under the corpus's id to make the two agree."
+        if not _blessed_under(args, given):
+            raise GraphIdError(
+                f"--graph-id {given!r} names no graph in the corpus at {corpus_dir}, which "
+                f"records {listed}, and no blessed baseline sits under it either — so it is "
+                f"neither the corpus's graph nor a live archive key. Every failure record "
+                f"tied to those scenarios would be dropped as another graph's and the cycle "
+                f"would report having no evidence while holding all of it (ADR 0176). Pass "
+                f"one of the ids above, or omit --graph-id and let it be derived."
             )
-        raise GraphIdError(
-            f"--graph-id {given!r} names no graph in the corpus at {corpus_dir}, which "
-            f"records {listed}, and no blessed baseline sits under it either — so it is "
-            f"neither the corpus's graph nor a live archive key. Every failure record "
-            f"tied to those scenarios would be dropped as another graph's and the cycle "
-            f"would report having no evidence while holding all of it (ADR 0176). Pass "
-            f"one of the ids above, or omit --graph-id and let it be derived."
+        if len(present) > 1:
+            # A live archive key AND an ambiguous corpus. The key is not a
+            # typo and is kept; which graph's evidence to ground in is still
+            # not guessable, so this is the one place a warning survives.
+            return GraphIdResolution(
+                note=(
+                    f"--graph-id {given!r} names no graph in the corpus at {corpus_dir} "
+                    f"({listed}) and IS the key a blessed baseline sits under, so it is "
+                    f"being read as the archive key (ADR 0125). WARNING: the corpus "
+                    f"records {len(present)} graphs, so the evidence id cannot be derived "
+                    f"either — --proposer rule_based_prompt will drop every failure record "
+                    f"tied to those scenarios as another graph's. Bootstrap a corpus for "
+                    f"one graph, or bless under the id you mean to improve."
+                )
+            )
+        derived = present[0]
+        args.evidence_graph_id = derived
+        return GraphIdResolution(
+            note=(
+                f"--graph-id {given!r} names no graph in the corpus at {corpus_dir} and IS "
+                f"the key a blessed baseline sits under, so it is kept as the ARCHIVE key "
+                f"(ADR 0125); the evidence id is derived from the corpus instead: "
+                f"{derived!r}, from its {len(scenarios)} scenario(s), which record one graph"
+            ),
+            derived=derived,
         )
 
     if len(present) > 1:
@@ -317,24 +334,16 @@ def resolve_graph_id_from_corpus(args: argparse.Namespace) -> GraphIdResolution:
         )
 
     derived = present[0]
-    if derived == DEFAULT_GRAPH_ID:
+    if derived == graph_id(args):
+        # Already the same string; deriving would say something about nothing.
         return GraphIdResolution()
-    if not _blessed_under(args, derived) and _blessed_under(args, DEFAULT_GRAPH_ID):
-        return GraphIdResolution(
-            f"--graph-id not given. The corpus at {corpus_dir} records one graph, "
-            f"{derived!r}, but a blessed baseline already sits under the archive key "
-            f"{DEFAULT_GRAPH_ID!r} and none under {derived!r} — so the key is KEPT: "
-            f"moving it would leave G5 with no baseline and reject every candidate for "
-            f"having nothing to compare to. WARNING: --proposer rule_based_prompt will "
-            f"drop this corpus's failure records as another graph's. To make the two "
-            f"namespaces agree, re-bless: `aef loop bless --graph-id {derived} "
-            f"--state <state> --agent-path <path>`."
-        )
-    args.graph_id = derived
+    args.evidence_graph_id = derived
     return GraphIdResolution(
         note=(
-            f"--graph-id not given; derived {derived!r} from the {len(scenarios)} "
-            f"scenario(s) in {corpus_dir}, which record one graph"
+            f"--graph-id not given; the evidence graph id is derived as {derived!r} from "
+            f"the {len(scenarios)} scenario(s) in {corpus_dir}, which record one graph. "
+            f"The archive key is unchanged ({graph_id(args)!r}), so a blessed baseline "
+            f"stays where it was blessed (ADR 0182)"
         ),
         derived=derived,
     )
@@ -383,6 +392,11 @@ def _config(args: argparse.Namespace) -> LoopConfig:
         paths=LoopPaths(root=Path(args.state)),
         base_ref=getattr(args, "base", "main"),
         graph_id=graph_id(args),
+        # Two fields, two namespaces (ADR 0125, split in ADR 0182). `None`
+        # unless `resolve_graph_id_from_corpus` derived one, and `None` means
+        # "the same as the archive key" — so every subcommand that never
+        # derives is byte-for-byte the configuration it had before.
+        evidence_graph_id=getattr(args, "evidence_graph_id", None),
         corpus=load_corpus(corpus_dir) if corpus_dir and corpus_dir.is_dir() else None,
         network_isolated=bool(getattr(args, "network_isolated", False)),
         sandbox_image=getattr(args, "sandbox_image", None),
@@ -468,6 +482,126 @@ def _warn_unmet_obligations(args: argparse.Namespace, config: LoopConfig) -> Non
     )
 
 
+# ---------------------------------------------------------------------------
+# The containment warning, surfaced (ADR 0179's open item, closed in ADR 0182)
+# ---------------------------------------------------------------------------
+#
+# ADR 0179 R3 moved `prompt_agent.persona_in_user_turn` out of `state.errors`
+# — where it zeroed the task metric, became failure memory and got pasted into
+# the persona by the proposer — and into the containment record the node
+# writes every run, with `containment_warnings(state)` as THE reader. It said
+# so plainly: "Until that lands, the fact lives in the trace and in
+# `working_memory` and nothing prints it."
+#
+# Reproduced (ADR 0182): a real migrated prompt agent, bootstrapped through a
+# real `impl: command` provider whose argv template has no `{system}` slot,
+# with the fact demonstrably on the recorded scenario —
+#
+#     scenario q-1: containment_warnings -> [('prompt_agent', {'isolation':
+#       ['single_turn', 'user_turn_persona'], 'message': "provider … declares
+#       no system channel…
+#
+# — and `aef loop doctor` printing six obligations and `aef loop cycle`
+# printing a verdict, neither of them mentioning it.
+#
+# WHICH STATES ARE READ, and why not the memory store. `--memory` was checked
+# and deliberately carries nothing: ADR 0179's whole finding is that this fact
+# is not a failure, so `make_reflect_node` never writes it into a
+# `MemoryRecord`, and a reader that went looking there would find nothing on
+# every repo. The two places an executed run's state survives are the recorded
+# runs under `--runs` and the corpus scenarios, and both are read here.
+#
+# A WARNING, not an obligation. `Preflight` is a fixed list of six things an
+# owner must SUPPLY; this is a property of a provider they already installed,
+# with no fix inside the repo — exactly the distinction ADR 0179 drew when it
+# refused to leave the fact in `state.errors`. So it is printed beside the
+# report rather than added to it, and it never changes an exit code.
+CONTAINMENT_ADR = "see ADR 0179"
+
+
+def _final_state_of(initial: AEFState, trace: Sequence[Any]) -> AEFState:
+    state = initial
+    for record in trace:
+        state = record.delta.apply(state)
+    return state
+
+
+def _containment_lines(states: Iterable[AEFState]) -> list[str]:
+    """One line per DISTINCT provider that sent a persona in the user turn.
+
+    Per provider and not per run: the fact is a property of the provider, so a
+    corpus of two hundred scenarios recorded against one CLI is one sentence,
+    not two hundred. Sorted by provider name, for the reason
+    `containment_warnings` sorts by node id — a line order that depends on
+    which scenario happened to load first is one more thing to hold in the
+    head.
+    """
+    from aef.reasoning.prompt_agent import containment_warnings
+
+    seen: dict[str, str] = {}
+    for state in states:
+        for node_id, warning in containment_warnings(state):
+            provider = str(warning.get("provider", "unknown"))
+            if provider in seen:
+                continue
+            isolation = warning.get("isolation")
+            listed = (
+                ", ".join(str(item) for item in isolation)
+                if isinstance(isolation, list) and isolation
+                else "none declared"
+            )
+            seen[provider] = (
+                f"{node_id}: persona sent in the USER turn by provider {provider!r} "
+                f"(isolation: {listed}) — {CONTAINMENT_ADR}"
+            )
+    return [seen[provider] for provider in sorted(seen)]
+
+
+def _corpus_states(args: argparse.Namespace) -> list[AEFState]:
+    """The final state of every scenario in `--corpus`. These ARE the runs the
+    gates re-execute, so a warning on one is a warning about the evidence this
+    turn is judging against."""
+    root = Path(args.corpus) if getattr(args, "corpus", None) else None
+    if root is None or not root.is_dir():
+        return []
+    try:
+        scenarios = load_corpus(root).scenarios
+    except CorpusError:
+        # A malformed corpus is somebody else's error to report; this is a
+        # note printed beside a result, and losing the result to it would be
+        # the tail wagging the dog.
+        return []
+    return [_final_state_of(s.initial_state, s.trace) for s in scenarios]
+
+
+def _latest_run_state(args: argparse.Namespace) -> list[AEFState]:
+    """The MOST RECENT recorded run under `--runs`, or nothing.
+
+    The most recent one only: the question this answers is "what does the
+    provider you are running now do", and an answer assembled from a year of
+    runs would name a CLI the owner replaced in March.
+    """
+    root = Path(args.runs) if getattr(args, "runs", None) else None
+    if root is None or not root.is_dir():
+        return []
+    from aef.harness.harvest import HarvestError, load_runs
+
+    try:
+        runs = load_runs(root)
+    except HarvestError:
+        return []
+    if not runs:
+        return []
+    latest = max(runs, key=lambda r: r.at)
+    return [_final_state_of(latest.initial_state, latest.trace)]
+
+
+def _print_containment_summary(args: argparse.Namespace) -> None:
+    """The cycle/gate summary line(s). Silent when there is nothing to say."""
+    for line in _containment_lines([*_corpus_states(args), *_latest_run_state(args)]):
+        print(f"  {line}")
+
+
 def cmd_gate(args: argparse.Namespace) -> int:
     config = _config(args)
     _warn_unmet_obligations(args, config)
@@ -486,6 +620,7 @@ def cmd_gate(args: argparse.Namespace) -> int:
         return EXIT_HALTED
 
     print(run.report)
+    _print_containment_summary(args)
     if run.halted:
         print("\nLOOP HALTED — a proposal reached for the harness. Read the ledger.")
     return run.exit_code
@@ -577,13 +712,11 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 def cmd_record(args: argparse.Namespace) -> int:
     from aef.cli.run import build_run_config
-    from aef.config import build_retriever
+    from aef.harness.recorder import RecorderError
 
     graph = load_graph_reference(args.module)
     from aef.services.knowledge.in_memory import InMemoryKnowledgeStore
     from aef.services.memory.in_memory import InMemoryMemoryStore
-    from aef.services.runtime import agent_services
-    from aef.state import AEFState
 
     # Everything `--config` contributes, read through `aef run`'s OWN
     # construction site (ADR 0145's rule, applied to the caller ADR 0145 did
@@ -611,7 +744,43 @@ def cmd_record(args: argparse.Namespace) -> int:
         print(f"error: --check: {exc}", file=sys.stderr)
         return EXIT_REJECTED
 
-    recorded = record_to_corpus(
+    # `RecorderError` is a NAMED refusal of what the operator asked for — an
+    # id that already exists, a `--expected must_fail` on a task the agent
+    # completed (ADR 0149's tripwire guard) — so it is a rejection, exit 1,
+    # and must be caught by name. It used to reach `main()`'s catch-all,
+    # which returned 1 for everything; now that a crash is EXIT_ERROR, a
+    # refusal that is not caught by name would be reported as one (ADR 0182).
+    # `cmd_bootstrap` catches exactly this family for exactly this reason.
+    try:
+        recorded = _record(args, graph, run_config, memory, knowledge, checks)
+    except (RecorderError, CorpusError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_REJECTED
+    print(f"recorded {recorded.scenario.id} ({recorded.scenario.split.value}) -> {recorded.path}")
+    print(f"  {len(recorded.scenario.trace)} node execution(s) pinned")
+    print(
+        f"  {len(recorded.scenario.model_calls)} model call(s) pinned, "
+        f"{len(recorded.scenario.checks)} check(s)"
+    )
+    return EXIT_OK
+
+
+def _record(
+    args: argparse.Namespace,
+    graph: Graph,
+    run_config: Any,
+    memory: Any,
+    knowledge: Any,
+    checks: tuple[TaskCheck, ...],
+) -> Any:
+    """`cmd_record`'s call to the recorder, lifted so the `try` around it
+    wraps the recorder and nothing else — a broad `try` over the services
+    construction would turn a genuine crash there into a rejection."""
+    from aef.config import build_retriever
+    from aef.services.runtime import agent_services
+    from aef.state import AEFState
+
+    return record_to_corpus(
         Path(args.corpus),
         graph,
         AEFState(
@@ -660,13 +829,6 @@ def cmd_record(args: argparse.Namespace) -> int:
         checks=checks,
         budget_ms=getattr(args, "budget_ms", None),
     )
-    print(f"recorded {recorded.scenario.id} ({recorded.scenario.split.value}) -> {recorded.path}")
-    print(f"  {len(recorded.scenario.trace)} node execution(s) pinned")
-    print(
-        f"  {len(recorded.scenario.model_calls)} model call(s) pinned, "
-        f"{len(recorded.scenario.checks)} check(s)"
-    )
-    return EXIT_OK
 
 
 def cmd_bootstrap(args: argparse.Namespace) -> int:
@@ -857,6 +1019,7 @@ def cmd_score(args: argparse.Namespace) -> int:
     independent read, and reading it casually spends it.
     """
     from aef.harness.evaluation import ScoreSet
+    from aef.harness.memory_store import FileMemoryStore
     from aef.harness.scenario_runner import run_scenario
 
     corpus = load_corpus(Path(args.corpus))
@@ -919,6 +1082,25 @@ def cmd_score(args: argparse.Namespace) -> int:
     # graph against another's scenarios measures nothing about either.
     other_graph = sorted(s.id for s in corpus.scenarios if s.graph_id != graph.id)
 
+    # `--memory`: the durable store a FAILED OWNER CHECK is recorded into,
+    # through ADR 0180's one idempotent producer (ADR 0182, K3-5).
+    #
+    # ADR 0174 gave the check-failure producer to `bootstrap` and refused it
+    # to every GATE path, and that refusal stands: a gate that wrote to the
+    # adopter's store would let scoring a candidate manufacture the next one's
+    # evidence. But wiring it into bootstrap ALONE let staleness walk a lesson
+    # out of the prompt while nothing ever re-saw it — K2's S1b measured
+    # `runs_since_last_seen` climbing to 17 by the seventeenth scenario, and
+    # 0 with the producer on the scored split.
+    #
+    # `aef loop score` is the one caller that is neither: it scores the
+    # INCUMBENT the owner already trusts, in-process, over the owner's own
+    # corpus, with the owner naming the file. So this is opt-in, off by
+    # default, and the isolated path is untouched — see the flag's help.
+    memory_store = (
+        FileMemoryStore(path=Path(args.memory)) if getattr(args, "memory", None) else None
+    )
+
     runs: list[dict[str, ScoreSet]] = []
     # split -> scenario id -> why it scored what it did. First repeat only, to
     # match `per_scenario`, which is also read off the first run.
@@ -937,6 +1119,11 @@ def cmd_score(args: argparse.Namespace) -> int:
                     score_policy,
                     cassette_miss=cassette_miss,
                     live_provider=live_provider,
+                    # `record_check_outcomes` is idempotent on
+                    # (run_id, signature), so `--repeat 5` and a second
+                    # `aef loop score` over the same corpus both leave ONE
+                    # record per failed check (ADR 0180).
+                    memory=memory_store,
                 )
                 per_scenario[scenario.id] = float(result["score"])
                 cost += int(result["cost_tokens"])
@@ -1295,6 +1482,9 @@ def cmd_cycle(args: argparse.Namespace) -> int:
     else:
         for line in run.lines:
             print(f"  {line}")
+        # Beside the verdict, because the evidence this turn gated on is what
+        # the note is about (ADR 0179's open item, closed in ADR 0182).
+        _print_containment_summary(args)
 
         # One line saying what this turn actually produced, in words, because
         # "  no memory store configured..." three lines up in a CI log is not
@@ -1313,7 +1503,12 @@ def cmd_cycle(args: argparse.Namespace) -> int:
             # evidence this turn was allowed to read is part of what the turn
             # decided, and the verdict is the line a workflow tees into its
             # step summary.
-            verdict = f"{verdict} [--graph-id derived from --corpus: {args.graph_id!r}]"
+            #
+            # It says "evidence graph id" rather than "--graph-id" since ADR
+            # 0182: the archive key is no longer what moved, and a summary
+            # naming the flag would send a reader to check an archive that had
+            # not changed.
+            verdict = f"{verdict} [evidence graph id derived from --corpus: {derived!r}]"
         print(f"cycle verdict: {verdict}")
         return run.exit_code
     finally:
@@ -1350,7 +1545,6 @@ def cmd_run(args: argparse.Namespace) -> int:
     separate chance to propose: ten quiet turns recorded as one attempt would
     need thirty turns to reach a threshold meant to fire after three.
     """
-    from aef.cli.run import load_graph_module
     from aef.harness.loop import run_loop
     from aef.harness.memory_store import FileMemoryStore
 
@@ -1368,7 +1562,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     state_root = Path(args.state)
     try:
         config = _config(args)
-        graph = load_graph_module(args.module) if args.module else None
+        # The ONE loader, like the other five (ADR 0176 F3, completed by ADR
+        # 0182). This was `cli.run.load_graph_module`, which took a dotted
+        # module and a file path but refused `module:factory` — the sixth
+        # in-process caller and the last on the old loader — and which lacks
+        # ADR 0085's `BaseException` guard, so a candidate factory raising
+        # `SystemExit` exited this process cleanly.
+        graph = load_graph_reference(args.module) if args.module else None
         run = run_loop(
             config,
             now=datetime.now(UTC),
@@ -1593,6 +1793,24 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         print(f"error (invalid --graph-id): {exc}", file=sys.stderr)
         return EXIT_ERROR
     print(result.render())
+    # BELOW the report and outside `Preflight`, deliberately. The six
+    # obligations are things an owner must SUPPLY and each carries a `fix:`
+    # that is an edit in this repo; a persona that travelled in the user turn
+    # is a property of a CLI they already installed, and there is no edit that
+    # gives a binary a `--system-prompt` flag. Putting it in the list would
+    # make `doctor` exit 1 forever on a correctly configured Codex adopter —
+    # which is ADR 0179's own finding, one surface over.
+    lines = _containment_lines([*_latest_run_state(args), *_corpus_states(args)])
+    if lines:
+        width = max(len(o.name) for o in result.obligations)
+        print()
+        for line in lines:
+            print(f"  [!!] {'persona channel':<{width}}  {line}")
+        print(
+            "       Not an obligation and not a fix: the persona is untrusted-channel text "
+            "on this provider, so ADR 0152's containment story does not hold for it. Read "
+            "ADR 0179 before treating a low score from such a run as the agent's fault."
+        )
     return EXIT_OK if result.ready else EXIT_REJECTED
 
 
@@ -1662,6 +1880,122 @@ def cmd_corpus_reconcile(args: argparse.Namespace) -> int:
             "is the record of it (ADR 0141)."
         )
     return EXIT_OK
+
+
+# The `aef loop` subcommands that RUN A TURN — a chance to propose, and so a
+# line in the cycle journal whatever happened to them. Derived nowhere: the
+# same two names `tests/cli/test_loop_turn_commands.py` derives from this
+# module's AST, and that test fails if a third handler starts driving a turn.
+LOOP_TURN_COMMANDS = frozenset({"cycle", "run"})
+
+
+def _journal_crash(command: str, args: argparse.Namespace, exc: BaseException) -> None:
+    """A turn that died on an unexpected exception is still a turn that ran.
+
+    Best-effort by design: the journal is a diagnostic, and losing the exit
+    code because the journal write itself failed would replace one wrong
+    answer with a worse one.
+    """
+    state = getattr(args, "state", None)
+    if not state or isinstance(exc, LoopStateInsideRepoError):
+        # `--state` inside the repo is the one failure that must NOT be
+        # journalled: the journal lives under `--state`, so writing it would
+        # create the directory just refused (ADR 0167).
+        return
+    try:
+        _journal_turn(
+            Path(state),
+            at=datetime.now(UTC),
+            proposed=False,
+            verdict=f"error ({type(exc).__name__}): {exc}",
+            command=command,
+        )
+    except OSError:  # pragma: no cover - a journal write that cannot happen
+        pass
+
+
+def _report_crash_as_error(
+    name: str, handler: Callable[[argparse.Namespace], int]
+) -> Callable[[argparse.Namespace], int]:
+    """Wrap one `aef loop` handler so an unexpected exception is EXIT_ERROR.
+
+    THE DEFECT (reproduced, ADR 0182). Eleven of the thirteen `aef loop`
+    subcommands let an exception reach `aef/cli/main.py`'s catch-all, which
+    prints `error: <exc>` and returns **1** — and 1 is also `EXIT_REJECTED`,
+    "the candidate was rejected, the system is working":
+
+        $ aef loop score agents.demo.graph --corpus <a file> --splits bogus
+        error: 'bogus' is not a valid Split
+        exit=1   <- EXIT_REJECTED (a verdict on a candidate)
+        $ aef loop record agents.demo.graph --corpus <under a file> ...
+        error: [Errno 20] Not a directory: '.../afile.txt/under-a-file/train'
+        exit=1   <- EXIT_REJECTED
+        $ aef loop harvest agents.demo.no_such_module ...
+        error: cannot import 'agents.demo.no_such_module': No module named ...
+        exit=1   <- EXIT_REJECTED
+
+    That is ADR 0167's R3 — *a crash's remedy is not a rejection's* — still
+    standing for the majority of the surface after G1a fixed `cycle`/`run`
+    and ADR 0167 fixed `doctor`/`bless`. The rendered nightly workflow fails
+    the job on `-ge 2` and gives exit 3 its own summary ("the cycle crashed;
+    no kill switch is set, fix the invocation", ADR 0178), so a crashed
+    `score`/`record`/`harvest`/`skills`/... stayed green.
+
+    **WHY THIS AND NOT `main()`'s CATCH-ALL.** Returning 3 there would change
+    `aef adopt`, `aef migrate`, `aef init`, `aef run`, `aef eval`, `aef trace`
+    and `aef doctor` too. Those commands have no exit-code vocabulary at all:
+    1 is the ordinary "this command failed" every CLI returns, nothing
+    distinguishes a rejection from a crash for them because they issue no
+    verdicts, and no finding has reproduced a problem with their code.
+    Strengthening a control on invocations nobody has shown a problem with is
+    an owner's decision, not a fix wave's side effect (ADR 0141's rule). The
+    exit-code vocabulary — 0 verdict / 1 REJECTED / 2 HALTED / 3 ERROR, and
+    the `-ge 2` CI rule that reads it — is the LOOP's, so the wrapper is the
+    loop's too.
+
+    **WHY A WRAPPER AND NOT A `try` PER HANDLER.** Thirteen handlers, each
+    free to forget, is how eleven of them came to be wrong at once. Applied
+    once over everything `add_loop_parser` registers, a fourteenth subcommand
+    cannot forget — and `test_every_loop_subcommand_reports_a_crash_as_an_error`
+    enumerates them from the real parser, which is G1a's own pattern.
+    """
+
+    def wrapped(args: argparse.Namespace) -> int:
+        try:
+            return handler(args)
+        except Exception as exc:
+            # Named, not a bare traceback: the exception TYPE is what tells a
+            # reader whether to fix the invocation or the repo.
+            print(f"error ({type(exc).__name__}): {exc}", file=sys.stderr)
+            if name in LOOP_TURN_COMMANDS:
+                _journal_crash(name, args, exc)
+            return EXIT_ERROR
+
+    # `SystemExit` and `KeyboardInterrupt` are deliberately NOT caught: an
+    # operator's Ctrl-C is not this loop's error, and argparse's own usage
+    # exits must keep argparse's code.
+    wrapped.__name__ = getattr(handler, "__name__", name)
+    wrapped.__doc__ = handler.__doc__
+    wrapped.__wrapped__ = handler  # type: ignore[attr-defined]
+    return wrapped
+
+
+def _wrap_loop_handlers(subs: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Apply `_report_crash_as_error` to every handler under `aef loop`.
+
+    Recurses into a subcommand that is itself a group (`loop corpus
+    reconcile`), because a nested handler is exactly the one a per-handler
+    `try` would be most likely to miss. `LOOP_TURN_COMMANDS` holds top-level
+    names only, so the leaf name is the right one to carry.
+    """
+    for name, sub in subs.choices.items():
+        handler = sub.get_default("handler")
+        if handler is None:
+            for action in sub._actions:
+                if isinstance(action, argparse._SubParsersAction):
+                    _wrap_loop_handlers(action)
+            continue
+        sub.set_defaults(handler=_report_crash_as_error(name, handler))
 
 
 def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -1751,16 +2085,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
             "candidate — otherwise a candidate could widen the rules it is judged by."
         ),
     )
-    p_gate.add_argument(
-        "--entrypoint",
-        default=None,
-        help=(
-            "module:factory that builds your graph, e.g. agents.mine.graph:build_graph. "
-            "G2 and G3 refuse without it — they have to execute the corpus to have anything "
-            "to say. There is deliberately no default: one would name a layout your repo "
-            "may not have and fail as an import error inside a gate rejection."
-        ),
-    )
+    p_gate.add_argument("--entrypoint", default=None, help=ENTRYPOINT_HELP)
     _cassette_miss(p_gate)
     p_gate.add_argument(
         "--agent-path",
@@ -1999,6 +2324,24 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "it the run is deny-by-default. Its model_provider also answers cassette "
         "misses under --cassette-miss live.",
     )
+    p_score.add_argument(
+        "--memory",
+        default=None,
+        help=(
+            "durable memory JSONL — the SAME file `aef loop bootstrap --memory`, `aef run "
+            "--memory` and `aef loop cycle --memory` use. Given it, a scenario whose OWNER "
+            "CHECK fails is recorded as failure memory through the one producer (ADR 0180), "
+            "idempotently: --repeat 5 and a second run over the same corpus leave ONE record "
+            "per failed check. Off by default. WHY IT MATTERS: with the producer wired into "
+            "`bootstrap` only, a lesson's `runs_since_last_seen` climbs on every scored "
+            "scenario and staleness walks it out of the prompt while nothing ever re-sees it "
+            "(17 by the seventeenth scenario; 0 with this flag). WHAT IT DOES NOT DO: this is "
+            "the IN-PROCESS path only. The gates' isolated path runs each scenario in a "
+            "worker with no store and never writes one — a gate that could would let scoring "
+            "a candidate manufacture the next one's evidence, which ADR 0174 refused and this "
+            "does not reopen."
+        ),
+    )
     p_score.set_defaults(handler=cmd_score)
 
     p_skills = loop_subs.add_parser(
@@ -2061,11 +2404,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
             "candidate — otherwise a candidate could widen the rules it is judged by."
         ),
     )
-    p_cycle.add_argument(
-        "--entrypoint",
-        default=None,
-        help="module:factory that builds your graph; G2/G3 refuse without it",
-    )
+    p_cycle.add_argument("--entrypoint", default=None, help=ENTRYPOINT_HELP)
     _cassette_miss(p_cycle)
     p_cycle.add_argument("--agent-path", default=DEFAULT_AGENT_PATH, help=_AGENT_PATH_HELP)
     p_cycle.add_argument(
@@ -2106,14 +2445,13 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_run.add_argument(
         "--module",
         default=None,
-        help="module exposing build_graph(), OR a path to the graph file — the "
-        "form to use under a widened --agent-root, whose `.claude/agents/...` path "
-        "has no importable dotted spelling (ADR 0168).",
+        metavar="GRAPH",
+        help=GRAPH_REFERENCE_HELP,
     )
     p_run.add_argument("--runs", default=None, help="dir from `aef run --record-runs`")
     p_run.add_argument("--corpus", default=None)
     p_run.add_argument("--config", default=None, help="aef.yaml path, read from the base ref")
-    p_run.add_argument("--entrypoint", default=None, help="module:factory; G2/G3 refuse without it")
+    p_run.add_argument("--entrypoint", default=None, help=ENTRYPOINT_HELP)
     _cassette_miss(p_run)
     p_run.add_argument(
         "--memory",
@@ -2218,4 +2556,17 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_doctor.add_argument("--corpus", default="corpus")
     p_doctor.add_argument("--agent-path", default=DEFAULT_AGENT_PATH, help=_AGENT_PATH_HELP)
     p_doctor.add_argument("--observations", default=None)
+    p_doctor.add_argument(
+        "--runs",
+        default=None,
+        help="dir from `aef run --record-runs`. Read for ONE thing: whether the most "
+        "recent recorded run had its persona sent in the USER turn, which is a property "
+        "of the provider you installed and is reported as a warning rather than an "
+        "obligation (ADR 0179). The corpus is read for the same thing without this flag.",
+    )
     p_doctor.set_defaults(handler=cmd_doctor)
+
+    # LAST, over everything registered above, including the nested `corpus`
+    # group: a crash is EXIT_ERROR on EVERY `aef loop` subcommand, and a
+    # fourteenth added below this line is covered without being told to be.
+    _wrap_loop_handlers(loop_subs)
