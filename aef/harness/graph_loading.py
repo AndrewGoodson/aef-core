@@ -46,7 +46,36 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
-__all__ = ["ensure_cwd_importable", "import_graph_module", "looks_like_a_path", "split_entrypoint"]
+__all__ = [
+    "DEFAULT_GRAPH_FACTORY",
+    "GRAPH_REFERENCE_HELP",
+    "ensure_cwd_importable",
+    "import_graph_module",
+    "looks_like_a_path",
+    "split_entrypoint",
+]
+
+# The factory `aef migrate` writes and every generated graph exposes, so it is
+# the one a reference that names no factory means.
+DEFAULT_GRAPH_FACTORY = "build_graph"
+
+# ONE sentence about "which graph", for every flag and argument in this repo
+# that takes one. It lives HERE, beside the splitter that enforces it, rather
+# than in `aef/cli/loop.py` where it started: `--entrypoint` is read by the
+# harness (`scenario_runner`, `node_worker`), the harness may not import the
+# CLI, and a second copy in the harness is the ADR 0149 shape — two answers to
+# one question, drifting the first time either gains a case. `aef/cli/loop.py`
+# re-exports it, so `from aef.cli.loop import GRAPH_REFERENCE_HELP` still works
+# and there is still only one string.
+GRAPH_REFERENCE_HELP = (
+    "which graph, in any of three forms — a dotted module exposing "
+    "build_graph() ('agents.mine.graph'); 'module:factory' "
+    "('agents.mine.graph:build_graph'); or a path to the .py file that "
+    "defines it ('.claude/agents/migrated/x/graph.py', optionally with "
+    "':factory'). The file form is the one to use under a widened "
+    "--agent-root, whose `.claude/agents/...` path has no importable dotted "
+    "spelling — a leading dot means relative import (ADR 0168)."
+)
 
 
 def ensure_cwd_importable() -> None:
@@ -75,17 +104,47 @@ def looks_like_a_path(module_path: str) -> bool:
 
 
 def split_entrypoint(entrypoint: str) -> tuple[str, str]:
-    """`'<module or file>:<factory>'` -> its two halves.
+    """`reference` -> (module-or-path, factory name). THE splitter.
 
-    A Windows drive letter is not a separator: `C:\\x\\graph.py:build_graph`
-    splits on the LAST colon, and a bare `graph.py` (no factory) is an error
-    rather than a module named `graph.py` with an empty attribute.
+    The factory defaults to `DEFAULT_GRAPH_FACTORY`, so all THREE documented
+    forms resolve: a dotted module, `module:factory`, and a file path with or
+    without `:factory`.
+
+    A Windows drive letter is not a separator: the split is on the LAST colon
+    and only when what follows is a Python identifier, so `a/b/graph.py`,
+    `a/b/graph.py:make` and `C:\\x\\graph.py` all resolve the way they read. A
+    half-written `module:` or `:factory` is refused by name rather than
+    guessed at.
+
+    **This used to demand both halves**, and refusing a reference with no
+    colon made `--entrypoint` a FOURTH spelling of "which graph" (reproduced,
+    ADR 0182):
+
+        load_graph_reference   'agents.demo.graph'  ok
+        load_graph             'agents.demo.graph'  REFUSED  EntrypointError:
+            entrypoint must be '<module or file path>:<factory>'
+        load_graph             'agents/demo/graph.py'  REFUSED (same)
+
+    — so `aef loop cycle --module agents/demo/graph.py --entrypoint
+    agents/demo/graph.py` accepted the first and refused the second inside one
+    invocation. ADR 0176 fixed the five in-process callers by writing a second
+    splitter in `aef/cli/loop.py`; this is that splitter, moved to the one
+    place both the CLI and the harness can read it, so `scenario_runner` and
+    `node_worker` — the two sides of G2 — cannot disagree about a spelling
+    (ADR 0177's rule, applied to the split as well as the import).
     """
     module_path, sep, attribute = entrypoint.rpartition(":")
-    if not sep or not module_path or not attribute:
-        raise ValueError(
-            f"entrypoint must be '<module or file path>:<factory>', got {entrypoint!r}"
-        )
+    if not sep:
+        return entrypoint, DEFAULT_GRAPH_FACTORY
+    if not module_path:
+        raise ValueError(f"{entrypoint!r} names no module before the ':'. {GRAPH_REFERENCE_HELP}")
+    if not attribute:
+        raise ValueError(f"{entrypoint!r} ends in ':' and names no factory. {GRAPH_REFERENCE_HELP}")
+    if not attribute.isidentifier():
+        # Not a factory name: a colon inside a path. Treat the whole string as
+        # the module/path rather than guessing, so the error the importer
+        # raises is about the thing the user typed.
+        return entrypoint, DEFAULT_GRAPH_FACTORY
     return module_path, attribute
 
 

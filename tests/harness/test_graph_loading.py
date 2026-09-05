@@ -52,7 +52,12 @@ import pytest
 
 from aef.harness.checks import CatastrophicPatternError, TaskCheck
 from aef.harness.corpus import Scenario, Split
-from aef.harness.graph_loading import import_graph_module, looks_like_a_path, split_entrypoint
+from aef.harness.graph_loading import (
+    DEFAULT_GRAPH_FACTORY,
+    import_graph_module,
+    looks_like_a_path,
+    split_entrypoint,
+)
 from aef.harness.isolated_suite import run_corpus_isolated
 from aef.harness.scenario_runner import EntrypointError, load_graph, run_scenario
 from aef.kernel import END, Graph, GraphExecutor, Node
@@ -158,10 +163,33 @@ def test_an_entrypoint_splits_on_the_last_colon(entrypoint: str, expected: tuple
     assert split_entrypoint(entrypoint) == expected
 
 
-@pytest.mark.parametrize("entrypoint", ["no_colon_here", ":build_graph", "mod:"])
-def test_an_entrypoint_without_both_halves_is_refused(entrypoint: str) -> None:
+@pytest.mark.parametrize("entrypoint", [":build_graph", "mod:"])
+def test_a_half_written_entrypoint_is_refused(entrypoint: str) -> None:
+    """`no_colon_here` used to be on this list and was moved out DELIBERATELY
+    (ADR 0182): a reference with no colon is now a dotted module whose factory
+    defaults to `build_graph`, which is what made `--entrypoint` accept the
+    same three forms as `--module`. A colon with nothing on one side of it is
+    still half-written and still refused by name."""
     with pytest.raises(ValueError):
         split_entrypoint(entrypoint)
+
+
+@pytest.mark.parametrize(
+    ("entrypoint", "expected"),
+    [
+        ("pkg.mod", ("pkg.mod", DEFAULT_GRAPH_FACTORY)),
+        ("a/b/graph.py", ("a/b/graph.py", DEFAULT_GRAPH_FACTORY)),
+        (r"C:\x\graph.py", (r"C:\x\graph.py", DEFAULT_GRAPH_FACTORY)),
+        ("pkg.mod:make", ("pkg.mod", "make")),
+    ],
+)
+def test_a_reference_with_no_factory_takes_the_default_one(
+    entrypoint: str, expected: tuple[str, str]
+) -> None:
+    """The third and fourth forms `--entrypoint` refused until ADR 0182, and
+    the reason `aef loop cycle --module agents/x/graph.py --entrypoint
+    agents/x/graph.py` accepted the first and refused the second."""
+    assert split_entrypoint(entrypoint) == expected
 
 
 # ---------------------------------------------------------------------------

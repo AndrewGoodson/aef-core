@@ -17,14 +17,24 @@ while the same command with `--graph-id demo_agent` proposed a candidate and
 gated it. Both records were in the file; the graph id was in the corpus the
 command had already read.
 
-THE COMPLICATION this file also pins: `--graph-id` is TWO things — the archive
-key G5 reads a blessed baseline under, and the `Graph.id` the prompt proposer
-matches scenarios against (ADR 0125 separated those namespaces on purpose).
-Deriving unconditionally moved the archive key out from under an
+THE COMPLICATION this file also pins: `--graph-id` WAS TWO things — the
+archive key G5 reads a blessed baseline under, and the `Graph.id` the prompt
+proposer matches scenarios against (ADR 0125 separated those namespaces on
+purpose). Deriving unconditionally moved the archive key out from under an
 already-blessed baseline, and
 `test_an_adopted_repo_gates_a_candidate_end_to_end` went red with `not built:
-G5 rejected the candidate first`. So derivation happens when there is nothing
-to orphan, and says so loudly when there is.
+G5 rejected the candidate first`. So ADR 0176 derived only when there was
+nothing to orphan, and printed a WARNING when there was.
+
+**Updated deliberately in ADR 0182.** `LoopConfig` has two fields now —
+`graph_id` (the archive key) and `evidence_graph_id` (the `Graph.id` the
+proposer admits records under) — so deriving the evidence id cannot orphan a
+baseline and the archive key is never moved by this function at all. Four
+tests below pinned the one-field behaviour and are rewritten here with that
+history; the fifth, the regression test at the top, keeps its subject and
+gains the assertion that the baseline stays where it was blessed. The rule
+that survives unchanged is the refusal: a corpus recording several graphs and
+no `--graph-id` is still not guessable.
 """
 
 from __future__ import annotations
@@ -153,9 +163,13 @@ def test_a_cycle_without_graph_id_no_longer_drops_the_evidence(  # type: ignore[
     assert "proposed cycle-" in out, out
     # And it SAYS what it derived — twice, because the verdict line is the one
     # a workflow tees into its step summary and three lines up is not a place
-    # anyone reads.
-    assert "derived 'demo_agent'" in out, out
-    assert "[--graph-id derived from --corpus: 'demo_agent']" in out, out
+    # anyone reads. The wording moved from "--graph-id derived" to "evidence
+    # graph id derived" in ADR 0182, because the archive key is no longer what
+    # changed and a summary naming the flag sends the reader to the wrong
+    # place.
+    assert "derived as 'demo_agent'" in out, out
+    assert "[evidence graph id derived from --corpus: 'demo_agent']" in out, out
+    assert "The archive key is unchanged ('default')" in out, out
 
 
 def test_the_explicit_flag_still_works_and_says_nothing_about_deriving(  # type: ignore[no-untyped-def]
@@ -211,18 +225,29 @@ def _bless(state: Path, key: str) -> None:
 def _args(tmp_path: Path, corpus: Path, given: str | None) -> object:
     import argparse
 
-    return argparse.Namespace(corpus=str(corpus), graph_id=given, state=str(tmp_path / "state"))
+    return argparse.Namespace(
+        corpus=str(corpus),
+        graph_id=given,
+        evidence_graph_id=None,
+        state=str(tmp_path / "state"),
+    )
 
 
-def test_one_graph_and_no_flag_derives_and_says_so(tmp_path: Path) -> None:
+def test_one_graph_and_no_flag_derives_the_evidence_id_only(tmp_path: Path) -> None:
+    """Was `test_one_graph_and_no_flag_derives_and_says_so`, which asserted
+    `args.graph_id == "marlin-accela"` — the ARCHIVE key moving. It does not
+    move any more (ADR 0182): the derived value lands on the second field, and
+    the key is what it always was."""
     corpus = _corpus_of(tmp_path / "corpus", "marlin-accela")
     args = _args(tmp_path, corpus, None)
 
     resolution = resolve_graph_id_from_corpus(args)  # type: ignore[arg-type]
 
     assert resolution.derived == "marlin-accela"
-    assert args.graph_id == "marlin-accela"  # type: ignore[attr-defined]
-    assert "derived 'marlin-accela'" in (resolution.note or "")
+    assert args.evidence_graph_id == "marlin-accela"  # type: ignore[attr-defined]
+    assert args.graph_id is None, "the ARCHIVE key must not move"  # type: ignore[attr-defined]
+    assert graph_id(args) == DEFAULT_GRAPH_ID  # type: ignore[arg-type]
+    assert "derived as 'marlin-accela'" in (resolution.note or "")
 
 
 def test_several_graphs_and_no_flag_refuses_with_the_list(tmp_path: Path) -> None:
@@ -247,45 +272,73 @@ def test_a_flag_naming_no_graph_and_nothing_blessed_is_refused(tmp_path: Path) -
     assert "no blessed baseline sits under it" in str(exc.value)
 
 
-def test_a_flag_naming_no_graph_but_holding_a_baseline_is_a_warning(tmp_path: Path) -> None:
-    """ADR 0125's namespace, kept: a live archive key is not a typo. It is
-    warned about by name, because the prompt proposer will still drop the
-    records — refusing here would break the documented adoption sequence, in
-    which `aef loop bless` takes no corpus at all.
+def test_a_flag_naming_no_graph_but_holding_a_baseline_keeps_the_key_and_derives(
+    tmp_path: Path,
+) -> None:
+    """Was `..._is_a_warning`. ADR 0125's namespace is still kept — a live
+    archive key is not a typo — but the WARNING it printed described a fix it
+    could not perform: "--proposer rule_based_prompt drops every failure
+    record tied to those scenarios". With two fields it performs it (ADR
+    0182): the key stays, the evidence id comes from the corpus.
     """
     corpus = _corpus_of(tmp_path / "corpus", "demo_agent")
     _bless(tmp_path / "state", DEFAULT_GRAPH_ID)
+    args = _args(tmp_path, corpus, DEFAULT_GRAPH_ID)
 
-    resolution = resolve_graph_id_from_corpus(  # type: ignore[arg-type]
-        _args(tmp_path, corpus, DEFAULT_GRAPH_ID)
-    )
+    resolution = resolve_graph_id_from_corpus(args)  # type: ignore[arg-type]
+
+    assert resolution.derived == "demo_agent"
+    assert args.evidence_graph_id == "demo_agent"  # type: ignore[attr-defined]
+    assert args.graph_id == DEFAULT_GRAPH_ID  # type: ignore[attr-defined]
+    note = resolution.note or ""
+    assert "ARCHIVE key" in note, note
+    assert "WARNING" not in note, "there is nothing left to warn about"
+
+
+def test_an_ambiguous_corpus_under_a_live_archive_key_is_still_warned_about(
+    tmp_path: Path,
+) -> None:
+    """The one warning that survives, and why: the key is not a typo, so it is
+    kept — but with several graphs in the corpus the evidence id is still not
+    derivable, and this function refuses to guess it (ADR 0176's rule, intact).
+    """
+    corpus = _corpus_of(tmp_path / "corpus", "demo_agent", "summary_agent")
+    _bless(tmp_path / "state", DEFAULT_GRAPH_ID)
+    args = _args(tmp_path, corpus, DEFAULT_GRAPH_ID)
+
+    resolution = resolve_graph_id_from_corpus(args)  # type: ignore[arg-type]
 
     assert resolution.derived is None
+    assert args.evidence_graph_id is None  # type: ignore[attr-defined]
     assert "WARNING" in (resolution.note or "")
-    assert "archive key" in (resolution.note or "")
 
 
 def test_derivation_does_not_move_the_key_out_from_under_a_baseline(tmp_path: Path) -> None:
-    """The measured regression this branch exists for: deriving
+    """The measured regression the old warn branch existed for: deriving
     unconditionally left G5 with no baseline and rejected every candidate for
-    having nothing to compare to."""
+    having nothing to compare to.
+
+    The property is unchanged and the mechanism is not: derivation happens
+    now — it just happens on the OTHER field, so there is nothing to orphan.
+    """
     corpus = _corpus_of(tmp_path / "corpus", "demo_agent")
     _bless(tmp_path / "state", DEFAULT_GRAPH_ID)
     args = _args(tmp_path, corpus, None)
 
     resolution = resolve_graph_id_from_corpus(args)  # type: ignore[arg-type]
 
-    assert resolution.derived is None, "the key must not move"
-    assert args.graph_id is None  # type: ignore[attr-defined]
+    assert args.graph_id is None, "the ARCHIVE key must not move"  # type: ignore[attr-defined]
     assert graph_id(args) == DEFAULT_GRAPH_ID  # type: ignore[arg-type]
-    note = resolution.note or ""
-    assert "aef loop bless --graph-id demo_agent" in note, note
+    assert resolution.derived == "demo_agent", "and the EVIDENCE id must be derived anyway"
+    assert args.evidence_graph_id == "demo_agent"  # type: ignore[attr-defined]
 
 
 def test_no_corpus_derives_nothing_and_still_means_default(tmp_path: Path) -> None:
     import argparse
 
-    args = argparse.Namespace(corpus=None, graph_id=None, state=str(tmp_path / "state"))
+    args = argparse.Namespace(
+        corpus=None, graph_id=None, evidence_graph_id=None, state=str(tmp_path / "state")
+    )
 
     assert resolve_graph_id_from_corpus(args) == (None, None)
     assert graph_id(args) == DEFAULT_GRAPH_ID
@@ -317,8 +370,14 @@ def test_the_ambiguous_corpus_refusal_is_a_rejection_and_is_journalled(  # type:
 
 
 def test_the_corpus_is_not_read_twice_into_two_different_answers(tmp_path: Path) -> None:
-    """The derived id and the id the gates filter scenarios by come from the
-    same read of the same corpus — the seam this whole finding lived in."""
+    """The derived id and the id the PROPOSER admits records under come from
+    the same read of the same corpus — the seam this whole finding lived in.
+
+    It used to compare against `graph_id(args)`, which was the same field.
+    Since ADR 0182 the derived value is `evidence_graph_id`, and the archive
+    key deliberately does NOT track the corpus — so comparing against
+    `graph_id` here would now pin the defect rather than the fix.
+    """
     corpus = _corpus_of(tmp_path / "corpus", "marlin-accela")
     args = _args(tmp_path, corpus, None)
     resolve_graph_id_from_corpus(args)  # type: ignore[arg-type]
@@ -326,5 +385,73 @@ def test_the_corpus_is_not_read_twice_into_two_different_answers(tmp_path: Path)
     from aef.harness.corpus import load_corpus
 
     loaded: Corpus = load_corpus(corpus)
-    assert {s.graph_id for s in loaded.scenarios} == {graph_id(args)}  # type: ignore[arg-type]
+    assert {s.graph_id for s in loaded.scenarios} == {args.evidence_graph_id}  # type: ignore[attr-defined]
     assert loaded.split(Split.TRAIN)
+
+
+# ---------------------------------------------------------------------------
+# The two fields, together, on the configuration ADR 0176 could only warn about
+# ---------------------------------------------------------------------------
+
+
+def test_a_blessed_default_and_a_demo_agent_corpus_get_both_answers(  # type: ignore[no-untyped-def]
+    repo: Path, tmp_path: Path, capsys
+) -> None:
+    """THE K3-3 case (ADR 0182), and it is exactly the one ADR 0176 warned
+    about instead of fixing: `aef loop bless` takes no `--corpus`, so the
+    documented first-week sequence blesses under `'default'` while the corpus
+    the loop bootstraps records `'demo_agent'`.
+
+    Before, the cycle printed `WARNING: --proposer rule_based_prompt will drop
+    this corpus's failure records as another graph's` and then did exactly
+    that. Now both answers are right at once: the proposer grounds in
+    `demo_agent`'s evidence AND G5 still finds the `default` baseline.
+    """
+    corpus, memory = tmp_path / "corpus", tmp_path / "memory.jsonl"
+    _bootstrap(tmp_path, corpus, memory)
+    _bless(tmp_path / "state", DEFAULT_GRAPH_ID)
+    capsys.readouterr()
+
+    _cycle(repo, tmp_path, corpus, memory)
+    out = capsys.readouterr().out
+
+    # The evidence half.
+    assert "dropped as another graph's scenario" not in out, out
+    assert "proposed cycle-" in out, out
+    assert "derived as 'demo_agent'" in out, out
+    # The archive half: the baseline is still where `bless` put it, so G5 has
+    # something to compare against.
+    from aef.harness import archive
+
+    assert archive.versions(tmp_path / "state" / "archive", DEFAULT_GRAPH_ID), (
+        "the blessed baseline was orphaned — the archive key moved"
+    )
+    assert not archive.versions(tmp_path / "state" / "archive", "demo_agent")
+    assert "no baseline" not in out, out
+
+
+def test_the_two_fields_are_two_and_collapsing_them_orphans_the_baseline(tmp_path: Path) -> None:
+    """The mutation, as an assertion about the config rather than a comment.
+
+    `LoopConfig.evidence_graph_id` defaults to None and `evidence_id` falls
+    back to `graph_id`, so a caller that never heard of the split is
+    unchanged; set it, and the two answers differ. Collapse them — make
+    `evidence_id` return `graph_id` unconditionally — and the CLI's derivation
+    would have to move the key again, which is what orphaned the baseline.
+    """
+    from aef.harness.git import GitRepo
+    from aef.harness.loop import LoopConfig, LoopPaths
+
+    unsplit = LoopConfig(
+        repo=GitRepo(root=tmp_path), paths=LoopPaths(root=tmp_path / "s"), graph_id="default"
+    )
+    assert unsplit.evidence_id == "default", "None must mean 'the same as the archive key'"
+
+    split = LoopConfig(
+        repo=GitRepo(root=tmp_path),
+        paths=LoopPaths(root=tmp_path / "s"),
+        graph_id="default",
+        evidence_graph_id="demo_agent",
+    )
+    assert split.graph_id == "default", "the archive key"
+    assert split.evidence_id == "demo_agent", "the Graph.id the proposer admits records under"

@@ -193,6 +193,33 @@ class LoopConfig:
     # to the provider named in the base ref's `model_provider`, and the
     # score is a live one; the opt-in for scoring a prompt change.
     cassette_miss: str = "fail"
+    # The `Graph.id` the PROPOSER matches recorded evidence against, when it
+    # differs from the archive key above.
+    #
+    # `graph_id` was ONE field serving TWO namespaces, and ADR 0125 separated
+    # those namespaces on purpose: `archive.versions` reads it as a directory
+    # name (what `aef loop bless` blessed under), and `RuleBasedPromptProposer`
+    # reads it as a `Graph.id` to admit or drop each memory record by. ADR
+    # 0176's F2 could therefore only half-fix "cycle drops all the evidence
+    # without --graph-id": deriving the id from the corpus moved the ARCHIVE
+    # key out from under a baseline the owner had already blessed, and G5 then
+    # rejected every candidate for having nothing to compare to (measured —
+    # `test_an_adopted_repo_gates_a_candidate_end_to_end` went red). So it
+    # derived only when there was nothing to orphan and printed a WARNING
+    # otherwise, which left a real configuration in which the evidence was
+    # still dropped and the command said so instead of fixing it.
+    #
+    # With two fields the derivation cannot orphan anything: `graph_id` stays
+    # the archive key, `evidence_graph_id` follows the corpus, and the warn
+    # branch is gone (ADR 0182). `None` means "the same as `graph_id`", so
+    # every caller that never heard of this field behaves exactly as before.
+    evidence_graph_id: str | None = None
+
+    @property
+    def evidence_id(self) -> str:
+        """The `Graph.id` recorded evidence is admitted under. Read by the
+        proposer and by nothing that touches the archive."""
+        return self.evidence_graph_id or self.graph_id
 
     def __post_init__(self) -> None:
         if self.cassette_miss not in ("fail", "live"):
@@ -1437,9 +1464,16 @@ def _build_proposer(config: LoopConfig) -> Any:
         # The zone policy, graph id and corpus come from the same config the
         # gates read, so the proposer refuses the paths G0 would refuse and
         # learns only from this graph's own runs.
+        #
+        # `evidence_id`, not `graph_id`: this is the ONE reader of the
+        # `Graph.id` namespace, and separating it from the archive key is what
+        # lets `aef loop cycle` derive the id from its own corpus without
+        # moving the key a baseline was blessed under (ADR 0125's two
+        # namespaces, ADR 0176's F2, split in ADR 0182). It defaults TO
+        # `graph_id`, so a caller that sets only the old field is unchanged.
         return RuleBasedPromptProposer(
             zone_policy=config.zone_policy,
-            graph_id=config.graph_id,
+            graph_id=config.evidence_id,
             corpus=config.corpus,
         )
     if config.proposer != "llm":
