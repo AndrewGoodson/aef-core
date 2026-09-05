@@ -285,6 +285,19 @@ def resolve_agent_source(
         graph = site.out_relative
         if (repo_root / graph).is_file():
             return AgentSource(path=graph, persona=wanted)
+        # A repo may keep the GENERATED graphs at the default root and widen
+        # Zone A only for the personas (ADR 0157's own reproduction, and the
+        # form ADR 0158's acceptance test runs): `aef migrate` at the default
+        # root, the loop at `--agent-root .claude/agents`. The persona is the
+        # same file either way; look for its graph where the default root
+        # would have put it before declaring it missing.
+        if agent_root != DEFAULT_AGENT_ROOT:
+            for default_site in discover_prompt_agents(repo_root, agent_root=DEFAULT_AGENT_ROOT):
+                if PurePosixPath(default_site.source).as_posix() != wanted:
+                    continue
+                default_graph = default_site.out_relative
+                if (repo_root / default_graph).is_file():
+                    return AgentSource(path=default_graph, persona=wanted)
         return AgentSource(
             path=graph,
             persona=wanted,

@@ -420,11 +420,11 @@ def test_a_prompt_file_repo_goes_from_adopt_to_a_gated_prompt_candidate(
     )
     assert "Loop readiness — 6 things you must supply" in doctor.stdout
     assert f"[OK] blessed baseline        1 archived version(s) of '{AGENT_ROOT}'" in doctor.stdout
-    # ...and obligation 3 is RED, on a graph whose reflect node is wired and
-    # runs. That is seam R2 — `--agent-path` means the persona to the proposer
-    # and a Python graph to preflight — asserted as it actually behaves, with
-    # the fix pinned by an xfail below rather than by a softened assertion.
-    assert "[--] reflect node routed to  no reflect node in the graph" in doctor.stdout
+    # ...and obligation 3 is GREEN on the persona path: seam R2 (`--agent-path`
+    # meant the persona to the proposer and a Python graph to preflight) was
+    # fixed by ADR 0178 an hour after this test pinned the defect — preflight
+    # now resolves a persona to the graph migrate generated for it.
+    assert "[OK] reflect node routed to" in doctor.stdout, doctor.stdout
 
     # 7. G1a: the same widened root with `--agent-path` left at its default is
     #    refused, rather than reporting on a tree the loop cannot touch.
@@ -592,15 +592,8 @@ def test_a_prompt_file_repo_goes_from_adopt_to_a_gated_prompt_candidate(
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "seam R2: `--agent-path` means the persona `.md` to the prompt proposer and a "
-        "Python graph module to preflight, so on the repo shape ADR 0152 exists to "
-        "serve, obligation 3 is reported RED for a graph whose reflect node is wired "
-        "and runs, and obligation 6 is reported GREEN having 'scanned' a markdown file"
-    ),
-)
+# Was a strict xfail pinning seam R2; ADR 0178 (fix wave J2) closed it, so this
+# is now the regression test for the persona → generated-graph resolution.
 @pytest.mark.slow
 def test_doctor_judges_the_graph_when_agent_path_names_the_persona(
     prompt_repo: tuple[Path, Path],

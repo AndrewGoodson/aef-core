@@ -1280,3 +1280,23 @@ def test_a_python_agent_path_is_untouched_by_persona_resolution(tmp_path: Path) 
     )
     assert obligation.met, obligation.detail
     assert "1 graph scanned" in obligation.detail, obligation.detail
+
+
+def test_a_persona_resolves_to_a_graph_kept_at_the_default_root(tmp_path) -> None:
+    """ADR 0157/0158's configuration: `aef migrate` at the default root, the
+    loop widened to the personas. The persona's generated graph lives under
+    `agents/`, not under the widened root; the resolver must find it there
+    rather than report the persona as unmigrated."""
+    from aef.cli.migrate import run_migrate
+    from aef.harness.preflight import resolve_agent_source
+
+    repo = tmp_path / "repo"
+    (repo / ".claude" / "agents").mkdir(parents=True)
+    (repo / ".claude" / "agents" / "accela-agent.md").write_text(
+        "---\nname: harbor-accela\ndescription: d\n---\n\n# Accela\n\nbody\n"
+    )
+    run_migrate(repo)  # default root: graphs under agents/migrated/<module>/graph.py
+    src = resolve_agent_source(repo, ".claude/agents/accela-agent.md", agent_root=".claude/agents")
+    assert not src.problem, src.problem
+    assert src.path.startswith("agents/migrated/"), src.path
+    assert (repo / src.path).is_file()
