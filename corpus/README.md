@@ -33,6 +33,38 @@ aef loop record agents.demo.graph --corpus corpus \
     --scenario-id my-case --objective "..." --split train
 ```
 
+## Owner checks — data, and one of them was not safe
+
+A scenario's `checks` are the part of the score that can fail without an error
+(ADR 0113): a dotted path into the final state, an operator, and a value.
+
+| op | holds when |
+|---|---|
+| `equals` | the value at `path` equals `value` |
+| `contains` | `value` is a substring of / an element in the value at `path` |
+| `regex` | `re.search(value, ...)` matches; the target must be a string |
+| `exists` | the path resolves to something that is not `null` |
+| `max_words` | the string at `path` has **at most** `value` whitespace-separated words |
+| `min_words` | it has **at least** `value` of them |
+
+**Use `max_words` for a word cap, not `regex`.** Every summary scenario here
+originally declared its cap as `^(?:\s*\S+){1,N}\s*$`, which matches in 0.05 ms
+and, on a summary one word over the cap, backtracks over every partition of
+the string and **does not terminate** — so the scorer hung on exactly the
+input the check existed to catch, and only ever on the live path, because
+every recorded cassette sits at or under its cap (ADR 0156 §D2, fixed in ADR
+0166). Python's `re` has no timeout, so a pattern with a repeated group whose
+body can match one input many ways is now refused when the scenario **loads**,
+with the safe rewrite in the message.
+
+The scenarios here still carry a regex rather than `max_words`, deliberately:
+the original pattern's `{1,` also required at least one word, and swapping in a
+bare `max_words` would let an empty summary pass, while adding `min_words: 1`
+would change every scenario's check count and therefore its recorded score.
+They use the linear-time equivalent `^\s*\S+(?:\s+\S+){0,N-1}\s*$`. New
+scenarios should use `max_words` (with `min_words: 1` where the answer must be
+non-empty) and no regex at all.
+
 ## The corpus never shrinks
 
 `check_never_shrinks` fails if a previously-admitted scenario disappears —
