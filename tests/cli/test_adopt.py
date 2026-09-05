@@ -622,6 +622,34 @@ def test_gitignore_gaps_ignores_commented_out_patterns() -> None:
     assert gitignore_gaps("*.py[cod]\n") == ()
 
 
+def test_the_bytecode_advisory_covers_a_widened_agent_root(tmp_path: Path) -> None:
+    """ADR 0168 / F8. The message named `agents/` — interpolated from
+    `DEFAULT_AGENT_ROOT` — as the directory at risk, so an operator who ran
+    `aef migrate --agent-root .claude/agents` was told about the wrong one.
+
+    REPRODUCED on the pilot clone, whose `.gitignore` covers no bytecode:
+    compiling one generated module and running `git add -A` staged
+
+        A  .claude/agents/migrated/marlin_accela/__pycache__/graph.cpython-313.pyc
+
+    which is Zone A content under a root this sentence did not mention.
+
+    `aef adopt` runs BEFORE `aef migrate` and cannot know which root will be
+    chosen, so the rule is stated instead of a path guessed — asserted here,
+    because "name the other directory too" would have been the wrong fix.
+    """
+    from aef.cli.adopt import gitignore_appended_note, gitignore_gaps
+    from aef.harness.zones import DEFAULT_AGENT_ROOT
+
+    (gap,) = gitignore_gaps("node_modules/\n*.pem\n")
+    for text in (gap, gitignore_appended_note()):
+        assert "AGENT ROOT" in text, text
+        assert "--agent-root" in text, text
+        assert ".claude/agents/" in text, text
+        assert "runs before" in text and "cannot know" in text, text
+        assert f"`{DEFAULT_AGENT_ROOT}/` by default" in text, text
+
+
 def test_the_checklist_names_the_zone_a_root_the_harness_actually_uses(tmp_path: Path) -> None:
     """E2 (ADR 0142): `aef migrate` wrote `aef_migrated.py` to the repo ROOT,
     which is Zone C — the one place the loop is structurally forbidden to

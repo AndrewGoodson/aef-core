@@ -164,8 +164,38 @@ def split_request(request: CompletionRequest) -> tuple[str | None, str]:
     return system, rendered
 
 
+def _usage_match(model_usage: dict[str, object], usage: dict[str, object] | None) -> str | None:
+    """The one `modelUsage` key whose (input, output) token row equals the
+    payload's top-level `usage` — or None when zero or several do. Both
+    spellings of the keys are read because the two maps use different ones
+    (`inputTokens` in `modelUsage`, `input_tokens` at the top level)."""
+    if not usage:
+        return None
+
+    def _pair(row: object, in_key: str, out_key: str) -> tuple[int, int] | None:
+        if not isinstance(row, dict):
+            return None
+        i, o = row.get(in_key), row.get(out_key)
+        if isinstance(i, (int, float)) and isinstance(o, (int, float)):
+            return int(i), int(o)
+        return None
+
+    top = _pair(usage, "input_tokens", "output_tokens")
+    if top is None:
+        return None
+    hits = [
+        k
+        for k, row in model_usage.items()
+        if _pair(row, "inputTokens", "outputTokens") == top
+        or _pair(row, "input_tokens", "output_tokens") == top
+    ]
+    return hits[0] if len(hits) == 1 else None
+
+
 def answering_model(
-    model_usage: dict[str, object], requested: str | None
+    model_usage: dict[str, object],
+    requested: str | None,
+    usage: dict[str, object] | None = None,
 ) -> tuple[str | None, str]:
     """Which model in a CLI's `modelUsage` map answered, **and how sure that
     is** — see `MODEL_ATTRIBUTION_VALUES`.
@@ -201,15 +231,22 @@ def answering_model(
     fixed here — `aef/services/runtime.py` is not this module's — and the
     remedy this function can offer is to stop presenting a guess as a fact.
 
-    Five rules, in order, each returning the attribution it earned:
+    Six rules, in order, each returning the attribution it earned:
 
     1. the requested name, if the map has it — `requested`;
     2. a key that *extends* the requested name (`claude-opus-5` ->
        `claude-opus-5-20260101`) — `alias`, the case that made reading
        `modelUsage` worth doing at all;
     3. a map with exactly one key — `sole`, no ambiguity to resolve;
-    4. the key with the most output tokens — `heuristic`, the rule above;
-    5. the first key — also `heuristic`, and where we came in.
+    4. **the key whose token row equals the payload's top-level `usage`** —
+       `usage_match`. S1 observed on a live call that the CLI's top-level
+       `usage` matched the Opus row exactly (in 2 / out 69) while the map's
+       first key was Haiku: the top-level usage IS the answering call's
+       usage, and the helper's row differs. Deterministic, no guess, and it
+       is the rule that decides when nothing was requested (a provider built
+       with no default model — S3's judge runner);
+    5. the key with the most output tokens — `heuristic`, the rule above;
+    6. the first key — also `heuristic`, and where we came in.
 
     An empty map returns `(None, "unknown")`; the caller substitutes whatever
     it asked for and inherits the label.
@@ -234,6 +271,9 @@ def answering_model(
     if len(keys) == 1:
         # One model was billed. Nothing was guessed, whatever was requested.
         return keys[0], "sole"
+    matched = _usage_match(model_usage, usage)
+    if matched is not None:
+        return matched, "usage_match"
     best = max(keys, key=_output_tokens)
     return (best if _output_tokens(best) else keys[0]), "heuristic"
 
@@ -394,7 +434,7 @@ class ClaudeCodeProvider(ModelProvider):
         model_usage = payload.get("modelUsage") or {}
         requested = request.model or self._default_model
         # NOT the first key of the map — see `answering_model`.
-        answered_by, attribution = answering_model(model_usage, requested)
+        answered_by, attribution = answering_model(model_usage, requested, usage)
         return CompletionResult(
             content=str(payload.get("result", "")),
             model=answered_by or requested or "",

@@ -663,3 +663,43 @@ def test_the_judge_call_that_was_misattributed_is_labelled_a_guess() -> None:
     named = ClaudeCodeProvider(default_model="claude-opus-5", runner=_Recorder(_ok(payload)))
     resolved = named.complete(_request(model=""))
     assert (resolved.model, resolved.model_attribution) == ("claude-opus-5-20260101", "alias")
+
+
+def test_the_usage_match_rule_picks_the_row_equal_to_the_top_level_usage() -> None:
+    """S1's live observation, as a fixture: the map's FIRST key is the helper,
+    nothing was requested, and the top-level `usage` equals the answering
+    model's row exactly. Rule 4 decides deterministically; the old rule 3
+    ("most output tokens") would have picked Haiku here because the helper
+    wrote more."""
+    from aef.providers.harness_provider import answering_model
+
+    model_usage = {
+        "claude-haiku-4-5-20251001": {"inputTokens": 900, "outputTokens": 140},
+        "claude-opus-5[1m]": {"inputTokens": 2, "outputTokens": 69},
+    }
+    usage = {"input_tokens": 2, "output_tokens": 69}
+    assert answering_model(model_usage, None, usage) == ("claude-opus-5[1m]", "usage_match")
+    # Without the top-level usage the same fixture falls to the heuristic —
+    # and gets it wrong, which is the point of carrying the usage through.
+    name, how = answering_model(model_usage, None)
+    assert how == "heuristic" and name == "claude-haiku-4-5-20251001"
+    # An ambiguous match (two rows equal) is not a match.
+    tied = {k: {"inputTokens": 2, "outputTokens": 69} for k in ("a", "b")}
+    assert answering_model(tied, None, usage)[1] == "heuristic"
+
+
+def test_agent_services_hands_the_providers_default_model_to_the_judge() -> None:
+    """ADR 0169's root cause: `reflection_model or ""` sent every judge call
+    down the heuristic attribution path whenever the provider had a default
+    and the caller named none."""
+    from aef.services.runtime import agent_services
+
+    class _P:
+        default_model = "claude-opus-5"
+
+        def complete(self, request):  # pragma: no cover - never called here
+            raise AssertionError
+
+    services = agent_services(model_provider=_P(), reflection="llm")
+    judge = services.judge if hasattr(services, "judge") else services.require_judge()
+    assert getattr(judge, "model", None) == "claude-opus-5"
