@@ -286,3 +286,43 @@ def test_an_explicit_agent_path_wins_over_discovery(tmp_path: Path) -> None:
     ]
     assert names == ["model_calls_visible:clean.py"]
     assert all(c.ok for c in run_doctor(tmp_path, agent_path="clean.py") if c.name in names)
+
+
+# --------------------------------------------------------------------------
+# The entry file the agent actually reads (ADR 0153)
+# --------------------------------------------------------------------------
+
+
+def test_an_entry_file_that_never_reaches_the_guide_is_reported(tmp_path: Path) -> None:
+    """Reproduced on a real repo: `aef adopt` skipped the `AGENTS.md` that
+    repo's agents read, so `grep -c AEF AGENTS.md` returned 0 and the scaffold
+    contract sat in files nobody opens. Adopt appends a block now — but a repo
+    adopted before that, or one whose block was deleted, still has the gap and
+    nothing said so.
+
+    Advisory, not an error: an adopter may point their agents elsewhere on
+    purpose. What they may not do is fail to notice.
+    """
+    from aef.cli.adopt import run_adopt
+
+    run_adopt(tmp_path)
+    (tmp_path / "AGENTS.md").write_text("# my own rules\n\nnothing about the scaffold here\n")
+
+    by_name = {c.name: c for c in run_doctor(tmp_path)}
+    check = by_name["entry_file_points_at_the_guide:AGENTS.md"]
+    assert not check.ok
+    assert check.level == "advisory", "this must not fail an otherwise-healthy repo"
+    assert "AGENT_INTEGRATION.md" in check.detail
+    assert "aef adopt" in check.detail
+    # ...and the file adopt did write is fine, so the check is not simply
+    # "every AGENTS.md is bad".
+    assert by_name["entry_file_points_at_the_guide:CLAUDE.md"].ok
+
+
+def test_the_entry_file_check_is_silent_in_a_repo_that_was_never_adopted(tmp_path: Path) -> None:
+    """An `aef init` project has no adoption markers and rightly has no
+    `CLAUDE.md`. Reporting a missing scaffold block there is noise about a
+    scaffold nobody installed."""
+    (tmp_path / "AGENTS.md").write_text("# mine\n")
+    names = {c.name for c in run_doctor(tmp_path)}
+    assert not any(n.startswith("entry_file_points_at_the_guide") for n in names), names

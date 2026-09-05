@@ -148,6 +148,39 @@ def run_doctor(target_dir: Path, *, agent_path: str | None = None) -> list[Docto
         )
     )
 
+    # ADR 0153. `aef adopt` used to SKIP an entry file that already existed,
+    # so a repo with its own `AGENTS.md` (or `CLAUDE.md`) was adopted with the
+    # scaffold contract in files its agents never open: measured on a real
+    # 8-agent repo, `grep -c AEF AGENTS.md` returned 0 after a clean adopt.
+    # Adopt now appends a marker block instead — but a repo adopted before
+    # that, or one whose block was deleted, still has the gap, and nothing
+    # told anyone. Advisory: an adopter may legitimately point their agents
+    # somewhere else, as long as they know they have.
+    if looks_adopted:
+        for name in ("CLAUDE.md", "AGENTS.md"):
+            entry_file = target_dir / name
+            if not entry_file.is_file():
+                continue
+            try:
+                text = entry_file.read_text()
+            except (OSError, UnicodeDecodeError):
+                continue
+            points_at_the_guide = "<!-- aef:begin -->" in text or "AGENT_INTEGRATION.md" in text
+            checks.append(
+                DoctorCheck(
+                    f"entry_file_points_at_the_guide:{name}",
+                    points_at_the_guide,
+                    f"{entry_file} carries the aef block"
+                    if points_at_the_guide
+                    else f"{entry_file} is what your coding agent reads and it names neither the "
+                    f"aef marker block nor AGENT_INTEGRATION.md — the scaffold contract "
+                    f"never reaches the agent. fix: re-run `aef adopt --dir .`, which "
+                    f"appends a block between `<!-- aef:begin -->` and `<!-- aef:end -->` "
+                    f"and leaves every other byte of the file alone",
+                    level="info" if points_at_the_guide else "advisory",
+                )
+            )
+
     # F4: `aef adopt` promises doctor "confirms the config and IMPORTS are
     # wired correctly" and doctor never imported anything — so a syntactically
     # invalid `aef_adapter.py` passed clean.

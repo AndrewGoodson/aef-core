@@ -172,8 +172,11 @@ def test_every_emitted_aef_command_is_one_the_cli_accepts(pristine: Path) -> Non
     # with no arguments worth getting wrong. A coverage floor keeps that from
     # silently happening again.
     # 15 -> 30 with FIRST_DAY.md (ADR 0148), whose whole point is that every
-    # command in it was executed. A floor, not an equality: documents grow.
-    assert checked >= 30, f"only {checked} commands checked — the extractor is skipping too much"
+    # command in it was executed. 30 -> 50 with the prompt-file sequence of
+    # ADR 0153, whose six commands appear in both FIRST_DAY.md and LOOP.md and
+    # whose two extra flags (`--config`, `--cassette-miss live`) are exactly
+    # the kind a document invents. A floor, not an equality: documents grow.
+    assert checked >= 50, f"only {checked} commands checked — the extractor is skipping too much"
 
 
 def test_the_command_extractor_detects_a_command_the_cli_rejects(
@@ -283,6 +286,69 @@ def test_the_first_git_add_dash_a_does_not_spend_the_drift_budget_on_bytecode(
         f"a one-line candidate drifted {drift:.4f} of {DEFAULT_MAX_DRIFT}; it measured "
         f"0.4675 with committed bytecode and 0.0238 without (ADR 0142)"
     )
+
+
+def test_the_kit_carries_the_prompt_file_sequence_and_the_sentence_that_makes_it_honest(
+    pristine: Path,
+) -> None:
+    """ADR 0153. Every eligible repo in the survey had ZERO model-SDK call
+    sites and between three and twenty-six `.claude/agents/*.md` agents, and
+    the generated kit described only the other shape.
+
+    The sequence is asserted in order — a document listing the right six
+    commands in the wrong order is a document that cannot be followed — and so
+    is the sentence that stops an adopter believing a cassette can score a
+    changed prompt. Every `aef` line in both files goes through the real
+    parser in `test_every_emitted_aef_command_is_one_the_cli_accepts` above.
+    """
+    heading = "## If your agents are prompt files, not Python"
+    for name in ("FIRST_DAY.md", "LOOP.md"):
+        whole = (pristine / name).read_text()
+        assert heading in whole, name
+        # The section, not the file: both documents carry other sequences, and
+        # asserting order across the whole file would pass or fail on where
+        # some unrelated `aef loop cycle` happens to sit.
+        body = whole[whole.index(heading) :]
+        text = body[: body.index("\n## ", 1)] if "\n## " in body[1:] else body
+        positions = [
+            text.index(step)
+            for step in (
+                "aef adopt --dir .",
+                "aef migrate --dir .",
+                "aef loop bootstrap",
+                "aef loop bless",
+                "aef loop doctor",
+                "aef loop cycle",
+            )
+        ]
+        assert positions == sorted(positions), f"{name} lists the sequence out of order"
+        # The two flags the shape requires, in the invocations themselves.
+        joined = text.replace("\\\n", " ")
+        cycle = [ln for ln in joined.splitlines() if ln.strip().startswith("aef loop cycle ")]
+        assert any("--cassette-miss live" in ln and "--config" in ln for ln in cycle), name
+        bootstrap = [
+            ln for ln in joined.splitlines() if ln.strip().startswith("aef loop bootstrap ")
+        ]
+        assert any("--config" in ln for ln in bootstrap), name
+        # ...and the claim, not just the flags. A prompt candidate is gated
+        # live or not at all; a cassette miss scored 0 is not a rejection.
+        assert "every request is a cassette MISS" in text, name
+        assert "every gate pass of a prompt candidate is a LIVE pass" in text, name
+        assert "noise floor" in text, name
+
+
+def test_first_day_describes_the_appending_it_now_does(pristine: Path) -> None:
+    """`FIRST_DAY.md` said an existing file "is skipped and reported,
+    including `.gitignore`, which is why an adopter who already had one is
+    told to add `__pycache__/` themselves". ADR 0153 made that false, and a
+    generated document that describes behaviour the tool no longer has is the
+    defect class this whole file exists to catch."""
+    text = (pristine / "FIRST_DAY.md").read_text()
+    assert "told to add `__pycache__/` themselves" not in text
+    assert "<!-- aef:begin -->" in text and "# aef:begin" in text
+    assert "appended" in text
+    # The measurement that forced the change, not just the mechanism.
+    assert "grep -c AEF AGENTS.md" in text
 
 
 def test_the_doctor_help_names_the_number_of_obligations_it_reports() -> None:

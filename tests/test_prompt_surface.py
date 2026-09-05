@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from aef.cli.adopt import render_autonomy_md, render_claude_md
-from aef.cli.adopt_loop import render_first_day_md
+from aef.cli.adopt import PromptSurface, render_aef_block, render_autonomy_md, render_claude_md
+from aef.cli.adopt_loop import render_first_day_md, render_loop_md
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -74,7 +74,17 @@ def _surface() -> dict[str, str]:
     # above do. It is a prompt surface and not merely a document: an adopting
     # coding agent is handed it as the task, so text the model guide says to
     # remove is as costly here as in CLAUDE.md.
-    files["<adopt: FIRST_DAY.md>"] = render_first_day_md("repo")
+    files["<adopt: FIRST_DAY.md>"] = render_first_day_md("repo", 8)
+    files["<adopt: LOOP.md>"] = render_loop_md("repo", 8)
+    # The block `aef adopt` appends INTO an adopter's own `CLAUDE.md` /
+    # `AGENTS.md` (ADR 0153). It is the most prompt-surface-shaped thing this
+    # scaffold produces — it lands inside the file a coding agent reads as its
+    # standing instructions, in a repo aef-core did not write — so it is
+    # audited as one. Rendered for a prompt-file repo, the arm where the block
+    # says the most.
+    files["<adopt: aef block>"] = render_aef_block(
+        "repo", "prompt_files", PromptSurface(agents=8, skills=5, has_agents_md=True)
+    )
     return files
 
 
@@ -159,7 +169,16 @@ def test_no_prompt_surface_carries_text_the_guide_removed(name: str) -> None:
 
 @pytest.mark.parametrize(
     "name",
-    ["CLAUDE.md", "<adopt: CLAUDE.md>", "<adopt: AUTONOMY.md>", "<adopt: FIRST_DAY.md>"],
+    [
+        "CLAUDE.md",
+        "<adopt: CLAUDE.md>",
+        "<adopt: AUTONOMY.md>",
+        "<adopt: FIRST_DAY.md>",
+        # The appended block is the ONLY aef text an adopter with their own
+        # `AGENTS.md` is guaranteed to have in front of their agent, so the
+        # two verification rules have to survive inside it too.
+        "<adopt: aef block>",
+    ],
 )
 def test_verification_instructions_were_kept(name: str) -> None:
     text = _surface()[name].lower()

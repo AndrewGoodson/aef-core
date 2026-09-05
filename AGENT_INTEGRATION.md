@@ -69,7 +69,11 @@ ruff format --check aef tests
 
 ## Start (adopting aef-core into another repo)
 Inside the target repo: `aef adopt --dir <path>`. It detects the current
-framework and writes **17** never-overwrite files — the onboarding kit
+framework — `langgraph` / `crewai` / `raw_sdk` / **`prompt_files`** / `none`,
+where `prompt_files` means the repo's agents are `.md` prompts run by a coding
+harness rather than Python call sites, reported with its counts
+(`prompt_files (8 agents, 5 skills, AGENTS.md, .codex)`) — and writes **17**
+never-overwrite files — the onboarding kit
 (`CLAUDE.md`, `AGENTS.md`, `AGENT_INTEGRATION.md`, `AUTONOMY.md`,
 `FIRST_DAY.md`, `AEF_MIGRATION_CHECKLIST.md`), the config and shim
 (`aef.yaml`, `aef_adapter.py`, `.gitignore`), the loop kit (`LOOP.md`,
@@ -79,8 +83,42 @@ per-harness entry files (`.github/copilot-instructions.md`,
 "six" here for months, and the drift was in the direction that matters: the
 loop kit and `FIRST_DAY.md` were the files nobody was told they had.
 
+**Never-overwrite, and the five files that are appended to instead** (ADR
+0153). An existing file of a name adopt would write is skipped and reported —
+except `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`,
+`.cursor/rules/aef.mdc` and `.gitignore`, which gain a block between
+`<!-- aef:begin -->` and `<!-- aef:end -->` (`# aef:begin` / `# aef:end` in
+`.gitignore`). Every pre-existing byte survives verbatim and outside the
+block; re-running replaces only what is between the markers, so a second
+`aef adopt` changes no byte of any file; deleting the block undoes it exactly.
+The report says `appended` for those, beside `wrote` and `skipped`. The reason
+is a measurement: on a real repo with eight `.claude/agents/*.md` agents,
+adopt wrote a `CLAUDE.md` the repo does not use and skipped the `AGENTS.md` it
+does — `grep -c AEF AGENTS.md` returned **0**, so the contract never reached
+the file that repo's agents read. Files with markers adopt cannot resolve (an
+unmatched pair, two blocks), non-text files, and symlinks are skipped with the
+reason, never guessed at.
+
 Then `aef doctor` to confirm the setup, fill `aef.yaml`'s five surfaces, wire
 a node in `aef_adapter.py`, and `aef run` / `aef eval` / `aef trace`.
+
+**If your agents are prompt files**, there is no call site to convert:
+`aef migrate` registers each `.claude/agents/*.md` as its own graph under
+`agents/migrated/`, and the node runs that prompt as the system prompt of one
+harness call. Four harnesses are wired through `model_provider.impl`:
+`claude_code` (default — the coding agent's own login, no API key, reproduced
+end to end), `codex` (from the CLI's documented flags, not reproduced), `grok`
+(measured through the provider; `--cwd <an empty directory>` is its
+load-bearing isolation flag, and even with it **~17.9k tokens of the
+operator's session still reach the model with no flag to stop it**), and
+`command` — a generic CLI harness configured from an argv template in
+`aef.yaml` (ADR 0154), which is also how **GitHub Copilot's CLI** is wired:
+by the owner who installs it, since this repo ships no guess about its flags
+(ADR 0150). The prompt runs; the agent's tools do not. The generated
+`FIRST_DAY.md` and `LOOP.md` carry that sequence and the sentence that makes
+it honest: **a changed prompt cannot be scored from a cassette** — every
+request is a miss — so every gate pass of a prompt candidate is a live one,
+and the live noise floor is the bar a candidate must clear.
 
 **`FIRST_DAY.md` is the adopter's sequence** — `aef migrate` through
 `aef loop cycle`, in order, with the real output of every command and what

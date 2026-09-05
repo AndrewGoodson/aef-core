@@ -30,7 +30,90 @@ def _module_path(repo_relative: str) -> str:
     return repo_relative.removesuffix(".py").replace("/", ".")
 
 
-def render_loop_md(repo_name: str) -> str:
+def render_prompt_repo_sequence(prompt_agents: int = 0) -> str:
+    """The prompt-file adopter's sequence, and the sentence that makes it
+    honest (ADR 0153).
+
+    Every eligible repo in the `UPGRADE_LOOP.md` survey had zero model-SDK
+    call sites and between three and twenty-six `.claude/agents/*.md` files.
+    The generated kit described the other shape only, so the adopter whose
+    agents are prompts had a document about a repo they do not have.
+    """
+    module = f"{_module_path(DEFAULT_MIGRATED_OUT).rsplit('.', 1)[0]}.<agent>.graph"
+    path = f"{DEFAULT_MIGRATED_OUT.rsplit('/', 1)[0]}/<agent>/graph.py"
+    counted = (
+        f"This repo has **{prompt_agents}** of them."
+        if prompt_agents
+        else "If that is this repo, this section is your sequence."
+    )
+    return f"""## If your agents are prompt files, not Python
+
+`.claude/agents/*.md`, skills, `AGENTS.md`, a `.codex/` — agents that a coding
+harness runs, with no `anthropic`/`openai` call site anywhere. {counted}
+
+There is nothing to convert, and `aef migrate` does not look for one:
+it registers each agent file as **its own graph** at `{path}` — inside Zone A,
+`graph_id` = the agent's name — and that graph's node runs the agent's prompt
+as the system prompt of a single harness model call.
+`model_provider.impl: claude_code` uses the coding agent's own login, so no API
+key is involved. **The prompt runs; the agent's tools do not**, which is the
+safety property rather than a limitation.
+
+**Which harness runs the call is `model_provider.impl` in `aef.yaml`**, and
+four are wired: `claude_code` (default — the Claude Code login, reproduced end
+to end), `codex` (built from the CLI's documented flags, **not** reproduced),
+`grok` (measured: it answers through the provider, and `--cwd <an empty
+directory>` is the load-bearing isolation flag — with it, **~17.9k tokens of
+the operator's own session still reach the model and there is no flag that
+stops that**, which is the honest number rather than an isolation claim), and
+`command`, a generic CLI harness you configure with an argv template
+(aef-core ADR 0154). **GitHub Copilot's CLI is `impl: command`, configured by
+you when you install it** — this repo ships no guess about its flags, because
+a flag's shape is not a flag's value (aef-core ADR 0150).
+
+**Which file the loop may edit is a decision you have to make, and the default
+is the narrow one.** The generated GRAPH is Zone A; the persona `.md` it reads
+is Zone C, so a candidate that edits the prompt itself is rejected by G0 until
+you widen the agent root. `aef migrate --agent-root .claude/agents` is that
+opt-in, per repo, and its report states in words what it adds to the loop's
+blast radius. Widening it means agent-authored diffs to the files your coding
+harness loads on every session — decide that deliberately, not to make a
+cycle produce something.
+
+The whole day, for that shape:
+
+```
+aef adopt --dir .
+aef migrate --dir .
+aef loop bootstrap {module} --corpus corpus \\
+    --inputs inputs.json --state ~/.aef-loop-state \\
+    --memory ~/.aef-loop-state/memory.jsonl --config aef.yaml
+aef loop bless --repo . --state ~/.aef-loop-state --agent-path {path}
+aef loop doctor --repo . --state ~/.aef-loop-state --corpus corpus \\
+    --agent-path {path}
+aef loop cycle --repo . --state ~/.aef-loop-state --workdir /tmp/loop \\
+    --module {module} --corpus corpus \\
+    --entrypoint {module}:build_graph --agent-path {path} \\
+    --memory ~/.aef-loop-state/memory.jsonl --config aef.yaml \\
+    --cassette-miss live --build-command "<your green bar>"
+```
+
+**`--config` on bootstrap, and `--cassette-miss live --config` on the cycle,
+are not optional here — and the reason is a property of prompts, not a
+preference.** A cassette is keyed on the request that was recorded. Change the
+prompt and every request changes, so every request is a cassette MISS; under
+the default `--cassette-miss fail` the candidate's nodes fail and it scores 0,
+which is a rejection that measured nothing and reads exactly like a real one.
+
+**So every gate pass of a prompt candidate is a LIVE pass, and it spends real
+model calls.** Start on one scenario, not forty. And read the live noise floor
+as the bar: two runs of an *unchanged* prompt do not score identically, so a
+candidate beating the incumbent by less than that spread has not been shown to
+beat it at all — it has been shown to be within the noise.
+"""
+
+
+def render_loop_md(repo_name: str, prompt_agents: int = 0) -> str:
     return f"""# The self-rewiring loop in {repo_name}
 
 Agents here may propose changes to their own code. An automated gate pipeline
@@ -122,9 +205,11 @@ until aef-core ADR 0145 no generated document named the flag at all. The
 alternative is to start the loop on a graph that calls no model.
 
 **Check `__pycache__/` is in `.gitignore` before you bless.** `aef adopt`
-writes one now (aef-core ADR 0142) but **skips an existing `.gitignore`
-rather than appending to it**, and says so in the migration checklist — so a
-repo that already had one may still be missing the pattern. Compiled bytecode
+writes one now (aef-core ADR 0142), and when you already had one it **appends
+the two patterns inside a `# aef:begin` / `# aef:end` block** rather than
+leaving you to notice (aef-core ADR 0153) — every byte you had stays outside
+that block, untouched. It appends nothing when the file already covers
+bytecode some other way, so check rather than assume. Compiled bytecode
 committed under `{DEFAULT_AGENT_ROOT}/` by an ordinary `git add -A` is Zone A
 content the baseline does not have, and G5 charges it as drift: measured at
 **0.468 of a 0.500 budget** for a one-line candidate, against **0.024** for
@@ -160,6 +245,7 @@ to be able to see the kill switch. Silence used to mean "do not check", and a
 halted loop's corpus grew from the documented invocation (aef-core ADR 0141).
 Pass `--no-loop-state` only when there is genuinely no loop state yet.
 
+{render_prompt_repo_sequence(prompt_agents)}
 The hand-written failing `aef run --memory` that used to sit between bootstrap
 and bless is **gone from this sequence**: `bootstrap --memory` leaves the same
 evidence (aef-core ADR 0145). Add runs later with:
@@ -504,14 +590,24 @@ def render_loop_monitor_workflow(repo_name: str) -> str:
     weekly = (
         "${{ github.event.schedule == '0 9 * * 1' || github.event_name == 'workflow_dispatch' }}"
     )
-    return f"""# Post-merge monitoring and the weekly digest for {repo_name}.
+    daily = (
+        "${{ github.event.schedule == '0 3 * * *' || github.event_name == 'workflow_dispatch' }}"
+    )
+    module = _module_path(DEFAULT_MIGRATED_OUT)
+    return f"""# Post-merge monitoring, the daily cycle, and the weekly digest for {repo_name}.
 # Same trigger rule as loop-gate.yml — see that file, and aef-core ADR 0057.
+#
+# This file is the CLOCK. Until it is committed, the loop runs only when
+# someone types the command: the rendered workflow used to carry `loop
+# monitor` and `loop digest` and no `loop cycle` at all, so an adopted repo's
+# loop never proposed anything unattended (aef-core ADR 0153).
 
 name: loop-monitor
 
 on:
   schedule:
     - cron: "0 * * * *"   # evaluate open windows, roll back what needs it
+    - cron: "0 3 * * *"   # one cycle: harvest, propose, gate. Never merges.
     - cron: "0 9 * * 1"   # weekly digest
   workflow_dispatch:
 
@@ -540,6 +636,55 @@ jobs:
       # for more data. Exit 2 means a change every gate passed still
       # regressed, so the gates have a blind spot.
       - run: aef loop monitor --repo . --state ~/.aef-loop-state
+
+      # One turn of the loop: propose one candidate, gate it, escalate or
+      # reject. It creates a LOCAL branch and never pushes, which is why
+      # `contents: read` is enough. Nothing merges — Tier-1 is off.
+      #
+      # `--memory` is the flag that decides whether this step does anything:
+      # without it the cycle reports `no memory store configured` and exits 0,
+      # which reads as a healthy nightly run and is a loop that never ran.
+      # `--config` carries your policies and provider into the corpus replay.
+      # `--cassette-miss fail` is deliberate: CI has no coding-agent harness
+      # login, so `live` here would either fail for want of a credential or
+      # spend one you did not mean to spend. Score prompt candidates live from
+      # a machine that has the login, not from this job.
+      - name: Daily cycle
+        if: {daily}
+        run: |
+          set -o pipefail
+          status=0
+          aef loop cycle \\
+            --repo . --state ~/.aef-loop-state \\
+            --workdir "$RUNNER_TEMP/cycle" \\
+            --module "$AEF_MODULE" --entrypoint "$AEF_ENTRYPOINT" \\
+            --corpus corpus --config aef.yaml \\
+            --memory ~/.aef-loop-state/memory.jsonl \\
+            --cassette-miss fail \\
+            --build-command "$AEF_BUILD_COMMAND" \\
+            2>&1 | tee "$RUNNER_TEMP/cycle.log" || status=$?
+          # In WORDS, not only as an exit code: `no admissible failure memory`
+          # and `escalated` both exit 0, and a nightly job that is green
+          # either way tells nobody which one happened.
+          {{
+            echo "## Loop cycle — {repo_name} (exit $status)"
+            echo '```'
+            cat "$RUNNER_TEMP/cycle.log"
+            echo '```'
+          }} >> "$GITHUB_STEP_SUMMARY"
+          # 1 is a REJECTION — the system working, not a broken job. 2 is a
+          # HALT, and that must fail loudly enough to reach a person.
+          if [ "$status" -ge 2 ]; then exit 1; fi
+        env:
+          # EDIT THESE THREE. `AEF_MODULE` is the graph the loop improves —
+          # `aef migrate` prints the path it wrote; one graph per prompt agent
+          # means one module per agent, so pick the one you want improved.
+          # Without `--entrypoint`, G2 and G3 cannot execute your corpus and
+          # refuse, leaving four of six gates judging every candidate.
+          # `--build-command` is your green bar, not ours.
+          AEF_MODULE: {module}
+          AEF_ENTRYPOINT: {module}:build_graph
+          AEF_BUILD_COMMAND: python -m pytest -q
 
       - name: Weekly digest
         if: {weekly}
@@ -605,7 +750,7 @@ should have failed.
 """
 
 
-def render_first_day_md(repo_name: str) -> str:
+def render_first_day_md(repo_name: str, prompt_agents: int = 0) -> str:
     """`FIRST_DAY.md` — the sequence, in the order an adopter meets it.
 
     Named for *when* to read it, which is the one thing the rest of the kit
@@ -658,13 +803,37 @@ aef loop cycle --repo . --state ~/.aef-loop-state --workdir /tmp/loop \\
 
 Between steps 2 and 3 you write **the semantics** — the node bodies. That is
 the one gap no command closes, and section 2 says exactly how wide it is.
+Unless your agents are prompt files, in which case there are no node bodies to
+write and the sequence gains two flags — the next section is yours.
 
+**After today, the loop runs nightly once you have committed
+`.github/workflows/loop-monitor.yml`** — `aef adopt` writes it with an hourly
+`loop monitor`, a daily `loop cycle` at 03:00 UTC and a weekly digest, all
+`workflow_dispatch`-able. Until that file is committed, the loop runs when you
+type the command and at no other time. Edit the three `AEF_*` env values in
+the cycle step first; the generated ones are placeholders, and a cycle with no
+`--memory` reports `no memory store configured` and exits 0 every night, which
+reads like a healthy run and is a loop that never ran.
+
+{render_prompt_repo_sequence(prompt_agents)}
 ## 1. `aef adopt` — what you got, and what you did not
 
-It wrote 17 files and **never overwrites**: an existing file of the same name
-is skipped and reported, including `.gitignore`, which is why an adopter who
-already had one is told to add `__pycache__/` themselves rather than having it
-appended silently.
+It wrote 17 files and **never overwrites** a file it did not write: an existing
+file of the same name is skipped and reported. Five are the exception, and
+appending is not overwriting: `CLAUDE.md`, `AGENTS.md`,
+`.github/copilot-instructions.md`, `.cursor/rules/aef.mdc` and `.gitignore`
+get a block between `<!-- aef:begin -->` and `<!-- aef:end -->` markers
+(`# aef:begin` / `# aef:end` in `.gitignore`, whose syntax has no HTML
+comments) appended to whatever was already there. **Every byte you had is
+still there, unmodified, outside the block**; re-running adopt replaces only
+what is between the markers, and deleting the block undoes it exactly. The
+report says `appended` rather than `wrote` or `skipped` for each one.
+
+That rule exists because of a measurement, not a preference: on a real repo
+with eight `.claude/agents/*.md` agents, adopt wrote a `CLAUDE.md` the repo
+does not use and skipped the `AGENTS.md` it does — `grep -c AEF AGENTS.md`
+returned **0**, so the contract never reached the file that repo's agents
+actually read (aef-core ADR 0153).
 
 ```
 CLAUDE.md  AGENTS.md  AGENT_INTEGRATION.md  AUTONOMY.md  FIRST_DAY.md

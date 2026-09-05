@@ -51,7 +51,27 @@ _CREWAI_MANIFEST_RE = re.compile(r"\bcrewai\b")
 _RAW_SDK_MANIFEST_RE = re.compile(r"\b(?:openai|anthropic)\b")
 _MANIFEST_GLOBS = ("requirements*.txt", "pyproject.toml", "Pipfile")
 
-Framework = str  # one of "langgraph", "crewai", "raw_sdk", "none"
+Framework = str  # one of "langgraph", "crewai", "raw_sdk", "prompt_files", "none"
+
+# The `/new-model-check` skill `adopt` itself writes. Named once and used
+# twice — where it is written and where prompt-file detection EXCLUDES it —
+# because a scaffold that counts its own output as the adopter's agent surface
+# reports a different number on every run, and the marker block interpolates
+# that number into files it must be able to rewrite byte-identically.
+_ADOPT_SKILL_PATH = ".claude/skills/new-model-check/SKILL.md"
+
+# The marker pair. `<!-- ... -->` in markdown-ish files (`.md`, `.mdc`), `#`
+# in `.gitignore`, because a marker the file's own syntax does not tolerate is
+# a marker that breaks the file it is protecting.
+MD_MARKERS = ("<!-- aef:begin -->", "<!-- aef:end -->")
+GITIGNORE_MARKERS = ("# aef:begin", "# aef:end")
+
+# `agents/migrated/graph.py` -> `agents/migrated/<agent>/graph.py`, the shape
+# `aef migrate` writes one-graph-per-prompt-agent into (`<agent>` is the agent
+# name as a Python module name; the graph's own `graph_id` keeps the name as
+# written). Derived from migrate's own default rather than spelled out
+# (ADR 0091's rule).
+_PROMPT_AGENT_OUT_SHAPE = f"{DEFAULT_MIGRATED_OUT.rsplit('/', 1)[0]}/<agent>/graph.py"
 
 
 def _is_ignored(path: Path, root: Path) -> bool:
@@ -68,7 +88,148 @@ def _read_all(paths: list[Path]) -> str:
     return "\n".join(parts)
 
 
-def detect_framework(repo_root: Path, *, max_files: int = 2000) -> Framework:
+@dataclass(frozen=True)
+class PromptSurface:
+    """What a repo whose agents are *prompt files* actually has.
+
+    Every eligible repo surveyed for `UPGRADE_LOOP.md` had **zero** model-SDK
+    call sites and between three and twenty-six agent prompts. `aef migrate`
+    found nothing in any of them and `aef adopt` reported `none`, which is the
+    label for "no orchestration code to migrate away from" — true, and
+    useless, when the agents are `.md` files run by a coding-agent harness.
+    """
+
+    agents: int = 0
+    skills: int = 0
+    has_agents_md: bool = False
+    has_codex_dir: bool = False
+    has_copilot_instructions: bool = False
+    cursor_rules: int = 0
+
+    @property
+    def total(self) -> int:
+        """How many prompt-surface signals were found at all. Zero means the
+        repo has no prompt agents and `prompt_files` must not be reported."""
+        return (
+            self.agents
+            + self.skills
+            + int(self.has_agents_md)
+            + int(self.has_codex_dir)
+            + int(self.has_copilot_instructions)
+            + self.cursor_rules
+        )
+
+    def describe(self) -> str:
+        """`8 agents, 5 skills, AGENTS.md, .codex` — the counts, in the order
+        an owner would list them, with nothing named that is not there."""
+        parts: list[str] = []
+        if self.agents:
+            parts.append(f"{self.agents} agent{'s' if self.agents != 1 else ''}")
+        if self.skills:
+            parts.append(f"{self.skills} skill{'s' if self.skills != 1 else ''}")
+        if self.has_agents_md:
+            parts.append("AGENTS.md")
+        if self.has_codex_dir:
+            parts.append(".codex")
+        if self.has_copilot_instructions:
+            parts.append(".github/copilot-instructions.md")
+        if self.cursor_rules:
+            parts.append(f"{self.cursor_rules} cursor rule{'s' if self.cursor_rules != 1 else ''}")
+        return ", ".join(parts)
+
+
+# The two headings only `render_claude_md` and `render_harness_pointer`
+# produce. Used to tell a file `aef adopt` WROTE from one it merely appended a
+# block to — a distinction the marker alone cannot make, and getting it wrong
+# is what made the counts differ between run 1 and run 2 (the file was the
+# adopter's before adopt touched it, and still is).
+_GENERATED_HEADINGS = (" — AEF scaffold contract", " — agent instructions (aef-core)")
+
+
+def _is_adopt_generated(path: Path) -> bool:
+    """Was this whole file written by `aef adopt`, as opposed to being the
+    adopter's file with an appended block?
+
+    Counting adopt's own entry files as the repo's prompt surface would make a
+    pristine repo detect as `none` on the first run and `prompt_files` on the
+    second, purely from the files adopt had just written. Read errors answer
+    "not ours" — the conservative direction, where the worst case is counting
+    a file once.
+    """
+    try:
+        text = path.read_text()
+    except (OSError, UnicodeDecodeError):
+        return False
+    if MD_MARKERS[0] not in text:
+        return False
+    heading = next(
+        (line for line in text.splitlines() if line.startswith("# ")),
+        "",
+    )
+    return any(heading.rstrip().endswith(suffix) for suffix in _GENERATED_HEADINGS)
+
+
+def detect_prompt_surface(repo_root: Path) -> PromptSurface:
+    """Counts the prompt-file agent surface: `.claude/agents/*.md`,
+    `.claude/skills/*/SKILL.md`, `AGENTS.md`, `.codex/`,
+    `.github/copilot-instructions.md`, `.cursor/rules/*`.
+
+    Files `aef adopt` itself writes are excluded — the `/new-model-check`
+    skill by path, and the entry files by their marker block — so running
+    adopt twice reports the same numbers both times.
+    """
+    agents_dir = repo_root / ".claude" / "agents"
+    agents = (
+        len([p for p in sorted(agents_dir.glob("*.md")) if p.is_file()])
+        if agents_dir.is_dir()
+        else 0
+    )
+
+    skills_dir = repo_root / ".claude" / "skills"
+    ours = repo_root / _ADOPT_SKILL_PATH
+    skills = (
+        len(
+            [
+                p
+                for p in sorted(skills_dir.glob("*/SKILL.md"))
+                if p.is_file() and p.resolve() != ours.resolve()
+            ]
+        )
+        if skills_dir.is_dir()
+        else 0
+    )
+
+    agents_md = repo_root / "AGENTS.md"
+    copilot = repo_root / ".github" / "copilot-instructions.md"
+    cursor_dir = repo_root / ".cursor" / "rules"
+    cursor = (
+        [p for p in sorted(cursor_dir.iterdir()) if p.is_file() and not _is_adopt_generated(p)]
+        if cursor_dir.is_dir()
+        else []
+    )
+    return PromptSurface(
+        agents=agents,
+        skills=skills,
+        has_agents_md=agents_md.is_file() and not _is_adopt_generated(agents_md),
+        has_codex_dir=(repo_root / ".codex").is_dir(),
+        has_copilot_instructions=copilot.is_file() and not _is_adopt_generated(copilot),
+        cursor_rules=len(cursor),
+    )
+
+
+def describe_detection(framework: Framework, surface: PromptSurface) -> str:
+    """The one line `aef adopt` prints first. The counts are reported whatever
+    the label is: a repo can have both call sites and prompt agents, and the
+    adopter needs to know about both."""
+    detail = surface.describe()
+    if framework == "prompt_files":
+        return f"{framework} ({detail})"
+    if detail:
+        return f"{framework} (+ prompt files: {detail})"
+    return framework
+
+
+def _detect_code_framework(repo_root: Path, *, max_files: int = 2000) -> Framework:
     """Scans `.py` files AND dependency manifests (requirements*.txt,
     pyproject.toml, Pipfile — anywhere in the tree, for monorepos with the
     framework declared in a subdirectory) under `repo_root` for the agent
@@ -97,6 +258,27 @@ def detect_framework(repo_root: Path, *, max_files: int = 2000) -> Framework:
     return "none"
 
 
+def detect_framework(repo_root: Path, *, max_files: int = 2000) -> Framework:
+    """The framework label, across both kinds of agent this scaffold meets.
+
+    **Precedence: a code/manifest signal wins over prompt files, and the
+    reason is what the label is FOR.** It selects the per-framework migration
+    notes and the convert-your-call-sites half of the checklist, and a repo
+    with real LangGraph/CrewAI/SDK call sites still needs those — the call
+    sites are the thing `aef migrate` can route losslessly and the thing that
+    makes a model call invisible to the harness if it does not. Nothing is
+    lost the other way: `describe_detection` reports the prompt counts under
+    every label, and the "run `aef migrate`, it registers your N prompt
+    agents" checklist step is emitted whenever N > 0. Choosing prompt_files
+    first would hide the framework notes entirely, which is a real loss;
+    choosing the code label first hides nothing.
+    """
+    framework = _detect_code_framework(repo_root, max_files=max_files)
+    if framework != "none":
+        return framework
+    return "prompt_files" if detect_prompt_surface(repo_root).total else "none"
+
+
 _FRAMEWORK_MIGRATION_NOTES: dict[Framework, str] = {
     "langgraph": (
         "Detected LangGraph. Your `StateGraph` nodes map closely onto AEF `Node`s: "
@@ -123,16 +305,136 @@ _FRAMEWORK_MIGRATION_NOTES: dict[Framework, str] = {
         "only live in `providers/`), and inject it via `Services` instead of "
         "constructing it inline."
     ),
+    "prompt_files": (
+        "Detected prompt-file agents — `.claude/agents/*.md`, skills, `AGENTS.md`, "
+        "`.codex/` — and no model-SDK call site anywhere. That is the ordinary "
+        "shape for a repo whose agents are run by a coding-agent harness rather "
+        "than by an SDK, and it is the shape this label exists for: `none` used "
+        "to be reported here, which is the label for 'no orchestration code to "
+        "migrate away from' and told you nothing about the eight agents you do "
+        "have. There is no call site to convert. The runtime attaches at the "
+        "MODEL layer instead: `aef migrate` registers each agent file as its own "
+        "graph, and the node runs that prompt as the system prompt of one "
+        "harness call — `model_provider.impl: claude_code` uses the coding "
+        "agent's own login, so no API key is involved. The agent's PROMPT runs; "
+        "the agent's TOOLS do not. That is the safety property, not a gap."
+    ),
     "none": (
-        "No agent framework or raw model-SDK usage detected. Start from "
-        "`aef adopt`'s generated `aef.yaml` and build your first `Node` directly "
-        "against the AEF kernel — there's no existing orchestration code to "
-        "migrate away from."
+        "No agent framework, raw model-SDK usage, or prompt-file agents detected. "
+        "Start from `aef adopt`'s generated `aef.yaml` and build your first `Node` "
+        "directly against the AEF kernel — there's no existing orchestration code "
+        "to migrate away from."
     ),
 }
 
 
-def render_claude_md(framework: Framework, repo_name: str) -> str:
+def render_aef_block_body(
+    repo_name: str, framework: Framework, surface: PromptSurface | None = None
+) -> str:
+    """The section `aef adopt` maintains inside an entry file it did not
+    write. Bounded on purpose: the adopter's `CLAUDE.md`/`AGENTS.md` is theirs,
+    and the contract lives in `AGENT_INTEGRATION.md`, so this block is a
+    pointer plus the rules an agent must not be able to miss."""
+    surface = surface or PromptSurface()
+    prompt_line = ""
+    if surface.agents:
+        # The AGENT COUNT only, never `surface.describe()`. The other signals
+        # include files `aef adopt` writes, so a block quoting them says
+        # something different on the second run and the "re-running replaces
+        # the block with the same bytes" promise is broken. `.claude/agents/`
+        # is a directory adopt never writes into.
+        n = surface.agents
+        prompt_line = (
+            f"- **Your agents are prompt files** ({n} under `.claude/agents/`). There is no call "
+            f"site to convert: `aef migrate` registers each `.claude/agents/*.md` as its "
+            f"own graph at `{_PROMPT_AGENT_OUT_SHAPE}`, and the node runs that prompt as "
+            f"the system prompt of one harness model call. The prompt runs; the agent's "
+            f"tools do not.\n"
+        )
+    return f"""## AEF scaffold ({repo_name}) — generated section
+
+This repo is adopting **aef-core**, a runtime for agent graphs with a gated
+self-rewiring loop. **Everything outside the `aef:begin`/`aef:end` markers is
+yours** — `aef adopt` did not rewrite a byte of it, and re-running replaces
+only this block. Delete the block and adopt will append a fresh one; keep it
+and adopt will update it in place.
+
+- **Read `AGENT_INTEGRATION.md` first** (ingest-and-start), then
+  `FIRST_DAY.md` (the command sequence, with the real output of each step),
+  `LOOP.md` (the gates and the zones) and `AUTONOMY.md` (what may never be
+  automated).
+- **Zone A is `{DEFAULT_AGENT_ROOT}/`** — the only tree the loop may propose
+  changes to. A candidate touching anything else is rejected by G0 and the
+  cycle exits 1.
+{prompt_line}- Node contract, non-negotiable:
+  `(AEFState, Context, Services) -> tuple[StateDelta, Route]`. Everything
+  arrives via `Services` — no globals, no env reads, no self-constructed
+  clients.
+- Two always-on invariants: **two-plane determinism** (the kernel is pure
+  bookkeeping; every model/nondeterministic call lives in a node declared
+  `deterministic=False`) and **vendor isolation** (`anthropic`/`openai`/
+  `mem0`/`neo4j` imports only in `aef/providers/` and
+  `aef/services/*/adapters/`).
+- Green bar before any change is done: `pytest -q` · `mypy --strict <pkg>` ·
+  `ruff check .` · `ruff format --check <dirs>`. Reproduce first: construct
+  the failing case and RUN it before writing a fix.
+- **HARD-STOP — ask a human** for: a push to another repo or any external
+  publish; enabling `aef/evolution/`, weakening the deny-by-default
+  `PolicyEngine`, or removing a HITL gate; deleting or overwriting a user
+  file; a breaking public-contract change you are unsure of. Nothing
+  auto-merges: a candidate passing all six gates is escalated, never merged."""
+
+
+def _wrap_in_markers(body: str, markers: tuple[str, str]) -> str:
+    begin, end = markers
+    return f"{begin}\n{body}\n{end}"
+
+
+def render_aef_block(
+    repo_name: str,
+    framework: Framework,
+    surface: PromptSurface | None = None,
+    *,
+    markers: tuple[str, str] = MD_MARKERS,
+) -> str:
+    return _wrap_in_markers(render_aef_block_body(repo_name, framework, surface), markers)
+
+
+def apply_block(text: str, block: str, markers: tuple[str, str]) -> str | None:
+    """Append `block` to `text`, or replace the block already there.
+
+    Returns the new text, or **None** when the file carries markers this
+    cannot safely resolve (an end with no begin, a begin with no end, or two
+    begins) — the caller then skips the file and says why. Guessing where
+    someone else's block ends is how a never-overwrite tool overwrites.
+
+    The bytes outside the marker pair are never touched: on a replace they are
+    the literal slices either side of it, and on a first append the file's
+    existing bytes are a prefix of the result. The only thing added outside
+    the markers is the separator that puts the block on its own line, and it
+    is added once — a second run finds the markers and replaces between them.
+    """
+    begin, end = markers
+    first = text.find(begin)
+    if first == -1:
+        if end in text:
+            return None
+        if text == "":
+            return block + "\n"
+        separator = "\n\n" if not text.endswith("\n") else ("" if text.endswith("\n\n") else "\n")
+        return text + separator + block + "\n"
+    if text.find(begin, first + len(begin)) != -1:
+        return None
+    closing = text.find(end, first + len(begin))
+    if closing == -1:
+        return None
+    return text[:first] + block + text[closing + len(end) :]
+
+
+def render_claude_md(
+    framework: Framework, repo_name: str, surface: PromptSurface | None = None
+) -> str:
+    surface = surface or PromptSurface()
     return f"""# {repo_name} — AEF scaffold contract
 
 This repo is being migrated onto AEF (Agent Engineering Foundation), a
@@ -183,8 +485,10 @@ over from an older `aef migrate`, put it under `{DEFAULT_AGENT_ROOT}/`
 The other half of Zone A hygiene is the generated `.gitignore`: bytecode
 committed under `{DEFAULT_AGENT_ROOT}/` is charged against G5's drift budget —
 0.4675 of 0.500 for a one-line candidate in the run that measured it. If you
-already had a `.gitignore`, `aef adopt` left it alone and said so; add
-`__pycache__/` and `*.py[cod]` yourself.
+already had a `.gitignore`, `aef adopt` **appended** `__pycache__/` and
+`*.py[cod]` inside a `# aef:begin` / `# aef:end` block, and only when neither
+pattern was already there. Every byte you had is untouched and outside the
+block; delete the block if you ignore bytecode another way (aef-core ADR 0153).
 
 ## The node contract (non-negotiable)
 
@@ -196,7 +500,7 @@ Nodes never construct their own clients, never read env vars, never reach
 for globals. Everything arrives via `Services` (dependency injection).
 See the `aef-core` package's `aef/kernel/contracts.py` for the exact types.
 
-## Detected framework in this repo: `{framework}`
+## Detected framework in this repo: `{describe_detection(framework, surface)}`
 
 {_FRAMEWORK_MIGRATION_NOTES[framework]}
 
@@ -235,6 +539,8 @@ pip package), so `docs/roadmap.md` below requires that checkout.
 - `aef/providers/`, `aef/services/*/` — pluggable backends behind stable interfaces
 - `aef/security/tool.py` — the policy engine every tool call goes through
 - `docs/roadmap.md` (source checkout only) — what's implemented vs. stubbed, phase by phase
+
+{render_aef_block(repo_name, framework, surface)}
 """
 
 
@@ -250,8 +556,19 @@ _BYTECODE_DIR_FORMS = frozenset(
 )
 _BYTECODE_FILE_FORMS = frozenset({"*.pyc", "*.py[cod]", "*.py[co]", "**/*.pyc", "*$py.class"})
 
+
+def render_gitignore_block() -> str:
+    """The two bytecode patterns, inside `# aef:begin`/`# aef:end`.
+
+    The same bytes whether they are written into a fresh `.gitignore` or
+    appended to one the adopter already had — one string, so the two paths
+    cannot drift and a re-run of adopt on either is a byte-for-byte no-op.
+    """
+    return _wrap_in_markers("__pycache__/\n*.py[cod]", GITIGNORE_MARKERS)
+
+
 _GITIGNORE_BODY = f"""# Generated by `aef adopt`. Add your own entries below; this file is written
-# once and never rewritten.
+# once, and only the `# aef:begin` / `# aef:end` block below is ever rewritten.
 #
 # The first two patterns are load-bearing for the self-rewiring loop, and the
 # reason is measured rather than stylistic (ADR 0142). Bytecode committed
@@ -262,8 +579,7 @@ _GITIGNORE_BODY = f"""# Generated by `aef adopt`. Add your own entries below; th
 # against 0.0238 for the same candidate with the bytecode excluded: 35 of the
 # 36 differing lines were `.pyc`. Two consecutive drift rejections halt the
 # loop, so that is two candidates from a halt caused by nothing your agent did.
-__pycache__/
-*.py[cod]
+{render_gitignore_block()}
 *.so
 
 # Tool caches. Not drift (they land outside `{DEFAULT_AGENT_ROOT}/`), just noise.
@@ -287,38 +603,92 @@ def render_gitignore() -> str:
     return _GITIGNORE_BODY
 
 
-def gitignore_gaps(text: str) -> tuple[str, ...]:
-    """What an EXISTING `.gitignore` is missing, in the adopter's words.
+_DRIFT_COST = (
+    f"Committed bytecode under `{DEFAULT_AGENT_ROOT}/` is Zone A content the loop never "
+    f"wrote, and G5 charges it as drift: measured 0.4675 of a 0.500 budget for a one-line "
+    f"candidate, against 0.0238 with the bytecode excluded (ADR 0142)."
+)
 
-    `aef adopt` never overwrites, and appending to a file the adopter owns is
-    the same trespass wearing a politer hat — a generated line silently added
-    to a tracked config is a change nobody reviewed. So the tool reports the
-    gap and the adopter closes it.
+
+def gitignore_covers_bytecode(text: str) -> bool:
+    """Does this `.gitignore` already keep `.pyc` out of the tree?
+
+    Comments are not rules — a naive `"__pycache__" in text` reads
+    `# __pycache__/` as coverage, the detector failing in exactly the
+    direction that costs the adopter a drift budget (ADR 0142).
     """
     lines = {
         line.strip() for line in text.splitlines() if line.strip() and not line.startswith("#")
     }
-    if lines & _BYTECODE_DIR_FORMS or lines & _BYTECODE_FILE_FORMS:
+    return bool(lines & _BYTECODE_DIR_FORMS or lines & _BYTECODE_FILE_FORMS)
+
+
+def gitignore_gaps(text: str) -> tuple[str, ...]:
+    """What an existing `.gitignore` is missing, in the adopter's words —
+    the FALLBACK message, for when `aef adopt` could not append the block
+    itself (a symlink, a non-text file, markers it refuses to resolve).
+
+    ADR 0142 used this for every existing `.gitignore`, because appending was
+    read as overwriting-by-another-route. ADR 0153 separates the two: writing
+    inside `# aef:begin`/`# aef:end` leaves every pre-existing byte untouched
+    and is reversible by deleting the block, so it is not an overwrite — and
+    a checklist line is the weakest control available for a cost measured at
+    93.5% of a drift budget.
+    """
+    if gitignore_covers_bytecode(text):
         return ()
     return (
         f"Add `__pycache__/` and `*.py[cod]` to your existing `.gitignore` — `aef adopt` "
-        f"left it untouched and neither pattern is in it. Committed bytecode under "
-        f"`{DEFAULT_AGENT_ROOT}/` is Zone A content the loop never wrote, and G5 charges it "
-        f"as drift: measured 0.4675 of a 0.500 budget for a one-line candidate, against "
-        f"0.0238 with the bytecode excluded (ADR 0142).",
+        f"could not append them for you and neither pattern is in it. {_DRIFT_COST}",
     )
 
 
-def render_migration_checklist(framework: Framework) -> list[str]:
+def gitignore_appended_note() -> str:
+    """What the checklist says once the block HAS been appended. Past tense on
+    purpose: it reports what the tool did, so an adopter can go and look at it,
+    rather than asking them to do something already done."""
+    return (
+        f"`aef adopt` appended `__pycache__/` and `*.py[cod]` to your existing `.gitignore`, "
+        f"inside a `# aef:begin` / `# aef:end` block — every byte you had is untouched and "
+        f"outside it, and re-running adopt replaces only that block. Delete the block if you "
+        f"ignore bytecode another way. {_DRIFT_COST}"
+    )
+
+
+def prompt_agent_checklist_item(agents: int) -> str:
+    """The step that replaces "convert your call sites" when the repo's agents
+    are prompt files. There is nothing to convert; there is something to
+    register."""
+    count = f"{agents} prompt agent{'s' if agents != 1 else ''}" if agents else "your prompt agents"
+    return (
+        f"Run `aef migrate --dir .` — it registers {count} (`.claude/agents/*.md`) as "
+        f"graphs, one graph per agent at `{_PROMPT_AGENT_OUT_SHAPE}` (the graph's `graph_id` "
+        f"is the agent's name), inside Zone A. There is no call site to convert: each node "
+        f"runs that agent's prompt as the system prompt of a single harness model call. The "
+        f"prompt runs; the agent's tools do not. NOTE which file the loop may then edit: the "
+        f"GRAPH is Zone A, the PERSONA `.md` is Zone C by default, so a candidate editing the "
+        f"prompt itself is rejected until you widen the agent root — `aef migrate --agent-root "
+        f"...` is opt-in per repo and its report says what that adds to the loop's blast radius."
+    )
+
+
+def render_migration_checklist(
+    framework: Framework, surface: PromptSurface | None = None
+) -> list[str]:
     common = [
         "Read the generated CLAUDE.md in full before writing any code.",
         "Fill in aef.yaml: objectives, tools.allow, policies, evaluator.suites.",
         "Identify your current entrypoint(s) — the function(s) that start an agent run.",
         # Derived from DEFAULT_AGENT_ROOT rather than spelled out, so a repo
-        # that moves its agent root cannot be told the wrong directory.
+        # that moves its agent root cannot be told the wrong directory. The
+        # output path is migrate's default for a call site, and the
+        # one-graph-per-agent shape when the repo's agents are prompt files —
+        # both inside Zone A, which is what this item is about.
         f"Put every node you convert under `{DEFAULT_AGENT_ROOT}/` — Zone A, the only tree "
         f"the loop is allowed to propose changes to. `aef migrate` writes its generated "
-        f"graph to `{DEFAULT_MIGRATED_OUT}`, which is inside Zone A, and names the zone of "
+        f"graph to "
+        f"`{_PROMPT_AGENT_OUT_SHAPE if surface and surface.agents else DEFAULT_MIGRATED_OUT}`"
+        f", which is inside Zone A, and names the zone of "
         f"the path in its report; anywhere else is Zone C and, measured, a candidate "
         f"touching it is rejected with `G0 rejected it: candidate touches paths outside "
         f"Zone A` and the cycle exits 1 (ADR 0142, ADR 0143).",
@@ -352,6 +722,18 @@ def render_migration_checklist(framework: Framework) -> list[str]:
             "Add a second provider + FallbackProvider if you want vendor fallback.",
             "Wire the aef_adapter.py shim to your old entrypoint and compare outputs.",
         ],
+        # The convert-your-call-sites half, for a repo that has no call sites.
+        # `aef migrate` is the step, and what it produces is one graph per
+        # agent file rather than one node per call site.
+        "prompt_files": [
+            prompt_agent_checklist_item(surface.agents if surface else 0),
+            "Read `.claude/agents/*.md` and decide WHICH agents the loop should improve — "
+            "one graph per agent means one loop target per agent, each with its own corpus, "
+            "baseline and drift budget.",
+            "Prove one harness call before the loop depends on it: `aef run "
+            '<the generated module> --objective "..." --config aef.yaml --checkpoints-dir '
+            ".aef-runs`. `model_provider.impl: claude_code` needs no API key.",
+        ],
         "none": [
             "Write your first Node directly against aef.kernel — no legacy code to migrate.",
             "Start with a two-node graph (do-the-thing -> END) and grow it.",
@@ -369,7 +751,14 @@ def render_migration_checklist(framework: Framework) -> list[str]:
         "It is the only document that says what each step costs you and which failures "
         "exit 0 having done nothing.",
     ]
-    return common + by_framework[framework] + tail
+    steps = common + by_framework[framework] + tail
+    # A repo can have BOTH call sites and prompt agents — the framework label
+    # picks which migration notes apply (see `detect_framework`), it does not
+    # decide which agents exist. So the prompt-agent step is emitted under
+    # every label once there is a prompt agent to register.
+    if surface and surface.agents and framework != "prompt_files":
+        steps.insert(len(common), prompt_agent_checklist_item(surface.agents))
+    return steps
 
 
 _ADAPTER_SHIM_TEMPLATE = '''"""AEF adapter shim — generated by `aef adopt`.
@@ -471,7 +860,11 @@ def render_aef_yaml(repo_name: str) -> str:
 extends: _base
 
 model_provider:
-  impl: claude_code  # the coding agent's own login, no API key; or codex / anthropic
+  # the coding agent's own login, no API key; or codex / grok / anthropic /
+  # command — any CLI, from an argv template in a `command:` block (ADR 0154).
+  # GitHub Copilot's CLI is `command`, configured by you when you install it:
+  # this repo ships no guess about its flags (ADR 0150).
+  impl: claude_code
   model: claude-opus-5  # a real current ID; claude-fable-5-1 for the hardest long-horizon work
   fallback: []
 
@@ -859,43 +1252,37 @@ deliberately-started loop.
 """
 
 
-_HARNESS_POINTER_BODY = """This repo uses **aef-core**, a repo-agnostic Agent Operating System
+_POINTER_PREAMBLE = """This repo uses **aef-core**, a repo-agnostic Agent Operating System
 scaffold. It works with any coding agent (Claude, Codex, Cursor, GitHub
 Copilot, …) — the scaffold is plain Python + the `aef` CLI; only the entry
-file each agent reads differs.
-
-**Read first (in this repo):** `AGENT_INTEGRATION.md` (ingest-and-start guide)
-and `AUTONOMY.md` (the autonomy safety contract). `CLAUDE.md` / `AGENTS.md`
-hold the full scaffold contract.
-
-Two always-on invariants:
-- Two-plane determinism — the kernel is pure bookkeeping; every LLM/
-  nondeterministic call lives in a node declared `deterministic=False`.
-- Vendor isolation — `anthropic`/`openai`/`mem0`/`neo4j` imports only in
-  `aef/providers/` and `aef/services/*/adapters/`.
-
-Green bar (all four must pass before any change is done):
-`pytest -q` · `mypy --strict <pkg>` · `ruff check .` · `ruff format --check <dirs>`
-
-HARD-STOP gates — pause and ask a human for any of: a push to another repo or
-any external publish; enabling `aef/evolution/`, weakening the PolicyEngine, or
-removing a HITL gate; deleting/overwriting a user file; a breaking
-public-contract change you're unsure of. Everything else: decide and proceed.
-"""
+file each agent reads differs. `CLAUDE.md` / `AGENTS.md` hold the full
+scaffold contract; the section below is the same block `aef adopt` maintains
+in those files, so there is one contract and not four."""
 
 
-def render_harness_pointer(repo_name: str) -> str:
+def render_harness_pointer(
+    repo_name: str, framework: Framework = "none", surface: PromptSurface | None = None
+) -> str:
     """A thin, harness-neutral instructions file pointing at the canonical
     guide and inlining the safety contract — used for GitHub Copilot's
-    `.github/copilot-instructions.md`."""
-    return f"# {repo_name} — agent instructions (aef-core)\n\n{_HARNESS_POINTER_BODY}"
+    `.github/copilot-instructions.md`.
+
+    Body is `render_aef_block`, not a fourth copy of the same rules: when this
+    file already exists in the adopter's repo, the block is what gets appended
+    to it, and a pointer that says something different from the appended block
+    is two contracts wearing one name.
+    """
+    block = render_aef_block(repo_name, framework, surface)
+    return f"# {repo_name} — agent instructions (aef-core)\n\n{_POINTER_PREAMBLE}\n\n{block}\n"
 
 
-def render_cursor_rule(repo_name: str) -> str:
+def render_cursor_rule(
+    repo_name: str, framework: Framework = "none", surface: PromptSurface | None = None
+) -> str:
     """Cursor `.cursor/rules/*.mdc` — same pointer body, with the minimal
     frontmatter Cursor uses to always apply a rule."""
     frontmatter = "---\ndescription: aef-core scaffold contract\nalwaysApply: true\n---\n\n"
-    return f"{frontmatter}# {repo_name} — agent instructions (aef-core)\n\n{_HARNESS_POINTER_BODY}"
+    return frontmatter + render_harness_pointer(repo_name, framework, surface)
 
 
 @dataclass(frozen=True)
@@ -904,6 +1291,23 @@ class AdoptResult:
     written_files: list[Path] = field(default_factory=list)
     skipped_files: list[Path] = field(default_factory=list)
     checklist: list[str] = field(default_factory=list)
+    # The third verb (ADR 0153). A file that already existed and gained an
+    # `aef:begin`/`aef:end` block is neither written (its own bytes are still
+    # there) nor skipped (the adopter's agent now reads the contract), and
+    # collapsing it into either is how the report stops describing what
+    # happened.
+    appended_files: list[Path] = field(default_factory=list)
+    # Why each skip happened. `already exists` stays the default so callers
+    # that never look up a reason print what they always printed.
+    skip_reasons: dict[Path, str] = field(default_factory=dict)
+    prompt_surface: PromptSurface = field(default_factory=PromptSurface)
+
+    def detection(self) -> str:
+        """The line `aef adopt` prints first, with the prompt-file counts."""
+        return describe_detection(self.framework, self.prompt_surface)
+
+    def skip_reason(self, path: Path) -> str:
+        return self.skip_reasons.get(path, "already exists")
 
 
 def render_new_model_check_skill() -> str:
@@ -923,13 +1327,35 @@ def render_new_model_check_skill() -> str:
 
 def run_adopt(target_dir: Path) -> AdoptResult:
     target_dir = target_dir.resolve()
+    surface = detect_prompt_surface(target_dir)
     framework = detect_framework(target_dir)
     repo_name = target_dir.name
 
     written: list[Path] = []
     skipped: list[Path] = []
+    appended: list[Path] = []
+    reasons: dict[Path, str] = {}
 
-    def _write_if_absent(relative_name: str, content: str) -> None:
+    def _skip(path: Path, reason: str) -> None:
+        skipped.append(path)
+        if reason != "already exists":
+            reasons[path] = reason
+
+    def _write_if_absent(
+        relative_name: str,
+        content: str,
+        *,
+        block: str | None = None,
+        markers: tuple[str, str] = MD_MARKERS,
+    ) -> None:
+        """Write the file when it is absent; when it exists and `block` is
+        given, maintain that block inside `markers` and touch nothing else.
+
+        Appending inside markers is not overwriting, and ADR 0153 says why:
+        the adopter's bytes are still there, unmodified and outside the block,
+        and deleting the block restores the file exactly. Everything without a
+        `block` keeps ADR 0034/0040's rule unchanged — skipped and reported.
+        """
         path = target_dir / relative_name
         # ``Path.exists()`` is false for a dangling symlink, and normal file
         # writes follow symlinked parent directories.  Treat either shape as
@@ -943,36 +1369,82 @@ def run_adopt(target_dir: Path) -> AdoptResult:
                 blocked_parent = True
                 break
             parent = parent.parent
-        if path.exists() or path.is_symlink() or blocked_parent:
-            skipped.append(path)
+        if path.is_symlink() or blocked_parent:
+            _skip(path, "a symlink, or under one — adoption never writes through a link")
             return
-        path.parent.mkdir(parents=True, exist_ok=True)  # for .github/, .cursor/rules/
-        path.write_text(content)
-        written.append(path)
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)  # for .github/, .cursor/rules/
+            path.write_text(content)
+            written.append(path)
+            return
+        if block is None:
+            _skip(path, "already exists")
+            return
+        try:
+            existing = path.read_text()
+        except (OSError, UnicodeDecodeError) as exc:
+            # Not text, or not readable. Appending to bytes we cannot read is
+            # how a scaffold corrupts an adopter's file; the skip says so.
+            _skip(path, f"exists but is not readable as text ({type(exc).__name__})")
+            return
+        updated = apply_block(existing, block, markers)
+        if updated is None:
+            _skip(
+                path,
+                f"carries an unbalanced or duplicated {markers[0]} / {markers[1]} pair — "
+                f"refusing to guess which bytes are the block",
+            )
+            return
+        if updated == existing:
+            _skip(path, "already carries the current aef block")
+            return
+        path.write_text(updated)
+        appended.append(path)
 
-    claude_md = render_claude_md(framework, repo_name)
-    _write_if_absent("CLAUDE.md", claude_md)
+    entry_block = render_aef_block(repo_name, framework, surface)
+    claude_md = render_claude_md(framework, repo_name, surface)
+    _write_if_absent("CLAUDE.md", claude_md, block=entry_block)
     _write_if_absent("aef.yaml", render_aef_yaml(repo_name))
     _write_if_absent("aef_adapter.py", render_adapter_shim(framework, repo_name))
 
-    # Zone A hygiene (ADR 0142). Written BEFORE the checklist, because when
-    # the adopter already has a `.gitignore` this is where the gap has to be
-    # reported: appending to their file would be the never-overwrite rule
-    # broken by another route, and the failure mode of saying nothing is a
-    # drift budget spent on bytecode.
+    # Zone A hygiene (ADR 0142, amended by ADR 0153). Handled BEFORE the
+    # checklist, because what the checklist says depends on what happened
+    # here: the two bytecode patterns are appended inside `# aef:begin` /
+    # `# aef:end` when the existing file covers neither, and reported as a gap
+    # the adopter must close only when appending was impossible.
     gitignore = target_dir / ".gitignore"
-    _write_if_absent(".gitignore", render_gitignore())
-
-    checklist = render_migration_checklist(framework)
-    if gitignore in skipped:
-        # Unreadable (a dangling symlink, a directory) counts as a gap: the
-        # patterns cannot be shown to be there, and claiming they are is the
-        # one answer that costs the adopter a drift budget.
+    existing_gitignore = ""
+    if gitignore.is_file() and not gitignore.is_symlink():
         try:
-            existing = gitignore.read_text()
-        except OSError:
-            existing = ""
-        checklist.extend(gitignore_gaps(existing))
+            existing_gitignore = gitignore.read_text()
+        except (OSError, UnicodeDecodeError):
+            existing_gitignore = ""
+    covered = gitignore_covers_bytecode(existing_gitignore)
+    _write_if_absent(
+        ".gitignore",
+        render_gitignore(),
+        # A file that already keeps `.pyc` out needs nothing appended — and
+        # nagging an adopter to add a pattern equivalent to one they have is
+        # how generated advice stops being read (ADR 0142). `None` here means
+        # "skip, as before"; the block form is only offered when it is needed,
+        # or when adopt's own block is already in the file and has to stay
+        # replaceable rather than duplicated.
+        block=(
+            None
+            if covered and GITIGNORE_MARKERS[0] not in existing_gitignore
+            else render_gitignore_block()
+        ),
+        markers=GITIGNORE_MARKERS,
+    )
+
+    checklist = render_migration_checklist(framework, surface)
+    if gitignore in appended:
+        checklist.append(gitignore_appended_note())
+    elif gitignore in skipped and not covered:
+        # Unreadable, a symlink, a directory, or markers we refuse to resolve:
+        # the patterns cannot be shown to be there and could not be added, and
+        # claiming otherwise is the one answer that costs a drift budget.
+        checklist.extend(gitignore_gaps(existing_gitignore))
     _write_if_absent(
         "AEF_MIGRATION_CHECKLIST.md",
         "# AEF migration checklist\n\n" + "\n".join(f"- [ ] {item}" for item in checklist),
@@ -986,21 +1458,35 @@ def run_adopt(target_dir: Path) -> AdoptResult:
     # Cross-harness entry files (docs/adr/0040): every major coding-agent reads
     # a different instructions file. AGENTS.md carries the full contract
     # (Codex + the cross-tool convention); Copilot and Cursor get thin native
-    # pointers into the canonical guide. All never-overwrite.
-    _write_if_absent("AGENTS.md", claude_md)
-    _write_if_absent(".github/copilot-instructions.md", render_harness_pointer(repo_name))
-    _write_if_absent(".cursor/rules/aef.mdc", render_cursor_rule(repo_name))
+    # pointers into the canonical guide.
+    #
+    # These four are where ADR 0153 changed the rule, and `AGENTS.md` is the
+    # measurement that forced it: on a real repo with eight prompt agents,
+    # `aef adopt` wrote a `CLAUDE.md` the repo does not use and SKIPPED the
+    # `AGENTS.md` it does — `grep -c AEF AGENTS.md` returned 0, so the
+    # contract never reached the file that repo's agents actually read.
+    _write_if_absent("AGENTS.md", claude_md, block=entry_block)
+    _write_if_absent(
+        ".github/copilot-instructions.md",
+        render_harness_pointer(repo_name, framework, surface),
+        block=entry_block,
+    )
+    _write_if_absent(
+        ".cursor/rules/aef.mdc",
+        render_cursor_rule(repo_name, framework, surface),
+        block=entry_block,
+    )
 
     # The self-rewiring loop kit (ADR 0057/0058). LOOP.md leads with what does
     # NOT work yet: an adopting repo whose agents produce candidates against an
     # empty corpus sees every one rejected, and that reads as "the loop is
     # broken" rather than "the loop has nothing to judge against".
-    _write_if_absent("LOOP.md", render_loop_md(repo_name))
+    _write_if_absent("LOOP.md", render_loop_md(repo_name, surface.agents))
     # The sequence, in the order an adopter meets it (ADR 0148). Separate from
     # LOOP.md deliberately: LOOP.md says what the loop NEEDS, and needed a
     # reader who already knew when to run each command. Every command in it
     # was executed against a fresh adoption and its real output pasted.
-    _write_if_absent("FIRST_DAY.md", render_first_day_md(repo_name))
+    _write_if_absent("FIRST_DAY.md", render_first_day_md(repo_name, surface.agents))
     _write_if_absent("agents/README.md", render_agents_zone_readme(repo_name))
     _write_if_absent("corpus/README.md", render_corpus_readme(repo_name))
     _write_if_absent(".github/workflows/loop-gate.yml", render_loop_gate_workflow(repo_name))
@@ -1009,8 +1495,14 @@ def run_adopt(target_dir: Path) -> AdoptResult:
     # Per-model-release re-audit (docs/adr/0111). Without it an adopted
     # repo's prompts and call sites are checked against exactly one model:
     # whichever was current the day it adopted.
-    _write_if_absent(".claude/skills/new-model-check/SKILL.md", render_new_model_check_skill())
+    _write_if_absent(_ADOPT_SKILL_PATH, render_new_model_check_skill())
 
     return AdoptResult(
-        framework=framework, written_files=written, skipped_files=skipped, checklist=checklist
+        framework=framework,
+        written_files=written,
+        skipped_files=skipped,
+        checklist=checklist,
+        appended_files=appended,
+        skip_reasons=reasons,
+        prompt_surface=surface,
     )

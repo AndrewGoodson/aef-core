@@ -44,11 +44,15 @@ def _cmd_migrate(args: argparse.Namespace) -> int:
 
 def _cmd_adopt(args: argparse.Namespace) -> int:
     result = run_adopt(Path(args.dir))
-    print(f"detected framework: {result.framework}")
+    print(f"detected framework: {result.detection()}")
     for path in result.written_files:
         print(f"wrote {path}")
+    # The third verb (ADR 0153): the file was the adopter's, its bytes are
+    # untouched, and it now carries the scaffold block between markers.
+    for path in result.appended_files:
+        print(f"appended aef block to {path} (your bytes outside it are unchanged)")
     for path in result.skipped_files:
-        print(f"skipped {path} (already exists)")
+        print(f"skipped {path} ({result.skip_reason(path)})")
     print("\nmigration checklist:")
     for i, item in enumerate(result.checklist, 1):
         print(f"  {i}. {item}")

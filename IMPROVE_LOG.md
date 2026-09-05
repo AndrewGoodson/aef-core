@@ -2393,3 +2393,101 @@ refresh its text without changing the total. Neither D1's specification nor
 D2's ReDoS is fixed here — D2 in particular blocks every live measurement in
 this repo until `checks.py` bounds its matcher or the corpus loses its
 nested quantifier, and either alone closes it.
+
+
+## M2 — `aef adopt` into a repo that already has files (ADR 0153)
+
+Increment M2 of `UPGRADE_LOOP.md`. **No rubric dimension moves** — adoption
+work claims no rubric point.
+
+**Reproduced by RUNNING, on a copy of the read-only pilot clone** (`marlin`:
+8 agents in `.claude/agents/*.md`, 5 skills, `AGENTS.md`, `.codex/`, no
+`CLAUDE.md`), before anything changed:
+
+```
+$ aef adopt --dir <clone>
+detected framework: none
+skipped <clone>/.gitignore (already exists)
+skipped <clone>/AGENTS.md (already exists)
+$ grep -c AEF <clone>/AGENTS.md
+0
+```
+
+`aef adopt` wrote a `CLAUDE.md` that repo does not use and skipped the
+`AGENTS.md` it does. The scaffold contract reached no file the repo's harness
+opens. A repo with its own `CLAUDE.md` got the same: the file came back
+untouched and nothing in it pointed at `AGENT_INTEGRATION.md`. And the
+`loop-monitor.yml` adopt renders had `loop monitor` + `loop digest` and **no
+`loop cycle` step at all** (found by J0), so an adopted repo's loop never ran
+unattended.
+
+**Changed.** A fifth framework label, `prompt_files`, counted and reported
+(`prompt_files (8 agents, 5 skills, AGENTS.md, .codex)`); the
+convert-your-call-sites checklist step replaced, for that shape, by "run `aef
+migrate` — it registers your N prompt agents as graphs" with M1's
+one-graph-per-agent path and the Zone A/Zone C distinction the persona files
+sit either side of. Five entry files (`CLAUDE.md`, `AGENTS.md`, the Copilot
+and Cursor pointers, `.gitignore`) are **appended to within
+`<!-- aef:begin -->` / `<!-- aef:end -->` markers** (`# aef:begin` in
+`.gitignore`) instead of skipped, and the CLI reports `appended` as a third
+verb. A daily `loop cycle` step in the rendered workflow, with `--memory`,
+`--config`, `--cassette-miss fail` (CI has no harness login) and the verdict
+written to `$GITHUB_STEP_SUMMARY` in words, because `no admissible failure
+memory` and `escalated` both exit 0. An advisory `aef doctor` check for an
+entry file that names neither the block nor the guide.
+
+**Precedence, decided and written down:** a code/manifest signal keeps the
+label, because the label selects the per-framework migration notes and a repo
+with real call sites still needs them; the prompt counts and the `aef migrate`
+step are reported under every label, so nothing is hidden the other way.
+
+**Appending is not overwriting, and ADR 0153 argues it rather than asserting
+it:** every pre-existing byte survives verbatim and outside the block, a
+re-run replaces only the block, deleting the block restores the file. The rule
+ADR 0034/0040 needed was *never destroy*; *never write* was a proxy that
+failed in the one case that mattered.
+
+**Measured on the clone, after:**
+
+```
+detected framework: prompt_files (8 agents, 5 skills, AGENTS.md, .codex)
+appended aef block to <clone>/.gitignore (your bytes outside it are unchanged)
+appended aef block to <clone>/AGENTS.md (your bytes outside it are unchanged)
+$ grep -c AEF <clone>/AGENTS.md
+2
+$ git -C <clone> diff --stat
+ .gitignore |  5 +++++
+ AGENTS.md  | 36 ++++++++++++++++++++++++++++++++++++
+ 2 files changed, 41 insertions(+)
+```
+
+Insertions only. `sha256` of the text outside the markers, and of all 260
+files in the tree, is identical after run 1 and run 2 — **a second `aef adopt`
+changes no byte of any file.** The first version of the change failed that,
+because the block quoted counts adopt itself changes; it was found by running
+adopt twice rather than by reading it, and the block now quotes only the
+`.claude/agents/*.md` count, with a test pinning that property.
+
+Three pinned "never overwrites" tests were rewritten **deliberately** to
+assert *the adopter's bytes are unchanged and the block is there* instead of
+*the file is unchanged*; `test_run_adopt_is_idempotent_on_second_run` stays at
+17/17, because a re-run reports the entry files as `skipped (already carries
+the current aef block)`. The emitted-command floor moves 30 → 50 (54 are
+extracted).
+
+Sixteen mutations, each reverted from a `shasum`-verified byte backup: 16 of
+16 detected. **Two survived the first pass and are recorded** — the block
+quoting the full surface (behaviourally equivalent once detection stopped
+counting adopt's own output; pinned by a new property test) and the third verb
+collapsing back into `skipped` (no test ran the CLI handler at all; one does
+now).
+
+**Still open, stated rather than implied.** The prompt-file sequence in the
+generated documents parses through the real CLI and has **not** been run end
+to end against the clone — that is M5 and M6. The live-cost sentence is a
+claim about how cassettes are keyed, not a measurement; the size of the noise
+floor is S2's. `detect_prompt_surface` is a file-shape heuristic tuned on
+seven repos with one owner.
+
+Green bar: `pytest -q` 2021 passed, 3 skipped (2002 -> 2024 collected, +22) · `mypy aef examples` clean ·
+`ruff check .` clean · `ruff format --check` clean · **0 model calls.**
