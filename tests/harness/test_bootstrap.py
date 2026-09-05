@@ -215,7 +215,13 @@ def test_bootstrap_refuses_a_duplicate_id_within_one_batch(tmp_path: Path) -> No
 def test_bootstrap_reports_how_many_runs_failed(tmp_path: Path) -> None:
     outcome = _run(tmp_path / "corpus", ("a", 1), ("b", 9), ("c", 9))
     assert outcome.failed == ("b", "c")
-    assert "2 of 3 recorded run(s) FAILED." in outcome.lines
+    # Both halves of one count, always, so an owner reading it knows which
+    # observation they have without a second line (ADR 0174). These inputs
+    # declare no checks, so the second half is zero and says so.
+    assert (
+        "2 of 3 recorded run(s) FAILED: 2 raised or ended with a failed plan, "
+        "0 failed an owner check — the task metric, which fails without an error (ADR 0113)."
+    ) in outcome.lines
 
 
 def test_bootstrap_says_so_when_nothing_failed(tmp_path: Path) -> None:
@@ -670,3 +676,182 @@ def test_an_empty_inputs_file_is_refused(tmp_path: Path) -> None:
     path.write_text("[]")
     with pytest.raises(BootstrapError, match="no inputs"):
         load_inputs(path)
+
+
+# --- ADR 0174: a failed owner check becomes failure memory -------------------
+
+
+def _checked_inputs(*specs: tuple[str, str]) -> tuple[BootstrapInput, ...]:
+    """Inputs carrying the owner's claim about the answer. Both fixture graphs
+    set `plan.goal` to the objective at `difficulty=1` and raise nothing, so a
+    `contains` check on a marker the objective does not carry fails with the
+    run entirely clean — which is the whole reproduction."""
+    return tuple(
+        BootstrapInput(
+            id=sid,
+            objective=f"task {sid}",
+            working_memory={"difficulty": 1},
+            checks=(TaskCheck(path="plan.goal", op="contains", value=marker),),
+        )
+        for sid, marker in specs
+    )
+
+
+def test_a_clean_run_that_fails_an_owner_check_leaves_failure_memory(tmp_path: Path) -> None:
+    """The wire ADR 0157 and ADR 0155 found from opposite ends. `_graph`
+    completes its plan and raises nothing, so `failure_signals` is empty and
+    the reflect node writes `kind="success"` — including for the input whose
+    owner check does not hold. Before ADR 0174 that outcome reached memory as
+    nothing at all and `aef loop cycle --memory` said `no admissible failure
+    memory` every cycle."""
+    sink = FileMemoryStore(path=tmp_path / "memory.jsonl")
+    outcome = bootstrap(
+        tmp_path / "corpus",
+        _reflecting_graph(),
+        _services,
+        inputs=_checked_inputs(("ok", "task ok"), ("bad", "NOT-IN-THE-GOAL")),
+        now=NOW,
+        agent_id="fixture",
+        memory_sink=sink,
+    )
+    # Neither run RAISED: `classify` is not the question a check answers.
+    assert outcome.failed == ()
+    assert outcome.check_failed == ("bad",)
+    assert outcome.failure_ids == ("bad",)
+
+    reopened = FileMemoryStore(path=tmp_path / "memory.jsonl")
+    failures = reopened.query("failure", limit=10)
+    assert [r.run_id for r in failures] == ["bad"]
+    assert failures[0].content["failed_checks"] == ["check:plan.goal:contains"]
+
+    text = "\n".join(outcome.lines)
+    assert "1 of 2 recorded run(s) FAILED: 0 raised or ended with a failed plan, " in text
+    assert "1 failed an owner check" in text
+    assert "check-derived FAILURE record" in text
+    # Never the "everything passes" complaint: these are exactly the runs that
+    # CAN demonstrate an improvement.
+    assert "cannot demonstrate an improvement" not in text
+
+
+def test_the_check_derived_record_carries_no_expected_value(tmp_path: Path) -> None:
+    """A lesson that carries the check's own answer is teaching to the test
+    (ADR 0157's caveat, ADR 0174's rule). The prompt proposer pastes this text
+    into the persona verbatim."""
+    sink = FileMemoryStore(path=tmp_path / "memory.jsonl")
+    bootstrap(
+        tmp_path / "corpus",
+        _reflecting_graph(),
+        _services,
+        inputs=_checked_inputs(("bad", "ZQX-UNMISTAKABLE-8817")),
+        now=NOW,
+        agent_id="fixture",
+        memory_sink=sink,
+    )
+    assert "ZQX-UNMISTAKABLE-8817" not in (tmp_path / "memory.jsonl").read_text()
+
+
+def test_a_check_that_holds_leaves_no_failure_record(tmp_path: Path) -> None:
+    sink = FileMemoryStore(path=tmp_path / "memory.jsonl")
+    outcome = bootstrap(
+        tmp_path / "corpus",
+        _reflecting_graph(),
+        _services,
+        inputs=_checked_inputs(("ok", "task ok")),
+        now=NOW,
+        agent_id="fixture",
+        memory_sink=sink,
+    )
+    assert outcome.check_failed == ()
+    assert FileMemoryStore(path=tmp_path / "memory.jsonl").query("failure", limit=10) == []
+
+
+def test_the_check_record_does_not_need_a_reflect_node(tmp_path: Path) -> None:
+    """`_graph` has none. The check is the OWNER's, declared before the run,
+    and evaluating it against what the run produced is recording what happened
+    — the same distinction `BootstrapInput` already draws between `checks` and
+    the `expected` key it refuses (ADR 0060). ADR 0145's sentence that a graph
+    without a reflect node leaves an EMPTY sink is therefore narrowed here, in
+    writing, rather than silently."""
+    sink = FileMemoryStore(path=tmp_path / "memory.jsonl")
+    outcome = bootstrap(
+        tmp_path / "corpus",
+        _graph(),
+        _services,
+        inputs=_checked_inputs(("bad", "NOT-IN-THE-GOAL")),
+        now=NOW,
+        agent_id="fixture",
+        memory_sink=sink,
+    )
+    assert outcome.memory_records == 1
+    assert outcome.check_failed == ("bad",)
+
+
+def test_the_report_counts_a_wrong_answer_as_a_failure(tmp_path: Path) -> None:
+    """S3b's reproduction: eight inputs, three content negatives the owner's own
+    checks caught, and `0 of 8 recorded run(s) failed. A corpus where everything
+    passes cannot demonstrate an improvement` printed underneath them. The count
+    was `classify`'s alone while the checks sat in the same inputs file.
+
+    Here: one input raises, one answers cleanly and fails its check, one passes.
+    One count, both halves named, and the "everything passes" advisory silent."""
+    raised = BootstrapInput(id="crash", objective="task crash", working_memory={"difficulty": 9})
+    outcome = bootstrap(
+        tmp_path / "corpus",
+        _reflecting_graph(),
+        _services,
+        inputs=(*_checked_inputs(("wrong", "NOT-IN-THE-GOAL"), ("right", "task right")), raised),
+        now=NOW,
+        agent_id="fixture",
+    )
+    assert outcome.failed == ("crash",)
+    assert outcome.check_failed == ("wrong",)
+    assert outcome.failure_ids == ("wrong", "crash")
+
+    text = "\n".join(outcome.lines)
+    assert (
+        "2 of 3 recorded run(s) FAILED: 1 raised or ended with a failed plan, "
+        "1 failed an owner check" in text
+    )
+    assert "cannot demonstrate an improvement" not in text
+    # Still distinguishable per scenario: a crash and a wrong answer need
+    # different fixes, so one label for both would hide which an owner has.
+    assert "  FAILED  crash" in text
+    assert "  WRONG   wrong" in text
+    assert "  passed  right" in text
+
+
+def test_a_wrong_answer_alone_silences_the_everything_passes_advisory(tmp_path: Path) -> None:
+    """The advisory is a claim about the corpus — that no gate reading it has
+    anything to hold a candidate to. With a failed owner check that claim is
+    false: these are exactly the runs that can demonstrate an improvement."""
+    outcome = bootstrap(
+        tmp_path / "corpus",
+        _reflecting_graph(),
+        _services,
+        inputs=_checked_inputs(("wrong", "NOT-IN-THE-GOAL")),
+        now=NOW,
+        agent_id="fixture",
+    )
+    text = "\n".join(outcome.lines)
+    assert "1 of 1 recorded run(s) FAILED" in text
+    assert "cannot demonstrate an improvement" not in text
+    # And nothing suggests a tripwire: no run raised, so there is no crash for
+    # an owner to label, and ADR 0060 keeps the label theirs either way.
+    assert "tripwire" not in text
+
+
+def test_a_graph_that_declares_no_checks_still_leaves_an_empty_sink(tmp_path: Path) -> None:
+    """ADR 0060 from the memory side, unchanged: with no checks declared there
+    is no owner claim to have failed, so bootstrap authors nothing at all."""
+    sink = FileMemoryStore(path=tmp_path / "memory.jsonl")
+    outcome = bootstrap(
+        tmp_path / "corpus",
+        _graph(),
+        _services,
+        inputs=_inputs(("easy", 1), ("hard", 9)),
+        now=NOW,
+        agent_id="fixture",
+        memory_sink=sink,
+    )
+    assert outcome.memory_records == 0
+    assert outcome.check_failed == ()

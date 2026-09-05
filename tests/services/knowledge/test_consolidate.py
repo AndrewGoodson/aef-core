@@ -93,6 +93,54 @@ def test_signature_survives_malformed_content() -> None:
     assert default_signature(_failure(run_id="r1", failing_nodes=[None, 42])) is None
 
 
+def test_a_check_derived_failure_is_signed_by_its_checks() -> None:
+    """ADR 0174. `harness.check_memory` records a run that answered cleanly and
+    failed the owner's task metric: no node raised, so `failing_nodes` is empty
+    and the node rule alone made these records UNSIGNABLE — invisible to this
+    whole layer, which is the shape ADR 0155 measured as zero entries."""
+    record = MemoryRecord(
+        kind="failure",
+        content={
+            "failing_nodes": [],
+            "failed_checks": ["check:working_memory.summary:contains"],
+            "verbal_feedback": "check failed",
+            "objective": "summarise",
+        },
+        run_id="r1",
+        agent_id="a1",
+        created_at=T1,
+    )
+    assert default_signature(record) == "failure:check:working_memory.summary:contains"
+
+
+def test_a_check_signature_takes_precedence_over_failing_nodes() -> None:
+    """Read first because the two describe different failures. In practice
+    they never co-occur — `check_failure_record` writes nothing when the run
+    carries errors — and the order is pinned so a record that somehow has both
+    is signed by the more specific one rather than by whichever branch a
+    refactor left on top."""
+    record = MemoryRecord(
+        kind="failure",
+        content={"failing_nodes": ["fetch"], "failed_checks": ["check:x:equals"]},
+        run_id="r1",
+        agent_id="a1",
+        created_at=T1,
+    )
+    assert default_signature(record) == "failure:check:x:equals"
+
+
+def test_a_malformed_failed_checks_falls_back_to_the_node_rule() -> None:
+    for bad in ("not-a-list", [], [None, 42]):
+        record = MemoryRecord(
+            kind="failure",
+            content={"failing_nodes": ["fetch"], "failed_checks": bad},
+            run_id="r1",
+            agent_id="a1",
+            created_at=T1,
+        )
+        assert default_signature(record) == "failure:fetch"
+
+
 def test_success_signature_uses_objective() -> None:
     assert default_signature(_success(run_id="r1", objective="ship it")) == "success:ship it"
 
