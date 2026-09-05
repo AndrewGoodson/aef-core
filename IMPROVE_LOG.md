@@ -4261,3 +4261,86 @@ candidate is scored live or not at all with S2's floor as the bar.
 **Green bar.** `pytest -q`: 2511 passed, 7 skipped, 4 xfailed (2522 collected,
 2516 before — +6, none removed). `mypy aef examples`: 134 files clean.
 `ruff check .` clean. `ruff format --check aef tests examples`: 271 files clean.
+
+## S6 / J4 — The two signals, and which one came apart (2026-09-05)
+
+ADR **0162**. Worker S6 of `UPGRADE_LOOP.md` (BEYOND_90's J4). Two rigs, one
+point. **Dimension 3: 7 → 8** (heading 70 → 71). **Dimension 2: stays 12.**
+**90 live calls of 90**, on `claude-opus-5[1m]` (session default),
+`claude-haiku-4-5-20251001` and `claude-sonnet-5`, all through the harness
+login with no key. Pre-registered in `docs/research/j4/prereg.txt` before the
+first measurement call, amended twice, each amendment before the calls it
+governs.
+
+**Rig A — the self-preference control, which could not exist until now.** Four
+ADRs (0115, 0123, 0159, 0171) recorded the same absence, and the obstruction
+was structural: `LLMJudge` grades ONE state, so a judge could not prefer its
+own writing even in principle. Eleven pairs of summaries of the same passage,
+from a byte-identical recorded request — the cassette's (Opus) and a live one
+(Haiku) — ranked by both those models and by a **disinterested** third that
+wrote neither, position-swapped, with neither the caller's label nor the
+writer's model anywhere in the prompt (asserted against the requests actually
+issued, not intended).
+
+    prefers the Opus-written summary   opus 0.714  haiku 0.444  sonnet 0.455
+    self-preference vs the disinterested judge   opus +0.260   haiku +0.010
+    agrees with the owner's checks (5 discriminating pairs)  2/3 · 5/5 · 5/5
+    position-inconsistent                        4/11 · 2/11 · 0/11
+
+The effect is measured PRESENT and **attributed to one judge**, which the
+two-arm design could not have done: its difference-in-differences (+0.270) was
+accidentally right only because Haiku's bias is ~0. The disinterested judge is
+better on all three statistics.
+
+**Mitigation implemented and re-measured** (the pre-registered second branch —
+present-and-unmitigated would have been +0). `PairwiseRanker` in
+`aef/reasoning/llm_reflection.py`: `allow_self_ranking=False` **refuses** rather
+than warning (ADR 0105's reasoning — an automatic fallback is weaker than a
+refusal), guarded twice because this repo's own default is `model: ""` and the
+name is unknown until the call answers, and suffix-normalised so
+`claude-opus-5[1m]` cannot slip past `claude-opus-5`. The shipped prompt is the
+prompt that was measured, proved rather than claimed: sha256 pinned in the test
+and the runner now imports the shipped strings instead of holding copies.
+
+**Amendment 1, found by the dry run before any measurement call:** only
+`sum-21`…`sum-39` were recorded on `claude-opus-5[1m]`. The corpus's original
+twenty are **`claude-fable-5-1`** recordings, six of them in validation. ADR
+0171 says nothing false, but a self-preference control over a Fable-written
+summary measures nothing, so rig A uses the eleven Opus-recorded validation
+scenarios and `load_pairs` now refuses the rest.
+
+**Rig B — the harmful-and-resolved lesson, and why the point is not taken.**
+The lesson came out of shipped code over the corpus's seven cap negatives
+(records built the way ADR 0157 built its evidence, because M4b/ADR 0174 had
+not landed) and into the prompt through the shipped retriever and renderer. Ten
+live runs. On the five harm probes it made two runs **longer** and broke the
+cap check it is about — harmful AND live, ADR 0118's coincidence again, by a
+mechanism nobody predicted: 330 characters of prior-failure prose containing a
+38-word example summary, inserted before the passage. Zero content checks
+flipped, so the pre-registered condition did not fire.
+
+The one run of the shape J4 wanted turned up in the *help* arm — `sum-35`, cap
+resolved 30 → 28 words, a content regex broken — and it is **fragile**: the
+regex admits "stays open" and not "staying open", which under ADR 0171's own
+standard is a check to widen, not a content loss. And the shipped `_tally`,
+**run** over the ten runs rather than reasoned about, reads
+`helpful=7 harmful=3` with that very run counted **helpful**, because harm is
+defined as "reproduced this signature" and `sum-35` produced a different one.
+Ranking on the tally would rank on a signal that moves the wrong way as harm
+increases. `memory_retriever.py` is untouched; the one-line blocker is named
+in `consolidate.py` for whoever takes dimension 2 next.
+
+**Reported, not fixed.** (1) Six corpus scenarios are `claude-fable-5-1`
+recordings and nothing states it; the quota for that model is exhausted, so
+they cannot be re-recorded. (2) A retrieved lesson made the failure it
+describes MORE likely, twice — no measurement in this repo has looked for
+that, because ADR 0110's A/B scored retrieval coverage and ADR 0155's arms
+compared prompts. (3) `_tally`'s inversion.
+
+**Green bar.** `pytest -q` 2423 passed / 6 skipped (from 2408; +15); `mypy aef
+examples` clean on 132 files; `ruff check .` clean; `ruff format --check aef
+tests examples docs/research/j4` 267 files formatted. 5 mutations against the
+new test, 5 caught, control green before and after, every restore proved by
+sha256 equality with a byte backup. `test_a_timed_out_container_is_actually_dead`
+failed on a later full-suite run and passes in isolation — ADR 0171's docker
+flake on the same test, noted rather than attributed here.

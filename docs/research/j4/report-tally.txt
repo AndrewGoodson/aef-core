@@ -1,0 +1,16 @@
+first generation: failure:check:working_memory.summary:max_words x7, helpful/harmful 0/0 (no run had it in context yet)
+
+run                           own signature                                      reproduced the lesson?
+-------------------------------------------------------------------------------------------------------
+sum-23-cransley-cut           failure:check:working_memory.summary:max_words                        yes
+sum-24-pellow-mill            success:summarise sum-24-pellow-mill in at most 12 words                     NO
+sum-31-quernmore-kiln         success:summarise sum-31-quernmore-kiln in at most 26 words                     NO
+sum-34-alder-carr             success:summarise sum-34-alder-carr in at most 30 words                     NO
+sum-39-coldbeck-society       failure:check:working_memory.summary:max_words                        yes
+sum-22-marlowe-street         success:summarise sum-22-marlowe-street in at most 30 words                     NO
+sum-30-ganister-tarn          success:summarise sum-30-ganister-tarn in at most 28 words                     NO
+sum-33-cotterdale-bus         success:summarise sum-33-cotterdale-bus in at most 25 words                     NO
+sum-35-priory-gatehouse       failure:check:working_memory.summary:regex                             NO
+sum-36-larkfield-quarry       failure:check:working_memory.summary:max_words                        yes
+
+failure:check:working_memory.summary:max_words     x10  helpful=7 harmful=3
