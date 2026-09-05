@@ -19,7 +19,7 @@ A self-graded number is exactly the failure the trust case warns about.
 | 7 | Real-signal ingestion | 10 | Learns from live runs and real tenants, not a synthetic corpus; telemetry closes the loop | Arize "closing the loop"; Live-SWE-agent (on-the-fly) |
 | 8 | Adoptability / harness-native | 5 | Drops into a repo whose agents are coding-agent sessions; no key; cross-tool | — |
 
-## Current — 2026-09-04 after J0 — **68 / 100**
+## Current — 2026-09-04 after J0 — **69 / 100**
 
 *Corrected 2026-09-04 (ADR 0127): every total in this file up to and
 including this one was carried forward by hand as `previous + delta` and
@@ -30,6 +30,7 @@ from the rows, so a total nobody checked cannot recur.*
 
 | # | Score | What moved and the artifact |
 |---|---|---|
+| 4 | 15/15 | S5 / J3 (ADR 0161): the 14 read "one point off: shadow containment is opt-in". Reproduced by running — on a box WITH docker and the worker image, `ShadowRunner(incumbent, candidate)` refused exactly as it does with neither, and the one-line way past it was `uncontained=True`; the escaping node's write landed on the host. `shadow_for` now resolves a runtime, verifies isolation both directions and returns a contained runner: same node, same box, no arguments, host marker **False**. `shadow.containment: auto` is the default and **refuses rather than falling back** (an automatic fallback would be weaker than ADR 0105's refusal); `fallback`/`off` are owner statements in `aef.yaml`, announced on stderr and written to the ledger as `EventKind.CONTAINMENT` with `security_event: True`, which `build_digest` counts. J0's deduction answered in both halves: the renamed `test_the_in_process_bypass_exists_only_when_an_owner_opts_out_and_is_logged` keeps proving the bypass real under opt-out and adds that the default cannot reach it, and the adversarial-round record's two BROKE-IT attacks are named at the tests that re-execute them. 5 mutations, 5 caught; +15 tests |
 | 1 | 15/20 | J0 (ADR 0151): the repo's own scheduled `aef loop cycle` passes no `--memory` and exits 0 every night with `no memory store configured … no candidate`; the adopter's rendered workflow has no cycle step. Verified. "Automatically" is unmet |
 | 2 | 12/20 | J0 (ADR 0151): `make_retrieve_node` writes `retrieved_context` and no prompt reads it — `draft_node` builds from `working_memory` alone; the knowledge A/B measures a retrieval-coverage proxy, never a task score. Verified. I12 as designed would have measured four identical arms |
 | 3 | 6/10 | J0 (ADR 0151): the 3/18 vs 9/18 judge A/B exists as a docstring citing an ADR — no test, script or committed data; no judge scored against a real model in-repo; no self-preference control. Verified |

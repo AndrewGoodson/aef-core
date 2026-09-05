@@ -61,6 +61,12 @@ class EventKind(StrEnum):
     KEPT = "kept"
     ROLLED_BACK = "rolled_back"
     HALTED = "halted"
+    # What a shadow run's evidence was gathered UNDER (ADR 0161). A gate
+    # outcome cannot be read without it, and an uncontained shadow whose only
+    # trace is a line on stderr is a condition nobody reviewing the ledger a
+    # week later can see. Entries for an uncontained run also carry
+    # `security_event: True`, which is what puts them in the owner's digest.
+    CONTAINMENT = "containment"
 
 
 @dataclass(frozen=True)
