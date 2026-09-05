@@ -4985,3 +4985,170 @@ moves** — this is apparatus.
 every-graph scan, unreachable under a widened root), which belongs to another
 worker; and the generated `FIRST_DAY.md`/`aef.yaml` templates say nothing about
 the new opt-in — the exact paragraph M7 should place is in ADR 0181.
+
+## M6 — the pilot, on the clone (ADR 0163)
+
+The clone at `<scratchpad>/pilot-marlin`, **copied first** and with its `origin`
+remote (which pointed at `/Users/raptor/marlin`) removed before anything ran, so
+the pilot could not reach the owner's checkout even by mistake. **41 live calls**
+of a ≤ 80 budget; every offline reproduction cost nothing; **no file under
+`aef/` was modified**.
+
+`adopt` re-run on a repo adopted by an older `aef` appended blocks to five entry
+files — `CLAUDE.md`, `.gitignore`, `AGENTS.md`, `.github/copilot-instructions.md`,
+`.cursor/rules/aef.mdc` — and a **second** `adopt` left all five byte-identical
+(`shasum -c`: five OKs), with `git diff --numstat` still `36 0` / `5 0`:
+insertions only, ADR 0153/0172 holding on a real repo. `migrate` wrote **8**
+prompt-agent graphs. `model: ""` was confirmed to mean the session default —
+every run's provenance says `claude-opus-5[1m]` — and `gates.live_model_calls:
+true` is recorded as the owner's opt-in with what it permits stated in the
+owner's terms (ADR 0181).
+
+**Five real objectives, drawn from marlin's own `AGENTS.md` and persona bodies,
+across three personas** (`marlin-accela` x2, `marlin-source` x2,
+`marlin-reviewer` x1) — whether to flip the Clearwater connector now that
+credentials exist; the TAMPA server-to-server token request; a 2000-feature
+ArcGIS page with no `exceededTransferLimit`; the Socrata watermark field; a
+`handoff-v1` packet with a sender/receiver collision and disagreeing tree SHAs.
+Answered live at 453–949 words each, `--tools ""`, with the containment block
+(`no_mcp`, `no_project_context`, `no_tools`, `single_turn`, `system_role`;
+persona in the system channel) recorded on every one.
+
+**The redaction scan ran on every recorded run: 0 input substitutions, 0 output
+matches, 0 dropped keys.** A zero from a scanner that never ran looks identical,
+so ADR 0119's control was RUN rather than assumed: 5 of 5 planted credential
+shapes caught (`email`, `api_key`, `bearer`, `aws_key`, `opaque_secret`), 2 of 3
+secret-shaped working-memory keys dropped. **The residual is named**: marlin's
+own subscription UUID — the identifier its boundary rule is written around — is
+**not** matched, because ADR 0126 removed `-` from `opaque_secret` to stop
+redacting hyphenated English. An owner with UUID-shaped secrets extends the list.
+
+**Then the finding.** `aef loop harvest` promoted **0 of 5** and rejected all
+five as *did not re-execute deterministically*, and that is a defect in two
+parts, each isolated to one variable offline:
+
+- **F-M6-1** — `aef run --record-runs` builds `RecordedRun(...)` with no
+  `model_calls=`, so the determinism re-check replays against an **empty
+  cassette**. `RecordedRun.model_calls`' own docstring predicted exactly this
+  and called it *"a correct-looking rejection for the wrong reason"*.
+  `recorder.py` (which `record` and `bootstrap` use) wraps the provider and
+  stores the calls; `aef run --record-runs` is the one recording path that does
+  not, and the only one `harvest`, `cycle --runs` and the generated cron are fed
+  from.
+- **F-M6-2** — with the cassette supplied by hand the run is **still** rejected:
+  `harvest._reexecution_services` builds `CassetteProvider(None, …)` with no
+  inner provider, so ADR 0169's `prompt_agent__containment` re-executes as
+  `isolation: []`, `persona_role: 'unknown'` against a recorded `['no_mcp',
+  'no_project_context','no_tools','single_turn','system_role']`, `'system'`, and
+  `_reexecutes_identically` compares the encoded trace **byte for byte**. Two
+  mechanisms that are each right; their join is a field the re-check has no
+  provider to derive.
+
+Three arms, offline, zero calls: **as shipped → rejected; + the cassette →
+rejected; + a provider for the re-check → PROMOTED.** So **no run of any
+`aef migrate`-generated prompt-agent graph has ever been harvestable, on any
+repo.** ADR 0151's J0 scored dim 7 at 4/10 on the inference that no live signal
+has ever entered harvest; this is the mechanism behind it, and it is worse than
+the inference — the step exists, is documented, exits 0, and refuses its input
+with a message naming the one explanation the evidence rules out.
+
+**F-M6-3** — `aef loop cycle --runs` is a silent no-op without `--module`
+(`graph = load_graph_reference(args.module) if args.module else None`, and the
+harvest leg is guarded on `graph is not None`). Reproduced on two `--no-memory`
+invocations differing in one flag: with `--entrypoint` alone, no harvest line at
+all; add `--module` and it reports. ADR 0176's "two spellings of which graph" in
+a fourth place.
+
+**So `bootstrap` populated the corpus, and the ADR says so wherever it matters.**
+Five real objectives, **one uniform owner check** written from the persona's own
+rule — the answer must name `developer.accela.com`, because the Developer Portal
+issues App ID/Secret and the ACA citizen portal does not — applied unchanged to
+every input. 2 of 5 failed it, in two distinct runs, under one signature
+(`check:working_memory.prompt_agent:contains`, keyed without its value, ADR
+0174), which is what made a lesson possible.
+
+**One live cycle**, ADR 0181's form. Candidate: one four-line bullet appended to
+marlin's own persona, `runs=2`, **carrying no excerpt of the model's output** —
+ADR 0180's finding 2 visible in the wild. `live_model_calls: True`; 7 corpus
+passes, **35 scenario executions**, 30 of them live misses served inside the
+worker; G0 pass, G1 pass, G4 pass, G5 pass (**drift 0.007/0.500**), **G2 pass**
+(5 re-executed, every previously-passing one still passes) and **G3 FAIL — "1
+previously-passing scenario(s) now score below 0.5"**. Read against ADR 0181 on
+the same repo, persona and proposer, that is a **third and different rejection**:
+0158's was the worker's login, 0181's was a null result, **this one is a
+regression the lesson caused** — with the excerpt already removed, so the
+excerpt was not the whole mechanism. And **G2 passed while G3 failed on the same
+run**, which is ADR 0162's two conflated signals separating in the wild. The
+ledger does not say *which* scenario regressed; reported, not fixed.
+
+`monitor` and `digest` are what an owner reads the next morning, and the digest
+prints **"Production runs recorded: 5"** and **"Scenarios added to the corpus:
+0"** side by side and draws no line between them; its recording warning fires
+only when the count is zero, so with `--runs` omitted it advises passing
+`--record-runs` to a pilot that had already done so five times.
+
+**Pinned rather than fixed:** one strict xfail in
+`tests/cli/test_prompt_repo_acceptance.py` running `adopt → migrate → run
+--record-runs → harvest --include-successes` on the synthetic repo and the
+`command` stub, asserting `promoted 1 run(s)` — offline, no credential, red the
+day **both** blockers close and correctly still xfailing if only one does; plus
+one passing description making F-M6-1's single line greppable. F-M6-3 is written
+down and deliberately not pinned, because a test asserting today's silence would
+be a test asserting a defect.
+
+**Green bar:** `pytest -q` 2721 passed / 7 skipped / 2 xfailed (2730 collected,
+from 2728 — **+2**, none removed), `mypy aef examples` clean (135 files),
+`ruff check .` clean, `ruff format --check` 280 files. Two non-regressions
+recorded because both look like one: run the suite with
+`PATH=<repo>/.venv/bin:$PATH` — without it 30 tests fail on `No such file or
+directory: 'python'` because `run_sandboxed` scrubs `PATH` to its allowlist —
+and `test_a_timed_out_container_is_actually_dead` failed once on a loaded box
+mid-pilot and passed in isolation and on the clean re-run.
+
+**Still requires a person:** the real checkout, a third party, the two blockers,
+and a redaction pattern list that covers this repo's own UUID.
+
+## S7 / J1 — real signal, bounded, and the falsification that fired (ADR 0164)
+
+**Claimed in advance: dimension 7, 4 → 6 (+2). Claimed after the evidence: +0,
+and the rubric is not edited.**
+
+The condition was written down before the pilot ran: (a) real runs enter the
+corpus **through `harvest`**, redaction on, counts quoted; (b) a candidate is
+proposed **from that evidence**, not from bootstrap-synthesised inputs; (c) the
+gates reach a live verdict. With the branches beside it: (a) but no proposal →
++1; **harvest refuses every run → +0 and quote why**; the last +3 unclaimed
+either way.
+
+**Harvest refused every run** (M6's F-M6-1 and F-M6-2, both reproduced with a
+passing control arm), so the third branch fired. (b) and (c) both held — a
+candidate was proposed and the gates reached `REJECT` on it live, under
+`live_model_calls: true`, with 30 live completions inside the worker — but from
+`bootstrap`'s evidence, which (b) excludes by name. `bootstrap` is the system
+asking itself questions; the dimension is about signal the system did not
+commission, and a loop that learns only from questions it chose has no defence
+against choosing the ones it already answers well.
+
+**The last +3 stays unclaimed, with the reason: marlin is the owner's own
+repository, not a third party.** Every objective was written by the same process
+that read the personas, so "a repo nobody wrote to pass" is true of the repo and
+not of the objectives. The tenant half of dimension 7 needs someone else's
+traffic, someone else's secrets in the redaction scan, and someone else's
+judgement of whether the answers were right.
+
+**Recorded and deliberately not acted on:** the pilot is evidence that J0's
+4/10 is generous — the `--runs` path is not merely unpopulated, it is unusable
+for every model-calling graph. S7 does **not** lower the base, because a worker
+that can lower a base can raise one, and `UPGRADE_LOOP.md` gives base moves to
+J0. It is written down so the next independent re-score has it in hand.
+
+A rubric row was drafted and deleted rather than softened. It would have read
+*"real runs reached memory and the gates judged a lesson built from them"* —
+every word true, none of it the thing dimension 7 scores. The heading stays
+**72 / 100** and `tests/test_rubric_arithmetic.py` recomputes it from the rows.
+
+The most useful thing the pilot produced belongs to dimension 2, not 7, and is
+left for whoever re-opens it: **G3 rejected because a scenario the incumbent
+passed dropped below 0.5 with the lesson in the prompt** — a regression on the
+task metric from a rule-based lesson whose model excerpt ADR 0180 had already
+removed.

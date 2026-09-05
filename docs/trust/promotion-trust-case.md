@@ -239,6 +239,40 @@ correctly when connected to something real. That gap is not one more test
 away — it needs an adopter with traffic, and **it is unaffected by the fix
 above**.
 
+**Status update, 2026-09-05 (ADR 0163, the marlin pilot). Facts only; neither
+criterion's assessment changes.** The pilot ran the whole ingestion sequence on
+a copy of a real prompt-file repo — `adopt` → `migrate` → five real objectives
+through `aef run --record-runs` under the real harness → `aef loop harvest` →
+`bless` → `doctor` → one `cycle --cassette-miss live` → `monitor`/`digest`.
+Three facts this document did not have:
+
+1. **The ingestion path is not merely unused; it does not work.** `harvest`
+   promoted **0 of 5** real recorded runs and rejected all five as "did not
+   re-execute deterministically", for two reproduced defects (ADR 0163's F-M6-1
+   and F-M6-2). No run of any `aef migrate`-generated prompt-agent graph is
+   harvestable today, on any repo. So the sentence above — "a mechanism that
+   would do those things correctly when connected to something real" — is not
+   established for this path, and the pilot is the first time it was tested.
+2. **The redaction step in front of criterion 6 was exercised and scanned
+   clean, with a control and a named residual.** 0 substitutions and 0 output
+   matches across five real runs; 5 of 5 planted credential shapes caught by the
+   same policy; and the default pattern list does **not** match that repo's own
+   subscription UUID, which is the identifier its boundary rules are written
+   around. An adopter extends the list; the default is not sufficient for a
+   tenant whose secrets are UUID-shaped.
+3. **The gates did reach a live verdict on a candidate built from real
+   evidence** — `live_model_calls: true`, 35 scenario executions, 30 of them
+   live inside the sandbox worker, REJECT by G3 because one previously-passing
+   scenario's score fell below 0.5. That is criterion 1's *mechanism* working
+   end to end on a real repo; it is not criterion 1's *evidence*, because the
+   runs it judged were commissioned by an inputs file rather than arriving as
+   traffic, and marlin is the same owner's repository rather than a tenant.
+
+**Neither criterion moves, and the residual-risk number is unchanged.** What
+the pilot removes is an assumption: "connect it to something real and it will
+work" was untested and is now known to be false for the harvest leg until two
+defects are closed.
+
 ### 2.2 The canary cannot see a narrow enough regression
 
 Demonstrated, and previously recorded as a limit rather than found by attack:

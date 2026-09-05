@@ -1,0 +1,8 @@
+recorded 3 scenario(s) in the train split
+  WRONG   accela-clearwater
+  passed  accela-tampa-token
+  passed  accela-pinellas
+1 of 3 recorded run(s) FAILED: 0 raised or ended with a failed plan, 1 failed an owner check — the task metric, which fails without an error (ADR 0113).
+  recording spent 3 live model call(s). Recording is the one pass that is SUPPOSED to be live: the gates replay these from each scenario's cassette and need no credential (ADR 0123).
+  4 memory record(s) written to the durable store — what the graph's own reflect node observed, nothing bootstrap decided. `aef loop cycle --memory <the same file>` proposes from these.
+  1 of them is/are a check-derived FAILURE record: the owner's check, evaluated against what the run produced (ADR 0174). A signature recurring in two distinct runs becomes a lesson (ADR 0110).

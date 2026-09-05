@@ -1,0 +1,13 @@
+
+== arm 0 — as shipped (`aef run --record-runs`)
+   promoted 0 run(s) to the train split
+     1 REJECTED, did not re-execute deterministically: 45624a03-fc13-40da-b5af-0d94ad8fafb4
+
+== arm 1 — + the cassette the recorder never wrote
+   promoted 0 run(s) to the train split
+     1 REJECTED, did not re-execute deterministically: 45624a03-fc13-40da-b5af-0d94ad8fafb4
+
+== arm 2 — + the provider the re-check never has (patched in THIS process)
+   promoted 1 run(s) to the train split
+
+corpus after arm 2: ['manifest.json', 'train/45624a03-fc13-40da-b5af-0d94ad8fafb4.json']

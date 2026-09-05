@@ -723,6 +723,100 @@ def test_the_sandbox_env_allowlist_carries_what_the_harness_login_needs() -> Non
     assert "USER" in widened.env_allowlist
 
 
+# M6 (ADR 0163) extends the sequence past `cycle` to the leg the trust case's
+# criterion 1 actually names: a run recorded from production, harvested into
+# the corpus. On the marlin pilot that leg promoted 0 of 5 real runs. Both
+# causes are pinned here, offline, against the same synthetic repo and the same
+# `command` stub — no credential, no model, and they fail loudly the day either
+# is fixed.
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "F-M6-1 and F-M6-2, in series. (1) `aef run --record-runs` constructs "
+        "`RecordedRun(...)` with no `model_calls=`, so the field defaults to `()` and "
+        "harvest's determinism re-check replays against an empty cassette — the exact "
+        "failure `RecordedRun.model_calls`' own docstring calls 'a correct-looking "
+        "rejection for the wrong reason'. (2) Even with the cassette supplied, "
+        "`harvest._reexecution_services` builds `CassetteProvider(None, ...)` with no "
+        "inner provider, so ADR 0169's `prompt_agent__containment` re-executes as "
+        "`isolation: [], persona_role: 'unknown'` against the recorded values, and "
+        "`_reexecutes_identically` compares the encoded trace byte for byte. So NO run "
+        "of any `aef migrate`-generated prompt-agent graph is harvestable, on any repo"
+    ),
+)
+@pytest.mark.slow
+def test_a_recorded_production_run_can_be_harvested_into_the_corpus(
+    prompt_repo: tuple[Path, Path],
+) -> None:
+    repo, tmp_path = prompt_repo
+    runs = tmp_path / "runs"
+    assert _aef(repo, "adopt", "--dir", ".").returncode == 0
+    assert _aef(repo, "migrate", "--dir", ".").returncode == 0
+    (repo / "aef.yaml").write_text(STUB_CONFIG)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "migrated")
+
+    run = _aef(
+        repo,
+        "run",
+        MODULE,
+        "--objective",
+        "May the Clearwater connector be enabled?",
+        "--config",
+        "aef.yaml",
+        "--record-runs",
+        str(runs),
+    )
+    assert run.returncode == 0, run.stderr
+    recorded = sorted(runs.glob("*.json"))
+    assert len(recorded) == 1, [p.name for p in recorded]
+
+    harvest = _aef(
+        repo,
+        "loop",
+        "harvest",
+        MODULE,
+        "--runs",
+        str(runs),
+        "--corpus",
+        "corpus",
+        "--state",
+        str(tmp_path / "loop-state"),
+        "--include-successes",
+    )
+    assert harvest.returncode == 0, harvest.stderr
+    assert "promoted 1 run(s)" in harvest.stdout, harvest.stdout
+
+
+def test_the_recorder_pins_the_cassette_the_determinism_check_needs() -> None:
+    """F-M6-1, narrowed to the one line that causes it.
+
+    `aef loop record` and `aef loop bootstrap` both go through `recorder.py`,
+    which wraps the provider in a `CassetteProvider` and stores
+    `recording.recorded` on the scenario. `aef run --record-runs` is the one
+    recording path that does not — and it is the only one `harvest`, `cycle
+    --runs` and the generated nightly workflow are fed from.
+
+    This asserts what is TRUE TODAY, so it is a description rather than a pin,
+    and the xfail above is what turns red when the defect is fixed. Its job is
+    to make the cause greppable from the test suite.
+    """
+    import inspect
+
+    from aef.cli import run as run_cli
+    from aef.harness import recorder
+
+    source = inspect.getsource(run_cli.run_graph_module)
+    assert "RecordedRun(" in source
+    assert "model_calls=" not in source, (
+        "aef/cli/run.py now passes model_calls to RecordedRun — F-M6-1 may be fixed; "
+        "check the strict xfail above."
+    )
+    assert "model_calls=recording.recorded" in inspect.getsource(recorder)
+
+
 # --------------------------------------------------------------------------
 # The live half — opt-in, against a clone of a real prompt-file repo.
 # --------------------------------------------------------------------------

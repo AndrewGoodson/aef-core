@@ -1,0 +1,34 @@
+The five real objectives, and the first line of each answer.
+Both are shown AFTER ADR 0119's redaction policy has been applied; the
+substitution count for every one of them was 0 (see 05-redaction-scan.txt).
+
+O1  graph_id=marlin-accela  run_id=9c48f5c9-746a-4a8f-ad9c-e78968e6c838
+    objective:  The City of Clearwater has just provisioned Marlin-owned Accela app credentials in Key Vault. Should the Clearwater Accela connector's enabled flag be set to true on the next ingestion run?
+    answer[0]:  **Short answer: No.** Credentials are gate #1 of two. `enabled` stays `false`.
+    answer len: 514 words, 3324 chars
+    containment: {'isolation': ['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role'], 'persona_role': 'system', 'provider': 'claude_code'}
+
+O2  graph_id=marlin-accela  run_id=22a5f0ec-8744-4076-a34e-4dc03c7abe21
+    objective:  For agency TAMPA in the PROD environment, which OAuth2 grant type and which request parameters does a server-to-server Accela v4 token request need, and where do the App ID and App Secret come from?
+    answer[0]:  ## Answer (advisory — no calls made, no credentials touched)
+    answer len: 563 words, 3843 chars
+    containment: {'isolation': ['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role'], 'persona_role': 'system', 'provider': 'claude_code'}
+
+O3  graph_id=marlin-source  run_id=7d10629e-0855-493e-8606-f744999b92d2
+    objective:  An ArcGIS permit layer returned a page of 2000 features with no exceededTransferLimit flag. Fetched 2000, lake 2000, published 2000. Is this run reconciled, and may scheduled ingestion be enabled?
+    answer[0]:  ## Answer: No, and no.
+    answer len: 453 words, 3140 chars
+    containment: {'isolation': ['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role'], 'persona_role': 'system', 'provider': 'claude_code'}
+
+O4  graph_id=marlin-source  run_id=491c4102-0bc4-437f-9089-c24efedab233
+    objective:  A Socrata permit dataset exposes issue_date, last_updated and :updated_at. Which field is the ingestion watermark, what grace_days does it need, and which tests must pass before the schedule is enabled?
+    answer[0]:  ## Answer
+    answer len: 949 words, 6482 chars
+    containment: {'isolation': ['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role'], 'persona_role': 'system', 'provider': 'claude_code'}
+
+O5  graph_id=marlin-reviewer  run_id=999d7f25-ee17-46da-b300-6a156d1c2a02
+    objective:  A handoff-v1 packet names marlin-implementer as both sender and receiver, carries three evidence entries whose git_tree_sha values disagree, and sets explicit_authorization to false. What review status applies and may it recommend ship?
+    answer[0]:  ## Review result
+    answer len: 620 words, 4270 chars
+    containment: {'isolation': ['no_mcp', 'no_project_context', 'no_tools', 'single_turn', 'system_role'], 'persona_role': 'system', 'provider': 'claude_code'}
+

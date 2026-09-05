@@ -1,0 +1,90 @@
+{
+ "at": "2026-09-05T07:50:14.238444+00:00",
+ "detail": {
+  "archive_version": 1,
+  "blessed": true
+ },
+ "entry_hash": "43c0ebd69fb9e33a074e016765cd7d97ea4e0dfb35b6f38c91733ef0f3e9097e",
+ "kind": "blessed",
+ "previous_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+ "proposal_id": "baseline@marlin-accela",
+ "sequence": 1,
+ "summary": "owner-blessed baseline archived"
+}
+{
+ "at": "2026-09-05T07:50:43.970166+00:00",
+ "detail": {
+  "base": "main",
+  "head": "loop/cycle-20260905T075043-prompt",
+  "paths": [
+   ".claude/agents/accela-agent.md"
+  ]
+ },
+ "entry_hash": "abd3d4fd2f1f23a07394223220db1a37523a0d099bb0e3246786e6c616192ac1",
+ "kind": "proposed",
+ "previous_hash": "43c0ebd69fb9e33a074e016765cd7d97ea4e0dfb35b6f38c91733ef0f3e9097e",
+ "proposal_id": "loop/cycle-20260905T075043-prompt@f5a698d89384",
+ "sequence": 2,
+ "summary": "1 file(s), 4 line(s)"
+}
+{
+ "at": "2026-09-05T07:50:43.970166+00:00",
+ "detail": {
+  "evidence": "7 corpus pass(es) (35 scenario execution(s)): 1 candidate + 1 incumbent + 5 random control(s); 5/5 gated scenario(s) recorded from graph 'marlin-accela'",
+  "gates": [
+   {
+    "gate": "G0",
+    "outcome": "pass",
+    "reason": "1 file(s), 4 line(s), all Zone A; 0 Python file(s) statically scanned, no violations; 1 NOT statically scanned (not Python \u2014 an AST gate has nothing to say about them, and G1/G2/G5 judge them instead)"
+   },
+   {
+    "gate": "G1",
+    "outcome": "pass",
+    "reason": "1 build command(s) succeeded against the merged workspace"
+   },
+   {
+    "gate": "G4",
+    "outcome": "pass",
+    "reason": "no owner-only safety metadata declared by the candidate"
+   },
+   {
+    "gate": "G5",
+    "outcome": "pass",
+    "reason": "0/3 accepted in the last 7d; drift 0.007/0.500 from the blessed baseline"
+   },
+   {
+    "gate": "G2",
+    "outcome": "pass",
+    "reason": "5 scenario(s) re-executed; every previously-passing one still passes. 0 changed routing (reported, not rejected)."
+   },
+   {
+    "gate": "G3",
+    "outcome": "fail",
+    "reason": "1 previously-passing scenario(s) now score below 0.5 (zero tolerance, regardless of the aggregate)"
+   }
+  ],
+  "grounded_in": [
+   "checkfail-3073e89f508052fcba1c981209593db4 (memory): failure:check:working_memory.prompt_agent:contains recurred",
+   "checkfail-7b6e5115de38aa72ae69304a01c64478 (memory): failure:check:working_memory.prompt_agent:contains recurred"
+  ],
+  "live_model_calls": true,
+  "proposer": "rule_based_prompt",
+  "security_gates": []
+ },
+ "entry_hash": "c514a96ad7c0cbbc07d5c7deeb78449b2787f969efab2271cb1b89b733b8efbf",
+ "kind": "gated",
+ "previous_hash": "abd3d4fd2f1f23a07394223220db1a37523a0d099bb0e3246786e6c616192ac1",
+ "proposal_id": "loop/cycle-20260905T075043-prompt@f5a698d89384",
+ "sequence": 3,
+ "summary": "ran G0, G1, G4, G5, G2, G3; passed=False"
+}
+{
+ "at": "2026-09-05T07:50:43.970166+00:00",
+ "detail": {},
+ "entry_hash": "b48eb69e0a471e25fbfa5f88a88c4bdea2245e2bc8a295bbdb506fbc5cce8edb",
+ "kind": "rejected",
+ "previous_hash": "c514a96ad7c0cbbc07d5c7deeb78449b2787f969efab2271cb1b89b733b8efbf",
+ "proposal_id": "loop/cycle-20260905T075043-prompt@f5a698d89384",
+ "sequence": 4,
+ "summary": "G3 rejected it: 1 previously-passing scenario(s) now score below 0.5 (zero tolerance, regardless of the aggregate)"
+}

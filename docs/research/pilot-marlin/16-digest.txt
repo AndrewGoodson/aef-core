@@ -1,0 +1,34 @@
+# Self-rewiring digest, 2026-08-29 to 2026-09-05
+
+- Proposed: 1
+- Merged: 0 (acceptance rate 0%)
+- Rolled back: 0 — net accepted 0
+- Rejected: 1
+- Escalated to you: 0
+- Security events: 0
+- Halts: 0
+- Scenarios added to the corpus: 0
+- Drift from the blessed baseline: 0.000
+- Out-performing you editing code directly: n/a — nothing to compare yet
+- Production runs recorded: 0
+- Halt channel configured: NO
+
+**No halt channel is configured.** If the loop halts, nothing will tell you — you will find out by noticing it stopped. Set the halt webhook.
+
+**No production runs were recorded**, so the corpus cannot grow and the gates keep measuring what the agent used to do. Pass `--record-runs` from your deployment.
+# Self-rewiring digest, 2026-08-29 to 2026-09-05
+
+- Proposed: 1
+- Merged: 0 (acceptance rate 0%)
+- Rolled back: 0 — net accepted 0
+- Rejected: 1
+- Escalated to you: 0
+- Security events: 0
+- Halts: 0
+- Scenarios added to the corpus: 0
+- Drift from the blessed baseline: 0.000
+- Out-performing you editing code directly: n/a — nothing to compare yet
+- Production runs recorded: 5
+- Halt channel configured: NO
+
+**No halt channel is configured.** If the loop halts, nothing will tell you — you will find out by noticing it stopped. Set the halt webhook.
