@@ -839,6 +839,13 @@ def _module_name(name: str) -> str:
     return slug
 
 
+# The generated prompt-agent graph's node order, as the report prints it. A
+# test asserts the rendered module declares exactly these nodes in this order,
+# so the report cannot describe a three-node graph while writing a four-node
+# one (ADR 0183 found exactly that).
+PROMPT_AGENT_WIRING = "retrieve -> prompt_agent -> reflect -> consolidate -> END"
+
+
 def discover_prompt_agents(
     root: Path,
     *,
@@ -1751,10 +1758,7 @@ def _prompt_agent_lines(result: MigrateResult) -> list[str]:
                 f"            (a file path, not {site.dotted!r}: no dotted module name exists under"
             )
             lines.append(f"            {result.agent_root!r}, and `aef run` takes either form)")
-        lines.append(
-            f"            graph_id={site.graph_id!r}, wired prompt_agent -> reflect "
-            f"-> consolidate -> END"
-        )
+        lines.append(f"            graph_id={site.graph_id!r}, wired {PROMPT_AGENT_WIRING}")
         if site.unsafe_name_reason:
             lines += [
                 f"            NAME REFUSED as a graph id: {site.unsafe_name_reason}.",

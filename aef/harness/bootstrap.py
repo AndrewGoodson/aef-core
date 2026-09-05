@@ -373,6 +373,19 @@ class BootstrapOutcome:
                     "failed (ADR 0060). Consider marking one of these a tripwire — "
                     f"{', '.join(self.failed)}"
                 )
+            if self.check_failed:
+                # A run that ANSWERED and failed an owner check is already
+                # evidence (ADR 0174) and is NOT a tripwire candidate: the
+                # recorder refuses `must_fail` on a task the agent completed
+                # (ADR 0060's guard), so advising it would send the owner into
+                # a refusal. Say what these are instead — FIRST_DAY promised a
+                # line here and printed none when every failure was WRONG.
+                out.append(
+                    "  The owner-check failures are content negatives — already evidence "
+                    "the loop can learn from. A `must_fail` label is for a task the agent "
+                    "cannot complete at all; these completed and were wrong: "
+                    f"{', '.join(self.check_failed)}"
+                )
         else:
             out.append(
                 f"0 of {total} recorded run(s) failed. A corpus where everything passes "
