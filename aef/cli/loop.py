@@ -1460,7 +1460,16 @@ def cmd_cycle(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         journal = False
         return EXIT_ERROR
-    except (PolicyConfigError, CorpusGraphMismatchError, GraphIdError) as exc:
+    except GraphIdError as exc:
+        # An ambiguous or unknown graph id is a fault in the INVOCATION, not a
+        # verdict on a candidate. The second blind re-score (ADR 0188) ran
+        # this repo's own nightly command against its two-graph corpus: exit
+        # 1, which the workflow's own case statement reads as "a rejection —
+        # the system working". It was a broken job reported as a healthy one.
+        print(f"error: {exc}", file=sys.stderr)
+        verdict = f"error ({type(exc).__name__}): {exc}"
+        return EXIT_ERROR
+    except (PolicyConfigError, CorpusGraphMismatchError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         verdict = f"error ({type(exc).__name__}): {exc}"
         return EXIT_REJECTED

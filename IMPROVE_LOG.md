@@ -5233,3 +5233,9 @@ correctly; `aef migrate`'s report still says the node "appends a
 `prompt_agent.persona_in_user_turn` error", which ADR 0179 made false; and `aef
 loop bootstrap` returns `EXIT_REJECTED` where `cycle`/`run` return `EXIT_USAGE`
 for the equivalent missing-flag refusal.
+
+---
+
+## S0b / J0b — the second independent score (ADR 0188)
+
+72 → **69**. Five dimensions moved: 1, 4, 7 down (each verified; the dim-1 defect fixed in the same commit), 5 and 6 up (the reviewer found the artifacts). Report: `docs/research/j0b-independent-score-2026-09-05.md`.
