@@ -566,13 +566,29 @@ def _broken_image(image, *, binary=None, verify=True):  # type: ignore[no-untype
     raise SandboxUnavailableError(f"{binary or 'docker'} could not run image {image!r} (exit 125)")
 
 
+def _config_default_mode():  # type: ignore[no-untyped-def]
+    """The mode an owner who wrote no `shadow:` block gets.
+
+    Derived through the config path rather than spelled `ContainmentMode.AUTO`:
+    after ADR 0173 `shadow_for` has no default of its own, so "the default"
+    means the CONFIG's default, and a test asserting the default is contained
+    has to read it from where an owner sets it or it is asserting a constant.
+    """
+    from aef.cli.run import build_run_config
+
+    return build_run_config(None).containment_mode
+
+
 @needs_worker_image
 def test_the_container_is_the_default_when_a_runtime_and_image_are_available(
     tmp_path: Path,
 ) -> None:
-    """The increment, as one assertion. A caller that asks for nothing in
-    particular, on a box that HAS a runtime and an image, gets a contained
-    candidate — and the write that landed on the host before does not."""
+    """The increment, as one assertion. An owner who asks for nothing in
+    particular in `aef.yaml`, on a box that HAS a runtime and an image, gets a
+    contained candidate — and the write that landed on the host before does
+    not. The mode comes from the config path (ADR 0173): the claim is about
+    the DEFAULT an owner gets, and after 0173 that lives in `ShadowConfig`,
+    not in `shadow_for`'s signature."""
     from aef.harness.shadow import ContainmentMode, shadow_for
 
     marker = Path(tempfile.mkdtemp()) / "escaped-under-the-default"
@@ -585,6 +601,7 @@ def test_the_container_is_the_default_when_a_runtime_and_image_are_available(
         entrypoint="escaping:build_graph",
         workdir=workdir,
         image=IMAGE,
+        mode=_config_default_mode(),
     ) as shadow:
         assert shadow.decision.mode is ContainmentMode.AUTO, "the default is not `auto`"
         assert shadow.decision.contained, shadow.decision.reason
@@ -602,12 +619,13 @@ def test_auto_refuses_rather_than_falling_back_when_there_is_no_runtime() -> Non
     which half was missing rather than saying 'containment unavailable'."""
     from aef.harness.shadow import (
         NO_RUNTIME_REASON,
+        ContainmentMode,
         UncontainedShadowError,
         resolve_containment,
     )
 
     with pytest.raises(UncontainedShadowError) as caught:
-        resolve_containment(image=IMAGE, runtimes=_no_runtimes)
+        resolve_containment(image=IMAGE, mode=ContainmentMode.AUTO, runtimes=_no_runtimes)
     assert NO_RUNTIME_REASON in str(caught.value)
     assert "shadow.containment: fallback" in str(caught.value), (
         "a refusal an operator cannot act on gets routed around"
@@ -620,12 +638,18 @@ def test_auto_refuses_when_the_image_is_unavailable_and_says_why() -> None:
     into a decision to run uncontained."""
     from aef.harness.shadow import (
         IMAGE_UNAVAILABLE_PREFIX,
+        ContainmentMode,
         UncontainedShadowError,
         resolve_containment,
     )
 
     with pytest.raises(UncontainedShadowError) as caught:
-        resolve_containment(image=IMAGE, detect=_broken_image, runtimes=lambda: ("docker",))
+        resolve_containment(
+            image=IMAGE,
+            mode=ContainmentMode.AUTO,
+            detect=_broken_image,
+            runtimes=lambda: ("docker",),
+        )
     assert IMAGE_UNAVAILABLE_PREFIX in str(caught.value)
     assert "exit 125" in str(caught.value), "the runtime's own reason was dropped"
 
@@ -633,12 +657,17 @@ def test_auto_refuses_when_the_image_is_unavailable_and_says_why() -> None:
 def test_auto_refuses_when_no_image_is_configured() -> None:
     """`shadow.image` has no default because this repo has no image to ship.
     An unset one is a refusal that names it, not a silent downgrade."""
-    from aef.harness.shadow import NO_IMAGE_REASON, UncontainedShadowError, resolve_containment
+    from aef.harness.shadow import (
+        NO_IMAGE_REASON,
+        ContainmentMode,
+        UncontainedShadowError,
+        resolve_containment,
+    )
 
     with pytest.raises(UncontainedShadowError, match="shadow.image"):
-        resolve_containment(image=None)
+        resolve_containment(image=None, mode=ContainmentMode.AUTO)
     with pytest.raises(UncontainedShadowError) as caught:
-        resolve_containment(image="")
+        resolve_containment(image="", mode=ContainmentMode.AUTO)
     assert NO_IMAGE_REASON in str(caught.value)
 
 
@@ -827,6 +856,7 @@ def test_the_single_production_opt_out_is_unreachable_under_the_default(
             entrypoint="escaping:build_graph",
             workdir=tmp_path,
             image=IMAGE,
+            mode=_config_default_mode(),
             in_process_candidate=_incumbent(),
             ledger_root=tmp_path,
             warn=announced.append,
@@ -866,3 +896,205 @@ def test_an_unknown_containment_mode_is_refused_at_load_time() -> None:
 
     with pytest.raises(pydantic.ValidationError, match="is not one of"):
         ShadowConfig(containment="contained")
+
+
+# --------------------------------------------------------------------------
+# The wire (ADR 0173): `shadow.containment` is read by something
+#
+# Before this, the field validated in `aef.yaml`, `build_containment_mode` had
+# zero callers, and `shadow_for`'s `mode` defaulted to `auto` — so the owner
+# who wrote `off` got a container and the owner who wrote `fallback` got
+# `auto`'s refusal. Reproduced both ways. These tests pin the wire and the
+# absent default.
+# --------------------------------------------------------------------------
+
+_CONFIG = """
+model_provider:
+  impl: claude_code
+  model: claude-sonnet-4-5
+
+memory:
+  impl: in_memory
+
+objectives: "prove the owner's containment choice reaches the run"
+
+shadow:
+  containment: {containment}
+  image: {image}
+"""
+
+
+def _config_path(tmp_path: Path, containment: str) -> Path:
+    """A real `aef.yaml`, loaded by the real loader. The quotes on
+    `containment` are not decoration: YAML 1.1 reads a bare `off` as the
+    boolean False, so an owner's opt-out has to survive the parser before any
+    of this matters."""
+    path = tmp_path / "aef.yaml"
+    path.write_text(_CONFIG.format(containment=f'"{containment}"', image=IMAGE))
+    return path
+
+
+def _writes_to(marker: Path) -> Graph:
+    def writes(state, ctx, services):  # type: ignore[no-untyped-def]
+        marker.write_text("the shadow wrote this")
+        return StateDelta(), END
+
+    return Graph(
+        id="c",
+        version="1",
+        nodes={"w": Node(id="w", version="1", fn=writes, deterministic=True)},
+        edges=[],
+        entry_node="w",
+    )
+
+
+def test_shadow_for_will_not_choose_a_containment_mode_for_you() -> None:
+    """The mutation guard for ADR 0173's signature change.
+
+    A default here is not a convenience, it is a silent override: it was
+    `ContainmentMode.AUTO`, `shadow.containment` was read by nothing, and the
+    owner's declared mode lost to a default nobody wrote. `resolve_containment`
+    is pinned too — a default one level down is the same defect one level
+    down.
+
+    Asserted on the SIGNATURE rather than by calling without `mode`: with the
+    default restored, such a call proceeds to build a real container and fails
+    much later with an `IsolationError`, and a mutation whose failure has the
+    wrong cause proves nothing about the test. The absent default is exactly
+    what is being pinned, so it is what is read.
+    """
+    import inspect
+
+    from aef.harness.shadow import resolve_containment, shadow_for
+
+    for fn in (shadow_for, resolve_containment):
+        parameter = inspect.signature(fn).parameters["mode"]
+        assert parameter.default is inspect.Parameter.empty, (
+            f"{fn.__name__} chose a containment mode for its caller; `shadow.containment` "
+            f"is then a field an owner writes and nothing reads (ADR 0173)"
+        )
+        assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+
+
+def test_the_owner_who_wrote_off_gets_off_through_the_config_path(tmp_path: Path) -> None:
+    """`containment: "off"` in `aef.yaml`, carried by `RunConfig`, and the run
+    is uncontained BY THAT CHOICE — not by a shortfall, and the ledger says
+    which. Before ADR 0173 this owner got a container: their opt-out validated
+    and was discarded."""
+    from aef.cli.run import build_run_config
+    from aef.harness.ledger import EventKind, read
+    from aef.harness.shadow import OWNER_OPT_OUT_REASON, ContainmentMode, shadow_for
+
+    run_config = build_run_config(_config_path(tmp_path, "off"))
+    assert run_config.containment_mode is ContainmentMode.OFF
+
+    marker = Path(tempfile.mkdtemp()) / "escaped-through-the-config-path"
+    warnings: list[str] = []
+    with shadow_for(
+        _incumbent(),
+        entrypoint="unused:build_graph",
+        workdir=tmp_path,
+        image=IMAGE,
+        mode=run_config.containment_mode,
+        in_process_candidate=_writes_to(marker),
+        ledger_root=tmp_path,
+        proposal_id="p1",
+        warn=warnings.append,
+    ) as shadow:
+        assert shadow.decision.mode is ContainmentMode.OFF
+        assert not shadow.decision.contained
+        assert shadow.decision.reason == OWNER_OPT_OUT_REASON
+        assert not shadow.runner.contained
+        shadow.runner.observe(_state(), agent_services())
+
+    assert marker.exists(), "the owner asked for in-process and did not get it"
+    assert warnings and "OFF by owner choice" in warnings[0]
+
+    (entry,) = read(tmp_path)
+    assert entry.kind is EventKind.CONTAINMENT
+    assert entry.detail["containment"]["mode"] == "off"
+    assert entry.detail["containment"]["owner_opted_out"] is True
+    assert entry.detail["security_event"] is True
+
+
+def test_the_owner_who_wrote_fallback_gets_a_run_not_a_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The direction that STOPS work. `fallback` exists for the adopter with
+    no runtime; before ADR 0173 they got `auto`'s refusal, because the mode
+    they wrote never left the config object.
+
+    Runtime detection is patched away rather than the box's docker stopped:
+    the branch being pinned is the one an adopter without a daemon takes, and
+    it must be exercised on a box that has one.
+    """
+    from aef.cli.run import build_run_config
+    from aef.harness import shadow as shadow_module
+    from aef.harness.shadow import NO_RUNTIME_REASON, ContainmentMode, shadow_for
+
+    monkeypatch.setattr(shadow_module, "available_runtimes", _no_runtimes)
+
+    run_config = build_run_config(_config_path(tmp_path, "fallback"))
+    assert run_config.containment_mode is ContainmentMode.FALLBACK
+
+    with shadow_for(
+        _incumbent(),
+        entrypoint="unused:build_graph",
+        workdir=tmp_path,
+        image=IMAGE,
+        mode=run_config.containment_mode,
+        in_process_candidate=_incumbent(),
+        warn=lambda _m: None,
+    ) as shadow:
+        assert shadow.decision.mode is ContainmentMode.FALLBACK
+        assert not shadow.decision.contained
+        assert shadow.decision.reason == NO_RUNTIME_REASON
+        assert shadow.decision.owner_opted_out
+
+
+def test_the_owner_who_wrote_auto_still_gets_the_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The third case, and the one that proves the other two are not the same
+    wire twice. `auto` from the config refuses on a box with no runtime — the
+    control ADR 0161 shipped is unchanged by ADR 0173, which only made the
+    owner's choice reach it."""
+    from aef.cli.run import build_run_config
+    from aef.harness import shadow as shadow_module
+    from aef.harness.shadow import (
+        NO_RUNTIME_REASON,
+        ContainmentMode,
+        UncontainedShadowError,
+        shadow_for,
+    )
+
+    monkeypatch.setattr(shadow_module, "available_runtimes", _no_runtimes)
+
+    run_config = build_run_config(_config_path(tmp_path, "auto"))
+    assert run_config.containment_mode is ContainmentMode.AUTO
+
+    with pytest.raises(UncontainedShadowError) as caught:
+        shadow_for(
+            _incumbent(),
+            entrypoint="unused:build_graph",
+            workdir=tmp_path,
+            image=IMAGE,
+            mode=run_config.containment_mode,
+            in_process_candidate=_incumbent(),
+            ledger_root=tmp_path,
+            warn=lambda _m: None,
+        )
+    assert NO_RUNTIME_REASON in str(caught.value)
+    assert not (tmp_path / "ledger.jsonl").exists(), "a refusal is not a run"
+
+
+def test_no_aef_yaml_means_the_config_default_not_a_signature_default() -> None:
+    """`RunConfig()` with no config path must agree with `ShadowConfig()`, or
+    "no aef.yaml" and "an aef.yaml with no shadow block" become two different
+    security postures — the drift ADR 0091 records, in the one place this
+    increment adds a second spelling of the default."""
+    from aef.cli.run import build_run_config
+    from aef.config.factory import build_containment_mode
+    from aef.config.schema import ShadowConfig
+
+    assert build_run_config(None).containment_mode == build_containment_mode(ShadowConfig())

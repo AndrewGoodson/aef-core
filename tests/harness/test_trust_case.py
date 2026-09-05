@@ -240,12 +240,17 @@ def test_the_in_process_bypass_exists_only_when_an_owner_opts_out_and_is_logged(
     assert entry.detail["security_event"] is True
     assert entry.detail["containment"]["owner_opted_out"] is True
 
-    # And the default cannot get there: no owner statement, no bypass.
+    # And the default cannot get there: no owner statement, no bypass. The
+    # mode is read from the config path (ADR 0173) because that is now where
+    # "the default" lives — `shadow_for` has no default of its own.
+    from aef.cli.run import build_run_config
+
     with pytest.raises(UncontainedShadowError):
         shadow_for(
             graph(clean, "i"),
             entrypoint="unused:build_graph",
             workdir=tmp_path,
             image=None,
+            mode=build_run_config(None).containment_mode,
             in_process_candidate=graph(writes, "c"),
         )

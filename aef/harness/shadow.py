@@ -571,13 +571,17 @@ class ContainmentDecision:
 def resolve_containment(
     *,
     image: str | None,
-    mode: ContainmentMode = ContainmentMode.AUTO,
+    mode: ContainmentMode,
     binary: str | None = None,
     verify: bool = True,
     detect: Callable[..., ContainerRuntime] | None = None,
     runtimes: Callable[[], tuple[str, ...]] | None = None,
 ) -> ContainmentDecision:
     """Decide how this shadow run will be contained. Raises under `auto`.
+
+    `mode` is required for the same reason `shadow_for`'s is (ADR 0173): this
+    is the function that turns the owner's `shadow.containment` into a
+    decision, so a default here is the same silent override one level down.
 
     `detect` and `runtimes` are injected so the no-runtime and bad-image paths
     can be exercised on a box that HAS both — a fallback nobody has ever seen
@@ -693,8 +697,8 @@ def shadow_for(
     *,
     entrypoint: str,
     workdir: Path,
+    mode: ContainmentMode,
     image: str | None = None,
-    mode: ContainmentMode = ContainmentMode.AUTO,
     in_process_candidate: Graph | None = None,
     sandbox: SandboxPolicy | None = None,
     read_only_mounts: dict[str, str] | None = None,
@@ -706,9 +710,31 @@ def shadow_for(
     """The shadow a caller should build. Contained wherever containment exists.
 
     This is the whole of what "containment on by default" means in code: with
-    a runtime and a verified image on the box, a caller that asks for nothing
-    in particular gets a containerised candidate. Without them, `auto` refuses
-    and names the missing half.
+    a runtime and a verified image on the box, a caller whose `aef.yaml` says
+    nothing in particular gets a containerised candidate. Without them, `auto`
+    refuses and names the missing half.
+
+    **`mode` has no default, deliberately (ADR 0173).** It used to default to
+    `ContainmentMode.AUTO`, which read as "the safe default" and was in fact a
+    silent override: `shadow.containment` validated in `aef.yaml`, no code
+    read it, and an owner who wrote `off` or `fallback` got `auto` anyway —
+    the first a container they had declined, the second a refusal instead of
+    the fallback that mode exists to give them. Reproduced both ways. The
+    default was a promise the signature made and the code broke, which is
+    ADR 0101's rule, so it is gone: the caller says which mode, and the one
+    place to get it from a config is
+    `aef.config.factory.build_containment_mode(config.shadow)` — carried on
+    `RunConfig.containment_mode` for anything that already reads an
+    `aef.yaml`.
+
+    **Shadow execution still has no production caller** (ADR 0161 said so and
+    it is still true; this function is not one). This increment makes the wire
+    exist and removes the silent default; it does not add the caller. Adding
+    one is a design decision, not a patch: it needs the trust case's §2.1
+    conditions on live-input shadowing — a worker image containing the
+    adopter's own `aef`, a decision about which live requests may be
+    duplicated onto a candidate, and an owner who has read what an
+    `EXTERNAL_CALL` node does when it runs twice.
 
     `in_process_candidate` is used only on the uncontained path, and it is
     required there rather than loaded for you: running a candidate's module
