@@ -790,4 +790,6 @@ def test_the_report_wiring_string_is_the_rendered_modules_node_order(tmp_path: P
     assert walked == expected, (walked, expected)
     from aef.cli.migrate import report
 
-    assert PROMPT_AGENT_WIRING in "\n".join(report(result))
+    rendered = report(result)
+    text = rendered if isinstance(rendered, str) else "\n".join(rendered)
+    assert PROMPT_AGENT_WIRING in text
