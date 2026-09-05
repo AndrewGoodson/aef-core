@@ -231,6 +231,34 @@ container id (`{'30f67679c317'}`), and the leaked container was cleaned up by
 hand afterwards. A mutation whose failure has the wrong cause proves nothing
 about the test.
 
+## Erratum (ADR 0173)
+
+Two sentences above were false when written, and R5 of the second seam hunt
+found them by grepping for callers.
+
+**"the fallback is kept, named and logged, and reached only by an owner
+writing it in `aef.yaml`"** — an owner writing it in `aef.yaml` reached
+nothing. `shadow.containment` validated in `ShadowConfig`,
+`build_containment_mode` turned it into the enum, and **nothing called
+`build_containment_mode`**. The three-mode table above described a config
+field that no code read.
+
+**`shadow_for`'s `mode` defaulted to `ContainmentMode.AUTO`**, so the first
+integrator to call it without threading the owner's mode through got `auto`
+whatever the owner wrote — reproduced both ways: an owner who declared `off`
+got a container, and an owner who declared `fallback` on a runtime-less box
+got `auto`'s refusal.
+
+What the erratum does NOT retract: containment itself. The gap applied the
+CONTAINED-or-refuse mode unconditionally, so nothing weaker than `auto` was
+ever reachable through it, and dimension 4's 15 stands (argued in ADR 0173).
+What was wrong is that the config surface read as wired and was not, and that
+the ledger's `owner_opted_out: True` had no path an owner could take to it.
+
+ADR 0173 removes both defaults and carries the mode on
+`RunConfig.containment_mode`. Shadow execution still has no production caller;
+that part of "What this does not claim" was accurate then and is accurate now.
+
 ## What this does not claim
 
 - **Shadow execution still has no production caller.** `shadow_for` is the

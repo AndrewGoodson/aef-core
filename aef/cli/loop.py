@@ -19,6 +19,7 @@ import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from aef.harness.checks import TaskCheck
 from aef.harness.corpus import (
@@ -525,6 +526,33 @@ def _parse_checks(raw: list[str] | None) -> tuple[TaskCheck, ...]:
     return tuple(checks)
 
 
+def _score_attribution(result: dict[str, Any]) -> dict[str, object]:
+    """Why one scenario scored what it did — `{}` when nothing went wrong.
+
+    `run_scenario` already computes both halves: a `failure` string when the
+    run raised, and the list of checks that did not hold when it ran cleanly
+    and answered wrongly. `loop score` emitted NEITHER, so a `0.0000` meaning
+    "the provider died" and a `0.0000` meaning "the answer was wrong" were
+    indistinguishable in the report, and telling them apart in ADR 0156
+    required inferring from split-level token accounting. They are different
+    facts about a candidate and the report now says which one it is.
+    """
+    detail: dict[str, object] = {}
+    if result.get("failure"):
+        detail["failure"] = result["failure"]
+    if result.get("paused"):
+        detail["hitl_paused"] = result["paused"]
+    checks = result.get("checks")
+    if isinstance(checks, dict):
+        failed = list(checks.get("failures", ()))
+        if failed:
+            detail["checks"] = f"{checks.get('passed')}/{checks.get('total')} passed"
+            detail["checks_failed"] = failed
+    if result.get("budget_exceeded"):
+        detail["budget_exceeded"] = True
+    return detail
+
+
 def cmd_score(args: argparse.Namespace) -> int:
     """The task metric, read directly (ADR 0113): the incumbent graph over
     the corpus, one scalar per split with its honest statistics, and — with
@@ -600,8 +628,11 @@ def cmd_score(args: argparse.Namespace) -> int:
     other_graph = sorted(s.id for s in corpus.scenarios if s.graph_id != graph.id)
 
     runs: list[dict[str, ScoreSet]] = []
+    # split -> scenario id -> why it scored what it did. First repeat only, to
+    # match `per_scenario`, which is also read off the first run.
+    attribution: dict[str, dict[str, dict[str, object]]] = {}
     hits = misses = 0
-    for _ in range(args.repeat):
+    for repeat_index in range(args.repeat):
         per_split: dict[str, ScoreSet] = {}
         for split in splits:
             scenarios = tuple(s for s in corpus.split(split) if s.graph_id == graph.id)
@@ -620,6 +651,10 @@ def cmd_score(args: argparse.Namespace) -> int:
                 stats = result.get("cassette", {})
                 hits += int(stats.get("hits", 0))
                 misses += int(stats.get("misses", 0))
+                if repeat_index == 0:
+                    why = _score_attribution(result)
+                    if why:
+                        attribution.setdefault(split.value, {})[scenario.id] = why
             per_split[split.value] = ScoreSet(
                 label=split.value, per_scenario=per_scenario, cost_tokens=cost
             )
@@ -652,6 +687,10 @@ def cmd_score(args: argparse.Namespace) -> int:
             "per_scenario": {k: round(v, 4) for k, v in sorted(first.per_scenario.items())},
             # Across identical runs. Anything an increment claims must exceed this.
             "repeat_mean_spread": round(spread, 6),
+            # WHY each sub-1.0 score is what it is. Absent keys mean nothing
+            # went wrong; a scenario appears here only if it has something to
+            # say (ADR 0166).
+            "attribution": attribution.get(split.value, {}),
         }
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
@@ -676,8 +715,20 @@ def cmd_score(args: argparse.Namespace) -> int:
             f"ci95=[{row['ci95'][0]:.4f}, {row['ci95'][1]:.4f}] "
             f"repeat_spread={row['repeat_mean_spread']:.6f}"
         )
+        why_by_id = attribution.get(split.value, {})
         for sid, score in row["per_scenario"].items():
             print(f"      {score:.4f}  {sid}")
+            why = why_by_id.get(sid, {})
+            if "failure" in why:
+                print(f"                raised: {why['failure']}")
+            if "hitl_paused" in why:
+                print(f"                paused: {why['hitl_paused']}")
+            failed_checks = why.get("checks_failed", [])
+            if isinstance(failed_checks, list):
+                for line in failed_checks:
+                    print(f"                check failed: {line}")
+            if why.get("budget_exceeded"):
+                print("                budget_ms exceeded")
     return EXIT_OK
 
 
@@ -1164,7 +1215,8 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
             "an OWNER check on the final state, as JSON: a single object "
             '\'{"path": "working_memory.summary", "op": "contains", "value": "X"}\' '
             "or a JSON list of them. Repeatable. Ops: equals, contains, regex, exists "
-            "(ADR 0113). Data, never code."
+            "(ADR 0113), max_words, min_words (ADR 0166 — use these for a word cap; "
+            "the regex form of one is a ReDoS). Data, never code."
         ),
     )
     p_record.add_argument(

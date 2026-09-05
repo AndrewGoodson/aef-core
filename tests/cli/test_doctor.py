@@ -326,3 +326,98 @@ def test_the_entry_file_check_is_silent_in_a_repo_that_was_never_adopted(tmp_pat
     (tmp_path / "AGENTS.md").write_text("# mine\n")
     names = {c.name for c in run_doctor(tmp_path)}
     assert not any(n.startswith("entry_file_points_at_the_guide") for n in names), names
+
+
+# ---------------------------------------------------------------------------
+# ADR 0168 / R7 — the fix that adopt refuses to perform
+#
+# REPRODUCED on a repo whose AGENTS.md and CLAUDE.md are both symlinks into
+# docs/ (an ordinary cross-tool arrangement):
+#
+#     $ aef adopt --dir .
+#     skipped .../CLAUDE.md (a symlink, or under one - adoption never writes through a link)
+#     skipped .../AGENTS.md (a symlink, or under one - adoption never writes through a link)
+#     $ aef doctor --dir .
+#     [WARN] entry_file_points_at_the_guide:CLAUDE.md: ... fix: re-run `aef adopt --dir .`
+#     [WARN] entry_file_points_at_the_guide:AGENTS.md: ... fix: re-run `aef adopt --dir .`
+#
+# `is_file()` follows the link, so the check reads the TARGET's bytes, finds no
+# block, and prescribes the one command guaranteed not to add one. The only
+# advice on offer was a loop.
+# ---------------------------------------------------------------------------
+def _symlinked_entry_repo(root: Path) -> Path:
+    (root / "docs").mkdir()
+    (root / "docs" / "house-rules.md").write_text("# House rules\n\nagents read this.\n")
+    (root / "AGENTS.md").symlink_to(Path("docs") / "house-rules.md")
+    (root / "CLAUDE.md").symlink_to(Path("docs") / "house-rules.md")
+    (root / "aef_adapter.py").write_text("def build_graph() -> None: ...\n")
+    return root
+
+
+def test_adopt_really_does_refuse_a_symlinked_entry_file(tmp_path: Path) -> None:
+    """The half that makes the old fix a loop, asserted against the real adopt
+    rather than quoted from its source."""
+    from aef.cli.adopt import run_adopt
+
+    result = run_adopt(_symlinked_entry_repo(tmp_path))
+    for name in ("CLAUDE.md", "AGENTS.md"):
+        entry = tmp_path / name
+        assert entry in result.skipped_files, f"{name} was not skipped: {result.skipped_files}"
+        assert "symlink" in result.skip_reason(entry)
+
+
+def test_a_symlinked_entry_file_gets_the_real_remedy_not_rerun_adopt(tmp_path: Path) -> None:
+    checks = {c.name: c for c in run_doctor(_symlinked_entry_repo(tmp_path))}
+    for name in ("CLAUDE.md", "AGENTS.md"):
+        check = checks[f"entry_file_points_at_the_guide:{name}"]
+        assert not check.ok
+        assert "SYMLINK" in check.detail, check.detail
+        assert "docs/house-rules.md" in check.detail
+        assert "never writes through a link" in check.detail
+        assert "re-run `aef adopt --dir .`, which appends" not in check.detail, (
+            "doctor still prescribes the command adopt refuses to perform"
+        )
+
+
+def test_a_symlink_whose_target_carries_the_block_is_ok(tmp_path: Path) -> None:
+    """Reading THROUGH the link stays right: a link to a file that carries the
+    block does reach the agent. Only the FIX was wrong, and narrowing the check
+    to real files would have turned a passing repo into a warning."""
+    (tmp_path / "CLAUDE.md").write_text(
+        "# Mine\n\n<!-- aef:begin -->\nsee AGENT_INTEGRATION.md\n<!-- aef:end -->\n"
+    )
+    (tmp_path / "AGENTS.md").symlink_to("CLAUDE.md")
+    (tmp_path / "aef_adapter.py").write_text("def build_graph() -> None: ...\n")
+
+    checks = {c.name: c for c in run_doctor(tmp_path)}
+    for name in ("CLAUDE.md", "AGENTS.md"):
+        check = checks[f"entry_file_points_at_the_guide:{name}"]
+        assert check.ok, check.detail
+        assert "SYMLINK" not in check.detail
+
+
+def test_an_entry_file_under_a_symlinked_directory_is_named_too(tmp_path: Path) -> None:
+    """adopt refuses a path that is UNDER a link as well as one that IS one, so
+    a leaf-only check would prescribe the loop for the parent case."""
+    real = tmp_path / "real"
+    real.mkdir()
+    (real / "CLAUDE.md").write_text("# no block here\n")
+    (tmp_path / "aef_adapter.py").write_text("def build_graph() -> None: ...\n")
+
+    from aef.cli.doctor import _link_on_the_way_to
+
+    link = tmp_path / "linked"
+    link.symlink_to("real")
+    found = _link_on_the_way_to(tmp_path, link / "CLAUDE.md")
+    assert found == link, found
+
+
+def test_a_plain_entry_file_still_gets_the_rerun_adopt_fix(tmp_path: Path) -> None:
+    """The control. Nothing about the ordinary case changes."""
+    (tmp_path / "CLAUDE.md").write_text("# mine, no block\n")
+    (tmp_path / "aef_adapter.py").write_text("def build_graph() -> None: ...\n")
+    checks = {c.name: c for c in run_doctor(tmp_path)}
+    check = checks["entry_file_points_at_the_guide:CLAUDE.md"]
+    assert not check.ok
+    assert "re-run `aef adopt --dir .`" in check.detail
+    assert "SYMLINK" not in check.detail

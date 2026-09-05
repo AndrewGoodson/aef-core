@@ -133,3 +133,27 @@ found by running `run_graph_module` rather than by reading it.
 
 Both are regression-tested in `tests/cli/test_run.py`. See ADR 0125 for the
 reproductions and the numbers.
+
+## Erratum (2026-09-04, ADR 0155): a caller that writes state nobody reads
+
+**"The retriever finally has a caller" was true and insufficient.**
+`make_retrieve_node` writes chunks to `state.retrieved_context`, and until
+ADR 0155 the only code in the package that read them back was
+`retrieved_signatures()` in this same module — which computes the
+helpful/harmful tally and puts nothing in front of a model. No node built a
+prompt from a retrieved lesson.
+
+So retrieval could not change a run's behaviour, and this was measured
+rather than argued: over the six summary validation scenarios, the arms
+"no retrieve node", "retrieve, raw records" and "retrieve, records +
+knowledge" produced **one identical SHA-256 over every rendered prompt**,
+while the chunk counts climbed 0→5 as experience accumulated
+(`docs/research/i12/prompt-identity-before-wiring.json`).
+
+The gap is closed by `render_retrieved_context` and by `draft_node` reading
+it (ADR 0155). Nothing in this ADR's own decisions is retracted — the node,
+the budget enforcement, the `retrieved_signatures` outcome signal and the
+`agent_id` correction all stand. What is retracted is the implication that
+wiring the caller made retrieval *load-bearing*: a write with no reader is
+an injection point nobody calls, which is the exact defect this ADR quotes
+`MemoryRetriever`'s docstring as existing to prevent.

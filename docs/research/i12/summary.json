@@ -1,0 +1,123 @@
+{
+  "arms": {
+    "a": {
+      "calls": 12,
+      "knowledge_entries": 0,
+      "mean": 0.8541,
+      "per_scenario": {
+        "r0": {
+          "sum-13-cider-press": 1.0,
+          "sum-14-quarry-lake": 0.5,
+          "sum-15-bookbinder": 1.0,
+          "sum-16-cliff-path": 0.75,
+          "sum-17-clockmaker": 0.75,
+          "sum-18-heron-rookery": 1.0
+        },
+        "r1": {
+          "sum-13-cider-press": 1.0,
+          "sum-14-quarry-lake": 0.5,
+          "sum-15-bookbinder": 1.0,
+          "sum-16-cliff-path": 1.0,
+          "sum-17-clockmaker": 0.75,
+          "sum-18-heron-rookery": 1.0
+        }
+      },
+      "repeats": [
+        0.8333,
+        0.875
+      ],
+      "spread": 0.0417
+    },
+    "b": {
+      "calls": 12,
+      "knowledge_entries": 0,
+      "mean": 0.8541,
+      "per_scenario": {
+        "r0": {
+          "sum-13-cider-press": 1.0,
+          "sum-14-quarry-lake": 0.5,
+          "sum-15-bookbinder": 1.0,
+          "sum-16-cliff-path": 0.75,
+          "sum-17-clockmaker": 0.75,
+          "sum-18-heron-rookery": 1.0
+        },
+        "r1": {
+          "sum-13-cider-press": 1.0,
+          "sum-14-quarry-lake": 0.5,
+          "sum-15-bookbinder": 1.0,
+          "sum-16-cliff-path": 1.0,
+          "sum-17-clockmaker": 0.75,
+          "sum-18-heron-rookery": 1.0
+        }
+      },
+      "repeats": [
+        0.8333,
+        0.875
+      ],
+      "spread": 0.0417
+    },
+    "c": {
+      "calls": 12,
+      "knowledge_entries": 0,
+      "mean": 0.8334,
+      "per_scenario": {
+        "r0": {
+          "sum-13-cider-press": 0.75,
+          "sum-14-quarry-lake": 0.5,
+          "sum-15-bookbinder": 1.0,
+          "sum-16-cliff-path": 0.75,
+          "sum-17-clockmaker": 0.75,
+          "sum-18-heron-rookery": 1.0
+        },
+        "r1": {
+          "sum-13-cider-press": 1.0,
+          "sum-14-quarry-lake": 0.5,
+          "sum-15-bookbinder": 1.0,
+          "sum-16-cliff-path": 0.75,
+          "sum-17-clockmaker": 1.0,
+          "sum-18-heron-rookery": 1.0
+        }
+      },
+      "repeats": [
+        0.7917,
+        0.875
+      ],
+      "spread": 0.0833
+    },
+    "d": {
+      "calls": 48,
+      "knowledge_entries": 0,
+      "mean": 0.9166,
+      "per_scenario": {
+        "r0": {
+          "sum-13-cider-press": 1.0,
+          "sum-14-quarry-lake": 0.75,
+          "sum-15-bookbinder": 1.0,
+          "sum-16-cliff-path": 1.0,
+          "sum-17-clockmaker": 1.0,
+          "sum-18-heron-rookery": 0.5
+        },
+        "r1": {
+          "sum-13-cider-press": 1.0,
+          "sum-14-quarry-lake": 0.75,
+          "sum-15-bookbinder": 1.0,
+          "sum-16-cliff-path": 1.0,
+          "sum-17-clockmaker": 1.0,
+          "sum-18-heron-rookery": 1.0
+        }
+      },
+      "repeats": [
+        0.875,
+        0.9583
+      ],
+      "spread": 0.0833
+    }
+  },
+  "deltas": {
+    "b_minus_a": 0.0,
+    "c_minus_b": -0.0207,
+    "d_minus_c": 0.0832
+  },
+  "max_within_arm_spread": 0.0833,
+  "total_calls": 84
+}

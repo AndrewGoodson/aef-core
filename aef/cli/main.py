@@ -60,7 +60,11 @@ def _cmd_adopt(args: argparse.Namespace) -> int:
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
-    checks = run_doctor(Path(args.dir), agent_path=args.agent_path)
+    checks = run_doctor(
+        Path(args.dir),
+        agent_path=args.agent_path,
+        agent_root=getattr(args, "agent_root", None) or DEFAULT_AGENT_ROOT,
+    )
     ok = True
     for check in checks:
         if check.ok:
@@ -226,14 +230,35 @@ def build_parser() -> argparse.ArgumentParser:
             f"the module that builds your graph, repo-relative — the same flag "
             f"`aef loop doctor` takes. Without it, doctor scans every entry the adoption "
             f"contract names that exists (aef_adapter.py, {DEFAULT_MIGRATED_OUT}, "
-            f"{DEFAULT_AGENT_ROOT}/*/graph.py, and {LEGACY_MIGRATED_OUT} for a repo "
-            f"migrated before ADR 0143) for model calls the harness cannot see."
+            f"every graph.py anywhere under the agent root, and {LEGACY_MIGRATED_OUT} "
+            f"for a repo migrated before ADR 0143) for model calls the harness cannot see."
+        ),
+    )
+    p_doctor.add_argument(
+        "--agent-root",
+        default=DEFAULT_AGENT_ROOT,
+        help=(
+            f"the Zone A root this repo runs its loop with (default {DEFAULT_AGENT_ROOT!r}) "
+            f"— pass the SAME value you passed to `aef migrate --agent-root` and to every "
+            f"`aef loop` command. Without it, a repo that widened Zone A to "
+            f"`.claude/agents` had doctor report on the two files outside that root and "
+            f"say nothing about the graphs and personas inside it (ADR 0168)."
         ),
     )
     p_doctor.set_defaults(handler=_cmd_doctor)
 
     p_run = subparsers.add_parser("run", help="run a graph module's build_graph()")
-    p_run.add_argument("module", help="importable module path exposing build_graph()")
+    p_run.add_argument(
+        "module",
+        help=(
+            "the graph to run, as an importable dotted module path "
+            "(`agents.migrated.my_agent.graph`) OR a path to the .py file itself "
+            "(`.claude/agents/migrated/my_agent/graph.py`). Either exposes build_graph(). "
+            "The file form exists because an agent root like `.claude/agents` has no "
+            "dotted spelling at all — `aef migrate` prints whichever form is runnable "
+            "for the root you chose (ADR 0168)."
+        ),
+    )
     p_run.add_argument("--agent-id", default="cli-agent")
     p_run.add_argument(
         "--objective",

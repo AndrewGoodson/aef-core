@@ -304,3 +304,90 @@ def test_the_lineage_store_never_enters_the_version_archive(tmp_path: Path) -> N
     assert read_files(tmp_path, "planner", 1).keys() == {"agents/planner.py"}
     known = versions(tmp_path, "planner")
     check_never_shrinks(tmp_path, "planner", known)  # a lineage write is not a version
+
+
+@pytest.mark.parametrize("graph_id", ["../escape", "a/b", "/etc/x", ".."])
+def test_a_traversing_graph_id_is_refused_by_the_lineage_store_too(
+    tmp_path: Path, graph_id: str
+) -> None:
+    """ADR 0168 found this in `_graph_dir` and fixed it there. The lineage
+    store is a second place a graph id is joined onto a directory, written
+    after that fix, and it inherits the refusal rather than the hole."""
+    with pytest.raises(ArchiveError, match="not usable as a lineage filename"):
+        lineage_path(tmp_path, graph_id)
+    with pytest.raises(ArchiveError):
+        read_lineage(tmp_path, graph_id)
+    with pytest.raises(ArchiveError):
+        append_lineage(tmp_path, graph_id, _member())
+
+
+# ---------------------------------------------------------------------------
+# ADR 0168 / S2 — a graph id is joined onto a directory
+#
+# REPRODUCED, with `root` at `<tmp>/state/archive`:
+#
+#     >>> record(root, "../escape", files={"agents/graph.py": b"x = 1\n"}, ...)
+#     recorded version 1
+#     archive root contents: []
+#     WROTE state/escape/v000001/entry.json
+#     WROTE state/escape/v000001/files/agents/graph.py
+#
+# One level ABOVE the archive root, which was left empty. A graph id is not an
+# internal token: `aef migrate` reads it from a persona's `name:` frontmatter
+# and prints it as the value to hand `aef loop bless --graph-id`.
+# ---------------------------------------------------------------------------
+ESCAPING_IDS = ("../escape", "../../etc", "a/b", "/absolute", "", ".", "..")
+
+
+@pytest.mark.parametrize("graph_id", ESCAPING_IDS)
+def test_record_refuses_a_graph_id_that_is_not_one_path_segment(
+    tmp_path: Path, graph_id: str
+) -> None:
+    root = tmp_path / "state" / "archive"
+    root.mkdir(parents=True)
+    with pytest.raises(ArchiveError) as exc:
+        record(
+            root,
+            graph_id,
+            files={"agents/graph.py": b"x = 1\n"},
+            base_sha="a" * 40,
+            head_sha="b" * 40,
+            recorded_at=AT,
+        )
+    assert "not usable as an archive directory" in str(exc.value)
+    # Nothing was written anywhere - not in the archive, not beside it.
+    assert list(root.iterdir()) == []
+    assert sorted(p.name for p in (tmp_path / "state").iterdir()) == ["archive"]
+
+
+@pytest.mark.parametrize("graph_id", ESCAPING_IDS)
+def test_versions_refuses_the_same_ids_reads_and_writes_agree(
+    tmp_path: Path, graph_id: str
+) -> None:
+    """Refused in the ONE place both go through. A `versions()` that quietly
+    returned `()` for an id `record()` rejects would report an empty history
+    for a graph that cannot have one, which is the shape ADR 0139 calls
+    silently inert."""
+    root = tmp_path / "archive"
+    root.mkdir()
+    with pytest.raises(ArchiveError):
+        versions(root, graph_id)
+
+
+def test_a_safe_graph_id_is_untouched(tmp_path: Path) -> None:
+    """The control: the refusal must not have narrowed what an ordinary id may
+    be. Dots, dashes and underscores inside a segment are all still fine."""
+    root = tmp_path / "archive"
+    root.mkdir()
+    for graph_id in ("planner", "marlin-accela", "agent_2", "v1.2.3", ".hidden"):
+        entry = record(
+            root,
+            graph_id,
+            files={"agents/graph.py": b"x = 1\n"},
+            base_sha="a" * 40,
+            head_sha="b" * 40,
+            recorded_at=AT,
+        )
+        assert entry.version == 1
+        assert (root / graph_id / "v000001").is_dir()
+        assert versions(root, graph_id) == (1,)

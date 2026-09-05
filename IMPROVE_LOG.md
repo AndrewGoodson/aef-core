@@ -2786,3 +2786,480 @@ passes.
 candidate an executing gate reaches an *accept* verdict on, which needs the
 two gate defects above answered; ADR 0157 also states what S1's
 retrieval→prompt wiring changes about that claim.
+
+## D2 — a word cap that did not terminate, and a 0.0000 that would not say why (ADR 0166)
+
+**The defect.** ADR 0156 §D2, closed here. Every summary scenario in
+`corpus/` declared its word cap as `^(?:\s*\S+){1,N}\s*$`. The inner `\s*`
+is nullable, so adjacent iterations can split one non-space run anywhere, and
+the number of ways to cut a k-character string into ≤ N runs is exponential
+in k. A **match** short-circuits; a **failure** — a summary one word over the
+cap — must exhaust every one of them, and `checks.py::_holds` called
+`re.search` with no timeout. Every recorded cassette sits at or under its cap,
+so the branch was unreachable from every green test in this repo and reachable
+from every live gate pass. It cost I11 three attempts past a ten-minute wall
+(recorded there as a suspected throttle; erratum appended to ADR 0123) and S2
+four more.
+
+**Reproduced by running**, in a child process under a wall clock because the
+parent cannot time a call that never returns — both directly and through this
+repo's own `checks._holds` / `evaluation.score_scenario` on the real
+`corpus/validation/sum-13-cider-press.json`:
+
+```
+corpus pattern : ^(?:\s*\S+){1,35}\s*$
+_holds, corpus pattern, 35 words (at cap)                  -> True in 0.01 ms
+_holds, corpus pattern, 36 words (ONE OVER)                DID NOT TERMINATE in 8 s
+score_scenario, summary of 35 words (at cap)               -> 0.25 in 0.06 ms
+score_scenario, summary of 36 words (ONE OVER)             DID NOT TERMINATE in 8 s
+```
+
+and after the rewrite, same script, same scenario file:
+
+```
+corpus pattern : ^\s*\S+(?:\s+\S+){0,34}\s*$
+_holds, corpus pattern, 36 words (ONE OVER)                -> False in 0.02 ms
+score_scenario, summary of 36 words (ONE OVER)             -> 0.0 in 0.06 ms
+```
+
+**Four changes, each sufficient alone.**
+
+1. **`max_words` / `min_words`** — the cap with no regex in it. Integer value
+   (`bool` refused), non-string target fails rather than being stringified.
+2. **The twenty corpus scenarios keep a regex, and measuring is what showed
+   why.** `{1,N}` carries a LOWER bound: a bare `max_words` **accepts an empty
+   summary**, which is exactly the input ADR 0156 used to attribute repeat 3's
+   `0.00` to a failed call rather than a wrong answer; adding `min_words: 1`
+   is a fifth check on a four-check scenario and moves every recorded score
+   (0.75 → 0.80). So they take the linear-time equivalent
+   `^\s*\S+(?:\s+\S+){0,N-1}\s*$` — `\s+` is not nullable, so every iteration
+   boundary is forced. Migration: 6 scenarios at cap 30, 7 at 35, 7 at 40;
+   `checks` the only key that moved in all twenty (asserted per file by a JSON
+   diff over every top-level key, then `git diff --stat`: 20 files, 20
+   insertions, 20 deletions). New scenarios should use `max_words`.
+3. **A static detector**, at scenario load and again in `_holds`, because
+   Python's `re` has no timeout and this repo takes no dependency for one. It
+   refuses a repeated group whose body holds a nullable quantifier, or whose
+   body is a single unbounded-quantified atom (`(x+)+`). Verified against a
+   planted fault before being trusted: 10 patterns that must be refused
+   (including S2's exact three caps and `(a+)+`, `(a*)*`, `(a+)*`), 11 that
+   must pass (`^\S+$`, `(?:foo|bar){1,3}`, `\bword\b`, and the rewrite the
+   error message itself recommends — a fix whose advice the detector then
+   rejects is a dead end). All 21 agree. Planted in a scratch corpus file,
+   `load_scenario` refuses it, names the file, and leads with `unusable
+   check:`. A long input is **refused, never truncated** — "at most 35 words"
+   of the first 10,000 characters is a different question.
+4. **`loop score --json` gains `attribution`**, closing ADR 0156's further
+   defect. `run_scenario` already computed both halves and `cmd_score` emitted
+   neither, so "the provider died" and "the answer was wrong" were both
+   `0.0000` and telling them apart took token arithmetic. Tested on both
+   shapes with a stub provider; on the real corpus it immediately names the
+   case-sensitivity that has explained `sum-14` and `sum-16`'s 0.75 in prose
+   since ADR 0123.
+
+**The metric is unchanged.** `aef loop score agents.summary.graph:build_graph
+--corpus corpus --splits train,validation --json`, before and after,
+`diff`ed: identical byte for byte. train `0.9792` (n=12, stdev 0.0722),
+validation `0.9167` (n=6, stdev 0.1291), `sum-07`/`sum-14`/`sum-16` at 0.75,
+18 cassette hits and 0 misses.
+
+**Mutations: 5 of 5 caught**, every restore sha256-verified — the detector as
+a no-op, `max_words` reversed, `_holds` skipping the refusal, `cmd_score`
+dropping the `failure` string, and one corpus scenario keeping the old cap.
+**M3 exposed a weak test of my own**: with the refusal removed, the
+defence-in-depth test did not go red, it **hung** — which is the defect
+itself, and a hanging test is not a failing test. Rebuilt around a
+child-process wall so it fails in 5 seconds instead of never; the mutation was
+not dropped to keep the test.
+
+**Green bar.** `pytest -q` 2178 passed, 5 skipped (from 2131; +47). `mypy aef
+examples` 131 files clean. `ruff check .` clean. `ruff format --check aef
+tests examples` 252 formatted.
+
+**No rubric score moves** — this is a defect fix, not a measurement. What it
+buys is ADR 0156's consequence 4: "D2 blocks every live measurement in this
+repo until it is fixed" no longer holds.
+
+**Deliberately left.** `min_words` exists and nothing on disk uses it; whether
+the twenty scenarios should move to `max_words` + `min_words` is a decision
+for whoever next re-records the corpus, since it changes their recorded
+scores. No generated document lists the check ops — `grep "contains"` across
+`aef/cli/adopt.py`, `aef/cli/adopt_loop.py` and `aef/cli/templates/` finds
+nothing — so nothing under `adopt` needed an edit, recorded so M2 does not go
+looking. ADR 0156's third defect (`next(iter(modelUsage))`) is ADR 0154's and
+is not touched here.
+
+---
+
+## S1 / I12 — the ACE four-arm on the task metric (ADR 0155)
+
+**Model: `claude-opus-5[1m]`** — the session default, `--model` omitted from
+the argv; Fable's quota is exhausted and the owner authorised Opus, so all
+four arms were re-measured and no earlier Fable number is reused.
+
+**Expected, stated before running** (`TO_90_LOOP.md` §I12): four arms over
+the summary validation split, dim 2 moves 17 → 19 only if (c) > (b) by more
+than the spread. Falsifications fixed in advance: (c) ≤ (b) demotes ADR
+0110's coverage result to a proxy; (d) ≤ (c) keeps LLM reflection off; a gain
+smaller than the spread is not a gain.
+
+**Reproduced first, zero calls.** The four arms were the same experiment four
+times: `draft_node` built its prompt from `working_memory` and never read
+`state.retrieved_context`, so arms (a), (b), (c) and (d) produced **one
+identical SHA-256 over every rendered prompt** while chunks retrieved climbed
+0→5. ADR 0118's "the retriever finally has a caller" was true and
+insufficient — a caller that writes state nobody reads. Erratum appended to
+0118.
+
+**Changed.** `render_retrieved_context(state, *, max_items=5)` in
+`aef/reasoning/nodes.py` — generic, state-only, no clock, no randomness, safe
+in a `deterministic=True` node; `draft_node` appends it. With nothing
+retrieved the prompt is **byte-identical** to before, pinned by a literal
+golden, so every committed cassette still hits and `aef loop score` still
+makes no live call.
+
+**Mutations, both detected.** `lessons = ""` in `draft_node` → the regression
+test fails. `render_retrieved_context` returning the header instead of `""`
+→ the golden and three renderer tests fail. Reverted, shasum-verified.
+
+**Measured**, 84 live calls, `--repeats 2`, one arm-repeat per foreground
+invocation, results written as they landed (`docs/research/i12/`):
+
+| arm | mean | r0 | r1 | spread | calls | knowledge entries |
+|---|---|---|---|---|---|---|
+| (a) no retrieve | 0.8541 | 0.8333 | 0.8750 | 0.0417 | 12 | 0 |
+| (b) raw records | 0.8541 | 0.8333 | 0.8750 | 0.0417 | 12 | 0 |
+| (c) + knowledge | 0.8334 | 0.7917 | 0.8750 | 0.0833 | 12 | 0 |
+| (d) + LLM reflection | 0.9166 | 0.8750 | 0.9583 | 0.0833 | 48 | 0 |
+
+Largest within-arm spread **0.0833**. (b) − (a) = +0.0000. (c) − (b) =
+−0.0207. (d) − (c) = +0.0832, under the spread.
+
+**Verdict: dim 2 does not move. 17/20 stands, delta 0.** The (c) ≤ (b)
+falsification fired. The sharper finding is that **no knowledge entry formed
+in any arm**: six distinct objectives, no `state.errors`, so every record is
+a `success` with a unique signature and the consolidator's two-distinct-runs
+rule is never met — (c) and (b) are the same arm. ADR 0110's coverage result
+is demoted to a proxy that has *not been shown* to predict task outcome; it
+is not disproved, because this corpus cannot test it. `reflection.impl: llm`
+stays off, third measurement running.
+
+**Two defects found, reported, NOT fixed** (neither file is this worker's):
+
+1. The corpus word-cap check `^(?:\s*\S+){1,35}\s*$` **does not terminate in
+   600 s on a 36-word summary** (35 words: 0.0000 s). The check that catches
+   over-length summaries hangs on over-length summaries. Invisible under
+   cassettes, where every recorded summary is within the cap; it fires only
+   live. This is the likely true cause of ADR 0123's "three attempts past a
+   ten-minute wall", which was read as a throttle. Blocks any live scoring on
+   this corpus — S2's noise floor above all. `corpus/**/sum-*.json` +
+   `aef/harness/checks.py`.
+2. `ClaudeCodeProvider` reads the answering model as the first `modelUsage`
+   key, which is the CLI's own auxiliary haiku call, so `Provenance.model` in
+   every recorded run names the wrong model. `aef/providers/harness_provider.py`.
+
+**Green bar:** 2016 passed / 3 skipped (plus 17 new), `mypy aef examples`
+clean, `ruff check` and `ruff format --check` clean.
+
+
+## Fix wave G2 — the containment claim was about one provider (ADR 0169)
+
+`aef migrate` stamped this into every generated prompt-agent module, as fact:
+
+    THE PROMPT RUNS; THE AGENT'S TOOLS DO NOT. ... the harness adapters send
+    `--tools ""` with `--max-turns 1`.
+
+and `make_prompt_agent_node` said **"nothing in this path can open a file,
+spawn a process or reach a network service."** Both sentences describe
+`ClaudeCodeProvider`. The path takes whatever `model_provider.impl` names, and
+printing the argv for the same `CompletionRequest` shows three mismatches:
+
+```
+codex:                 [..., '--sandbox','read-only', ..., '<persona>\n\nsay ok']
+command WITH {system}: ['cli','-m','m1','--system-prompt-override','<persona>','-p','say ok']
+command NO   {system}: ['cli','-m','m1','-p','<persona>\n\nsay ok']
+```
+
+`codex exec` sends **neither** flag — an agentic loop in a read-only sandbox,
+with no system-prompt flag, so the persona goes in the USER turn. `impl:
+command` — ADR 0154's answer for Copilot's CLI and every harness after it —
+sends whatever the owner's argv template says and nothing more. No test joined
+the claim to the provider set, and one asserting "every impl is
+tool-suppressed" would fail on `command` by construction.
+
+**The suspected item, measured. Three live `grok` calls, budget three.** A
+directory holding one file whose first line is
+`AEF_CANARY_7F3A_THIS_LINE_PROVES_A_FILE_WAS_READ`, `--cwd` pointed at it, the
+adapter's exact tool flags, the prompt "List the files in the current
+directory and print the first line of each":
+
+| arm | exit | `stopReason` | `num_turns` | reply |
+|---|---|---|---|---|
+| `--max-turns 1` (what ships) | 1 | `cancelled` | 1 | a **tool preamble**; stderr `Error: max turns reached` |
+| `--max-turns 3` | 0 | `end_turn` | 2 | **contains the canary** |
+
+**`grok --tools ""` suppresses nothing on 1.0.5.** `claude --help` documents
+the identical spelling as *"Use \"\" to disable all tools"*. Same flag
+spelling, opposite semantics — ADR 0150's rule one level up. What contains the
+shipped Grok adapter is `--max-turns 1`, and it contains by *cancelling the
+run*; whether the read executed before the cancellation is **not established**,
+and that is written down rather than closed. `--disallowed-tools` is the right
+lever and is left unused, because `grok --help` lists no built-in tool names
+and this repo does not ship guessed flag values.
+
+**The fix is to condition the claim and make it per-run evidence.**
+`ModelProvider.isolation` is a closed vocabulary, DERIVED for the three
+harness adapters from the argv each builds for a sentinelled probe request, so
+a removed flag retracts its claim in the same commit:
+
+    claude_code  no_tools, no_mcp, single_turn, no_project_context, system_role
+    codex        read_only_fs, user_turn_persona
+    grok         single_turn, no_web_search, no_subagents, system_role
+    anthropic    structural — no tools parameter, no local process, system=
+    command      the owner's UNVERIFIED `isolation:` + the derived channel
+    cassette     the inner provider's, or nothing
+    fallback     the INTERSECTION — as isolated as its least-isolated member
+
+`command`'s template flags are deliberately never read as evidence: `--tools
+""` means opposite things on the two CLIs measured above, so inferring
+semantics from an unknown binary's spelling is a guess dressed as evidence.
+
+The node now writes provider, isolation and the persona's channel to
+`working_memory["<node id>__containment"]` on every run, and appends a
+`prompt_agent.persona_in_user_turn` error when the persona went out in the
+user turn — a warning rather than a refusal (some CLIs have no system flag),
+but an *error entry*, so the run scores 0 and reaches failure memory. Said out
+loud rather than discovered. Three-valued: a provider that declares nothing
+records `unknown` and does not warn, which is what keeps the replayed corpus
+unaffected. The generated header, the migrate report and the docstrings state
+the per-impl truth, and a test asserts the old sentence is **absent**.
+
+**Two defects folded in from S3's 36 live judge calls.** `answering_model`'s
+rule 3 misattributed one of them to the CLI's helper model, because a
+JSON-only judge reply is ~12 output tokens — fewer than the helper writes — so
+"the answering model writes the answer" inverts on the shortest replies. The
+requested-name rule would have won and never ran: `agent_services(reflection=
+"llm")` sets `model = reflection_model or ""`, so `requested` is empty and
+rule 3 decides alone. The function now returns an attribution
+(`requested`/`alias`/`sole`/`heuristic`/`unknown`) carried on
+`CompletionResult`; the `runtime.py` root cause is reported upward, not
+touched. And **`input_tokens` was never the cost** — it is the uncached
+remainder, *2* on all 36 calls, so ADR 0126's 211,470-vs-4,684 figures rested
+on numbers this code did not retain. The cache counters are now fields,
+`total_input_tokens` is the sum, and both live isolation guards read it: the
+Claude guard had the identical defect ADR 0154 found in Grok's and fixed only
+there.
+
+Eleven mutations, eleven detected, each reverted from a `shasum`-verified byte
+backup, plus a deliberate no-op control correctly **not** detected. **M7
+reported NOT DETECTED on its first run and the harness was at fault:**
+`"heuristic"` → `"requested"` is the SAME LENGTH, and the write landed in the
+same clock second as the previous restore of the same file, so CPython's
+`(mtime, size)` check served the pre-mutation `.pyc`. Purging `__pycache__`
+and running `python -B` detects it immediately. Worth keeping: a same-length
+edit is exactly what a mutation harness is made of, and a stale bytecode cache
+reports every one of them as a hole in the suite.
+
+**Still open, stated rather than implied.** `claude --tools ""` has **not**
+been canary-tested — the live budget was grok-only, and the one CLI that was
+tested is the one whose documented reading turned out to be wrong; `no_tools`
+on `claude_code` rests on its own `--help`. Grok's `--disallowed-tools` needs
+a tool-name list this box cannot obtain. The empty `reflection_model` in
+`aef/services/runtime.py` still sends every judge call down the heuristic
+attribution path.
+
+Green bar: `pytest -q` 2178 passed, 5 skipped (2158 → 2183 collected, +25) ·
+`mypy aef examples` clean on 131 files · `ruff check .` clean ·
+`ruff format --check aef tests examples` clean · `tests/test_vendor_isolation.py`
+green · **3 live model calls, all `grok`.**
+
+
+## Fix wave G1b — the diagnostic that never opened the agents (ADR 0168)
+
+Six findings — four from the first seam hunt, one from the second, and M4 folded
+in — each reproduced by running a command before anything was changed. **Zero
+live model calls.** No rubric dimension moves.
+
+**F3 (HIGH).** On a copy of the marlin pilot clone, `aef migrate` wrote eight
+prompt-agent graphs; `find -name graph.py` counted **nine** on disk; `aef
+doctor` listed **two**, and obligation 6 — ADR 0137's *every model call reaches
+the harness* — **passed on `agents/migrated/graph.py`**, the call-site stub
+whose `build_graph()` raises `NotImplementedError` and which makes no model call
+at all. The eight that do were never opened.
+
+The cause is a seam, not a bug in either half: doctor globbed `<agent
+root>/*/graph.py` (one level) and ADR 0152's migrate writes `<agent
+root>/migrated/<module>/graph.py` (two). Both halves tested; no test ran the
+producer into the consumer.
+
+**Erratum on ADR 0149**, recorded in that ADR as well as this one: its docstring
+claimed that deriving every path from `DEFAULT_AGENT_ROOT` meant the list
+"cannot leave this list naming a directory nothing writes to". That held for one
+writer. Derivation kept the ROOT correct and said nothing about the DEPTH. A
+shared constant proves two names spell one string; it cannot prove a glob
+matches what another command writes.
+
+Discovery is now ONE function — `aef.harness.zones.discover_graph_files`, in
+`zones` because `aef/harness/preflight.py` needs it and the harness does not
+import the CLI — and the invariant is enforced by running the real `run_migrate`
+into the real `_graph_entries`. `aef doctor --agent-root` added: a repo that
+took ADR 0152's Zone A opt-in had doctor reporting on the two files *outside*
+the widened root and nothing about the sixteen inside it.
+
+**Reported for G1a, not edited:** preflight's obligation 6 is
+`model_calls_are_visible(repo_root, agent_path)` — one path, defaulted by
+`aef/cli/loop.py::cmd_doctor` — so `aef loop doctor` has the identical false
+pass. `discover_graph_files` is importable today.
+
+**F5 (MEDIUM).** One `aef migrate --agent-root .claude/agents` printed `Zone A
+(agents/**)` for `agents/migrated/graph.py` twelve lines above `Zone A is
+'.claude/agents'`, while `inspect_path` under that policy says Zone **C**.
+`_zone_note` classified with the default `ZonePolicy` and hardcoded
+`DEFAULT_AGENT_ROOT`; `result.agent_root` existed and never reached it. Now the
+note reports the zone under the policy the loop will run, says in words that
+`--agent-root` moves the prompt-agent graphs while `--out` moves the call-site
+one, and prints the `--agent-path` values that ARE inside the root. The test
+asserts against `inspect_path` itself, not a phrase.
+
+**S2 (SUSPECTED → CONFIRMED).** A persona named `../escape` produced
+`graph_id='../escape'`, printed as the value to hand `aef loop bless
+--graph-id`. `archive._graph_dir` was `root / graph_id`, so `record()` wrote
+`state/escape/v000001/` — one level above the archive root, which stayed empty;
+`root / "/etc/x"` discards `root` entirely. Refused at both ends:
+`zones.segment_refusal` in the one place every archive read and write goes
+through (refused, never normalised — two spellings of one id must not disagree
+about which directory they mean), and `aef migrate` renames to the already-
+disambiguated module with the reason in the report. `AGENT_NAME` in the
+generated module is untouched: only the id that becomes a DIRECTORY has to be a
+path segment.
+
+**F8 (LOW).** The bytecode advisory named `agents/`. On the widened clone,
+compiling one generated module and `git add -A` tracked
+`.claude/agents/migrated/marlin_accela/__pycache__/graph.cpython-313.pyc`. Adopt
+runs before migrate and cannot know the root, so the message now states the rule
+rather than guessing a path.
+
+**Also found, reported, not fixed:** the report's `aef run
+.claude.agents.migrated.marlin_accela.graph` is not an importable module name
+under a widened root; a hand-typed hostile `--graph-id` now reaches the CLI as
+an uncaught `ArchiveError` (`aef/cli/loop.py` is G1a's).
+
+**M4 (HIGH, folded in).** The report's own printed command could not be run
+under the flag M1 added:
+
+    $ aef run .claude.agents.migrated.marlin_accela.graph --objective "x" --config aef.yaml
+    error: the 'package' argument is required to perform a relative import for
+    '.claude.agents.migrated.marlin_accela.graph'
+
+A leading dot is a RELATIVE import to `importlib`, and no dotted spelling of
+`.claude/agents/...` exists at all. **Erratum on ADR 0152**, recorded there: M1
+ran `aef run` on a graph at the DEFAULT root and ran `--agent-root` without ever
+running the command that flag makes migrate print. Each half exercised, the join
+not — the same shape as F3, in M1's own evidence. M4 hit it and worked around it
+by keeping the graphs at the default root while passing `--agent-root` to the
+loop, which is the two-trees-one-loop state the blast-radius block warns about.
+
+Refusing a non-importable root was rejected outright: `.claude/agents` IS the
+documented opt-in, so a refusal deletes ADR 0152 §4 rather than fixing it. So
+`aef run` — and `aef loop record`, which shares the loader — take a file path as
+well, through ONE importer replacing the two copies of
+`importlib.import_module`. The choice is made on the spelling, never by trying
+the import and falling back: a module that fails for its own reason would
+otherwise be retried as a filename and reported as "no such file", hiding the
+real error behind a second one. `sys.modules` is keyed on the resolved path,
+because migrate names every generated file `graph.py`.
+
+Pinned producer → parser → runner: the test takes the `aef run ...` line out of
+the real `report()`, `shlex.split`s it, feeds it to the real `build_parser()`,
+and runs what argparse hands back through the real `run_graph_module` — against
+a `command`-provider config whose argv is `["/bin/echo", "{prompt}"]`. A real
+provider, a real subprocess, **no live model call**.
+
+**R7 (MEDIUM, second seam hunt).** A repo whose `AGENTS.md` and `CLAUDE.md` are
+both symlinks into `docs/` — one file of house rules read under two names:
+
+    $ aef adopt --dir .
+    skipped .../CLAUDE.md (a symlink, or under one — adoption never writes through a link)
+    skipped .../AGENTS.md (a symlink, or under one — adoption never writes through a link)
+    $ aef doctor --dir .
+    [WARN] entry_file_points_at_the_guide:CLAUDE.md: ... fix: re-run `aef adopt --dir .`
+    [WARN] entry_file_points_at_the_guide:AGENTS.md: ... fix: re-run `aef adopt --dir .`
+
+`is_file()` follows the link, so the check reads the target's bytes, finds no
+block, and prescribes the one command guaranteed not to add one. The only advice
+on offer was a loop.
+
+The FIX was wrong, not the check — and that distinction is load-bearing. Reading
+through the link is right: a link whose target carries the block does reach the
+agent, and narrowing the check to real files turns a correctly-adopted repo into
+two warnings (the mutation that does exactly that fails
+`test_a_symlink_whose_target_carries_the_block_is_ok`). The remedy now names the
+target and says to add the block there or replace the link, and the walk covers
+a symlinked PARENT directory too, because adopt refuses those as well.
+`test_adopt_really_does_refuse_a_symlinked_entry_file` asserts adopt's half
+against the real `run_adopt` rather than quoting its source, so the two sides of
+the loop cannot drift apart silently.
+
+**Also found, reported, not fixed:** a hand-typed hostile `--graph-id` now
+reaches the CLI as an uncaught `ArchiveError` (`aef/cli/loop.py` is G1a's);
+`aef loop bootstrap --module`'s help still says "module" and nothing tests the
+loop commands under a widened root.
+
+Twelve mutations, twelve kills, every restore verified against a `sha256` taken
+before the edit — never `git checkout --`. Eleven were killed by tests written
+before the mutation ran; **one survived the first pass** and is recorded: keying
+`sys.modules` on the file's basename still loads the right file and still
+returns a distinct module object, so `first is not second` passed while the
+registry entry pointed at whichever was loaded last. The control was rebuilt to
+assert `sys.modules` itself. That is what the mutation pass is for.
+
+Green bar: `pytest -q` 2195 passed, 5 skipped (2153 -> 2195, **+42**, none
+removed) · `mypy aef examples` 131 files clean · `ruff check .` clean ·
+`ruff format --check aef tests examples` 252 files clean · **0 model calls.**
+
+## Fix wave H2 — the containment field that was read by nothing (ADR 0173)
+
+R5 of the second seam hunt, MEDIUM. ADR 0161 shipped
+`shadow.containment: auto|fallback|off` with a validator, a drift test against
+the enum, a test that the default is the contained one — and no wire.
+`build_containment_mode` had zero callers; `shadow_for`'s `mode` defaulted to
+`ContainmentMode.AUTO` in the signature. The config surface read as wired.
+
+**Reproduced by running, both directions.** An owner who wrote
+`containment: "off"` on a box with docker and `aef-worker:test` got
+`decision.mode = auto`, `contained = True`, `owner_opted_out = False` — a
+container they had declined. An owner who wrote `fallback` on a runtime-less
+box got `UncontainedShadowError` instead of the fallback that mode exists to
+give them. The harmless direction and the one that costs work.
+
+**Fixed:** both `mode` parameters (`shadow_for`, `resolve_containment`) lose
+their defaults — ADR 0101's rule applied to a parameter, since a default that
+silently overrides the owner's config is a promise the signature makes and the
+code breaks. `RunConfig` gains `containment_mode = build_containment_mode(
+config.shadow)`, one derivation, its unconfigured value derived from
+`ShadowConfig()` rather than restated as `AUTO`. After: `off → off,
+contained=False, owner_opted_out=True` with the ledger entry carrying
+`security_event`; `fallback → it RAN`; omitting `mode` → `TypeError`.
+
+**Not done, on purpose:** shadow execution still has no production caller.
+Adding one is a design decision, not a patch; the ADR states what it would
+need (a worker image containing the adopter's own `aef`, a decision on which
+live requests may be duplicated onto a candidate, an owner who has read trust
+case §2.1) and `RunConfig`'s docstring states that the field's only reader
+today is `RunConfig`.
+
+**Rubric: no dimension moves.** S5's +1 on dim 4 survives, argued in the ADR:
+the gap applied the CONTAINED-or-refuse mode unconditionally, so nothing
+weaker than `auto` was reachable through it and no run was ever less contained
+than 0161 claimed. The real cost was to the audit trail — `owner_opted_out:
+True` had no path an owner could take to it. Erratum filed on ADR 0161 for the
+two sentences that were false when written.
+
+5 mutations, 5 caught, every restore sha256-verified. M1's first form failed
+with an `IsolationError` from a real container rather than on the property
+being pinned, and the TEST was rebuilt around `inspect.signature` rather than
+the mutation dropped.
+
+**Green bar:** 2269 passed / 5 skipped (2264 → 2269, +5), `mypy aef examples`
+clean (132 files), `ruff check .` and `ruff format --check aef tests examples`
+clean. Zero live model calls.

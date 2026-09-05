@@ -45,7 +45,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from aef.harness.checks import TaskCheck
+from aef.harness.checks import CheckError, TaskCheck
 from aef.harness.trace_codec import (
     TRACE_FORMAT_VERSION,
     TraceCodecError,
@@ -201,6 +201,13 @@ class Scenario:
                 # exactly what UNSPECIFIED means: nobody recorded who wrote it.
                 source=Source(payload.get("source", Source.UNSPECIFIED.value)),
             )
+        except CheckError as exc:
+            # `CheckError` is a `ValueError`, so it would otherwise be reported
+            # as "malformed scenario payload" — which is the wrong lead for a
+            # pattern that parses perfectly and is refused because running it
+            # would not terminate (ADR 0166). The check's own message carries
+            # the rewrite; this only says the check is why the file is refused.
+            raise CorpusError(f"unusable check: {exc}") from exc
         except (KeyError, ValueError) as exc:
             raise CorpusError(f"malformed scenario payload: {exc}") from exc
 

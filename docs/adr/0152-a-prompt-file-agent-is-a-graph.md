@@ -342,3 +342,69 @@ two CLI facts the design rests on (recursive agent discovery; a `.py` under
 Lower on breadth: one pilot repo, eight personas, one harness. Nothing here says
 a *changed* prompt survives the gates — that is M4/M5, and the corpus this
 increment recorded has no failing input for them to work from yet.
+
+
+## Erratum (2026-09-04, ADR 0169, fix wave G2)
+
+**"The safety property, in the docstring because it is the whole point: the
+prompt runs; the agent's tools do not" is a claim about `ClaudeCodeProvider`,
+and it was written — here, in `make_prompt_agent_node`'s docstring, and
+stamped into every generated module — as a claim about the PATH.** The
+sentence "The harness adapters send `--tools ""` with `--max-turns 1`" is
+false of two of the five impls that path accepts and unverifiable on a third:
+
+- `codex exec` sends **neither** flag. It is an agentic loop in a `--sandbox
+  read-only` jail, and it has no system-prompt flag, so the persona goes in
+  the USER turn.
+- `grok --tools ""` was **measured** on 1.0.5 to suppress nothing: given one
+  more turn the same argv listed a planted directory and quoted the file's
+  first line back. `claude --help` documents the identical spelling as "Use
+  \"\" to disable all tools". Same spelling, opposite semantics.
+- `impl: command` — ADR 0154's answer for every harness after Grok, including
+  Copilot's CLI — sends whatever an owner's argv template says and nothing
+  else, and with no `{system}` slot prepends the persona to the user turn.
+
+`ProviderMessage`-level statements in this ADR stand: `CompletionRequest` has
+no tool field, and the frontmatter's `tools:` key is still parsed, reported
+and never obeyed under every impl. What does not stand is the unconditional
+"nothing in this path can open a file, spawn a process or reach a network
+service."
+
+Providers now declare an `isolation` set derived from the argv they build, the
+node records it and the persona's channel per run
+(`working_memory["<node id>__containment"]`, plus a
+`prompt_agent.persona_in_user_turn` error entry), and the generated header
+states the per-impl truth. ADR 0169 has the argv, the canary experiment and
+the raw JSON.
+
+\n
+
+---
+
+## Erratum, added by ADR 0168 (fix wave G1b)
+
+**The command this ADR's report prints for a widened root cannot be run.**
+
+§4 chose `--agent-root .claude/agents` as the opt-in, §2 has the report print
+`aef run <dotted> --objective "..."` per agent, and `dotted` is the output path
+with `/` replaced by `.`. Under the widened root that is
+`.claude.agents.migrated.marlin_accela.graph`, and:
+
+```
+$ aef run .claude.agents.migrated.marlin_accela.graph --objective "x" --config aef.yaml
+error: the 'package' argument is required to perform a relative import for
+'.claude.agents.migrated.marlin_accela.graph'
+```
+
+A leading dot is a relative import to `importlib`, and **no** dotted spelling of
+that path exists — `.claude` is not an identifier.
+
+This ADR's Measurements section ran `aef run` on a graph written at the
+**default** root, and ran `--agent-root` without ever running the command that
+flag makes migrate print. Each half was exercised; the join was not. It is the
+same seam shape as ADR 0168's F3 and it was in this increment's own evidence.
+
+Fixed in ADR 0168: `aef run` (and `aef loop record`, which shares the loader)
+accept a file path as well as a dotted name, and `migrate` prints whichever form
+is runnable for the root the adopter chose. Refusing the root was rejected —
+`.claude/agents` is this ADR's whole opt-in.

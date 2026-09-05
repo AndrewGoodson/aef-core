@@ -147,3 +147,26 @@ non-deterministic; and the judges' evidence omits the answer.
 High on the cassette and the default; the corpus is twenty synthetic
 passages of one shape, and the live noise floor is a number this ADR does
 not have.
+
+## Erratum (ADR 0166, 2026-09-04)
+
+The Evidence section above says of the three live attempts that "why `loop
+score --cassette-miss live` ran so much slower is not diagnosed (quota
+throttling after ~110 calls in the hour is the suspicion; it is a
+suspicion)". **The suspicion was wrong, and the honest hedge was the right
+call on the evidence available.**
+
+It was not a throttle. It was this corpus's own word-cap check. Every summary
+scenario carried `{"op": "regex", "value": "^(?:\\s*\\S+){1,N}\\s*$"}` — a
+repeated group over a nullable-separated body, which matches in 0.05 ms and,
+on a summary **one word over the cap**, backtracks over every partition of the
+string and does not return. `aef/harness/checks.py::_holds` called `re.search`
+with no timeout. The recorded cassettes all sit at or under their caps, so the
+replayed runs in this ADR never touched the failing branch; the live runs
+produced the first over-cap summary and hung on it. Diagnosed from a
+`faulthandler` stack in ADR 0156 §D2, reproduced and fixed in ADR 0166.
+
+Nothing else in this ADR changes. Every number here was measured on the
+replayed path, and re-scoring the corpus after the pattern was rewritten
+reproduces all of them byte-for-byte — train `0.9792`, validation `0.9167`,
+and all three `0.75`s.

@@ -150,3 +150,49 @@ def test_the_unsupported_impl_message_names_grok_and_command() -> None:
         build_model_provider(ModelProviderConfig(impl="openai", model="gpt-x"))
     with pytest.raises(UnsupportedProviderImplError, match="command"):
         build_model_provider(ModelProviderConfig(impl="openai", model="gpt-x"))
+
+
+def test_the_command_isolation_assertion_is_validated_at_config_load() -> None:
+    """One rule, two doors (ADR 0091): the same function `CommandProvider`
+    calls, so a typo in `aef.yaml` fails at load rather than at first use.
+    The claim itself is never verified against the binary — it cannot be, and
+    ADR 0169 says so in the field's own docstring."""
+    block: dict[str, object] = {
+        "argv": ["cli", "-p", "{prompt}"],
+        "isolation": ["no_tools", "single_turn"],
+    }
+    config = ModelProviderConfig(impl="command", model="m", command=block)  # type: ignore[arg-type]
+    assert config.command is not None
+    assert config.command.isolation == ["no_tools", "single_turn"]
+
+    with pytest.raises(ValidationError, match="unknown isolation"):
+        ModelProviderConfig(
+            impl="command",
+            model="m",
+            command={**block, "isolation": ["no_toolz"]},  # type: ignore[arg-type]
+        )
+    with pytest.raises(ValidationError, match="not the owner's to assert"):
+        ModelProviderConfig(
+            impl="command",
+            model="m",
+            command={**block, "isolation": ["system_role"]},  # type: ignore[arg-type]
+        )
+
+
+def test_the_owners_isolation_assertion_reaches_the_built_provider() -> None:
+    """A block that validates and is never read is the ADR 0100 shape — and
+    the whole point of ADR 0169 is that this assertion ends up in the trace."""
+    from aef.providers.command_provider import CommandProvider
+
+    provider = build_model_provider(
+        ModelProviderConfig(
+            impl="command",
+            model="m",
+            command={"argv": ["cli", "-p", "{prompt}"], "isolation": ["no_tools"]},  # type: ignore[arg-type]
+        )
+    )
+    assert isinstance(provider, CommandProvider)
+    assert provider.asserted_isolation == frozenset({"no_tools"})
+    # And the half the owner does not get to assert is derived: no `{system}`
+    # slot, so the persona would go out in the user turn.
+    assert provider.isolation == frozenset({"no_tools", "user_turn_persona"})

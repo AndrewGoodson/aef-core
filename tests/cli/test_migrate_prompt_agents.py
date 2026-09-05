@@ -21,6 +21,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from aef.cli.migrate import (
     discover_prompt_agents,
     discover_skills,
@@ -226,10 +228,35 @@ def test_the_generated_graph_names_the_persona_and_does_not_copy_it(tmp_path: Pa
 
 
 def test_the_generated_graph_states_the_safety_property(tmp_path: Path) -> None:
+    """The containment claim is CONDITIONED on the impl, and says so (ADR 0169).
+
+    This test replaces one that asserted the unconditional sentence, and that
+    is the point: `aef migrate` stamped "THE PROMPT RUNS; THE AGENT'S TOOLS DO
+    NOT ... the harness adapters send `--tools ""` with `--max-turns 1`" into
+    every generated module as fact, while `codex` sends neither flag, `grok`'s
+    `--tools ""` was measured to suppress nothing, and `command` sends
+    whatever an owner's template says. A test pinning the old sentence would
+    have defended it through this fix, so it is replaced deliberately rather
+    than extended.
+    """
     result = run_migrate(_prompt_repo(tmp_path, names=("marlin-accela",)))
     source = (tmp_path / result.prompt_agents[0].out_relative).read_text(encoding="utf-8")
-    assert "THE PROMPT RUNS; THE AGENT'S TOOLS DO NOT" in source
+
+    # The unconditional claim must not come back. Put it back -> this fails.
+    assert "THE PROMPT RUNS; THE AGENT'S TOOLS DO NOT" not in source
+    assert "touches nothing" not in source
+
+    assert "CONTAINMENT DEPENDS ON `model_provider.impl`" in source
+    # Every impl the runtime can be pointed at is named with what it enforces.
+    for impl in ("claude_code", "grok", "codex", "command", "anthropic"):
+        assert impl in source, f"the generated header does not say what {impl} enforces"
     assert "--tools" in source
+    assert "MEASURED to suppress nothing" in source, "grok's finding must survive generation"
+    assert "nothing that suppresses tools" in source, "codex's weaker isolation must be named"
+    assert "YOUR assertion, recorded unverified" in source, "command's assertion must be named"
+    # And where a reader finds the per-run evidence instead of this comment.
+    assert 'working_memory["prompt_agent__containment"]' in source
+    assert "prompt_agent.persona_in_user_turn" in source
 
 
 def test_frontmatter_capabilities_are_named_in_the_generated_file(tmp_path: Path) -> None:
@@ -337,3 +364,252 @@ def test_a_repo_with_no_prompt_agents_is_a_finding_not_a_crash(tmp_path: Path) -
     text = report(result)
     assert "found 0 prompt agent(s)" in text
     assert "BLAST RADIUS" not in text
+
+
+# ---------------------------------------------------------------------------
+# ADR 0168 / F5 — the report contradicted itself under a widened agent root
+#
+# REPRODUCED, one command, two sentences twelve lines apart:
+#
+#     $ aef migrate --dir <clone> --agent-root .claude/agents
+#     wrote .../agents/migrated/graph.py
+#       Zone A (agents/**) - agent-writable, the only tree the self-rewiring
+#       loop may propose changes to
+#     ...
+#     BLAST RADIUS - what the self-rewiring loop may now propose changes to.
+#       Zone A is '.claude/agents'. The generated graphs are inside it.
+#
+# and the classifier the gates use agreeing with neither:
+#
+#     >>> inspect_path("agents/migrated/graph.py",
+#     ...              ZonePolicy(agent_root=".claude/agents")).zone
+#     Zone.C
+#
+# `_zone_note` classified with the DEFAULT `ZonePolicy` and hardcoded
+# `DEFAULT_AGENT_ROOT` in its own string; `result.agent_root` never reached it.
+# ---------------------------------------------------------------------------
+def test_the_zone_note_reports_the_zone_under_the_root_the_loop_will_run(
+    tmp_path: Path,
+) -> None:
+    """The note and the gate must agree, under BOTH roots. Asserted against
+    `inspect_path` itself rather than against a phrase, so the test cannot
+    drift away from the classifier the way the string did."""
+    for agent_root in (DEFAULT_AGENT_ROOT, ".claude/agents"):
+        root = _prompt_repo(tmp_path / agent_root.replace("/", "_"), names=("one",))
+        result = run_migrate(root, agent_root=agent_root)
+        assert result.out_relative is not None
+        policy = ZonePolicy(agent_root=agent_root)
+        zone = inspect_path(result.out_relative, policy).zone
+        text = report(result)
+        if zone is Zone.A:
+            assert f"Zone A ({agent_root}/**)" in text, text
+            assert "Zone C under the agent root" not in text
+        else:
+            assert f"Zone C under the agent root this run used ({agent_root!r})" in text, text
+            assert f"Zone A ({agent_root}/**)" not in text
+
+
+def test_the_report_never_claims_zone_a_for_a_file_the_gate_calls_zone_c(
+    tmp_path: Path,
+) -> None:
+    """The contradiction itself, stated as the invariant: no line of the report
+    may say `Zone A (agents/**)` about a run whose Zone A is somewhere else."""
+    result = run_migrate(_prompt_repo(tmp_path, names=("one",)), agent_root=".claude/agents")
+    text = report(result)
+    assert "Zone A (agents/**)" not in text, (
+        "the per-file note still classifies with the default policy while BLAST "
+        f"RADIUS says Zone A is {result.agent_root!r}"
+    )
+    assert "Zone A is '.claude/agents'" in text
+
+
+def test_the_widened_note_names_the_agent_paths_that_are_inside_the_root(
+    tmp_path: Path,
+) -> None:
+    """The next command the operator types takes one of these. `--agent-root`
+    moves the prompt-agent graphs; `--out` moves the call-site graph, so it
+    landing outside a widened root is ordinary rather than a mistake - and the
+    note has to say which paths ARE inside."""
+    result = run_migrate(_prompt_repo(tmp_path), agent_root=".claude/agents")
+    text = report(result)
+    assert "`--agent-root` moves the PROMPT AGENT graphs, `--out` moves this one" in text
+    for site in result.prompt_agents:
+        assert f"--agent-path {site.out_relative}" in text, site.out_relative
+    assert "The CALL-SITE graph is NOT (agents/migrated/graph.py is Zone C)" in text
+
+
+# ---------------------------------------------------------------------------
+# ADR 0168 / S2 — a persona name is not a path segment
+#
+# REPRODUCED. `.claude/agents/evil.md` with `name: ../escape`:
+#
+#     AGENT    ../escape  (.claude/agents/evil.md)
+#               -> agents/migrated/escape/graph.py
+#               graph_id='../escape', wired prompt_agent -> ...
+#
+# The MODULE was sanitised; the graph id was not, and the report prints it as
+# the value to hand `aef loop bless --graph-id`. `archive._graph_dir` is
+# `root / graph_id`, so that id wrote `state/escape/v000001/` - one level above
+# the archive root, which was left empty.
+# ---------------------------------------------------------------------------
+def test_a_persona_name_that_is_not_a_path_segment_never_becomes_a_graph_id(
+    tmp_path: Path,
+) -> None:
+    from aef.harness.zones import segment_refusal
+
+    agents = tmp_path / ".claude" / "agents"
+    agents.mkdir(parents=True)
+    for i, name in enumerate(("../escape", "a/b", "/absolute", "ok-name")):
+        (agents / f"agent-{i}.md").write_text(PERSONA.format(name=name), encoding="utf-8")
+
+    result = run_migrate(tmp_path)
+    by_name = {site.definition.name: site for site in result.prompt_agents}
+    assert set(by_name) == {"../escape", "a/b", "/absolute", "ok-name"}
+
+    for name, site in by_name.items():
+        assert not segment_refusal(site.graph_id), (
+            f"graph_id {site.graph_id!r} (from persona {name!r}) is still not a "
+            f"single safe path segment"
+        )
+    assert by_name["ok-name"].graph_id == "ok-name", "a safe name must be left alone"
+    assert by_name["../escape"].graph_id == by_name["../escape"].module
+
+
+def test_a_refused_persona_name_is_named_in_the_report_never_silently_renamed(
+    tmp_path: Path,
+) -> None:
+    agents = tmp_path / ".claude" / "agents"
+    agents.mkdir(parents=True)
+    (agents / "evil.md").write_text(PERSONA.format(name="../escape"), encoding="utf-8")
+
+    result = run_migrate(tmp_path)
+    text = report(result)
+    assert "NAME REFUSED as a graph id" in text, text
+    assert "path traversal" in text
+    assert "graph_id='escape'" in text
+    # The persona's own name is still shown, so the line can be traced to a file.
+    assert "AGENT    ../escape" in text
+
+
+def test_the_generated_module_uses_the_safe_id_and_keeps_the_persona_name(
+    tmp_path: Path,
+) -> None:
+    """`Graph(id=...)` is what reaches the archive; `agent_name` is what the
+    model is told it is. Only the first has to be a path segment."""
+    agents = tmp_path / ".claude" / "agents"
+    agents.mkdir(parents=True)
+    (agents / "evil.md").write_text(PERSONA.format(name="../escape"), encoding="utf-8")
+
+    result = run_migrate(tmp_path)
+    (site,) = result.prompt_agents
+    source = (tmp_path / site.out_relative).read_text(encoding="utf-8")
+    assert 'GRAPH_ID = "escape"' in source, source
+    assert 'AGENT_NAME = "../escape"' in source
+    assert "id=GRAPH_ID," in source
+    assert "agent_name=AGENT_NAME," in source
+
+
+# ---------------------------------------------------------------------------
+# ADR 0168 / M4 — the report printed a command that cannot run
+#
+# REPRODUCED, from the repo `aef migrate --agent-root .claude/agents` produced:
+#
+#     $ aef run .claude.agents.migrated.marlin_accela.graph --objective x --config aef.yaml
+#     error: the 'package' argument is required to perform a relative import
+#     for '.claude.agents.migrated.marlin_accela.graph'
+#
+# A leading dot is a relative import to `importlib`, and no dotted spelling of
+# `.claude/agents/...` exists at all. M1 shipped a flag whose own generated
+# command could not be run under it.
+# ---------------------------------------------------------------------------
+COMMAND_PROVIDER_CONFIG = """model_provider:
+  impl: command
+  model: stub
+  command:
+    argv: ["/bin/echo", "{prompt}"]
+    output: stdout
+memory:
+  impl: in_memory
+objectives: exercise the generated graph
+"""
+
+
+def _printed_run_command(text: str, out_relative: str) -> str:
+    """The `aef run ...` line the report prints for one agent."""
+    lines = text.splitlines()
+    index = next(i for i, line in enumerate(lines) if line.strip() == f"-> {out_relative}")
+    return next(
+        line.strip().removeprefix("-> ")
+        for line in lines[index + 1 :]
+        if line.strip().startswith("-> aef run ")
+    )
+
+
+def test_the_printed_run_command_parses_and_runs_under_a_widened_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real producer, real parser, real runner — no live model call.
+
+    The whole defect was that nothing ever fed migrate's own printed command
+    back into the CLI that has to accept it.
+
+    Run from the repo root, which is what the printed command assumes and what
+    `aef run` has always documented — the dotted form needs the same thing (it
+    is `_ensure_cwd_importable` that puts the CWD on `sys.path`), so the file
+    form adds no requirement the adopter did not already have.
+    """
+    import shlex
+
+    from aef.cli.main import build_parser
+    from aef.cli.run import run_graph_module
+
+    root = _prompt_repo(tmp_path, names=("pilot-accela",), skills=0)
+    (root / "aef.yaml").write_text(COMMAND_PROVIDER_CONFIG, encoding="utf-8")
+    result = run_migrate(root, agent_root=".claude/agents")
+    (site,) = result.prompt_agents
+    assert site.out_relative.startswith(".claude/agents/"), site.out_relative
+
+    command = _printed_run_command(report(result), site.out_relative)
+    argv = shlex.split(command)
+    assert argv[0] == "aef" and argv[1] == "run"
+
+    # 1. the REAL parser accepts it
+    args = build_parser().parse_args(argv[1:])
+    assert args.module == site.out_relative, (
+        f"the report printed {args.module!r}, which is not the file that was written"
+    )
+
+    # 2. and the REAL runner runs it, with a local `echo` as the provider
+    monkeypatch.chdir(root)
+    state = run_graph_module(
+        args.module,
+        agent_id="a1",
+        objective="what are the preconditions?",
+        config_path=root / "aef.yaml",
+    )
+    assert "prompt_agent" in state.working_memory, state.working_memory
+    assert "what are the preconditions?" in str(state.working_memory["prompt_agent"])
+
+
+def test_the_dotted_form_is_still_printed_when_it_is_importable(tmp_path: Path) -> None:
+    """The control. Under the default root the dotted name works and is what an
+    adopter expects to see; the file path is the fallback, not the new normal."""
+    result = run_migrate(_prompt_repo(tmp_path, names=("pilot-accela",), skills=0))
+    (site,) = result.prompt_agents
+    assert site.importable
+    assert site.run_target == site.dotted == f"{DEFAULT_AGENT_ROOT}.migrated.pilot_accela.graph"
+    text = report(result)
+    assert f"aef run {site.dotted} " in text
+    assert "a file path, not" not in text
+
+
+def test_a_non_importable_root_is_named_in_the_report(tmp_path: Path) -> None:
+    result = run_migrate(
+        _prompt_repo(tmp_path, names=("pilot-accela",), skills=0), agent_root=".claude/agents"
+    )
+    (site,) = result.prompt_agents
+    assert not site.importable
+    assert site.run_target == site.out_relative
+    text = report(result)
+    assert f"aef run {site.out_relative} " in text
+    assert "a file path, not '.claude.agents.migrated.pilot_accela.graph'" in text

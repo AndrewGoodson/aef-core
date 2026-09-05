@@ -10,10 +10,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from aef.cli.migrate import DEFAULT_MIGRATED_OUT, LEGACY_MIGRATED_OUT
 from aef.config import AgentConfig, AgentConfigError, load_agent_config
 from aef.harness.preflight import model_calls_are_visible
-from aef.harness.zones import DEFAULT_AGENT_ROOT
+from aef.harness.zones import DEFAULT_AGENT_ROOT, discover_graph_files
 
 
 @dataclass(frozen=True)
@@ -64,7 +63,73 @@ def _adapter_check(adapter: Path) -> DoctorCheck:
     )
 
 
-def _graph_entries(target_dir: Path, agent_path: str | None) -> list[str]:
+def _link_on_the_way_to(target_dir: Path, path: Path) -> Path | None:
+    """The first symlink between `target_dir` and `path`, or `None`.
+
+    The same walk `aef adopt`'s writer does, and deliberately so: adopt refuses
+    a path that IS a link or is UNDER one, so a diagnostic that only looked at
+    the leaf would prescribe a fix adopt declines to perform for a parent
+    directory link (ADR 0168, R7).
+    """
+    if path.is_symlink():
+        return path
+    parent = path.parent
+    while parent != target_dir and parent != parent.parent:
+        if parent.is_symlink():
+            return parent
+        parent = parent.parent
+    return None
+
+
+def _entry_file_fix(target_dir: Path, entry_file: Path, name: str) -> str:
+    """What to actually DO about an entry file with no aef block.
+
+    REPRODUCED (ADR 0168, R7). A repo whose `AGENTS.md` and `CLAUDE.md` are both
+    symlinks into `docs/` — an ordinary cross-tool arrangement — gets:
+
+        $ aef adopt --dir .
+        skipped .../AGENTS.md (a symlink, or under one — adoption never writes through a link)
+        skipped .../CLAUDE.md (a symlink, or under one — adoption never writes through a link)
+        $ aef doctor --dir .
+        [WARN] entry_file_points_at_the_guide:AGENTS.md: ... fix: re-run `aef adopt --dir .`
+
+    which skips it again. `is_file()` follows the link, so the check reads the
+    target's bytes, finds no block, and prescribes the one command that is
+    guaranteed not to add one. The only advice on offer was a loop.
+
+    Reading THROUGH the link stays right — a link whose target carries the block
+    does reach the agent, and that case passes. What was wrong was the fix.
+    """
+    link = _link_on_the_way_to(target_dir, entry_file)
+    if link is None:
+        return (
+            "re-run `aef adopt --dir .`, which appends a block between "
+            "`<!-- aef:begin -->` and `<!-- aef:end -->` and leaves every other byte "
+            "of the file alone"
+        )
+    try:
+        resolved = entry_file.resolve()
+        shown: str | Path = resolved.relative_to(target_dir)
+    except (OSError, ValueError):  # outside the repo, or a broken link
+        shown = entry_file.resolve(strict=False)
+    via = "" if link == entry_file else f" (via the symlinked directory {link.name}/)"
+    return (
+        f"{name} is a SYMLINK{via} to {shown}, and `aef adopt` never writes through a "
+        f"link — it reports `a symlink, or under one` and skips, so re-running it will "
+        f"not add the block and telling you to is a loop. Do one of: add the block to "
+        f"the TARGET ({shown}) — appending `<!-- aef:begin -->` … `<!-- aef:end -->` "
+        f"with a pointer to AGENT_INTEGRATION.md, which is what adopt would have "
+        f"written — or replace the link with a real file that carries the target's "
+        f"content plus the block. Either way the agent reading {name} sees the "
+        f"contract; adopt will then leave it alone."
+    )
+
+
+def _graph_entries(
+    target_dir: Path,
+    agent_path: str | None,
+    agent_root: str = DEFAULT_AGENT_ROOT,
+) -> list[str]:
     """Which files are "the configured graph" for the model-call advisory.
 
     Keyed on the graph, not on migrate's output file. The advisory was written
@@ -77,33 +142,38 @@ def _graph_entries(target_dir: Path, agent_path: str | None) -> list[str]:
 
     An explicit `--agent-path` wins outright — it is the same flag
     `aef loop doctor` takes and it means the owner has said which file it is.
-    Otherwise every entry the adoption contract names, that exists, is
-    scanned: the adapter shim, migrate's output, and each
-    `<agent_root>/*/graph.py` — which is what `--agent-path` defaults into.
+    Otherwise the walk is `aef.harness.zones.discover_graph_files`, shared with
+    the loop's own preflight so that the two cannot disagree about which files
+    exist.
 
-    Every path here is derived from `DEFAULT_AGENT_ROOT` via
-    `aef.cli.migrate`, so moving the agent root or migrate's default cannot
-    leave this list naming a directory nothing writes to. `LEGACY_MIGRATED_OUT`
-    is the one exception and is named as such: it is where migrate wrote
-    before ADR 0143, and dropping it would silently stop discovering the graph
-    in every repo migrated before that day.
+    **Erratum on ADR 0149.** The docstring this replaces claimed that deriving
+    every path from `DEFAULT_AGENT_ROOT` meant the list "cannot leave this list
+    naming a directory nothing writes to". That held while `aef migrate` had
+    one writer. ADR 0152 added a second — one graph per prompt agent at
+    `<agent root>/migrated/<module>/graph.py` — and the glob here was
+    `<agent root>/*/graph.py`, one level. Derivation kept the *root* correct
+    and said nothing about the *depth*, so on the pilot clone doctor listed two
+    entries against nine graphs on disk and passed obligation 6 on the one file
+    that makes no model call. The invariant is now enforced by running the real
+    `run_migrate` into this function
+    (`tests/cli/test_doctor_discovery.py::test_doctor_lists_every_graph_migrate_wrote`),
+    not by a shared constant.
+
+    `agent_root` is the repo's own — `aef doctor --agent-root .claude/agents`
+    for a repo that widened Zone A. Without it, a widened repo's sixteen Zone A
+    files went unmentioned while doctor reported on two Zone C ones.
     """
     if agent_path:
         return [agent_path]
-    entries: list[str] = []
-    for name in ("aef_adapter.py", DEFAULT_MIGRATED_OUT, LEGACY_MIGRATED_OUT):
-        if (target_dir / name).is_file():
-            entries.append(name)
-    agents_root = target_dir / DEFAULT_AGENT_ROOT
-    if agents_root.is_dir():
-        for graph in sorted(agents_root.glob("*/graph.py")):
-            relative = graph.relative_to(target_dir).as_posix()
-            if relative not in entries:
-                entries.append(relative)
-    return entries
+    return discover_graph_files(target_dir, agent_root=agent_root)
 
 
-def run_doctor(target_dir: Path, *, agent_path: str | None = None) -> list[DoctorCheck]:
+def run_doctor(
+    target_dir: Path,
+    *,
+    agent_path: str | None = None,
+    agent_root: str = DEFAULT_AGENT_ROOT,
+) -> list[DoctorCheck]:
     target_dir = target_dir.resolve()
     checks: list[DoctorCheck] = []
 
@@ -174,9 +244,8 @@ def run_doctor(target_dir: Path, *, agent_path: str | None = None) -> list[Docto
                     if points_at_the_guide
                     else f"{entry_file} is what your coding agent reads and it names neither the "
                     f"aef marker block nor AGENT_INTEGRATION.md — the scaffold contract "
-                    f"never reaches the agent. fix: re-run `aef adopt --dir .`, which "
-                    f"appends a block between `<!-- aef:begin -->` and `<!-- aef:end -->` "
-                    f"and leaves every other byte of the file alone",
+                    f"never reaches the agent. fix: "
+                    + _entry_file_fix(target_dir, entry_file, name),
                     level="info" if points_at_the_guide else "advisory",
                 )
             )
@@ -204,7 +273,7 @@ def run_doctor(target_dir: Path, *, agent_path: str | None = None) -> list[Docto
     # Advisory, not an error: `aef doctor` checks that a setup is coherent,
     # while readiness to be gated is `aef loop doctor`'s question. An adopter
     # who has not routed their calls yet is mid-migration, not broken.
-    for entry in _graph_entries(target_dir, agent_path):
+    for entry in _graph_entries(target_dir, agent_path, agent_root):
         visible, detail, fix = model_calls_are_visible(target_dir, entry)
         checks.append(
             DoctorCheck(
