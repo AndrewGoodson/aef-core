@@ -39,6 +39,17 @@ jobs:
       - name: Graph-IR schema-compat gate
         run: pytest tests/test_schema_compat.py -v
 
+      # The published measurement tables re-derive from committed data, with
+      # zero live model calls (ADR 0196). The pytest asserts the drift set is
+      # exactly the one measure.py records with a reason — a new drift fails,
+      # and so does a recorded drift that quietly started reproducing again.
+      # `make measure` (the whole set, slow rows included) is RED on this tree
+      # by design; `make measure-ci` is this step and is green.
+      - name: Measurements re-derive (make measure-ci)
+        run: |
+          pytest tests/test_measurements_reproduce.py -v
+          make measure-ci
+
       - name: Full test suite
         run: pytest -q
 

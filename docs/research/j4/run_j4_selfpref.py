@@ -497,10 +497,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     mode.add_argument("--write-candidates", action="store_true")
     mode.add_argument("--rank", action="store_true")
     mode.add_argument("--report", action="store_true")
+    # `--verify` is the shared re-runner interface (ADR 0196): an alias of
+    # `--report`, so `docs/research/measure.py` can invoke every runner the
+    # same way. Re-derives the published table from the committed results
+    # file; zero live calls.
+    mode.add_argument("--verify", action="store_true", help="alias of --report (ADR 0196)")
     parser.add_argument("--judge", choices=JUDGES)
     parser.add_argument("--corpus", type=Path, default=REPO_ROOT / "corpus")
     parser.add_argument("--batch-size", type=int, default=8, help="max live calls this run")
     args = parser.parse_args(argv)
+    args.report = args.report or args.verify
 
     if args.report:
         report(args.corpus)

@@ -369,6 +369,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     mode.add_argument("--live", action="store_true", help="make the calls")
     mode.add_argument("--report", action="store_true", help="summarise an existing results file")
+    # `--verify` is the shared re-runner interface (ADR 0196): an alias of
+    # `--report`, so `docs/research/measure.py` can invoke every runner the
+    # same way. Re-derives the published table from the committed results
+    # file; zero live calls.
+    mode.add_argument("--verify", action="store_true", help="alias of --report (ADR 0196)")
     parser.add_argument("--corpus", type=Path, default=REPO_ROOT / "corpus")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--batch-start", type=int, default=0)
@@ -379,6 +384,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--no-resume", action="store_true", help="re-judge states already in --out")
     args = parser.parse_args(argv)
+    args.report = args.report or args.verify
 
     if args.report:
         report(args.out, args.threshold, args.corpus)
