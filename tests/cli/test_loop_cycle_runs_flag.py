@@ -139,3 +139,19 @@ def test_runs_with_module_still_reaches_the_harvest_leg(  # type: ignore[no-unty
 
     assert code == 0
     assert "promoted 0 run(s) to the train split" in out, out
+
+
+def test_run_has_the_same_refusal_as_cycle(  # type: ignore[no-untyped-def]
+    repo: Path, tmp_path: Path, capsys
+) -> None:
+    """`aef loop run` built its graph the same way (`if args.module else None`)
+    and harvested nothing without saying so — L2 reported it, ADR 0190's
+    sibling. Same refusal, same code, same two flags named."""
+    argv = _argv(repo, tmp_path, "--runs", str(tmp_path / "runs"))
+    argv[1] = "run"
+    if "--turns" not in argv:
+        argv += ["--turns", "1"]
+    code = main(argv)
+    assert code == EXIT_ERROR, "run silently skipped the harvest leg and reported success"
+    err = capsys.readouterr().err
+    assert "--runs" in err and "--module" in err, err
