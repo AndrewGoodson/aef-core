@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from aef.harness.checks import CheckError
 from aef.harness.corpus import Scenario, fixed_clock
 from aef.harness.evaluation import score_of, score_scenario
 from aef.harness.isolated import IsolationError, NodeWorkerSession, graph_from
@@ -184,12 +185,24 @@ def _run_one(
     except Exception as exc:  # noqa: BLE001 - any failure is an outcome, not a crash
         return _failed(f"{type(exc).__name__}: {exc}")
 
+    outcome = classify(result.final_state, result.trace, terminated=True)
     # Same function as the in-process runner (ADR 0113): two scorers drift.
-    record = score_scenario(
-        scenario, result.final_state, elapsed_ms=(time.monotonic() - started) * 1000.0
-    )
+    # INSIDE a try for the same reason it is there — this call sat outside
+    # one in both scoring paths, so a check that raised (the 10,000-character
+    # backstop firing on a linear content pattern, ADR 0177) took the whole
+    # corpus down rather than the one scenario it belongs to.
+    try:
+        record = score_scenario(
+            scenario, result.final_state, elapsed_ms=(time.monotonic() - started) * 1000.0
+        )
+    except CheckError as exc:
+        # Not `_failed`: the graph RAN and terminated, and the outcome G2
+        # compares is the real one. What could not be computed is the score.
+        return ScenarioResult(
+            outcome=outcome, score=0.0, cost_tokens=0, failure=f"unusable check: {exc}"
+        )
     return ScenarioResult(
-        outcome=classify(result.final_state, result.trace, terminated=True),
+        outcome=outcome,
         score=score_of(record),
         cost_tokens=record.cost_tokens,
     )

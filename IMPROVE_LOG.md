@@ -3884,3 +3884,185 @@ G2/G3 defects reproduce unchanged; `loop score` wants `module:factory` where
 `loop bootstrap` wants `module`; and a copied corpus's stale `manifest.json`
 makes the next cycle refuse with `corpus shrank`, with no command to reconcile
 it.
+
+
+## Fix wave J1 — one loader, and a backstop that over-fired (ADR 0177)
+
+Three findings of the third seam hunt: **R1** (HIGHEST), **R1's tail** and
+**R5**. Zero live model calls. No rubric dimension moves. Every one reproduced
+by running a command before anything was changed.
+
+### R1 — `--entrypoint` could not name a graph under the widened agent root
+
+`aef migrate --dir . --agent-root .claude/agents` is ADR 0152 §4's opt-in and
+the only way a persona becomes Zone A. On the seam hunt's `r1` clone:
+
+```
+$ aef migrate --dir . --agent-root .claude/agents
+wrote 1 prompt agent graph(s): <clone>/.claude/agents/migrated/reviewer/graph.py
+EXIT=0
+
+$ aef loop score '.claude/agents/migrated/reviewer/graph.py:build_graph' \
+    --corpus corpus --splits train --config aef.yaml
+error: the 'package' argument is required to perform a relative import
+for '.claude/agents/migrated/reviewer/graph.py'
+EXIT=1
+```
+
+Exit 1 is `EXIT_REJECTED`. ADR 0168 §M4 fixed this exact error for `aef run`
+and called `import_graph_module` "the one importer" — it was one of **three**.
+`aef/harness/scenario_runner.py:47` and `aef/harness/node_worker.py:53` each
+kept their own `importlib.import_module`.
+
+Through `aef loop cycle` that is worse than a refusal, because the two sides of
+G2 used **different** loaders — the incumbent reconstructed from a recording
+`aef loop record` could load, the candidate executed by the worker that could
+not. Reproduced through the real gate on a real git repo with a widened
+`ZonePolicy`:
+
+```
+G2 outcome : fail
+G2 reason  : 1 previously-passing scenario(s) no longer pass (zero tolerance)
+  evidence : s1: REGRESSION — incumbent passed (plan=done, 0 error(s));
+             candidate did not (terminated=False, plan=None, 1 error(s), 0 policy denial(s))
+```
+
+while the worker had said, and `g2_outcome.py`'s `return {sid: r.outcome …}`
+had thrown away:
+
+```
+IsolationError: worker for '.claude/agents/migrated/reviewer/graph.py:build_graph' failed:
+cannot import '.claude/agents/…': TypeError: the 'package' argument is required to perform
+a relative import
+```
+
+So on the documented opt-in **every prompt candidate is rejected forever**, and
+two rejections halt the loop, with a ledger claiming a corpus regression that
+did not happen.
+
+**Fixed** with one loader, `aef/harness/graph_loading.py` — in the HARNESS,
+because the harness may not import the CLI (`aef/harness/zones.py` carries the
+same argument for `DEFAULT_AGENT_PATH`), with `aef/cli/run.py` importing and
+re-exporting the published names. Call sites switched: `run.py`
+(`import_graph_module`, `load_graph_module`, `run_graph_module`),
+`scenario_runner.load_graph`, `node_worker.load_graph`.
+`aef/config/domain_gates.py`'s `import_module` is deliberately out of scope —
+it imports an evaluator suite, not a graph.
+
+`scenario_runner.load_graph` caught **`ImportError` only**, and
+`importlib.import_module` raises `TypeError` for a leading dot: that is
+precisely how the error escaped the gate, escaped `cmd_score` and reached the
+CLI's catch-all. Both loaders now catch it and name the ENTRYPOINT, not just
+the module. G2's verdict and evidence carry each failed scenario's failure
+string (first line, ≤200 chars).
+
+**After**, the real `run_migrate --agent-root .claude/agents` into the real
+`loop score`, stub `command` provider, no live call:
+
+```
+task metric — .claude/agents/migrated/reviewer/graph.py:build_graph (reviewer) — repeat=1
+  train       n=1   with_checks=1   mean=1.0000 stdev=0.0000 ci95=[1.0000, 1.0000]
+      1.0000  rev-1
+EXIT=0
+```
+
+and the gate, still FAIL (it has no evidence of non-regression) but saying why:
+
+```
+G2 reason : 1 previously-passing scenario(s) no longer pass (zero tolerance)
+            1 of them failed rather than answered: IsolationError: worker for
+            '.claude/agents/migrated/reviewer/graph.py:build_graph' failed: cannot import …
+```
+
+**R1's tail** — `test_both_sides_of_g2_resolve_a_widened_root_entrypoint_identically`
+runs the incumbent's loader in-process and the candidate's in the subprocess
+the worker actually is, and asserts both give `reviewer`. The asymmetry is what
+turned an import error into a "regression", so the symmetry is the property.
+
+### R5 — S3b's content regexes tripped the 10,000-char backstop and aborted the whole suite
+
+`(?i)(not (have been )?overloaded|no overloading|overloading (was )?(rejected|…))`
+and its sibling are the only two regexes in `corpus/` carrying a repeated group,
+both bounded (`( … )?`), both correctly allowed by ADR 0166's static detector —
+and `if len(actual) > 10000 and _repeated_group_bodies(pattern): raise` fired on
+them. The input that trips it is a model rambling past the 36-word cap, which
+is the family all seven of ADR 0171's negatives belong to:
+
+```
+$ aef loop score agents.summary.graph:build_graph --corpus <scratch> --splits train
+error: refusing to run regex check '(?i)(not (have been )?overloaded|…)' against 12000
+characters: the pattern repeats a group and the input is over 10000 characters. ...
+EXIT=1
+```
+
+and the second, 9,000-character scenario **never ran**, because `score_scenario`
+sat OUTSIDE the try/except in both scoring paths. Measured, those patterns
+decide that same 12,000-character input in 0.245 ms and 0.457 ms.
+
+**Fixed, two parts.** (a) the backstop counts only **unbounded** quantifiers
+(`+`, `*`, `{n,}`) — a bounded group enters its body a fixed number of times
+whatever the input length. The old rule refused **six of ADR 0166's own eleven
+`MUST_PASS` patterns** at 12,000 chars, including all three word-cap rewrites
+its refusal message recommends; that list had been checked against the detector
+and never against the backstop. Verified against: 21 detector patterns
+(unchanged), 13 backstop patterns at 12,000 chars (all run, none over 0.4 ms),
+every one of the corpus's 114 regex checks, three unbounded shapes that must
+still be refused, and the original ReDoS pattern (still refused at every
+length, in a child process under a wall clock). (b) a check that raises scores
+THAT scenario 0 with `failure = "unusable check: <refusal>"` and the run's REAL
+outcome — the graph ran; only the score is withheld — in both paths.
+
+**After**, same corpus, same command: `mean=0.8333` on both scenarios,
+`EXIT=0`, the content checks holding and the word cap failing, which is the
+finding the scenario was recorded to produce.
+
+### Tests that pinned the old behaviour, updated deliberately
+
+`test_a_very_long_input_is_refused_rather_than_truncated` asserted the refusal
+for a **bounded** pattern — one of the three rewrites ADR 0166's own message
+recommends. It now asserts it for `^(?:\s+\S+)+$`, with the control that the
+bounded one RUNS beside it. `test_a_malformed_entrypoint_is_refused` matched
+`module:factory`, which now names half the accepted forms.
+
+### Mutations
+
+8 of 8 caught; every restore from a byte backup, every before/after/backup
+sha256 equal, never `git checkout --`.
+
+| # | mutation | result |
+|---|---|---|
+| M1 | `scenario_runner.load_graph` imports a dotted name only | KILLED (4 failed) |
+| M2 | `node_worker.load_graph` imports a dotted name only | KILLED (3 failed) |
+| M3 | the worker drops the entrypoint from its message | **SURVIVED first pass**, KILLED after the control was rebuilt |
+| M4 | G2 drops the failure strings again | KILLED (1 failed) |
+| M5 | the backstop keys on ANY repeated group again | KILLED (10 failed) |
+| M6 | the backstop never fires | KILLED (4 failed) |
+| M7 | `score_scenario` back outside the try, in-process path | KILLED (2 failed) |
+| M8 | `score_scenario` back outside the try, isolated path | KILLED (1 failed) |
+
+M3 survived because `IsolationError` wraps every worker failure in
+`worker for '<entrypoint>' failed`, so the assertion passed with the entrypoint
+deleted from `load_graph`'s own message. The test now calls
+`node_worker.load_graph` directly and asserts on `WorkerError`.
+
+### Green bar
+
+```
+pytest -q                                2544 passed, 6 skipped (2550 collected,
+                                         from 2516 — +34, none removed)
+mypy aef examples                        Success: no issues found in 135 source files
+ruff check .                             All checks passed!
+ruff format --check aef tests examples   272 files already formatted
+```
+
+Errata filed on ADR 0168 (one loader of three was taught the file form) and
+ADR 0166 (the backstop over-fired on bounded groups, and a check's raise was
+suite-fatal).
+
+### Reported, not fixed
+
+- `aef/cli/loop.py`'s `--module`/`--entrypoint` help text still says "module"
+  although every one of them accepts a path now; `aef/cli/loop.py` is held by
+  two other workers this wave.
+- `harness/loop.py`'s cohort path builds `precomputed` outcomes and drops the
+  failure strings again, so a cohort-run rejection still cannot say why.

@@ -192,6 +192,33 @@ group is refused with a reason, because the detector above is conservative
 rather than a proof. A pattern with no repeated group is unaffected at any
 length; so is `contains`.
 
+> **ERRATUM (ADR 0177, fix worker J1).** Two corrections, and they are
+> different mistakes.
+>
+> **"any repeated group" was the wrong rule, not merely a conservative one.**
+> A **bounded** quantifier's iteration count does not grow with the input:
+> `(x )?` enters its body at most once and `(?:\s+\S+){0,34}` at most 34
+> times, whatever length you hand them, so the length of the input tells you
+> nothing new about them. Measured at 12,000 characters, this backstop refused
+> **six of the eleven `MUST_PASS` patterns above** — including all three
+> word-cap rewrites the refusal message recommends, and both of ADR 0171's
+> shipped content checks, each of which decides that input in under 0.4 ms.
+> The `MUST_PASS` list was verified against the **detector** and never against
+> the **backstop**. The backstop now keys on an UNBOUNDED quantifier (`+`,
+> `*`, `{n,}`) via `_unboundedly_repeated_group_bodies`; the static detector
+> in §3 is unchanged and still refuses both families at load.
+>
+> **And a refusal was suite-fatal, which is the opposite of this section's own
+> intent.** The design argument for refusing at load is that one bad check
+> should cost one file rather than the run — but `_holds`'s refusal raised
+> through `score_scenario`, which sat OUTSIDE the try/except in **both**
+> scoring paths (`scenario_runner.run_scenario`, `isolated_suite._run_one`),
+> so one scenario's raise killed the corpus: reproduced as
+> `aef loop score … error: refusing to run regex check … EXIT=1` with the
+> second, perfectly scorable scenario never run. A raising check now scores
+> that scenario 0 with `failure = "unusable check: …"` and the run's REAL
+> outcome. See ADR 0177 §R5.
+
 ### 4. `loop score --json` says which kind of zero it is
 
 ADR 0156 had to infer from split-level token accounting that repeat 3's

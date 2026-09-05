@@ -207,9 +207,13 @@ def test_an_unchanged_scenario_says_so() -> None:
 
 
 def test_a_malformed_entrypoint_is_refused() -> None:
+    """The message changed deliberately in ADR 0177: an entrypoint's left half
+    may be a FILE PATH now — `.claude/agents/migrated/<x>/graph.py` has no
+    dotted spelling — so "module:factory" would name half the accepted forms.
+    The property under test is unchanged."""
     from aef.harness.scenario_runner import EntrypointError, load_graph
 
-    with pytest.raises(EntrypointError, match="module:factory"):
+    with pytest.raises(EntrypointError, match=r"<module or file path>:<factory>"):
         load_graph("no_colon_here")
 
 

@@ -29,6 +29,7 @@ import json
 import sys
 from typing import Any
 
+from aef.harness.graph_loading import import_graph_module, split_entrypoint
 from aef.harness.trace_codec import decode_context, encode_route
 from aef.kernel.contracts import Edge, Node
 from aef.kernel.graph import Graph
@@ -51,17 +52,36 @@ class WorkerError(RuntimeError):
 
 
 def load_graph(entrypoint: str) -> Graph:
-    """`module:factory`. Any raise — including `SystemExit` — is a bad
-    entrypoint, not a clean exit (ADR 0085)."""
-    import importlib
+    """`module:factory` **or** `path/to/graph.py:factory`. Any raise —
+    including `SystemExit` — is a bad entrypoint, not a clean exit (ADR 0085).
 
-    if ":" not in entrypoint:
-        raise WorkerError(f"entrypoint {entrypoint!r} must be '<module>:<factory>'")
-    module_name, attribute = entrypoint.split(":", 1)
+    The file form matters here more than anywhere else. This worker is the
+    CANDIDATE side of G2; the incumbent side is reconstructed from the
+    recording, which `aef loop record` could load because it goes through
+    `aef run`'s importer. While this function had its own
+    `importlib.import_module`, the two sides resolved an entrypoint
+    differently, and under `--agent-root .claude/agents` the candidate side
+    failed to import while the incumbent side did not — which G2 read as a
+    behavioural regression (ADR 0177). One loader, both sides.
+    """
     try:
-        module = importlib.import_module(module_name)
+        module_name, attribute = split_entrypoint(entrypoint)
+    except ValueError as exc:
+        raise WorkerError(
+            f"entrypoint {entrypoint!r} must be '<module or file>:<factory>'"
+        ) from exc
+    try:
+        module = import_graph_module(module_name)
     except BaseException as exc:  # noqa: BLE001 - agent-authored import
-        raise WorkerError(f"cannot import {module_name!r}: {type(exc).__name__}: {exc}") from exc
+        # `TypeError` reaches here too — `importlib.import_module` raises it,
+        # not `ImportError`, for a name with a leading dot — and the
+        # entrypoint is named as well as the module, because the parent
+        # reports this string and "cannot import '.claude/...'" without the
+        # entrypoint does not say which candidate could not be loaded.
+        raise WorkerError(
+            f"cannot import {module_name!r} (from entrypoint {entrypoint!r}): "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
     factory = getattr(module, attribute, None)
     if factory is None:
         raise WorkerError(f"{module_name!r} has no attribute {attribute!r}")

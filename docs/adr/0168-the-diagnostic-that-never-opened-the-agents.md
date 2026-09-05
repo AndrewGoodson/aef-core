@@ -391,7 +391,23 @@ Option (b), refusing a root that is not importable, was rejected outright:
 - `aef/cli/run.py::import_graph_module(module_path)` — the one importer, used
   by `run_graph_module` **and** `load_graph_module` (which `aef loop record`
   shares), replacing the two copies of `importlib.import_module` that were
-  there. A `.py` suffix or a separator means "file"; anything else is a dotted
+  there.
+
+  > **ERRATUM (ADR 0177, fix worker J1).** "The one importer" was true of
+  > `aef/cli/run.py` and false of the repo. There were **three**:
+  > `aef/harness/scenario_runner.py::load_graph` and
+  > `aef/harness/node_worker.py::load_graph` each kept their own
+  > `importlib.import_module`, and neither is in this ADR's "Not fixed here,
+  > reported" section — because every M4 reproduction ran `aef run`, and
+  > `aef run` is the loader that got fixed. The consequence was worse than the
+  > defect M4 closed: `aef loop score` on a widened-root entrypoint exited 1
+  > (`EXIT_REJECTED`), and G2 loaded the INCUMBENT through a recording this
+  > importer could read while loading the CANDIDATE through the worker that
+  > could not — so an import error on one side became
+  > `1 previously-passing scenario(s) no longer pass`. There is now one
+  > implementation, `aef/harness/graph_loading.py` (the harness, because the
+  > harness may not import the CLI), and this module re-exports it. See
+  > ADR 0177 §R1. A `.py` suffix or a separator means "file"; anything else is a dotted
   name.
 - The choice is made on the **spelling**, never by trying the import and
   falling back. A dotted import that fails for its own reason — a typo inside

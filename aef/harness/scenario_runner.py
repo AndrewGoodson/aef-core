@@ -19,12 +19,13 @@ agent code in the calling process and must not be used to score a candidate.
 
 from __future__ import annotations
 
-import importlib
 import time
 from typing import Any
 
+from aef.harness.checks import CheckError
 from aef.harness.corpus import Scenario, fixed_clock
 from aef.harness.evaluation import score_of, score_scenario
+from aef.harness.graph_loading import import_graph_module, split_entrypoint
 from aef.harness.outcome import classify
 from aef.kernel import GraphExecutor, HumanApprovalRequiredError
 from aef.kernel.graph import Graph
@@ -45,14 +46,40 @@ class EntrypointError(RuntimeError):
 
 
 def load_graph(entrypoint: str) -> Graph:
-    """`package.module:factory` -> the `Graph` that factory returns."""
-    module_name, _, attribute = entrypoint.partition(":")
-    if not module_name or not attribute:
-        raise EntrypointError(f"entrypoint must be 'module:factory', got {entrypoint!r}")
+    """`package.module:factory` **or** `path/to/graph.py:factory` -> the
+    `Graph` that factory returns.
+
+    The file form is not a convenience: `aef migrate --agent-root
+    .claude/agents` (ADR 0152 §4, the only way a persona becomes Zone A)
+    writes `.claude/agents/migrated/<module>/graph.py`, and no dotted spelling
+    of that path exists. This function used to call `importlib.import_module`
+    directly, so on the documented opt-in:
+
+        $ aef loop score '.claude/agents/migrated/reviewer/graph.py:build_graph' ...
+        error: the 'package' argument is required to perform a relative import
+        for '.claude/agents/migrated/reviewer/graph.py'
+
+    — exit 1, which is `EXIT_REJECTED`. `import_graph_module` is the ONE
+    loader `aef run`, `aef loop record` and `node_worker` also use now, so
+    both sides of G2 resolve an entrypoint identically (ADR 0177).
+    """
     try:
-        module = importlib.import_module(module_name)
-    except ImportError as exc:
-        raise EntrypointError(f"cannot import {module_name!r}: {exc}") from exc
+        module_name, attribute = split_entrypoint(entrypoint)
+    except ValueError as exc:
+        raise EntrypointError(str(exc)) from exc
+    try:
+        module = import_graph_module(module_name)
+    except (ImportError, ValueError, TypeError) as exc:
+        # TypeError as well as ImportError: `importlib.import_module` raises
+        # `TypeError: the 'package' argument is required...` for a name with a
+        # leading dot, and that escaped this handler entirely — out of the
+        # gate, out of the CLI — instead of being reported as a bad
+        # entrypoint. ValueError is what `import_graph_module` raises when a
+        # path form names no file.
+        raise EntrypointError(
+            f"cannot import {module_name!r} (from entrypoint {entrypoint!r}): "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
     try:
         factory = getattr(module, attribute)
     except AttributeError as exc:
@@ -206,9 +233,33 @@ def run_scenario(
         }
 
     elapsed_ms = (time.monotonic() - started) * 1000.0
-    record = score_scenario(scenario, result.final_state, elapsed_ms=elapsed_ms)
+    outcome = classify(result.final_state, result.trace, terminated=True)
+    try:
+        record = score_scenario(scenario, result.final_state, elapsed_ms=elapsed_ms)
+    except CheckError as exc:
+        # ONE scenario's unusable check is one scenario's zero, never the
+        # suite's. `score_scenario` sat OUTSIDE this try until ADR 0177: a
+        # check that raised — the 10,000-character backstop firing on a
+        # perfectly linear content pattern, for one — propagated out of
+        # `run_scenario`, out of `cmd_score`, and killed every remaining
+        # scenario in the corpus. Reproduced: a two-scenario corpus where the
+        # first summary is 12,000 characters printed `error: refusing to run
+        # regex check ...` and exited 1 (EXIT_REJECTED), and the second
+        # scenario — which scores fine — never ran.
+        #
+        # The OUTCOME is the real one: the graph ran and terminated, and what
+        # failed is the owner's check, not the candidate's behaviour. So G2's
+        # question is answered honestly and only the score is withheld.
+        return {
+            "outcome": outcome.to_payload(),
+            "score": 0.0,
+            "cost_tokens": 0,
+            "elapsed_ms": elapsed_ms,
+            "failure": f"unusable check: {exc}",
+            "cassette": {"hits": cassette.hits, "misses": cassette.misses},
+        }
     payload: dict[str, Any] = {
-        "outcome": classify(result.final_state, result.trace, terminated=True).to_payload(),
+        "outcome": outcome.to_payload(),
         "score": score_of(record),
         "cost_tokens": record.cost_tokens,
         "elapsed_ms": elapsed_ms,
