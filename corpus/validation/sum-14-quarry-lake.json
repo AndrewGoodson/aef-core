@@ -7,9 +7,9 @@
       "value": "Ketley quarry lake"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "swimming"
+      "value": "(?i)swimming"
     },
     {
       "op": "contains",

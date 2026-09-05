@@ -12,9 +12,9 @@
       "value": "signal box"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "volunteers"
+      "value": "(?i)volunteers"
     },
     {
       "op": "regex",

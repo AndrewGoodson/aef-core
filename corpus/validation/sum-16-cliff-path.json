@@ -12,9 +12,9 @@
       "value": "coast path"
     },
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "landslip"
+      "value": "(?i)landslip"
     },
     {
       "op": "regex",
