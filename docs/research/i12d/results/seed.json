@@ -1,0 +1,785 @@
+{
+  "entries": [
+    {
+      "confidence": 0.6363636363636364,
+      "content": {
+        "failing_nodes": [],
+        "latest_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars",
+        "objective": "summarise sum-11-lantern-festival in at most 35 words",
+        "run_ids": [
+          "sum-22-marlowe-street",
+          "sum-25-hollin-bridge",
+          "sum-26-netherby-clinic",
+          "sum-04-halden-reservoir",
+          "sum-05-bramble-bakery",
+          "sum-08-glasshouse-tomatoes",
+          "sum-11-lantern-festival"
+        ],
+        "signature": "failure:check:working_memory.summary:max_words"
+      },
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "kind": "failure",
+      "occurrences": 7,
+      "runs": [
+        "checkfail-2ba1bfb0e98c137506bf303d1bc393a6",
+        "checkfail-a71aac60683fd2300a4af03d643527fb",
+        "checkfail-2fcb020654d70e8c9ec5ceb9f4ed3908",
+        "checkfail-ab2566aa47b9d34c8e8295f0bbe1feb2",
+        "checkfail-55fddde79e21358988e42e65051c79d7",
+        "checkfail-4dbc104cc7959de450113d0d7fb1740a",
+        "checkfail-21ddf25f6a7b7d9756ee722717178ee6"
+      ],
+      "runs_since_last_seen": 1,
+      "signature": "failure:check:working_memory.summary:max_words"
+    }
+  ],
+  "excerpt_check": {
+    "records_checked": 27,
+    "window": 12
+  },
+  "records": [
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars"
+        ],
+        "checks_passed": 4,
+        "checks_total": 5,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-11-lantern-festival in at most 35 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars"
+      },
+      "id": "checkfail-ab2566aa47b9d34c8e8295f0bbe1feb2",
+      "kind": "failure",
+      "run_id": "sum-11-lantern-festival"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 237 chars"
+        ],
+        "checks_passed": 4,
+        "checks_total": 5,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-08-glasshouse-tomatoes in at most 35 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 237 chars"
+      },
+      "id": "checkfail-2fcb020654d70e8c9ec5ceb9f4ed3908",
+      "kind": "failure",
+      "run_id": "sum-08-glasshouse-tomatoes"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 36 words, 227 chars"
+        ],
+        "checks_passed": 4,
+        "checks_total": 5,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-05-bramble-bakery in at most 35 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 36 words, 227 chars"
+      },
+      "id": "checkfail-a71aac60683fd2300a4af03d643527fb",
+      "kind": "failure",
+      "run_id": "sum-05-bramble-bakery"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 42 words, 264 chars"
+        ],
+        "checks_passed": 4,
+        "checks_total": 5,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-04-halden-reservoir in at most 40 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 42 words, 264 chars"
+      },
+      "id": "checkfail-2ba1bfb0e98c137506bf303d1bc393a6",
+      "kind": "failure",
+      "run_id": "sum-04-halden-reservoir"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 208 chars"
+        ],
+        "checks_passed": 4,
+        "checks_total": 5,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-26-netherby-clinic in at most 30 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 208 chars"
+      },
+      "id": "checkfail-21ddf25f6a7b7d9756ee722717178ee6",
+      "kind": "failure",
+      "run_id": "sum-26-netherby-clinic"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 26 words, 175 chars"
+        ],
+        "checks_passed": 3,
+        "checks_total": 4,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-25-hollin-bridge in at most 25 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 26 words, 175 chars"
+      },
+      "id": "checkfail-4dbc104cc7959de450113d0d7fb1740a",
+      "kind": "failure",
+      "run_id": "sum-25-hollin-bridge"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 210 chars"
+        ],
+        "checks_passed": 4,
+        "checks_total": 5,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-22-marlowe-street in at most 30 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 210 chars"
+      },
+      "id": "checkfail-55fddde79e21358988e42e65051c79d7",
+      "kind": "failure",
+      "run_id": "sum-22-marlowe-street"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-12-bell-recast in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "6320c23470c243f9b0f1e08724f09bb6",
+      "kind": "success",
+      "run_id": "sum-12-bell-recast"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-11-lantern-festival in at most 35 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "39ea74fdb03d4ff3823a27b8fcd4b881",
+      "kind": "success",
+      "run_id": "sum-11-lantern-festival"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-10-clay-pit in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "8391f9fb13614e5dbdc0e22635324606",
+      "kind": "success",
+      "run_id": "sum-10-clay-pit"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-09-choir-tour in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "ef0ae9ff614a44c3bb3dece2d43ce765",
+      "kind": "success",
+      "run_id": "sum-09-choir-tour"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-08-glasshouse-tomatoes in at most 35 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "af5bfb6b38bc42cb8938829d4ba03bf7",
+      "kind": "success",
+      "run_id": "sum-08-glasshouse-tomatoes"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-07-signal-box in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "c3a5785159bc4593b4374dae1e49b0de",
+      "kind": "success",
+      "run_id": "sum-07-signal-box"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-06-weir-otters in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "9c95a4054891439d81f9b4a7f8b18ef8",
+      "kind": "success",
+      "run_id": "sum-06-weir-otters"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-05-bramble-bakery in at most 35 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "8a7da7e73a7b4ecd8887919f4c67f100",
+      "kind": "success",
+      "run_id": "sum-05-bramble-bakery"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-04-halden-reservoir in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "09caed0383c94ceb80ecc4b8ae03092d",
+      "kind": "success",
+      "run_id": "sum-04-halden-reservoir"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-03-tidewell-library in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "d4859408b6e04cabb380a9d6085b42ce",
+      "kind": "success",
+      "run_id": "sum-03-tidewell-library"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-02-orchard-blight in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "35528c405405402196522f8c82ab9bbd",
+      "kind": "success",
+      "run_id": "sum-02-orchard-blight"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-01-kestrel-ferry in at most 35 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "a8546ff9226947d9b1f69312f5033cc8",
+      "kind": "success",
+      "run_id": "sum-01-kestrel-ferry"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-28-kellet-branch in at most 20 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "99e2f390253e45c09819a3dda000a48a",
+      "kind": "success",
+      "run_id": "sum-28-kellet-branch"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-27-sallow-vale in at most 22 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "e8f38c7417214897bc668b82c2e454f3",
+      "kind": "success",
+      "run_id": "sum-27-sallow-vale"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-26-netherby-clinic in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "2a5bb873b63340409a697c5e665f7476",
+      "kind": "success",
+      "run_id": "sum-26-netherby-clinic"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-25-hollin-bridge in at most 25 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "65fb6411997346e38c81c9a56f2285a1",
+      "kind": "success",
+      "run_id": "sum-25-hollin-bridge"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-24-pellow-mill in at most 12 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "4a34904f0db94d2a854768764b944fc8",
+      "kind": "success",
+      "run_id": "sum-24-pellow-mill"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-23-cransley-cut in at most 25 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "032236947a4343cea8d862e0f68e436b",
+      "kind": "success",
+      "run_id": "sum-23-cransley-cut"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-22-marlowe-street in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "fb3feb2211174885acf6181a5343a9eb",
+      "kind": "success",
+      "run_id": "sum-22-marlowe-street"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-21-ardvey-ferry in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "dbb257d73df24f6a8a011ed9bddd2a5e",
+      "kind": "success",
+      "run_id": "sum-21-ardvey-ferry"
+    }
+  ],
+  "rows": [
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-01-kestrel-ferry",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-02-orchard-blight",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-03-tidewell-library",
+      "score": 1.0
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 42 words, 264 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-04-halden-reservoir",
+      "score": 0.8
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 36 words, 227 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-05-bramble-bakery",
+      "score": 0.8
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-06-weir-otters",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-07-signal-box",
+      "score": 1.0
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 237 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-08-glasshouse-tomatoes",
+      "score": 0.8
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-09-choir-tour",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-10-clay-pit",
+      "score": 1.0
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-11-lantern-festival",
+      "score": 0.8
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-12-bell-recast",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-21-ardvey-ferry",
+      "score": 1.0
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 210 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-22-marlowe-street",
+      "score": 0.8
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-23-cransley-cut",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-24-pellow-mill",
+      "score": 1.0
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 26 words, 175 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-25-hollin-bridge",
+      "score": 0.75
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 208 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-26-netherby-clinic",
+      "score": 0.8
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-27-sallow-vale",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-28-kellet-branch",
+      "score": 1.0
+    }
+  ],
+  "scenarios": 20
+}
