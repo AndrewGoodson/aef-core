@@ -204,3 +204,7 @@ Files touched: `aef/harness/shadow.py` (two signatures, two docstrings),
 `shadow.containment` is read by something. The next person to write a shadow
 caller reads the owner's mode from `RunConfig.containment_mode` and cannot
 forget to, because there is no default to forget it into.
+
+## Addendum (orchestrator): the YAML 1.1 hazard, closed
+
+A bare `containment: off` reaches the model as the boolean `False` (YAML 1.1). `ShadowConfig` now accepts `False` as `off` — nothing else could have produced it — and refuses `True` with the quoting fix. Tested in `tests/config/test_shadow_config_yaml.py`; mutation-checked.

@@ -314,6 +314,24 @@ class ShadowConfig(_StrictModel):
     # names the missing image, not a silent downgrade.
     image: str | None = None
 
+    @field_validator("containment", mode="before")
+    @classmethod
+    def _yaml_off_is_a_word_here(cls, value: object) -> object:
+        """YAML 1.1 reads a bare `off` as the boolean false (and `on` as true),
+        so `containment: off` — the exact spelling the mode is named by —
+        arrives here as `False` and used to fail with a type error that
+        never mentioned YAML. `False` can only have been `off`, so it is
+        accepted as that mode; `True` has no mode to map to and is refused
+        with the fix (quote it). Found by fix wave H2 (ADR 0173)."""
+        if value is False:
+            return "off"
+        if value is True:
+            raise ValueError(
+                "shadow.containment: YAML read a bare word as the boolean true (`on`/`yes`); "
+                'quote the mode — containment: "auto" | "fallback" | "off"'
+            )
+        return value
+
     @field_validator("containment")
     @classmethod
     def _must_name_a_real_mode(cls, value: str) -> str:
