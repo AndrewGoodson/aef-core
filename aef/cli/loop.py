@@ -620,6 +620,9 @@ def _print_containment_summary(args: argparse.Namespace) -> None:
 
 
 def cmd_gate(args: argparse.Namespace) -> int:
+    refusal = _require_config_for_live_cassette(args, "gate")
+    if refusal is not None:
+        return refusal
     config = _config(args)
     refusal = _refuse_missing_base_ref(config)
     if refusal is not None:
@@ -1071,6 +1074,13 @@ def cmd_score(args: argparse.Namespace) -> int:
     # recording never saw, and the report says how many times it did: a
     # score with live misses is a different measurement from a replayed one.
     cassette_miss = getattr(args, "cassette_miss", "fail")
+    # Same refusal as the three turn-running commands, for the same reason:
+    # with no `--config` there is no provider, so `--cassette-miss live`
+    # means "every call misses" and the report's own mode line would still
+    # read LIVE (ADR 0191's F1, one command over).
+    refusal = _require_config_for_live_cassette(args, "score")
+    if refusal is not None:
+        return refusal
     live_provider = None
     # The OWNER'S policy, from the owner's own `aef.yaml` — the same one
     # `aef run --config` applies and the same one `_policy_from_base_ref`
@@ -1329,6 +1339,47 @@ def _require_memory_flag(args: argparse.Namespace, command: str = "cycle") -> in
     return EXIT_USAGE
 
 
+def _require_config_for_live_cassette(args: argparse.Namespace, command: str) -> int | None:
+    """`--cassette-miss live` needs a `--config`, or refuse. `None` proceeds.
+
+    The provider a live miss falls through to is read from `--config`'s
+    `model_provider`, at the base ref, and there is no other source for it.
+    Without the flag there is no provider, so EVERY model call in the corpus
+    misses and raises `ModelProviderError: ... no live provider to fall
+    through to` — and under ADR 0185 each of those classified as a *dead
+    call*, was retried (the corpus ran twice), and was then EXCLUDED from
+    G3's comparison rather than scored. The same per-scenario numbers gave
+    `G3 FAIL` counted and `G3 PASS` excluded, and past the refusal floor G3
+    said "the model was not answering" when the truth was "you omitted
+    --config" (reproduced, ADR 0191's F1).
+
+    `EXIT_ERROR`, not `EXIT_USAGE` and not `EXIT_REJECTED`: a nightly job's
+    rule is `>= 2` fails, and of the two codes above 1 this is the one whose
+    remedy is "fix the invocation" rather than "release the kill switch"
+    (ADR 0167 §6, ADR 0178). The harness refuses too — see
+    `loop.LiveGatingWithoutConfigError` — so a library caller cannot walk
+    past this the way ADR 0165's caller walked past a parser-level guard;
+    this one exists to make the message arrive before anything is journalled.
+    """
+    if getattr(args, "cassette_miss", "fail") != "live":
+        return None
+    if getattr(args, "config", None):
+        return None
+    print(
+        f"error: `{command} --cassette-miss live` needs --config. The provider a live "
+        f"cassette miss falls through to is read from that file's model_provider block (at "
+        f"the base ref, so a candidate cannot choose its own), and there is no other source "
+        f"for it. With no --config there is no provider, every model call misses with 'no "
+        f"live provider to fall through to', and those misses are excluded from the "
+        f"comparison as dead calls — so a run in which the model was never reached reports "
+        f"as one the model answered (ADR 0191). Pass --config <path to aef.yaml, relative "
+        f"to the repository root> with gates.live_model_calls: true, or drop --cassette-miss "
+        f"live and score from the recorded cassettes.",
+        file=sys.stderr,
+    )
+    return EXIT_ERROR
+
+
 def _agent_path_is_defaulted(args: argparse.Namespace) -> bool:
     """Was `--agent-path` left at `DEFAULT_AGENT_PATH`?
 
@@ -1425,6 +1476,9 @@ def cmd_cycle(args: argparse.Namespace) -> int:
     if refusal is not None:
         return refusal
     refusal = _require_agent_path_under_root(args, "cycle")
+    if refusal is not None:
+        return refusal
+    refusal = _require_config_for_live_cassette(args, "cycle")
     if refusal is not None:
         return refusal
 
@@ -1581,6 +1635,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     if refusal is not None:
         return refusal
     refusal = _require_agent_path_under_root(args, "run")
+    if refusal is not None:
+        return refusal
+    refusal = _require_config_for_live_cassette(args, "run")
     if refusal is not None:
         return refusal
 

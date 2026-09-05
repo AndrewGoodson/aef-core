@@ -43,7 +43,9 @@ class ScenarioResult:
     # The model call RAISED rather than answering. A dead call is not a
     # wrong answer: the prompt under test was never evaluated on this
     # scenario, so scoring it 0.0 records evidence that was never collected
-    # (ADR 0185). Only ever true on the live path — see `is_dead_call`.
+    # (ADR 0185). Only ever true on the live path AND only when a provider
+    # was actually there to die — see `is_dead_call`, whose third condition
+    # ADR 0191 added.
     dead_call: bool = False
     # This scenario was run a second time because the first attempt died.
     # Recorded so the bounded retry is visible in the gate's evidence rather
@@ -146,6 +148,19 @@ def run_corpus_isolated(
                 # retried forever. Bounded at one because an unbounded retry
                 # is an unbounded bill on somebody's quota, and because the
                 # second death is itself the signal.
+                #
+                # **What "bounded at one" bounds, precisely.** ADR 0185's
+                # consequences said "the retry costs at most one extra call
+                # per dead scenario". It does not: the retry re-runs the whole
+                # SCENARIO, and a scenario makes as many calls as its graph
+                # makes. Measured on a two-call graph whose provider dies on
+                # its second call (ADR 0191's F7): a clean two-scenario run
+                # costs 4 calls, the run with one death cost **6** — two extra
+                # calls for one dead scenario, not one. The true bound is one
+                # extra scenario EXECUTION, so up to K extra calls for a
+                # K-call scenario, and the worst case over a corpus is one
+                # extra full corpus pass. Stated as calls because calls are
+                # what the quota is denominated in.
                 retry = _run_one(
                     compiled,
                     scenario,
@@ -206,7 +221,11 @@ def _run_one(
             }
         )
     except IsolationError as exc:
-        return _failed(f"{type(exc).__name__}: {exc}", cassette_miss=cassette_miss)
+        return _failed(
+            f"{type(exc).__name__}: {exc}",
+            cassette_miss=cassette_miss,
+            live_provider_present=live_provider is not None,
+        )
 
     services = agent_services(
         clock=fixed_clock(scenario), policy=policy, agent_id=scenario.initial_state.agent_id
@@ -215,7 +234,11 @@ def _run_one(
     try:
         result = GraphExecutor(compiled, services).run(scenario.initial_state, record_trace=True)
     except Exception as exc:  # noqa: BLE001 - any failure is an outcome, not a crash
-        return _failed(f"{type(exc).__name__}: {exc}", cassette_miss=cassette_miss)
+        return _failed(
+            f"{type(exc).__name__}: {exc}",
+            cassette_miss=cassette_miss,
+            live_provider_present=live_provider is not None,
+        )
 
     outcome = classify(result.final_state, result.trace, terminated=True)
     # Same function as the in-process runner (ADR 0113): two scorers drift.
@@ -240,7 +263,9 @@ def _run_one(
     )
 
 
-def _failed(reason: str, *, cassette_miss: str = "fail") -> ScenarioResult:
+def _failed(
+    reason: str, *, cassette_miss: str = "fail", live_provider_present: bool = False
+) -> ScenarioResult:
     """A scenario that produced nothing, classified.
 
     `cassette_miss` defaults to `"fail"` — the replay-only configuration —
@@ -249,6 +274,10 @@ def _failed(reason: str, *, cassette_miss: str = "fail") -> ScenarioResult:
     mark a dead call. A worker a candidate killed is the candidate's
     behaviour; excluding those scenarios would hand `os._exit` the acquittal
     ADR 0094 took away from it.
+
+    `live_provider_present` defaults to `False` for the same reason and one
+    more: a miss with no provider behind it is a miss, not a death, and
+    defaulting the other way is exactly the hole ADR 0191's F1 reproduced.
     """
     return ScenarioResult(
         outcome=Outcome(
@@ -261,5 +290,7 @@ def _failed(reason: str, *, cassette_miss: str = "fail") -> ScenarioResult:
         score=0.0,
         cost_tokens=0,
         failure=reason,
-        dead_call=is_dead_call(reason, cassette_miss=cassette_miss),
+        dead_call=is_dead_call(
+            reason, cassette_miss=cassette_miss, live_provider_present=live_provider_present
+        ),
     )

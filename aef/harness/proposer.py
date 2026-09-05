@@ -492,10 +492,35 @@ class MemoryEvidence:
     split, and production experience is exactly what this exists to learn
     from. So the rule is *deny what is known to be off-limits*, and the
     reason it is safe is that the leak we care about has an exact signature.
+
+    **And records belonging to ANOTHER GRAPH's scenarios are excluded too**,
+    when `graph_id` says which graph this is (ADR 0191's F2). That filter
+    used to live in `RuleBasedPromptProposer` alone, so `--graph-id` — whose
+    help text promises "the graph whose recorded scenarios are this loop's
+    evidence" — restricted the evidence for ONE of three proposers. On this
+    repo's own two-graph corpus, `aef loop cycle --graph-id demo_agent` with
+    the DEFAULT `rule_based` proposer proposed a change to
+    `agents/demo/graph.py` and journalled
+    `grounded_in: ["m3 (memory): the summary invented a number", …]` —
+    three `summary_agent` records, with the flag on the command line
+    (reproduced, ADR 0191). The evidence a proposer may see is a property of
+    the EVIDENCE, not of which proposer happens to read it, so the filter
+    belongs here where every proposer goes through it — one filter, not one
+    per proposer.
+
+    The rule is `RuleBasedPromptProposer`'s own, unchanged: deny what is
+    *known* to belong to another graph's scenario, and admit a `run_id` the
+    corpus has never heard of, because that is production experience and it
+    is exactly what this exists to learn from.
     """
 
     records: tuple[MemoryRecord, ...] = ()
     excluded: tuple[str, ...] = ()
+    # Dropped as belonging to another graph's scenarios — reported separately
+    # from `excluded` because the two are different operator actions: one is a
+    # corpus that mixes graphs with a `--graph-id` naming one of them, the
+    # other is a leak of the set the proposer must not see.
+    foreign: tuple[str, ...] = ()
 
     @classmethod
     def from_store(
@@ -505,12 +530,19 @@ class MemoryEvidence:
         *,
         agent_id: str | None = None,
         limit: int = 50,
+        graph_id: str | None = None,
     ) -> MemoryEvidence:
         off_limits = _off_limits_run_ids(corpus)
+        foreign_ids = _foreign_run_ids(corpus, graph_id)
         found = store.query("failure", agent_id=agent_id, limit=limit)
-        admissible = tuple(r for r in found if r.run_id not in off_limits)
+        admissible = tuple(
+            r for r in found if r.run_id not in off_limits and r.run_id not in foreign_ids
+        )
         blocked = tuple(r.id for r in found if r.run_id in off_limits)
-        return cls(records=admissible, excluded=blocked)
+        foreign = tuple(
+            r.id for r in found if r.run_id not in off_limits and r.run_id in foreign_ids
+        )
+        return cls(records=admissible, excluded=blocked, foreign=foreign)
 
     def failing_nodes(self) -> tuple[tuple[str, str], ...]:
         """`(node_id, citing_record_id)` for every node a failure blames.
@@ -560,3 +592,16 @@ def _off_limits_run_ids(corpus: Corpus | None) -> frozenset[str]:
     if corpus is None:
         return frozenset()
     return frozenset(s.id for s in corpus.scenarios if s.split in (Split.VALIDATION, Split.HOLDOUT))
+
+
+def _foreign_run_ids(corpus: Corpus | None, graph_id: str | None) -> frozenset[str]:
+    """Run ids KNOWN to belong to a graph other than `graph_id`.
+
+    Both must be known: with no corpus there is nothing to compare against,
+    and with no graph id the caller has not said which graph this is. A
+    scenario whose own `graph_id` is empty is not evidence of foreignness and
+    is left admissible.
+    """
+    if corpus is None or graph_id is None:
+        return frozenset()
+    return frozenset(s.id for s in corpus.scenarios if s.graph_id and s.graph_id != graph_id)

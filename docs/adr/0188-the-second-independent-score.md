@@ -3,6 +3,17 @@
 ## Status
 Accepted. BEYOND_90's J0, run a second time at the end of the night (UPGRADE_LOOP's S0b), on `main` at 6affc65.
 
+> **Erratum (ADR 0191, F6).** Adding `--graph-id demo_agent` to this repo's
+> nightly cycle was necessary and not sufficient. One line down, `--agent-path`
+> defaulted to `agents/migrated/graph.py` — an ADOPTING repo's layout (ADR
+> 0149) — and aef-core has `agents/demo/` and `agents/summary/`. So with a
+> non-empty memory file the nightly cycle printed `no agent source at
+> agents/migrated/graph.py in main (the ref exists; the file is not in it): no
+> candidate` and **exited 0**, which the workflow's own case statement reads as
+> the healthy answer (reproduced). The workflow now passes `--agent-path
+> agents/demo/graph.py`, pinned beside the `--graph-id` pin, and that state is
+> `EXIT_ERROR` rather than a quiet exit 0.
+
 ## Context
 
 ADR 0151 applied the control once: a blind reviewer scored 68.5 against our 86 and the lower score stood. Since then eleven self-graded rows were added, each on an artifact. The rubric's own preamble says a self-graded number is the failure the trust case warns about — so the control was applied again, blind to every ADR, the log, the loops, and the first review. Report committed verbatim: `docs/research/j0b-independent-score-2026-09-05.md`.

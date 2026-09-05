@@ -7,6 +7,21 @@ Accepted. Fix worker **K1** of `UPGRADE_LOOP.md`. Model: `claude-opus-5[1m]`.
 probes, 14 inside the live proof. **No rubric dimension moves** — this closes
 two defects and adds one opt-in; it measures no learning.
 
+> **Erratum (ADR 0191, F1).** The opt-in below is read *after* the config, so
+> `_live_provider_from_base_ref` returned `None` for a MISSING `--config`
+> before it could refuse anything. `--cassette-miss live` with no config was
+> therefore not refused: it ran with no provider, every model call missed with
+> `no live provider to fall through to`, ADR 0185 classified all of them as
+> dead calls, the corpus ran twice, and up to a quarter of the scenarios were
+> excluded from G3 rather than scored — while the `gated` ledger event this
+> ADR added recorded `live_model_calls: false` throughout. K1 refused the
+> *opted-out* case by name and left the *unconfigured* case silent. It is now
+> `LiveGatingWithoutConfigError`, `EXIT_ERROR`, raised before any scenario
+> runs. And this ADR's own control test
+> `test_the_same_miss_fails_when_no_provider_crosses` drove exactly that state
+> and asserted `error_count == 1` — a property the defect could not move —
+> so it has been rewritten to assert the classification.
+
 Closes ADR 0158's two HIGH findings, **F-M5-2** and **F-M5-3**. Together they
 meant that *no provider served a live cassette miss inside the gates*, on any
 repo, ever — so `UPGRADE_LOOP.md`'s rule

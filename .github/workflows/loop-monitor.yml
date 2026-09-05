@@ -72,6 +72,18 @@ jobs:
       # the nightly cycle says `no admissible failure memory` instead of `no
       # memory store configured` — the truth, and now visible in the step
       # summary. That is an honest no-op, not yet a loop that learns from CI.
+      #
+      # `--agent-path` is NOT optional either, one line down the same road.
+      # The default is `agents/migrated/graph.py`, which is what `aef migrate`
+      # writes into an ADOPTING repo (ADR 0149) and which aef-core does not
+      # have. So the moment the memory file stopped being empty, this step
+      # printed `no agent source at agents/migrated/graph.py in main (the ref
+      # exists; the file is not in it): no candidate` and exited 0 — the
+      # nightly cycle still could not propose, one line further down than
+      # ADR 0188 looked (reproduced, ADR 0191's F6). aef-core's own Zone A
+      # graph is `agents/demo/graph.py`, which is also what `--graph-id
+      # demo_agent` names. That state is now `EXIT_ERROR` rather than a quiet
+      # exit 0, so this line going stale fails the job instead of hiding.
       - name: Daily cycle
         if: github.event.schedule == '0 3 * * *' || github.event_name == 'workflow_dispatch'
         run: |
@@ -81,6 +93,7 @@ jobs:
           aef loop cycle --repo . --state ~/.aef-loop-state \
             --workdir "$RUNNER_TEMP/cycle" --module agents.demo.graph \
             --graph-id demo_agent \
+            --agent-path agents/demo/graph.py \
             --runs ~/.aef-loop-state/runs --corpus corpus \
             --memory ~/.aef-loop-state/memory.jsonl \
             | tee -a "$GITHUB_STEP_SUMMARY"

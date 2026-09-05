@@ -5996,3 +5996,215 @@ survived thirty-eight ADRs after its twin was removed — the rule is about a
 *class*, not a constant: any default in `aef/` naming a repository's branch,
 path or layout is a guess about someone else's repo and should be derived or
 refused rather than spelled.
+
+## Fix wave L3 — a mode string is not a fact, a flag that bound one proposer of three, and the nightly that still could not propose (ADR 0191)
+
+**Zero live model calls.** Every measurement is a stub provider —
+`model_provider.impl: command` pointed at a shell script that exits non-zero on
+chosen invocations, a real subprocess through the real `CommandProvider` — or
+this repo's own CLI against this repo's own corpus. **No gate's verdict logic
+is touched**; `tests/harness/test_promotion_safety.py` is byte-for-byte what it
+was. **No rubric dimension moves.** Each of the four findings was reproduced by
+RUNNING it before a line was edited, and each fix was mutated and watched to
+fail its own control.
+
+Three of the four share one shape: **a fact was inferred from a request rather
+than carried from what happened.** F1 inferred "the model was reached" from the
+string `"live"`. F2 inferred "this proposer restricts its evidence" from the
+fact that *a* proposer did. F6 inferred "there is nothing to propose" from "the
+file I guessed at is not there".
+
+### F1 (HIGH) — `--cassette-miss live` with no `--config`, and every scenario becomes a dead call
+
+`_live_provider_from_base_ref` (ADR 0181) read the opt-in *after* the config,
+so a missing `--config` returned `None` before anything could refuse:
+
+```
+config_path=None, cassette_miss='live':
+  _live_provider_from_base_ref -> None   (NO refusal raised)
+  ledger will record live_model_calls=False
+
+run_corpus_isolated(cassette_miss='live', live_provider=None):
+  s1: score=0.0000 dead_call=True retried=True
+        failure=NodeEvaluationError: ModelProviderError: cassette miss (...)
+        and no live provider to fall through to
+  s2: score=0.0000 dead_call=True retried=True
+  s3: score=0.0000 dead_call=True retried=True
+  s4: score=0.0000 dead_call=True retried=True
+```
+
+Every scenario in the corpus. The failure names a `ModelProviderError`, so ADR
+0185's `is_dead_call` — gated on `cassette_miss == "live"` and nothing else —
+called all four deaths, each was retried (**the corpus ran twice**), and each
+went to G3 as *excluded* rather than scored. On the identical numbers:
+
+```
+counted  (ADR 0123, the replayed rule): G3 FAIL — 1 previously-passing
+    scenario(s) now score below 0.5 (zero tolerance, regardless of the aggregate)
+excluded (ADR 0185, live+no-provider): G3 PASS — candidate mean 1 beats the
+    control cohort's p95 of 0.9429
+```
+
+Above the 25% floor G3 refuses saying "the model was not answering" when the
+truth is "you omitted `--config`". Throughout, the `gated` ledger event
+recorded `live_model_calls: false` — the audit trail's own answer to *did this
+run under the operator's login?* was **no**, and nothing read it.
+
+Three parts.
+
+- **The harness refuses**, in `_live_provider_from_base_ref`, where it used to
+  `return None` — so `gate`, `cycle` and `run` all get it as library entry
+  points, and the four CLI commands get it a second time at the surface an
+  operator types at (`_require_config_for_live_cassette`).
+  `LiveGatingWithoutConfigError` is deliberately **not** a `PolicyConfigError`,
+  unlike its sibling `LiveGatingDisabledError`: that class means "the rules
+  could not be read" and reports as `EXIT_REJECTED`, a verdict on a candidate,
+  and reporting a missing flag as a rejection is what makes CI retry it forever
+  (ADR 0075, ADR 0167 §6). This is `EXIT_ERROR`.
+- **`is_dead_call` gains a third condition**, `live_provider_present`, passed
+  by the caller as a fact about the run it just performed instead of being
+  re-derived from the mode it was asked for. A miss with nothing behind it is a
+  **miss**: scored 0, counted, never excused, never retried. Both scoring paths
+  pass `live_provider is not None` from where they build the cassette, so the
+  two constructions cannot drift (ADR 0091).
+- **K1's control test was rewritten**, and this is the part worth keeping.
+  `test_the_same_miss_fails_when_no_provider_crosses` drove *exactly* the state
+  F1 lives in and asserted `results["miss"].outcome.error_count == 1` — true
+  before ADR 0185 and true after it, while the same scenario silently became
+  `dead_call=True retried=True` and left G3's comparison. A control that
+  constructs the failing state and then asserts a property the failure cannot
+  move is a control in name only.
+
+After the fix: the refusal raises, and the same four scenarios come back
+`score=0.0000 dead_call=False retried=False`.
+
+### F2 (HIGH) — `--graph-id` restricted the evidence for one proposer of three
+
+The flag's help promises *"the graph whose recorded scenarios are this loop's
+evidence"*, and the filter lived inside `RuleBasedPromptProposer._admissible`.
+`_build_proposer` builds the DEFAULT `RuleBasedProposer()` with no graph id;
+`MemoryEvidence.from_store` filtered validation and holdout run ids and nothing
+else. On this repo's own two-graph corpus, with three failure records whose
+`run_id`s are `summary_agent` train scenarios:
+
+```
+$ aef loop cycle --repo . --graph-id demo_agent \
+    --agent-path agents/demo/graph.py --corpus corpus --memory ...
+  proposed cycle-20260905T085525-0 on local branch loop/cycle-20260905T085525-0
+    (never pushed; proposer=rule_based)
+```
+
+with the `gated` ledger event reading
+
+```json
+"grounded_in": ["m3 (memory): the summary invented a number",
+                "m2 (memory): the summary dropped the ferry name",
+                "m1 (memory): the summary dropped the reservoir date"]
+```
+
+The evidence a proposer may see is a property of the **evidence**, not of which
+proposer happens to read it. `MemoryEvidence.from_store` takes `graph_id` and
+applies the filter once, so every proposer goes through it; `cycle()` passes
+`config.evidence_id` (ADR 0182's namespace, not the archive key). Dropped
+records land on their own `foreign` field, separate from `excluded`, because
+they are two different operator actions. The rule inside is unchanged and
+deliberately narrow — deny what is KNOWN to belong to another graph, admit a
+`run_id` the corpus has never heard of, because that is production experience
+and it is what the loop exists to learn from.
+
+After the fix:
+
+```
+  3 memory record(s) excluded as belonging to a graph other than 'demo_agent'
+  no admissible failure memory: all 3 record(s) came from scenarios of another
+    graph, not 'demo_agent': no candidate this cycle
+```
+
+On the verdict line and not in a note above it, because `cmd_cycle` journals
+`lines[-1]` (ADR 0165) and an operator told only "no admissible failure
+memory" will go and record more failures when the remedy is to point
+`--graph-id` at the graph those runs came from.
+
+### F6 (MEDIUM) — this repo's own nightly cycle still could not propose, and exited 0
+
+ADR 0188 gave the nightly cycle `--graph-id demo_agent`. One line down, with a
+non-empty memory file:
+
+```
+  no agent source at agents/migrated/graph.py in main
+  (the ref exists; the file is not in it): no candidate
+EXIT=0
+```
+
+`DEFAULT_AGENT_PATH` is what `aef migrate` writes into an ADOPTING repo, which
+is exactly right and is ADR 0149's whole point; aef-core has `agents/demo/` and
+`agents/summary/`, and the workflow passed no `--agent-path`. The workflow's
+own case statement reads exit 0 as *"escalated, or nothing to propose"*.
+
+ADR 0189 got the **sentence** right — it distinguishes an absent file from an
+absent ref — and left the **disposition** wrong. Two parts: the workflow passes
+`--agent-path agents/demo/graph.py`, pinned beside ADR 0188's `--graph-id` pin
+with the pin deriving the path from the workflow and asserting the named file
+exists; and the state itself is now `EXIT_ERROR`:
+
+```
+error (AgentSourceMissingError): no agent source at agents/migrated/graph.py in
+main (the ref exists; the file is not in it), so there is nothing for the
+proposer to edit. This is the invocation, not a verdict: pass --agent-path
+naming a graph that exists at main. Python files under agents/ at main:
+agents/demo/__init__.py, agents/demo/graph.py, agents/summary/__init__.py,
+agents/summary/graph.py.
+```
+
+`EXIT=3`. The list is read from the ref with `git ls-tree`, never from the
+working tree, because the candidate is built from the ref.
+
+### F7 (LOW-MED) — the retry-cost bound is per call, and it is enforced per scenario
+
+ADR 0185 said *"the retry costs at most one extra call per dead scenario"*.
+The retry re-runs the whole SCENARIO, and a scenario costs as many calls as its
+graph makes. On a two-call graph whose stub provider exits 7 on its fourth
+invocation:
+
+```
+s1: score=1.0 dead=False retried=False
+s2: score=1.0 dead=False retried=True
+total provider invocations: 6
+calls a clean 2-scenario run would have cost: 4
+```
+
+An erratum on the **statement**, not a change to the mechanism: the bound is
+one extra scenario EXECUTION — up to K extra calls for a K-call scenario, at
+worst one extra full corpus pass. The test asserts 6 *and* asserts `4 + 2`,
+because "the bound is wrong" must not become "there is no bound".
+
+The other half of F7 — reporting the evidence line in calls — is **not done,
+and the reason is recorded rather than skipped**: G3's line is built from
+`CohortVerdict.retried_scenarios` and no call count reaches it (the isolated
+`ScenarioResult` carries none; the worker's `cassette` block stops at the
+worker protocol). Threading it through would change four types and G3's own
+reporting, and the gates' verdict logic was out of this wave's scope.
+
+### Mutations
+
+| # | perturbation | control that FAILED |
+|---|---|---|
+| M1 | restore the early `return None` in `_live_provider_from_base_ref` | `test_live_with_no_config_is_refused_by_name_before_anything_runs`, `test_the_worker_sandbox_is_widened_only_when_a_provider_will_be_built` |
+| M2 | drop `live_provider_present` from `is_dead_call` | `test_a_live_miss_with_NO_PROVIDER_is_not_a_dead_call`, `test_the_same_miss_fails_when_no_provider_crosses` |
+| M3 | `_foreign_run_ids(...)` → empty set | `test_the_default_proposer_no_longer_grounds_in_another_graphs_records`, `test_the_same_records_under_their_OWN_graph_id_are_admitted` |
+| M4 | restore the `no candidate` return for a missing agent source | `test_the_default_path_missing_from_the_ref_refuses_instead_of_exiting_zero`, `test_the_cli_reports_it_as_EXIT_ERROR` |
+| M5 | remove `--agent-path` from the nightly workflow | `test_this_repos_nightly_cycle_names_the_graph_file_it_may_edit` |
+
+Every file restored from a byte backup and shasum-verified afterwards; no
+`git checkout --` was used.
+
+### What the wave is really about
+
+Three of the four defects were a **request read as a fact**. `"live"` is what
+the operator asked for, not what the provider did. `--graph-id` is what the
+operator asked for, and one of three proposers honoured it. `--agent-path`'s
+default is what this package guesses about a repo it has not looked at. In each
+case the code that consumed the request was correct about the request and wrong
+about the world, and in each case the repair was the same: carry the fact from
+where it is known, and refuse when it is not known rather than proceeding on
+the request.

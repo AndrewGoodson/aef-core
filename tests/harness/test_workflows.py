@@ -228,3 +228,32 @@ def test_this_repos_nightly_cycle_names_its_graph_id() -> None:
     cycle = text[text.index("aef loop cycle") :]
     cycle = cycle[: cycle.index("tee")]
     assert "--graph-id demo_agent" in cycle, cycle
+
+
+def test_this_repos_nightly_cycle_names_the_graph_file_it_may_edit() -> None:
+    """Beside the `--graph-id` pin above, because it is the same defect one
+    line down (ADR 0191's F6).
+
+    `--agent-path` defaults to `agents/migrated/graph.py`, which is what `aef
+    migrate` writes into an ADOPTING repo (ADR 0149); aef-core has
+    `agents/demo/` and `agents/summary/`. So with a non-empty memory file this
+    step printed `no agent source at agents/migrated/graph.py in main (the ref
+    exists; the file is not in it): no candidate` and exited 0 — reproduced,
+    and `--graph-id demo_agent` on the line above names the very graph whose
+    file was not being pointed at.
+
+    The path is derived here rather than quoted, so the pin cannot outlive the
+    file it names."""
+    from pathlib import Path as _Path
+
+    repo_root = _Path(__file__).resolve().parents[2]
+    text = (repo_root / ".github" / "workflows" / "loop-monitor.yml").read_text()
+    cycle = text[text.index("aef loop cycle") :]
+    cycle = cycle[: cycle.index("tee")]
+
+    assert "--agent-path" in cycle, cycle
+    named = cycle.split("--agent-path", 1)[1].split()[0]
+    assert (repo_root / named).is_file(), (
+        f"the nightly cycle points --agent-path at {named!r}, which is not a file in this "
+        f"repo — the state ADR 0191's F6 reproduced, in the other direction"
+    )

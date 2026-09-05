@@ -82,10 +82,10 @@ def _error_type_chain(failure: str) -> tuple[str, ...]:
     return tuple(names)
 
 
-def is_dead_call(failure: str | None, *, cassette_miss: str) -> bool:
+def is_dead_call(failure: str | None, *, cassette_miss: str, live_provider_present: bool) -> bool:
     """Did the model call RAISE, as distinct from answering wrongly?
 
-    Two conditions, and the second is load-bearing.
+    Three conditions, and the second and third are both load-bearing.
 
     1. Some exception in the chain is a `ModelProviderError`.
     2. **The run was live.** Under `cassette_miss="fail"` — the default, and
@@ -96,13 +96,24 @@ def is_dead_call(failure: str | None, *, cassette_miss: str) -> bool:
        measured the planted regression as 0.0000 with 36 misses). Calling
        that a dead call would excuse the strongest evidence the gates have.
        So a dead call is only possible on the live path K1 opened.
+    3. **A provider was actually there to die.** ADR 0185 gated only on the
+       MODE STRING, and a mode string is a request, not a fact: with
+       `cassette_miss="live"` and `live_provider=None` the cassette misses
+       and raises `ModelProviderError: ... and no live provider to fall
+       through to` — nothing was ever called, yet all four scenarios of the
+       reproduction came back `dead_call=True retried=True`, the corpus ran
+       twice, and G3 read `PASS` on numbers that read `FAIL` when counted
+       (reproduced, ADR 0191's F1). A miss with no provider is a MISS: it is
+       scored 0, and it is never a dead call. The caller passes this as a
+       fact about the run it just performed, rather than letting this
+       function re-derive it from the mode it was asked for.
 
     A candidate can of course raise `ModelProviderError` from its own node
     body under `--cassette-miss live`, and this function cannot tell that
     apart. That is why the exclusion is bounded twice over — one retry, then
     a refusal floor — rather than trusted (see `G3Improvement`, ADR 0185).
     """
-    if failure is None or cassette_miss != "live":
+    if failure is None or cassette_miss != "live" or not live_provider_present:
         return False
     return bool(MODEL_DEATH_ERRORS & set(_error_type_chain(failure)))
 
@@ -302,7 +313,11 @@ def run_scenario(
             "failure": failure,
             "cassette": {"hits": cassette.hits, "misses": cassette.misses},
         }
-        if is_dead_call(failure, cassette_miss=cassette_miss):
+        if is_dead_call(
+            failure,
+            cassette_miss=cassette_miss,
+            live_provider_present=live_provider is not None,
+        ):
             # The SAME classifier the isolated path uses, from the same
             # string, for the reason ADR 0091 states: two constructions of
             # one judgement drift, and the drift is a phantom.

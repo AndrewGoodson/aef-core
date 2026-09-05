@@ -76,6 +76,17 @@ CASSETTE_MISS = (
     "on_miss='fail'."
 )
 
+# And the one raised under `on_miss="live"` with NOTHING to fall through to —
+# quoted verbatim from the reproduction of ADR 0191's F1, because the whole
+# classification turns on this naming an ABSENT provider rather than a dead
+# one, and the two strings differ only in their tail.
+NO_PROVIDER_MISS = (
+    "NodeEvaluationError: ModelProviderError: cassette miss (key 6a9b6ea9c515, model '', "
+    "1 message(s), max_tokens 16000, first user text 'summarise: the s1 passage') and no "
+    "live provider to fall through to: on_miss='live' needs an inner ModelProvider "
+    "(model_provider.impl in aef.yaml, e.g. claude_code — ADR 0112)"
+)
+
 
 # --------------------------------------------------------------------------
 # The classifier
@@ -99,7 +110,7 @@ def test_the_type_chain_stops_at_the_message() -> None:
 
 def test_a_provider_that_raised_on_a_live_run_is_a_dead_call() -> None:
     failure = "NodeEvaluationError: ModelProviderError: claude exited 1: rate limited"
-    assert is_dead_call(failure, cassette_miss="live")
+    assert is_dead_call(failure, cassette_miss="live", live_provider_present=True)
 
 
 def test_a_cassette_MISS_is_never_a_dead_call() -> None:
@@ -111,9 +122,9 @@ def test_a_cassette_MISS_is_never_a_dead_call() -> None:
     path has: ADR 0123 caught the same planted regression ADR 0156 could not
     see live, scoring it 0.0000 with 36 misses. Excusing it as a dead call
     would throw that away."""
-    assert not is_dead_call(CASSETTE_MISS, cassette_miss="fail")
+    assert not is_dead_call(CASSETTE_MISS, cassette_miss="fail", live_provider_present=True)
     # Same string, same exception type — the run's mode is what decides.
-    assert is_dead_call(CASSETTE_MISS, cassette_miss="live")
+    assert is_dead_call(CASSETTE_MISS, cassette_miss="live", live_provider_present=True)
 
 
 def test_nothing_else_is_a_dead_call() -> None:
@@ -125,7 +136,7 @@ def test_nothing_else_is_a_dead_call() -> None:
         "worker exited mid-corpus; this scenario never ran",
         "ModelProviderErrorish: a type that merely starts with the name",
     ):
-        assert not is_dead_call(failure, cassette_miss="live"), failure
+        assert not is_dead_call(failure, cassette_miss="live", live_provider_present=True), failure
 
 
 def test_a_worker_the_candidate_killed_is_not_a_dead_call() -> None:
@@ -329,3 +340,121 @@ def test_a_variant_run_reports_its_dead_and_rescued_scenarios() -> None:
     )
     assert run.dead == frozenset({"b"})
     assert run.retried == frozenset({"b", "c"})
+
+
+def test_a_live_miss_with_NO_PROVIDER_is_not_a_dead_call() -> None:
+    """ADR 0191's F1, the classification half.
+
+    ADR 0185 gated `is_dead_call` on the MODE STRING alone, and a mode string
+    is a request rather than a fact. `--cassette-miss live` with no `--config`
+    builds no provider, so the cassette misses and raises
+
+        NodeEvaluationError: ModelProviderError: cassette miss (...) and no
+        live provider to fall through to
+
+    — a `ModelProviderError` naming the ABSENCE of a provider, which the old
+    rule read as a provider that died. Every scenario in the corpus was
+    classified dead, retried, and then excluded from G3: on the reproduction's
+    identical numbers, `G3 FAIL — 1 previously-passing scenario(s) now score
+    below 0.5` counted became `G3 PASS — candidate mean 1 beats the control
+    cohort's p95 of 0.9429` excluded.
+
+    A miss with nothing behind it is a MISS. It is scored 0."""
+    assert not is_dead_call(NO_PROVIDER_MISS, cassette_miss="live", live_provider_present=False)
+    # The CONTROL: the same string with a provider present is still a death,
+    # so this test is measuring the new condition and not the string.
+    assert is_dead_call(NO_PROVIDER_MISS, cassette_miss="live", live_provider_present=True)
+
+
+# ---------------------------------------------------------------------------
+# What "bounded at one" actually bounds (ADR 0191's F7)
+# ---------------------------------------------------------------------------
+
+TWO_CALL_SOURCE = """
+from aef.kernel import END, Graph, Node, SideEffect
+from aef.providers.base import CompletionRequest, ProviderMessage
+from aef.state import Plan, StateDelta
+
+
+def _ask(services, text):
+    return services.require_model_provider().complete(
+        CompletionRequest(messages=(ProviderMessage(role="user", content=text),), model="")
+    ).content
+
+
+def ask(state, ctx, services):
+    drafted = _ask(services, f"draft: {state.objective}")
+    revised = _ask(services, f"revise: {state.objective}")
+    return (
+        StateDelta(
+            working_memory={"summary": drafted + revised},
+            plan=Plan(goal=state.objective, status="done"),
+        ),
+        END,
+    )
+
+
+def build_graph():
+    return Graph(
+        id="asker2", version="1",
+        nodes={"ask": Node(id="ask", version="1", fn=ask, deterministic=False,
+                           side_effects=SideEffect.EXTERNAL_CALL,
+                           idempotency_key_fn=lambda s: f"{s.run_id}:ask")},
+        edges=[], entry_node="ask",
+    )
+"""
+
+
+def _two_call_scenario(sid: str) -> Scenario:
+    """Recorded from the same source the worker will execute, then stripped of
+    its `model_calls` — so both of the graph's calls miss the cassette."""
+    namespace: dict[str, Any] = {}
+    exec(compile(TWO_CALL_SOURCE, "<two_call>", "exec"), namespace)  # noqa: S102
+    recorded = record_run(
+        namespace["build_graph"](),
+        AEFState(run_id=sid, agent_id="a", objective=f"the {sid} passage"),
+        agent_services(model_provider=_Scripted()),
+        scenario_id=sid,
+        recorded_at=RECORDED_AT,
+    )
+    payload = {k: v for k, v in recorded.to_payload().items() if k != "model_calls"}
+    return Scenario.from_payload({**payload, "id": sid})
+
+
+@pytest.mark.slow
+def test_the_retry_costs_one_extra_SCENARIO_not_one_extra_CALL(tmp_path: Path) -> None:
+    """ADR 0185's consequences said "the retry costs at most one extra call
+    per dead scenario". It does not, and the erratum is ADR 0191's F7.
+
+    The retry re-runs the whole SCENARIO, and a scenario costs as many calls
+    as its graph makes. Two scenarios of a two-call graph cost 4 calls clean;
+    with the provider dying on call 4 — the second call of the second
+    scenario — the run costs **6**. Two extra calls for one dead scenario.
+
+    The true bound is one extra scenario EXECUTION: up to K extra calls for a
+    K-call scenario, and at worst one extra full corpus pass. That is still
+    bounded, which is what the retry needed to be; it is just not the number
+    that was written down."""
+    ws = Path(tempfile.mkdtemp(dir=tmp_path))
+    (ws / "agents").mkdir()
+    (ws / "agents" / "__init__.py").write_text("")
+    (ws / "agents" / "graph.py").write_text(TWO_CALL_SOURCE)
+
+    results = run_corpus_isolated(
+        ws,
+        [_two_call_scenario("s1"), _two_call_scenario("s2")],
+        entrypoint="agents.graph:build_graph",
+        cassette_miss="live",
+        live_provider=_flaky_provider(tmp_path, die_on={4}),
+    )
+
+    assert results["s2"].retried, "the fourth call died, so s2 was re-run"
+    assert not results["s2"].dead_call, "the retry answered"
+    calls = int((tmp_path / "calls").read_text())
+    assert calls == 6, (
+        f"a clean 2-scenario run of a 2-call graph costs 4 calls; this one cost {calls}. "
+        f"The bound is one extra SCENARIO, not one extra call."
+    )
+    # The control that keeps the claim honest in the other direction: it is
+    # still BOUNDED. One extra execution, never two.
+    assert calls == 4 + 2

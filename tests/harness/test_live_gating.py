@@ -41,6 +41,7 @@ from aef.harness.git import GitRepo
 from aef.harness.isolated_suite import run_corpus_isolated
 from aef.harness.loop import (
     LiveGatingDisabledError,
+    LiveGatingWithoutConfigError,
     LoopConfig,
     LoopPaths,
     PolicyConfigError,
@@ -234,7 +235,12 @@ def test_the_worker_sandbox_is_widened_only_when_a_provider_will_be_built(
         config_path=None,
         cassette_miss="live",
     )
-    assert _live_provider_from_base_ref(unconfigured) is None
+    # Since ADR 0191 that state is REFUSED rather than silently provider-less
+    # (see `test_live_with_no_config_is_refused_by_name_before_anything_runs`),
+    # so what this test still asserts is the narrowing itself: given no
+    # provider, the allowlist is not widened.
+    with pytest.raises(LiveGatingWithoutConfigError):
+        _live_provider_from_base_ref(unconfigured)
     assert "USER" not in _worker_sandbox_policy(unconfigured, None).env_allowlist
 
 
@@ -436,7 +442,15 @@ def test_a_live_miss_is_served_inside_the_worker_by_the_rebuilt_provider(
 def test_the_same_miss_fails_when_no_provider_crosses(tmp_path: Path) -> None:
     """The control for the test above: with `live_provider=None` the worker
     has nothing to call, so the miss is a failed node. A live-gating test
-    that passed either way would be measuring nothing."""
+    that passed either way would be measuring nothing.
+
+    **And it asserts the CLASSIFICATION, not just the count.** ADR 0181 wrote
+    this control as `error_count == 1`, which was true before ADR 0185 existed
+    and stayed true after it — while the same scenario silently became
+    `dead_call=True retried=True`, ran twice, and was EXCLUDED from G3's
+    comparison rather than scored (reproduced, ADR 0191's F1). A control that
+    drives the exact state a later change breaks, and then asserts a property
+    that change cannot move, is a control in name only."""
     ws = Path(tempfile.mkdtemp(dir=tmp_path))
     (ws / "agents").mkdir()
     (ws / "agents" / "__init__.py").write_text("")
@@ -449,7 +463,78 @@ def test_the_same_miss_fails_when_no_provider_crosses(tmp_path: Path) -> None:
         cassette_miss="live",
         live_provider=None,
     )
-    assert results["miss"].outcome.error_count == 1
+    result = results["miss"]
+    assert result.outcome.error_count == 1
+    assert result.score == 0.0
+    # The miss names a ModelProviderError, and it is STILL not a dead call:
+    # nothing was ever called. Scored, counted, never excused.
+    assert result.dead_call is False, result.failure
+    # And therefore never retried — the corpus ran once, not twice.
+    assert result.retried is False
+    assert "no live provider to fall through to" in (result.failure or "")
+
+
+def test_live_with_no_config_is_refused_by_name_before_anything_runs(tmp_path: Path) -> None:
+    """ADR 0191's F1, the refusal half.
+
+    `_live_provider_from_base_ref` returned `None` for a missing config
+    BEFORE it read the opt-in, so `--cassette-miss live` with no `--config`
+    ran with no provider at all rather than being refused. Every scenario then
+    missed, every miss classified as a dead call, each was retried, and up to
+    a quarter of them were excluded from the comparison — while the ledger
+    recorded `live_model_calls: false` throughout. The absence of a provider
+    is not "live gating off"; it is a run that cannot be judged."""
+    from aef.harness.loop import LiveGatingWithoutConfigError
+
+    repo = _repo(tmp_path, LOGIN_YAML + OPTED_IN)
+    unconfigured = LoopConfig(
+        repo=GitRepo(root=repo),
+        paths=LoopPaths(root=tmp_path / "state-nc"),
+        config_path=None,
+        cassette_miss="live",
+    )
+    with pytest.raises(LiveGatingWithoutConfigError) as excinfo:
+        _live_provider_from_base_ref(unconfigured)
+    assert "--cassette-miss live needs a --config" in str(excinfo.value)
+
+    # The CONTROL, and it is the whole point of refusing rather than warning:
+    # the DEFAULT mode is untouched. No config is required to replay.
+    replayed = LoopConfig(
+        repo=GitRepo(root=repo),
+        paths=LoopPaths(root=tmp_path / "state-replay"),
+        config_path=None,
+    )
+    assert _live_provider_from_base_ref(replayed) is None
+
+
+def test_the_cli_refuses_a_live_cycle_with_no_config_as_an_ERROR(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`EXIT_ERROR`, not `EXIT_REJECTED`: a nightly job's rule is `>= 2`
+    fails, and reporting a missing flag as a rejected candidate is what makes
+    CI retry it forever (ADR 0075, ADR 0167)."""
+    from aef.cli.main import main
+    from aef.harness.loop import EXIT_ERROR
+
+    repo = _repo(tmp_path, LOGIN_YAML + OPTED_IN)
+    code = main(
+        [
+            "loop",
+            "cycle",
+            "--repo",
+            str(repo),
+            "--state",
+            str(tmp_path / "state-cli"),
+            "--workdir",
+            str(tmp_path / "wd-cli"),
+            "--no-memory",
+            "--cassette-miss",
+            "live",
+        ]
+    )
+    assert code == EXIT_ERROR, code
+    err = capsys.readouterr().err
+    assert "--cassette-miss live` needs --config" in err, err
 
 
 # ---------------------------------------------------------------------------
