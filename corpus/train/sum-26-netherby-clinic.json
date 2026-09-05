@@ -1,0 +1,347 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Netherby Green"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Netherby Grange"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)vaccinat"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 30
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-26-netherby-clinic",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-26-netherby-clinic in at most 30 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-26-netherby-clinic",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 30,
+      "must_mention": [
+        "Netherby Green"
+      ],
+      "text": "The vaccination clinic that used to run at Netherby Grange has moved to Netherby Green, half a mile south. Netherby Grange keeps the podiatry and phlebotomy clinics; only vaccinations have moved. Patients who arrive at Netherby Grange on a Tuesday will be redirected on foot, and the trust says signage will be in place from the first of the month."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "32d9c412f29142d9415fd5a949bd953540a8645a86e7bf1eb0c35dd848d1a201",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Netherby Green.\n\nPassage:\nThe vaccination clinic that used to run at Netherby Grange has moved to Netherby Green, half a mile south. Netherby Grange keeps the podiatry and phlebotomy clinics; only vaccinations have moved. Patients who arrive at Netherby Grange on a Tuesday will be redirected on foot, and the trust says signage will be in place from the first of the month.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Vaccination clinics have relocated from Netherby Grange to Netherby Green, half a mile south; podiatry and phlebotomy remain at the Grange, with Tuesday arrivals redirected and signage from the month's start.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "output_tokens": 77,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code on claude-opus-5[1m] (ADR 0171). S3b content negative: two similarly-named sites, and the summary is useless if it names only one (ADR 0171)",
+  "recorded_at": "2026-09-05T03:18:13.580490+00:00",
+  "source": "bootstrap",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-26-netherby-clinic:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-05T03:18:26.671970+00:00",
+        "run_id": "sum-26-netherby-clinic",
+        "trace_id": "sum-26-netherby-clinic"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-26-netherby-clinic in at most 30 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-26-netherby-clinic",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Netherby Green"
+          ],
+          "text": "The vaccination clinic that used to run at Netherby Grange has moved to Netherby Green, half a mile south. Netherby Grange keeps the podiatry and phlebotomy clinics; only vaccinations have moved. Patients who arrive at Netherby Grange on a Tuesday will be redirected on foot, and the trust says signage will be in place from the first of the month."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-26-netherby-clinic:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-05T03:18:26.672024+00:00",
+        "run_id": "sum-26-netherby-clinic",
+        "trace_id": "sum-26-netherby-clinic"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-26-netherby-clinic in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 79,
+            "trace_id": "sum-26-netherby-clinic",
+            "ts": "2026-09-05T03:18:26.672024Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Vaccination clinics have relocated from Netherby Grange to Netherby Green, half a mile south; podiatry and phlebotomy remain at the Grange, with Tuesday arrivals redirected and signage from the month's start."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-26-netherby-clinic in at most 30 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-26-netherby-clinic",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Netherby Green"
+          ],
+          "text": "The vaccination clinic that used to run at Netherby Grange has moved to Netherby Green, half a mile south. Netherby Grange keeps the podiatry and phlebotomy clinics; only vaccinations have moved. Patients who arrive at Netherby Grange on a Tuesday will be redirected on foot, and the trust says signage will be in place from the first of the month."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-26-netherby-clinic:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-05T03:18:28.946785+00:00",
+        "run_id": "sum-26-netherby-clinic",
+        "trace_id": "sum-26-netherby-clinic"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-26-netherby-clinic in at most 30 words",
+        "plan": {
+          "goal": "summarise sum-26-netherby-clinic in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 79,
+            "trace_id": "sum-26-netherby-clinic",
+            "ts": "2026-09-05T03:18:26.672024Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-26-netherby-clinic",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Netherby Green"
+          ],
+          "summary": "Vaccination clinics have relocated from Netherby Grange to Netherby Green, half a mile south; podiatry and phlebotomy remain at the Grange, with Tuesday arrivals redirected and signage from the month's start.",
+          "text": "The vaccination clinic that used to run at Netherby Grange has moved to Netherby Green, half a mile south. Netherby Grange keeps the podiatry and phlebotomy clinics; only vaccinations have moved. Patients who arrive at Netherby Grange on a Tuesday will be redirected on foot, and the trust says signage will be in place from the first of the month."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-26-netherby-clinic:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-05T03:18:28.946964+00:00",
+        "run_id": "sum-26-netherby-clinic",
+        "trace_id": "sum-26-netherby-clinic"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-26-netherby-clinic in at most 30 words",
+        "plan": {
+          "goal": "summarise sum-26-netherby-clinic in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 79,
+            "trace_id": "sum-26-netherby-clinic",
+            "ts": "2026-09-05T03:18:26.672024Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-26-netherby-clinic",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Netherby Green"
+          ],
+          "summary": "Vaccination clinics have relocated from Netherby Grange to Netherby Green, half a mile south; podiatry and phlebotomy remain at the Grange, with Tuesday arrivals redirected and signage from the month's start.",
+          "text": "The vaccination clinic that used to run at Netherby Grange has moved to Netherby Green, half a mile south. Netherby Grange keeps the podiatry and phlebotomy clinics; only vaccinations have moved. Patients who arrive at Netherby Grange on a Tuesday will be redirected on foot, and the trust says signage will be in place from the first of the month."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

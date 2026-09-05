@@ -57,13 +57,24 @@ every recorded cassette sits at or under its cap (ADR 0156 §D2, fixed in ADR
 body can match one input many ways is now refused when the scenario **loads**,
 with the safe rewrite in the message.
 
-The scenarios here still carry a regex rather than `max_words`, deliberately:
-the original pattern's `{1,` also required at least one word, and swapping in a
-bare `max_words` would let an empty summary pass, while adding `min_words: 1`
-would change every scenario's check count and therefore its recorded score.
-They use the linear-time equivalent `^\s*\S+(?:\s+\S+){0,N-1}\s*$`. New
-scenarios should use `max_words` (with `min_words: 1` where the answer must be
-non-empty) and no regex at all.
+**Every summary scenario now states its cap as `max_words` + `min_words: 1`**
+(ADR 0171). They carried the linear-time regex `^\s*\S+(?:\s+\S+){0,N-1}\s*$`
+until the corpus was next re-recorded, because a bare `max_words` accepts an
+empty summary and adding `min_words: 1` changes a scenario's check count and
+therefore its recorded score. Both objections are discharged: `min_words: 1`
+restores the predicate exactly, and the score move it was protecting (0.75 →
+0.80 on three scenarios) no longer exists, because those three 0.75s were check
+defects and are corrected. A per-scenario score is now `k/5` rather than `k/4`.
+
+**`contains` is case-sensitive, and on a summary that is a trap.** ADR 0123
+recorded three "content failures" — `swimming`, `landslip`, `volunteers` — that
+were nothing of the kind: the model had capitalised the term at the start of a
+sentence, and `contains` said no. ADR 0159 measured that correcting them left
+the corpus with **no negatives at all**. Fifty-seven more checks of the same
+shape were passing only because the model happened not to open with them. So
+every term check on `working_memory.summary` is now `regex` with an inline
+`(?i)`, and `tests/harness/test_corpus_negatives.py` refuses a new
+`contains` there.
 
 ## The corpus never shrinks
 
@@ -71,6 +82,35 @@ non-empty) and no regex at all.
 a gate suite that can be made to pass by deleting the failing case is not a
 suite. This runs from the base ref, so a candidate cannot retire its own
 counterexample.
+
+## The content negatives, and what it took to get one
+
+A negative here is a scenario whose **recorded answer fails an owner check** —
+not a run that raised, and not a `must_fail` tripwire. Until ADR 0171 the
+summary corpus had none: its only three were the case-sensitivity defects
+above, and once those were corrected the corpus was 20/20 pass, which is a
+corpus that scores a constant judge exactly as well as a good one (ADR 0159).
+
+Nineteen scenarios (`sum-21` … `sum-39`) were recorded live on
+`claude-opus-5[1m]` against inputs chosen to be handled badly: a finding stated
+by negation, a superseded figure the passage opens with, two similarly-named
+entities with opposite outcomes, a measurement whose unit competes with four
+other numbers, a permission that is worthless without its conditions, a rate
+that fell while the count rose, and caps from 12 to 38 words. **Seven fail** —
+three in `train`, four in `validation`.
+
+The finding worth carrying forward is *which* checks they fail. **All seven are
+word-cap overruns**, by one to three words. Every content trap was handled
+correctly, and the three "content failures" the first pass appeared to produce
+were checks written too narrowly — `not overloaded` against "no overloading",
+`divers` against "diverted", `3.1 million` against "£3.1m" — each widened
+before anything was called a negative. On this task, at this cap range, this
+agent's one reproducible failure is length.
+
+`tests/harness/test_corpus_negatives.py` asserts the count cannot silently
+return to zero. Widening a check until everything passes and fixing a check
+that was too narrow look identical in a diff; the count afterwards is what
+separates them.
 
 ## What this seed corpus covers, and does not
 

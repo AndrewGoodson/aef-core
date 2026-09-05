@@ -1,0 +1,342 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Kellet branch"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)(not (yet )?(re)?open|no confirmed date|still closed|has not returned|remains closed|delayed indefinitely|still awaiting)"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 20
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-28-kellet-branch",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-28-kellet-branch in at most 20 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-28-kellet-branch",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 20,
+      "must_mention": [
+        "Kellet branch"
+      ],
+      "text": "Passenger trains have still not returned to the Kellet branch. The reopening, announced for May, slipped first to September and now has no confirmed date; the operator says signalling commissioning is the outstanding item. Freight has used the line since March. The station car park at Kellet Road is finished and locked."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "c6b10e72a55c780c9d2db2c31a36a30f3b9a0d37de000c93e82ac021ba11da12",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 20 words.\nThe summary must mention each of these terms, spelled exactly as given: Kellet branch.\n\nPassage:\nPassenger trains have still not returned to the Kellet branch. The reopening, announced for May, slipped first to September and now has no confirmed date; the operator says signalling commissioning is the outstanding item. Freight has used the line since March. The station car park at Kellet Road is finished and locked.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Kellet branch passenger service reopening delayed indefinitely pending signalling commissioning; freight runs, station car park complete.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "output_tokens": 44,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code on claude-opus-5[1m] (ADR 0171). S3b content negative: the fact is that something has NOT happened, and a summary that drops the negation inverts it (ADR 0171)",
+  "recorded_at": "2026-09-05T03:18:13.580490+00:00",
+  "source": "bootstrap",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-28-kellet-branch:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-05T03:18:31.347702+00:00",
+        "run_id": "sum-28-kellet-branch",
+        "trace_id": "sum-28-kellet-branch"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-28-kellet-branch in at most 20 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-28-kellet-branch",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 20,
+          "must_mention": [
+            "Kellet branch"
+          ],
+          "text": "Passenger trains have still not returned to the Kellet branch. The reopening, announced for May, slipped first to September and now has no confirmed date; the operator says signalling commissioning is the outstanding item. Freight has used the line since March. The station car park at Kellet Road is finished and locked."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-28-kellet-branch:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-05T03:18:31.347759+00:00",
+        "run_id": "sum-28-kellet-branch",
+        "trace_id": "sum-28-kellet-branch"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-28-kellet-branch in at most 20 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 46,
+            "trace_id": "sum-28-kellet-branch",
+            "ts": "2026-09-05T03:18:31.347759Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Kellet branch passenger service reopening delayed indefinitely pending signalling commissioning; freight runs, station car park complete."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-28-kellet-branch in at most 20 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-28-kellet-branch",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 20,
+          "must_mention": [
+            "Kellet branch"
+          ],
+          "text": "Passenger trains have still not returned to the Kellet branch. The reopening, announced for May, slipped first to September and now has no confirmed date; the operator says signalling commissioning is the outstanding item. Freight has used the line since March. The station car park at Kellet Road is finished and locked."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-28-kellet-branch:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-05T03:18:33.379719+00:00",
+        "run_id": "sum-28-kellet-branch",
+        "trace_id": "sum-28-kellet-branch"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-28-kellet-branch in at most 20 words",
+        "plan": {
+          "goal": "summarise sum-28-kellet-branch in at most 20 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 46,
+            "trace_id": "sum-28-kellet-branch",
+            "ts": "2026-09-05T03:18:31.347759Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-28-kellet-branch",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 20,
+          "must_mention": [
+            "Kellet branch"
+          ],
+          "summary": "Kellet branch passenger service reopening delayed indefinitely pending signalling commissioning; freight runs, station car park complete.",
+          "text": "Passenger trains have still not returned to the Kellet branch. The reopening, announced for May, slipped first to September and now has no confirmed date; the operator says signalling commissioning is the outstanding item. Freight has used the line since March. The station car park at Kellet Road is finished and locked."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-28-kellet-branch:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-05T03:18:33.379913+00:00",
+        "run_id": "sum-28-kellet-branch",
+        "trace_id": "sum-28-kellet-branch"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-28-kellet-branch in at most 20 words",
+        "plan": {
+          "goal": "summarise sum-28-kellet-branch in at most 20 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 46,
+            "trace_id": "sum-28-kellet-branch",
+            "ts": "2026-09-05T03:18:31.347759Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-28-kellet-branch",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 20,
+          "must_mention": [
+            "Kellet branch"
+          ],
+          "summary": "Kellet branch passenger service reopening delayed indefinitely pending signalling commissioning; freight runs, station car park complete.",
+          "text": "Passenger trains have still not returned to the Kellet branch. The reopening, announced for May, slipped first to September and now has no confirmed date; the operator says signalling commissioning is the outstanding item. Freight has used the line since March. The station car park at Kellet Road is finished and locked."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

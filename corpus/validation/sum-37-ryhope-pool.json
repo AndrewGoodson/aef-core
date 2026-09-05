@@ -1,0 +1,347 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Ryhope pool"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)(19|nineteenth) August"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)(flood|pump|delay|late|behind schedule)"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 36
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-37-ryhope-pool",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-37-ryhope-pool in at most 36 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-37-ryhope-pool",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 36,
+      "must_mention": [
+        "Ryhope pool"
+      ],
+      "text": "Ryhope pool was due to reopen on 3 June. It reopened on 19 August, after the new plant room flooded during commissioning and a second circulation pump had to be ordered from Italy. The pool now opens at 06:30 on weekdays, half an hour earlier than before, and the diving boards remain out of use pending a separate inspection."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "a35a72b4ff2a96c7690e323577a5f4be35c6f3952033e4101e16874991067331",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 36 words.\nThe summary must mention each of these terms, spelled exactly as given: Ryhope pool.\n\nPassage:\nRyhope pool was due to reopen on 3 June. It reopened on 19 August, after the new plant room flooded during commissioning and a second circulation pump had to be ordered from Italy. The pool now opens at 06:30 on weekdays, half an hour earlier than before, and the diving boards remain out of use pending a separate inspection.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Ryhope pool, scheduled to reopen on 3 June, finally reopened on 19 August after plant room flooding and a pump delay; weekday opening is now 06:30, though diving boards await inspection.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "output_tokens": 70,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code on claude-opus-5[1m] (ADR 0171). S3b content-negative candidate: the announced date and the actual date are both in the passage and only one of them is true (ADR 0171)",
+  "recorded_at": "2026-09-05T03:23:22.725497+00:00",
+  "source": "record",
+  "split": "validation",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-37-ryhope-pool:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-05T03:23:22.731471+00:00",
+        "run_id": "sum-37-ryhope-pool",
+        "trace_id": "sum-37-ryhope-pool"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-37-ryhope-pool in at most 36 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-37-ryhope-pool",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 36,
+          "must_mention": [
+            "Ryhope pool"
+          ],
+          "text": "Ryhope pool was due to reopen on 3 June. It reopened on 19 August, after the new plant room flooded during commissioning and a second circulation pump had to be ordered from Italy. The pool now opens at 06:30 on weekdays, half an hour earlier than before, and the diving boards remain out of use pending a separate inspection."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-37-ryhope-pool:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-05T03:23:22.731540+00:00",
+        "run_id": "sum-37-ryhope-pool",
+        "trace_id": "sum-37-ryhope-pool"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-37-ryhope-pool in at most 36 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 72,
+            "trace_id": "sum-37-ryhope-pool",
+            "ts": "2026-09-05T03:23:22.731540Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Ryhope pool, scheduled to reopen on 3 June, finally reopened on 19 August after plant room flooding and a pump delay; weekday opening is now 06:30, though diving boards await inspection."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-37-ryhope-pool in at most 36 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-37-ryhope-pool",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 36,
+          "must_mention": [
+            "Ryhope pool"
+          ],
+          "text": "Ryhope pool was due to reopen on 3 June. It reopened on 19 August, after the new plant room flooded during commissioning and a second circulation pump had to be ordered from Italy. The pool now opens at 06:30 on weekdays, half an hour earlier than before, and the diving boards remain out of use pending a separate inspection."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-37-ryhope-pool:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-05T03:23:25.420162+00:00",
+        "run_id": "sum-37-ryhope-pool",
+        "trace_id": "sum-37-ryhope-pool"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-37-ryhope-pool in at most 36 words",
+        "plan": {
+          "goal": "summarise sum-37-ryhope-pool in at most 36 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 72,
+            "trace_id": "sum-37-ryhope-pool",
+            "ts": "2026-09-05T03:23:22.731540Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-37-ryhope-pool",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 36,
+          "must_mention": [
+            "Ryhope pool"
+          ],
+          "summary": "Ryhope pool, scheduled to reopen on 3 June, finally reopened on 19 August after plant room flooding and a pump delay; weekday opening is now 06:30, though diving boards await inspection.",
+          "text": "Ryhope pool was due to reopen on 3 June. It reopened on 19 August, after the new plant room flooded during commissioning and a second circulation pump had to be ordered from Italy. The pool now opens at 06:30 on weekdays, half an hour earlier than before, and the diving boards remain out of use pending a separate inspection."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-37-ryhope-pool:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-05T03:23:25.420409+00:00",
+        "run_id": "sum-37-ryhope-pool",
+        "trace_id": "sum-37-ryhope-pool"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-37-ryhope-pool in at most 36 words",
+        "plan": {
+          "goal": "summarise sum-37-ryhope-pool in at most 36 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 72,
+            "trace_id": "sum-37-ryhope-pool",
+            "ts": "2026-09-05T03:23:22.731540Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-37-ryhope-pool",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 36,
+          "must_mention": [
+            "Ryhope pool"
+          ],
+          "summary": "Ryhope pool, scheduled to reopen on 3 June, finally reopened on 19 August after plant room flooding and a pump delay; weekday opening is now 06:30, though diving boards await inspection.",
+          "text": "Ryhope pool was due to reopen on 3 June. It reopened on 19 August, after the new plant room flooded during commissioning and a second circulation pump had to be ordered from Italy. The pool now opens at 06:30 on weekdays, half an hour earlier than before, and the diving boards remain out of use pending a separate inspection."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}
