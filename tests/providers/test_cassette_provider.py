@@ -174,3 +174,60 @@ def test_the_cassette_imports_no_vendor_sdk() -> None:
     from tests.test_vendor_isolation import _find_violations
 
     assert _find_violations(REPO / "aef" / "providers" / "cassette_provider.py") == []
+
+
+def test_a_cassette_forwards_the_inner_providers_isolation_and_invents_none() -> None:
+    """A wrapper cannot be more isolated than what it wraps: under
+    `on_miss="live"` the inner provider is what actually runs. With no inner
+    provider the answer is the empty set — no claim — which is what the gates'
+    replay-only configuration gets, and why replaying the corpus does not
+    start emitting containment warnings (ADR 0169)."""
+
+    class _Fixed(ModelProvider):
+        name = "fixed"
+
+        @property
+        def isolation(self) -> frozenset[str]:
+            return frozenset({"no_tools", "system_role"})
+
+        def complete(self, request: CompletionRequest) -> CompletionResult:
+            return CompletionResult(content="x", model="m", input_tokens=1, output_tokens=1)
+
+    assert CassetteProvider(_Fixed()).isolation == frozenset({"no_tools", "system_role"})
+    assert CassetteProvider(None).isolation == frozenset()
+
+
+def test_the_cache_counters_and_the_attribution_survive_a_round_trip() -> None:
+    """A recording that dropped them would make a replayed corpus disagree
+    with the live run about what a call cost and which model answered."""
+    result = CompletionResult(
+        content="OK",
+        model="claude-opus-5-20260101",
+        input_tokens=2,
+        output_tokens=4,
+        stop_reason="end_turn",
+        cache_read_input_tokens=4_600,
+        cache_creation_input_tokens=82,
+        model_attribution="alias",
+    )
+    request = CompletionRequest(
+        messages=(ProviderMessage(role="user", content="hi"),), model="claude-opus-5"
+    )
+    payload = RecordedCall.of(request, result).to_payload()
+    restored = RecordedCall.from_payload(payload).result
+    assert restored == result
+    assert restored.total_input_tokens == 4_684
+
+
+def test_a_cassette_recorded_before_the_fields_existed_still_loads() -> None:
+    """Every corpus scenario on disk predates ADR 0169; absent counters read
+    as 0 and an absent attribution as `requested`, which is what those
+    recordings implied when `input_tokens` was the only number kept."""
+    payload = {
+        "request": {"messages": [{"role": "user", "content": "hi"}], "model": "m", "max_tokens": 8},
+        "result": {"content": "OK", "model": "m", "input_tokens": 5, "output_tokens": 2},
+    }
+    restored = RecordedCall.from_payload(payload).result
+    assert (restored.cache_read_input_tokens, restored.cache_creation_input_tokens) == (0, 0)
+    assert restored.model_attribution == "requested"
+    assert restored.total_input_tokens == 5

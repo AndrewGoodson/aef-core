@@ -11,12 +11,30 @@ of the harness CLI under its own auth.
 No vendor SDK is imported. The only dependency is the CLI on `PATH`, and the
 subprocess is injectable so the adapters are tested without spawning one.
 
-All three adapters (`claude`, `codex`, `grok`) are single-turn and tool-less
-by construction: a graph node calling a model wants a completion, not an
-agent that edits the working tree. Multi-message requests are rendered into
-one transcript because the CLIs take one prompt — good enough for the
-reflection and consolidation nodes this runtime ships, and stated here so
-nobody mistakes it for a chat API.
+The three adapters are **not** equally isolated, and the previous version of
+this paragraph said they were ("single-turn and tool-less by construction").
+Each one now declares what its own argv enforces through `isolation`, and
+`ISOLATION_PROPERTIES` in `aef.providers.base` is the vocabulary:
+
+    claude_code  no_tools, no_mcp, single_turn, no_project_context, system_role
+    codex        read_only_fs, user_turn_persona
+    grok         no_web_search, no_subagents, single_turn, system_role
+
+`codex exec` sends neither `--tools` nor `--max-turns`: it is an agentic loop
+in a read-only sandbox, which may still read the working tree. And `grok
+--tools ""` was **measured** on 1.0.5 to suppress nothing — the run read a
+planted file and quoted its contents back (ADR 0169) — while `claude --tools
+""` is documented by `claude --help` as "Use \"\" to disable all tools". The
+same flag spelling, opposite semantics; ADR 0150's rule ("a flag's shape is
+not a flag's value") one level up.
+
+Each `isolation` is DERIVED from the argv the adapter actually builds for a
+fixed probe request, not written down beside it, so removing a flag changes
+the declaration in the same commit rather than in a later one.
+
+Multi-message requests are rendered into one transcript because the CLIs take
+one prompt — good enough for the reflection and consolidation nodes this
+runtime ships, and stated here so nobody mistakes it for a chat API.
 
 A harness this repo has never seen is **configuration, not code**: see
 `aef.providers.command_provider.CommandProvider` (`impl: command`), which
@@ -40,12 +58,55 @@ from aef.providers.base import (
     CompletionResult,
     ModelProvider,
     ModelProviderError,
+    ProviderMessage,
 )
 
 # The smallest VALID MCP config: an explicit, empty server set. Paired with
 # `--strict-mcp-config` this is what stops the operator's own MCP servers
 # reaching a node's model call. A bare `{}` fails the CLI's schema.
 _EMPTY_MCP_CONFIG = '{"mcpServers":{}}'
+
+# Two sentinels no flag name and no flag value can collide with. `isolation`
+# builds the adapter's real argv for this request and reads the result back;
+# scanning for a literal like "--safe-mode" in an argv that also carries a
+# user's prompt would let the PROMPT decide what the provider claims.
+PROBE_SYSTEM = "AEF_ISOLATION_PROBE_SYSTEM"
+PROBE_PROMPT = "AEF_ISOLATION_PROBE_PROMPT"
+
+PROBE_REQUEST = CompletionRequest(
+    messages=(
+        ProviderMessage(role="system", content=PROBE_SYSTEM),
+        ProviderMessage(role="user", content=PROBE_PROMPT),
+    ),
+    model="aef-isolation-probe-model",
+)
+"""The request `isolation` builds argv for. It carries a system message on
+purpose: `system_role` / `user_turn_persona` is a statement about whether the
+adapter HAS a system channel, and an adapter with one only reveals it when
+there is something to put in it."""
+
+
+def flag_present(argv: Sequence[str], flag: str, value: str | None = None) -> bool:
+    """`flag` appears in argv, optionally immediately followed by `value`."""
+    if value is None:
+        return flag in argv
+    return any(argv[i] == flag and argv[i + 1] == value for i in range(len(argv) - 1))
+
+
+def persona_channel(argv: Sequence[str]) -> frozenset[str]:
+    """Where `PROBE_REQUEST`'s system message ended up in `argv`.
+
+    Its own argv element (`--system-prompt <text>`) is `system_role`. Fused
+    into another element alongside the prompt is `user_turn_persona` — the
+    concatenation `CodexProvider` and a `{system}`-less `CommandProvider`
+    both perform, which turns the persona into untrusted-channel text while
+    ADR 0152's safety story assumes it is the system message. Neither, and
+    the adapter has said nothing about the channel."""
+    if any(element == PROBE_SYSTEM for element in argv):
+        return frozenset({"system_role"})
+    if any(PROBE_SYSTEM in element and PROBE_PROMPT in element for element in argv):
+        return frozenset({"user_turn_persona"})
+    return frozenset()
 
 
 @dataclass(frozen=True)
@@ -103,8 +164,11 @@ def split_request(request: CompletionRequest) -> tuple[str | None, str]:
     return system, rendered
 
 
-def answering_model(model_usage: dict[str, object], requested: str | None) -> str | None:
-    """Which model in a CLI's `modelUsage` map actually answered.
+def answering_model(
+    model_usage: dict[str, object], requested: str | None
+) -> tuple[str | None, str]:
+    """Which model in a CLI's `modelUsage` map answered, **and how sure that
+    is** — see `MODEL_ATTRIBUTION_VALUES`.
 
     **`next(iter(model_usage))` — the first key — is wrong, and was wrong on
     `main`.** These CLIs bill a *helper* model alongside the one asked for
@@ -121,25 +185,43 @@ def answering_model(model_usage: dict[str, object], requested: str | None) -> st
     trusts when an ADR says which model a measurement was taken on, and this
     one named a model that wrote none of the answer.
 
-    Four rules, in order:
+    **Rule 3 — "the key with the most output tokens" — is a guess, and it was
+    measured wrong.** S3's 36-call judge A/B misattributed
+    `sum-13-cider-press` to `claude-haiku-4-5-20251001`: a judge whose entire
+    reply is a small JSON object writes ~12 output tokens, which is *fewer*
+    than the CLI's own helper model wrote on that call, so the premise "the
+    helper writes a handful, the answering model writes the answer" inverts
+    on exactly the shortest replies.
 
-    1. the requested name, if the map has it;
+    The requested-name rule should have won there and never ran, because
+    `requested` was empty: `agent_services(reflection="llm")` sets
+    `LLMJudge.model = reflection_model or ""`, and with `model_provider.model`
+    also unset `request.model or self._default_model` is falsy. Rules 1 and 2
+    are skipped and rule 3 decides alone. That is reported upward rather than
+    fixed here — `aef/services/runtime.py` is not this module's — and the
+    remedy this function can offer is to stop presenting a guess as a fact.
+
+    Five rules, in order, each returning the attribution it earned:
+
+    1. the requested name, if the map has it — `requested`;
     2. a key that *extends* the requested name (`claude-opus-5` ->
-       `claude-opus-5-20260101`) — an alias resolves to a dated id, which is
-       exactly the case that made reading `modelUsage` worth doing at all;
-    3. the key that produced the most output tokens — the helper writes a
-       handful, the answering model writes the answer;
-    4. the first key, which is where we came in: with one entry it is right,
-       and with none there is nothing better to say.
+       `claude-opus-5-20260101`) — `alias`, the case that made reading
+       `modelUsage` worth doing at all;
+    3. a map with exactly one key — `sole`, no ambiguity to resolve;
+    4. the key with the most output tokens — `heuristic`, the rule above;
+    5. the first key — also `heuristic`, and where we came in.
+
+    An empty map returns `(None, "unknown")`; the caller substitutes whatever
+    it asked for and inherits the label.
     """
     if not model_usage:
-        return None
+        return None, "unknown"
     if requested:
         if requested in model_usage:
-            return requested
+            return requested, "requested"
         extended = [k for k in model_usage if k.startswith(f"{requested}-")]
         if len(extended) == 1:
-            return extended[0]
+            return extended[0], "alias"
 
     def _output_tokens(key: str) -> int:
         entry = model_usage[key]
@@ -149,8 +231,11 @@ def answering_model(model_usage: dict[str, object], requested: str | None) -> st
         return int(value) if isinstance(value, (int, float)) else 0
 
     keys = list(model_usage)
+    if len(keys) == 1:
+        # One model was billed. Nothing was guessed, whatever was requested.
+        return keys[0], "sole"
     best = max(keys, key=_output_tokens)
-    return best if _output_tokens(best) else keys[0]
+    return (best if _output_tokens(best) else keys[0]), "heuristic"
 
 
 class ClaudeCodeProvider(ModelProvider):
@@ -201,6 +286,40 @@ class ClaudeCodeProvider(ModelProvider):
     @property
     def default_model(self) -> str | None:
         return self._default_model
+
+    @property
+    def isolation(self) -> frozenset[str]:
+        """Derived from this adapter's own argv. Basis, per property:
+
+        - `no_tools` — `claude --help` (CLI 2.1.260): "`--tools <tools...>`
+          Specify the list of available tools from the built-in set. **Use ""
+          to disable all tools**". Documented by the binary, not merely
+          inferred from the flag being present — which matters, because the
+          identical spelling on `grok` means the opposite (ADR 0169).
+        - `single_turn` — `--max-turns 1`.
+        - `no_mcp` — `--strict-mcp-config` with a config declaring no server.
+        - `no_project_context` — `--safe-mode`, and ONLY that flag. `--cwd`
+          is not a substitute and neither is `--strict-mcp-config`.
+        - the channel — `--system-prompt` carries the persona.
+
+        Not claimed and not claimable from here: that a tool never *ran*.
+        This is the CLI's documented behaviour, and no live call in this repo
+        has planted a file and confirmed it stayed unread — which is exactly
+        the experiment that caught `grok`. Named as the open one.
+        """
+        argv = self.argv(PROBE_REQUEST)
+        found: set[str] = set()
+        if flag_present(argv, "--tools", ""):
+            found.add("no_tools")
+        if flag_present(argv, "--max-turns", "1"):
+            found.add("single_turn")
+        if flag_present(argv, "--strict-mcp-config") and flag_present(
+            argv, "--mcp-config", _EMPTY_MCP_CONFIG
+        ):
+            found.add("no_mcp")
+        if flag_present(argv, "--safe-mode"):
+            found.add("no_project_context")
+        return frozenset(found) | persona_channel(argv)
 
     def __init__(
         self,
@@ -275,13 +394,20 @@ class ClaudeCodeProvider(ModelProvider):
         model_usage = payload.get("modelUsage") or {}
         requested = request.model or self._default_model
         # NOT the first key of the map — see `answering_model`.
-        answered_by = answering_model(model_usage, requested) or requested or ""
+        answered_by, attribution = answering_model(model_usage, requested)
         return CompletionResult(
             content=str(payload.get("result", "")),
-            model=answered_by,
+            model=answered_by or requested or "",
+            # The UNCACHED remainder. On this CLI it is routinely 2 while the
+            # prompt is tens of thousands of tokens; the rest is below, and
+            # dropping it is what made ADR 0126's cost figures unsupportable
+            # from anything this code retained (ADR 0169).
             input_tokens=int(usage.get("input_tokens", 0)),
             output_tokens=int(usage.get("output_tokens", 0)),
             stop_reason=stop_reason,
+            cache_read_input_tokens=int(usage.get("cache_read_input_tokens", 0)),
+            cache_creation_input_tokens=int(usage.get("cache_creation_input_tokens", 0)),
+            model_attribution=attribution,
         )
 
 
@@ -301,6 +427,34 @@ class CodexProvider(ModelProvider):
     @property
     def default_model(self) -> str | None:
         return self._default_model
+
+    @property
+    def isolation(self) -> frozenset[str]:
+        """**The weakest of the three, and it used to be described as equal
+        to them.** `codex exec` is an agentic loop: this argv sends no
+        `--tools` and no `--max-turns`, so nothing here stops the model
+        calling a tool or taking another turn. What it does send is
+        `--sandbox read-only`, which bounds the damage to reads — a real
+        property, and not the one `no_tools` names.
+
+        It also has no system-prompt flag, so the persona is prepended to the
+        USER turn: `user_turn_persona`. ADR 0152's containment sentence
+        (`--tools ""` with `--max-turns 1`) described `ClaudeCodeProvider`
+        and was stamped into every generated module as if it described this
+        one too.
+
+        Unchanged and still true: this adapter has never been run (ADR 0112).
+        The declaration is what the argv says, and the argv is a hypothesis.
+        """
+        argv = self.argv(PROBE_REQUEST, Path("aef-isolation-probe-last-message.txt"))
+        found: set[str] = set()
+        if flag_present(argv, "--sandbox", "read-only"):
+            found.add("read_only_fs")
+        if flag_present(argv, "--tools", ""):
+            found.add("no_tools")
+        if flag_present(argv, "--max-turns", "1"):
+            found.add("single_turn")
+        return frozenset(found) | persona_channel(argv)
 
     def __init__(
         self,
@@ -391,16 +545,22 @@ class GrokProvider(ModelProvider):
     `{"type": "error", "message": "..."}` on stdout with the same text on
     stderr — measured by asking for a model that does not exist.
 
-    **`CompletionResult.input_tokens` is the SUM**: `usage.input_tokens` plus
-    `cache_read_input_tokens` plus `cache_creation_input_tokens`, which is
-    what `total_tokens` minus the output comes to. Grok's own
-    `usage.input_tokens` is only the *uncached remainder*, and it swings by
-    thousands between two identical calls depending on cache state. Reporting
-    it raw cost this adapter a real defect: the live isolation guard below,
-    written against the raw field, **passed on a deliberately de-isolated
-    provider** because the leaked instructions happened to be cached that run
-    (ADR 0154). A number that moves for reasons unrelated to what was sent
-    cannot guard what was sent.
+    **The number to guard on is `CompletionResult.total_input_tokens`**:
+    `usage.input_tokens` plus `cache_read_input_tokens` plus
+    `cache_creation_input_tokens`, which is what `total_tokens` minus the
+    output comes to. Grok's own `usage.input_tokens` is only the *uncached
+    remainder*, and it swings by thousands between two identical calls
+    depending on cache state. Reporting it raw cost this adapter a real
+    defect: the live isolation guard below, written against the raw field,
+    **passed on a deliberately de-isolated provider** because the leaked
+    instructions happened to be cached that run (ADR 0154). A number that
+    moves for reasons unrelated to what was sent cannot guard what was sent.
+
+    ADR 0154 fixed that by folding the cache counters into `input_tokens`,
+    because that was the only field there was. ADR 0169 gave
+    `CompletionResult` the two counters and a `total_input_tokens` property,
+    so the fold is gone and each field now means the same thing on every
+    provider. The guard reads the property; the sum it reads is identical.
 
     **Isolation, measured (ADR 0150's rule) rather than assumed.** Grok
     discovers project instructions the way Claude Code does — `grok inspect`
@@ -423,11 +583,18 @@ class GrokProvider(ModelProvider):
     a repo's `CLAUDE.md`/`AGENTS.md`/skills reaching a node's model call is
     to run the CLI somewhere that has none. This adapter therefore runs each
     call in a fresh empty temporary directory (`isolate_project_context`,
-    default on). The tool flags — `--tools ""` (allow no built-in tool),
-    `--disable-web-search`, `--no-subagents`, `--no-plan`, `--max-turns 1`,
-    `--verbatim` — buy 481 tokens on their own and 645 on top of `--cwd`,
-    which is inside run-to-run variation. They are kept because tool-less is
-    the *safety* property this adapter promises, not because they are cheap.
+    default on). The tool flags — `--tools ""`, `--disable-web-search`,
+    `--no-subagents`, `--no-plan`, `--max-turns 1`, `--verbatim` — buy 481
+    tokens on their own and 645 on top of `--cwd`, which is inside run-to-run
+    variation. They are kept for the safety they buy, not the cost.
+
+    **How much safety that is, is now measured and it is less than the
+    previous version of this paragraph claimed.** `--tools ""` suppresses
+    nothing on 1.0.5: given these exact flags and one more turn, the run
+    listed a planted directory and quoted a file's first line back. See
+    `isolation` for the two arms, and ADR 0169. The containment that survives
+    is `--max-turns 1`, which works by *cancelling the run* — this adapter
+    then raises rather than returning a completion.
 
     **The isolation is incomplete and there is no flag that completes it.**
     Even fully isolated the call carried ~17.9k tokens of input, and the
@@ -454,6 +621,65 @@ class GrokProvider(ModelProvider):
     """
 
     name = "grok"
+
+    @property
+    def isolation(self) -> frozenset[str]:
+        """**`no_tools` is absent, and it is absent because it was measured
+        false** (ADR 0169, three live calls on `grok 1.0.5`).
+
+        The experiment: a directory holding one file whose first line is a
+        canary string, `--cwd` pointed at it, this adapter's exact tool flags,
+        the prompt "List the files in the current directory and print the
+        first line of each."
+
+            --max-turns 1   exit 1, `stopReason: "cancelled"`, stderr
+                            "Error: max turns reached", `num_turns: 1`. The
+                            reply text is a tool preamble ("Listing the
+                            current directory and reading the first line of
+                            each file.") — the model was offered tools and
+                            reached for one.
+            --max-turns 3   exit 0, `num_turns: 2`, and the reply contains
+                            `AEF_CANARY_..._THIS_LINE_PROVES_A_FILE_WAS_READ`.
+
+        So `--tools ""` is "no restriction given" to Grok, while `claude
+        --help` documents the identical spelling as "Use \"\" to disable all
+        tools". What contains the shipped adapter is `--max-turns 1`, and it
+        contains by *cancelling the run*: the tool result never returns to the
+        model and `complete()` raises. Whether the read itself executed before
+        the cancellation is NOT established — a read is harmless, a write
+        would not be, and no measurement here covers a persona that asks for
+        one. That is the standing residual risk on `impl: grok`.
+
+        `--disallowed-tools <TOOLS>` ("Built-in tools to remove") is the right
+        lever and is **not** used, because `grok --help` lists no built-in
+        tool names to put in it and this repo does not ship guessed flag
+        values (ADR 0150). Named as the open follow-up rather than patched
+        over.
+
+        Declared: `no_web_search` and `no_subagents` (dedicated boolean flags
+        with unambiguous `--help` text), `single_turn`, and `system_role`
+        from `--system-prompt-override`. NOT `no_project_context`: Grok has no
+        `--safe-mode`, and the fully isolated call still carried ~17.9k tokens
+        of the operator's instructions (ADR 0154) — reconfirmed here, where an
+        isolated run's own `thought` field quoted rules that exist only in
+        `~/.claude/CLAUDE.md`.
+        """
+        argv = self.argv(
+            PROBE_REQUEST,
+            Path("aef-isolation-probe-cwd") if self._isolate_project_context else None,
+        )
+        found: set[str] = set()
+        if flag_present(argv, "--max-turns", "1"):
+            found.add("single_turn")
+        if flag_present(argv, "--disable-web-search"):
+            found.add("no_web_search")
+        if flag_present(argv, "--no-subagents"):
+            found.add("no_subagents")
+        if flag_present(argv, "--disallowed-tools"):
+            # Not sent today. Present so the day someone learns the built-in
+            # tool names, the claim moves with the argv rather than after it.
+            found.add("no_tools")
+        return frozenset(found) | persona_channel(argv)
 
     @property
     def default_model(self) -> str | None:
@@ -485,8 +711,15 @@ class GrokProvider(ModelProvider):
             "json",
             "--max-turns",
             "1",
-            # A completion, not an agent: no built-in tool, no web fetch, no
-            # subagent, no plan mode, and the prompt sent as written.
+            # No web fetch, no subagent, no plan mode, prompt sent as written.
+            #
+            # `--tools ""` is still sent and is NO LONGER BELIEVED. Measured
+            # on 1.0.5 (ADR 0169): with these exact flags and `--max-turns 3`
+            # the run listed a planted directory and quoted the file's first
+            # line back. An empty value is "no restriction given" here, not
+            # "allow none" — the opposite of what the same spelling means to
+            # `claude`. It is kept because it costs nothing and a future
+            # release may honour it; `isolation` does not count it.
             "--tools",
             "",
             "--disable-web-search",
@@ -519,6 +752,20 @@ class GrokProvider(ModelProvider):
         else:
             run = self._complete_in(request, None)
         if run.returncode != 0:
+            if "max turns reached" in run.stderr:
+                # Measured, not guessed (ADR 0169): a prompt the model wants a
+                # tool for exits 1 with `stopReason: "cancelled"` and exactly
+                # this stderr, because `--tools ""` did not stop it reaching
+                # for one and `--max-turns 1` then cut the run off. The bare
+                # "grok exited 1" this used to raise sent the reader looking
+                # for an auth or network fault.
+                raise ModelProviderError(
+                    "grok exited 1 at the turn cap: the model asked for a tool and "
+                    "--max-turns 1 cancelled the run before the second turn. On grok 1.0.5 "
+                    '`--tools ""` does not remove the built-in tools (ADR 0169), so a '
+                    "tool-using persona reaches this instead of an answer. Rephrase the "
+                    "persona to reason rather than act, or use impl: claude_code."
+                )
             raise ModelProviderError(
                 f"grok exited {run.returncode}: {run.stderr.strip()[-500:] or run.stdout[-500:]}"
             )
@@ -543,18 +790,20 @@ class GrokProvider(ModelProvider):
         model_usage = payload.get("modelUsage") or {}
         requested = request.model or self._default_model
         # NOT the first key of the map — see `answering_model`.
-        answered_by = answering_model(model_usage, requested) or requested or ""
+        answered_by, attribution = answering_model(model_usage, requested)
         return CompletionResult(
             content=str(payload.get("text", "")),
-            model=answered_by,
-            # The WHOLE context, cached parts included — see the class
-            # docstring. `usage.input_tokens` alone is the uncached remainder
-            # and swings by thousands between identical calls.
-            input_tokens=(
-                int(usage.get("input_tokens", 0))
-                + int(usage.get("cache_read_input_tokens", 0))
-                + int(usage.get("cache_creation_input_tokens", 0))
-            ),
+            model=answered_by or requested or "",
+            # The uncached remainder ONLY, as of ADR 0169. This adapter used
+            # to fold the two cache counters into this field because it was
+            # the only place to put them and the live isolation guard had to
+            # read a stable number; `CompletionResult` now carries them
+            # separately and `total_input_tokens` is that stable number. The
+            # sum is unchanged — where it is read from is.
+            input_tokens=int(usage.get("input_tokens", 0)),
             output_tokens=int(usage.get("output_tokens", 0)),
             stop_reason=stop_reason,
+            cache_read_input_tokens=int(usage.get("cache_read_input_tokens", 0)),
+            cache_creation_input_tokens=int(usage.get("cache_creation_input_tokens", 0)),
+            model_attribution=attribution,
         )

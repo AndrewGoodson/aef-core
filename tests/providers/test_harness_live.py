@@ -54,7 +54,16 @@ def test_the_operators_session_does_not_reach_the_call() -> None:
     """ADR 0126's measurement, re-run: unisolated this call carried 211,470
     input tokens of MCP schemas and the operator's own CLAUDE.md. The
     isolation flags are only worth having if they are ACCEPTED, which is
-    exactly what the shape assertion could not check."""
+    exactly what the shape assertion could not check.
+
+    **The guard reads `total_input_tokens`, not `input_tokens`** (ADR 0169).
+    `usage.input_tokens` is the uncached remainder and was measured at *2* on
+    the calls S3 recorded, so this threshold was being met by a number that
+    would have been 2 whatever reached the call — the identical defect ADR
+    0154 found in Grok's guard, still standing in Claude's. The real context
+    lives in `cache_read_input_tokens`/`cache_creation_input_tokens`, which
+    `CompletionResult` did not retain until now.
+    """
     result = ClaudeCodeProvider(timeout_s=600).complete(
         CompletionRequest(
             messages=(ProviderMessage(role="user", content="Reply with the single word OK"),),
@@ -62,6 +71,9 @@ def test_the_operators_session_does_not_reach_the_call() -> None:
             max_tokens=200,
         )
     )
-    assert result.input_tokens < 10_000, (
-        f"{result.input_tokens} input tokens: the operator's session is reaching the call"
+    assert result.total_input_tokens < 10_000, (
+        f"{result.total_input_tokens} total input tokens "
+        f"(uncached {result.input_tokens}, cache read {result.cache_read_input_tokens}, "
+        f"cache creation {result.cache_creation_input_tokens}): "
+        f"the operator's session is reaching the call"
     )

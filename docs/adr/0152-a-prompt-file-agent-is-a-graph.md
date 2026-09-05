@@ -342,3 +342,37 @@ two CLI facts the design rests on (recursive agent discovery; a `.py` under
 Lower on breadth: one pilot repo, eight personas, one harness. Nothing here says
 a *changed* prompt survives the gates — that is M4/M5, and the corpus this
 increment recorded has no failing input for them to work from yet.
+
+
+## Erratum (2026-09-04, ADR 0169, fix wave G2)
+
+**"The safety property, in the docstring because it is the whole point: the
+prompt runs; the agent's tools do not" is a claim about `ClaudeCodeProvider`,
+and it was written — here, in `make_prompt_agent_node`'s docstring, and
+stamped into every generated module — as a claim about the PATH.** The
+sentence "The harness adapters send `--tools ""` with `--max-turns 1`" is
+false of two of the five impls that path accepts and unverifiable on a third:
+
+- `codex exec` sends **neither** flag. It is an agentic loop in a `--sandbox
+  read-only` jail, and it has no system-prompt flag, so the persona goes in
+  the USER turn.
+- `grok --tools ""` was **measured** on 1.0.5 to suppress nothing: given one
+  more turn the same argv listed a planted directory and quoted the file's
+  first line back. `claude --help` documents the identical spelling as "Use
+  \"\" to disable all tools". Same spelling, opposite semantics.
+- `impl: command` — ADR 0154's answer for every harness after Grok, including
+  Copilot's CLI — sends whatever an owner's argv template says and nothing
+  else, and with no `{system}` slot prepends the persona to the user turn.
+
+`ProviderMessage`-level statements in this ADR stand: `CompletionRequest` has
+no tool field, and the frontmatter's `tools:` key is still parsed, reported
+and never obeyed under every impl. What does not stand is the unconditional
+"nothing in this path can open a file, spawn a process or reach a network
+service."
+
+Providers now declare an `isolation` set derived from the argv they build, the
+node records it and the persona's channel per run
+(`working_memory["<node id>__containment"]`, plus a
+`prompt_agent.persona_in_user_turn` error entry), and the generated header
+states the per-impl truth. ADR 0169 has the argv, the canary experiment and
+the raw JSON.

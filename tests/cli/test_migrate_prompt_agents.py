@@ -226,10 +226,35 @@ def test_the_generated_graph_names_the_persona_and_does_not_copy_it(tmp_path: Pa
 
 
 def test_the_generated_graph_states_the_safety_property(tmp_path: Path) -> None:
+    """The containment claim is CONDITIONED on the impl, and says so (ADR 0169).
+
+    This test replaces one that asserted the unconditional sentence, and that
+    is the point: `aef migrate` stamped "THE PROMPT RUNS; THE AGENT'S TOOLS DO
+    NOT ... the harness adapters send `--tools ""` with `--max-turns 1`" into
+    every generated module as fact, while `codex` sends neither flag, `grok`'s
+    `--tools ""` was measured to suppress nothing, and `command` sends
+    whatever an owner's template says. A test pinning the old sentence would
+    have defended it through this fix, so it is replaced deliberately rather
+    than extended.
+    """
     result = run_migrate(_prompt_repo(tmp_path, names=("marlin-accela",)))
     source = (tmp_path / result.prompt_agents[0].out_relative).read_text(encoding="utf-8")
-    assert "THE PROMPT RUNS; THE AGENT'S TOOLS DO NOT" in source
+
+    # The unconditional claim must not come back. Put it back -> this fails.
+    assert "THE PROMPT RUNS; THE AGENT'S TOOLS DO NOT" not in source
+    assert "touches nothing" not in source
+
+    assert "CONTAINMENT DEPENDS ON `model_provider.impl`" in source
+    # Every impl the runtime can be pointed at is named with what it enforces.
+    for impl in ("claude_code", "grok", "codex", "command", "anthropic"):
+        assert impl in source, f"the generated header does not say what {impl} enforces"
     assert "--tools" in source
+    assert "MEASURED to suppress nothing" in source, "grok's finding must survive generation"
+    assert "nothing that suppresses tools" in source, "codex's weaker isolation must be named"
+    assert "YOUR assertion, recorded unverified" in source, "command's assertion must be named"
+    # And where a reader finds the per-run evidence instead of this comment.
+    assert 'working_memory["prompt_agent__containment"]' in source
+    assert "prompt_agent.persona_in_user_turn" in source
 
 
 def test_frontmatter_capabilities_are_named_in_the_generated_file(tmp_path: Path) -> None:

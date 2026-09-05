@@ -2960,3 +2960,115 @@ stays off, third measurement running.
 
 **Green bar:** 2016 passed / 3 skipped (plus 17 new), `mypy aef examples`
 clean, `ruff check` and `ruff format --check` clean.
+
+
+## Fix wave G2 — the containment claim was about one provider (ADR 0169)
+
+`aef migrate` stamped this into every generated prompt-agent module, as fact:
+
+    THE PROMPT RUNS; THE AGENT'S TOOLS DO NOT. ... the harness adapters send
+    `--tools ""` with `--max-turns 1`.
+
+and `make_prompt_agent_node` said **"nothing in this path can open a file,
+spawn a process or reach a network service."** Both sentences describe
+`ClaudeCodeProvider`. The path takes whatever `model_provider.impl` names, and
+printing the argv for the same `CompletionRequest` shows three mismatches:
+
+```
+codex:                 [..., '--sandbox','read-only', ..., '<persona>\n\nsay ok']
+command WITH {system}: ['cli','-m','m1','--system-prompt-override','<persona>','-p','say ok']
+command NO   {system}: ['cli','-m','m1','-p','<persona>\n\nsay ok']
+```
+
+`codex exec` sends **neither** flag — an agentic loop in a read-only sandbox,
+with no system-prompt flag, so the persona goes in the USER turn. `impl:
+command` — ADR 0154's answer for Copilot's CLI and every harness after it —
+sends whatever the owner's argv template says and nothing more. No test joined
+the claim to the provider set, and one asserting "every impl is
+tool-suppressed" would fail on `command` by construction.
+
+**The suspected item, measured. Three live `grok` calls, budget three.** A
+directory holding one file whose first line is
+`AEF_CANARY_7F3A_THIS_LINE_PROVES_A_FILE_WAS_READ`, `--cwd` pointed at it, the
+adapter's exact tool flags, the prompt "List the files in the current
+directory and print the first line of each":
+
+| arm | exit | `stopReason` | `num_turns` | reply |
+|---|---|---|---|---|
+| `--max-turns 1` (what ships) | 1 | `cancelled` | 1 | a **tool preamble**; stderr `Error: max turns reached` |
+| `--max-turns 3` | 0 | `end_turn` | 2 | **contains the canary** |
+
+**`grok --tools ""` suppresses nothing on 1.0.5.** `claude --help` documents
+the identical spelling as *"Use \"\" to disable all tools"*. Same flag
+spelling, opposite semantics — ADR 0150's rule one level up. What contains the
+shipped Grok adapter is `--max-turns 1`, and it contains by *cancelling the
+run*; whether the read executed before the cancellation is **not established**,
+and that is written down rather than closed. `--disallowed-tools` is the right
+lever and is left unused, because `grok --help` lists no built-in tool names
+and this repo does not ship guessed flag values.
+
+**The fix is to condition the claim and make it per-run evidence.**
+`ModelProvider.isolation` is a closed vocabulary, DERIVED for the three
+harness adapters from the argv each builds for a sentinelled probe request, so
+a removed flag retracts its claim in the same commit:
+
+    claude_code  no_tools, no_mcp, single_turn, no_project_context, system_role
+    codex        read_only_fs, user_turn_persona
+    grok         single_turn, no_web_search, no_subagents, system_role
+    anthropic    structural — no tools parameter, no local process, system=
+    command      the owner's UNVERIFIED `isolation:` + the derived channel
+    cassette     the inner provider's, or nothing
+    fallback     the INTERSECTION — as isolated as its least-isolated member
+
+`command`'s template flags are deliberately never read as evidence: `--tools
+""` means opposite things on the two CLIs measured above, so inferring
+semantics from an unknown binary's spelling is a guess dressed as evidence.
+
+The node now writes provider, isolation and the persona's channel to
+`working_memory["<node id>__containment"]` on every run, and appends a
+`prompt_agent.persona_in_user_turn` error when the persona went out in the
+user turn — a warning rather than a refusal (some CLIs have no system flag),
+but an *error entry*, so the run scores 0 and reaches failure memory. Said out
+loud rather than discovered. Three-valued: a provider that declares nothing
+records `unknown` and does not warn, which is what keeps the replayed corpus
+unaffected. The generated header, the migrate report and the docstrings state
+the per-impl truth, and a test asserts the old sentence is **absent**.
+
+**Two defects folded in from S3's 36 live judge calls.** `answering_model`'s
+rule 3 misattributed one of them to the CLI's helper model, because a
+JSON-only judge reply is ~12 output tokens — fewer than the helper writes — so
+"the answering model writes the answer" inverts on the shortest replies. The
+requested-name rule would have won and never ran: `agent_services(reflection=
+"llm")` sets `model = reflection_model or ""`, so `requested` is empty and
+rule 3 decides alone. The function now returns an attribution
+(`requested`/`alias`/`sole`/`heuristic`/`unknown`) carried on
+`CompletionResult`; the `runtime.py` root cause is reported upward, not
+touched. And **`input_tokens` was never the cost** — it is the uncached
+remainder, *2* on all 36 calls, so ADR 0126's 211,470-vs-4,684 figures rested
+on numbers this code did not retain. The cache counters are now fields,
+`total_input_tokens` is the sum, and both live isolation guards read it: the
+Claude guard had the identical defect ADR 0154 found in Grok's and fixed only
+there.
+
+Eleven mutations, eleven detected, each reverted from a `shasum`-verified byte
+backup, plus a deliberate no-op control correctly **not** detected. **M7
+reported NOT DETECTED on its first run and the harness was at fault:**
+`"heuristic"` → `"requested"` is the SAME LENGTH, and the write landed in the
+same clock second as the previous restore of the same file, so CPython's
+`(mtime, size)` check served the pre-mutation `.pyc`. Purging `__pycache__`
+and running `python -B` detects it immediately. Worth keeping: a same-length
+edit is exactly what a mutation harness is made of, and a stale bytecode cache
+reports every one of them as a hole in the suite.
+
+**Still open, stated rather than implied.** `claude --tools ""` has **not**
+been canary-tested — the live budget was grok-only, and the one CLI that was
+tested is the one whose documented reading turned out to be wrong; `no_tools`
+on `claude_code` rests on its own `--help`. Grok's `--disallowed-tools` needs
+a tool-name list this box cannot obtain. The empty `reflection_model` in
+`aef/services/runtime.py` still sends every judge call down the heuristic
+attribution path.
+
+Green bar: `pytest -q` 2178 passed, 5 skipped (2158 → 2183 collected, +25) ·
+`mypy aef examples` clean on 131 files · `ruff check .` clean ·
+`ruff format --check aef tests examples` clean · `tests/test_vendor_isolation.py`
+green · **3 live model calls, all `grok`.**
