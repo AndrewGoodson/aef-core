@@ -3072,3 +3072,147 @@ Green bar: `pytest -q` 2178 passed, 5 skipped (2158 → 2183 collected, +25) ·
 `mypy aef examples` clean on 131 files · `ruff check .` clean ·
 `ruff format --check aef tests examples` clean · `tests/test_vendor_isolation.py`
 green · **3 live model calls, all `grok`.**
+
+
+## Fix wave G1b — the diagnostic that never opened the agents (ADR 0168)
+
+Six findings — four from the first seam hunt, one from the second, and M4 folded
+in — each reproduced by running a command before anything was changed. **Zero
+live model calls.** No rubric dimension moves.
+
+**F3 (HIGH).** On a copy of the marlin pilot clone, `aef migrate` wrote eight
+prompt-agent graphs; `find -name graph.py` counted **nine** on disk; `aef
+doctor` listed **two**, and obligation 6 — ADR 0137's *every model call reaches
+the harness* — **passed on `agents/migrated/graph.py`**, the call-site stub
+whose `build_graph()` raises `NotImplementedError` and which makes no model call
+at all. The eight that do were never opened.
+
+The cause is a seam, not a bug in either half: doctor globbed `<agent
+root>/*/graph.py` (one level) and ADR 0152's migrate writes `<agent
+root>/migrated/<module>/graph.py` (two). Both halves tested; no test ran the
+producer into the consumer.
+
+**Erratum on ADR 0149**, recorded in that ADR as well as this one: its docstring
+claimed that deriving every path from `DEFAULT_AGENT_ROOT` meant the list
+"cannot leave this list naming a directory nothing writes to". That held for one
+writer. Derivation kept the ROOT correct and said nothing about the DEPTH. A
+shared constant proves two names spell one string; it cannot prove a glob
+matches what another command writes.
+
+Discovery is now ONE function — `aef.harness.zones.discover_graph_files`, in
+`zones` because `aef/harness/preflight.py` needs it and the harness does not
+import the CLI — and the invariant is enforced by running the real `run_migrate`
+into the real `_graph_entries`. `aef doctor --agent-root` added: a repo that
+took ADR 0152's Zone A opt-in had doctor reporting on the two files *outside*
+the widened root and nothing about the sixteen inside it.
+
+**Reported for G1a, not edited:** preflight's obligation 6 is
+`model_calls_are_visible(repo_root, agent_path)` — one path, defaulted by
+`aef/cli/loop.py::cmd_doctor` — so `aef loop doctor` has the identical false
+pass. `discover_graph_files` is importable today.
+
+**F5 (MEDIUM).** One `aef migrate --agent-root .claude/agents` printed `Zone A
+(agents/**)` for `agents/migrated/graph.py` twelve lines above `Zone A is
+'.claude/agents'`, while `inspect_path` under that policy says Zone **C**.
+`_zone_note` classified with the default `ZonePolicy` and hardcoded
+`DEFAULT_AGENT_ROOT`; `result.agent_root` existed and never reached it. Now the
+note reports the zone under the policy the loop will run, says in words that
+`--agent-root` moves the prompt-agent graphs while `--out` moves the call-site
+one, and prints the `--agent-path` values that ARE inside the root. The test
+asserts against `inspect_path` itself, not a phrase.
+
+**S2 (SUSPECTED → CONFIRMED).** A persona named `../escape` produced
+`graph_id='../escape'`, printed as the value to hand `aef loop bless
+--graph-id`. `archive._graph_dir` was `root / graph_id`, so `record()` wrote
+`state/escape/v000001/` — one level above the archive root, which stayed empty;
+`root / "/etc/x"` discards `root` entirely. Refused at both ends:
+`zones.segment_refusal` in the one place every archive read and write goes
+through (refused, never normalised — two spellings of one id must not disagree
+about which directory they mean), and `aef migrate` renames to the already-
+disambiguated module with the reason in the report. `AGENT_NAME` in the
+generated module is untouched: only the id that becomes a DIRECTORY has to be a
+path segment.
+
+**F8 (LOW).** The bytecode advisory named `agents/`. On the widened clone,
+compiling one generated module and `git add -A` tracked
+`.claude/agents/migrated/marlin_accela/__pycache__/graph.cpython-313.pyc`. Adopt
+runs before migrate and cannot know the root, so the message now states the rule
+rather than guessing a path.
+
+**Also found, reported, not fixed:** the report's `aef run
+.claude.agents.migrated.marlin_accela.graph` is not an importable module name
+under a widened root; a hand-typed hostile `--graph-id` now reaches the CLI as
+an uncaught `ArchiveError` (`aef/cli/loop.py` is G1a's).
+
+**M4 (HIGH, folded in).** The report's own printed command could not be run
+under the flag M1 added:
+
+    $ aef run .claude.agents.migrated.marlin_accela.graph --objective "x" --config aef.yaml
+    error: the 'package' argument is required to perform a relative import for
+    '.claude.agents.migrated.marlin_accela.graph'
+
+A leading dot is a RELATIVE import to `importlib`, and no dotted spelling of
+`.claude/agents/...` exists at all. **Erratum on ADR 0152**, recorded there: M1
+ran `aef run` on a graph at the DEFAULT root and ran `--agent-root` without ever
+running the command that flag makes migrate print. Each half exercised, the join
+not — the same shape as F3, in M1's own evidence. M4 hit it and worked around it
+by keeping the graphs at the default root while passing `--agent-root` to the
+loop, which is the two-trees-one-loop state the blast-radius block warns about.
+
+Refusing a non-importable root was rejected outright: `.claude/agents` IS the
+documented opt-in, so a refusal deletes ADR 0152 §4 rather than fixing it. So
+`aef run` — and `aef loop record`, which shares the loader — take a file path as
+well, through ONE importer replacing the two copies of
+`importlib.import_module`. The choice is made on the spelling, never by trying
+the import and falling back: a module that fails for its own reason would
+otherwise be retried as a filename and reported as "no such file", hiding the
+real error behind a second one. `sys.modules` is keyed on the resolved path,
+because migrate names every generated file `graph.py`.
+
+Pinned producer → parser → runner: the test takes the `aef run ...` line out of
+the real `report()`, `shlex.split`s it, feeds it to the real `build_parser()`,
+and runs what argparse hands back through the real `run_graph_module` — against
+a `command`-provider config whose argv is `["/bin/echo", "{prompt}"]`. A real
+provider, a real subprocess, **no live model call**.
+
+**R7 (MEDIUM, second seam hunt).** A repo whose `AGENTS.md` and `CLAUDE.md` are
+both symlinks into `docs/` — one file of house rules read under two names:
+
+    $ aef adopt --dir .
+    skipped .../CLAUDE.md (a symlink, or under one — adoption never writes through a link)
+    skipped .../AGENTS.md (a symlink, or under one — adoption never writes through a link)
+    $ aef doctor --dir .
+    [WARN] entry_file_points_at_the_guide:CLAUDE.md: ... fix: re-run `aef adopt --dir .`
+    [WARN] entry_file_points_at_the_guide:AGENTS.md: ... fix: re-run `aef adopt --dir .`
+
+`is_file()` follows the link, so the check reads the target's bytes, finds no
+block, and prescribes the one command guaranteed not to add one. The only advice
+on offer was a loop.
+
+The FIX was wrong, not the check — and that distinction is load-bearing. Reading
+through the link is right: a link whose target carries the block does reach the
+agent, and narrowing the check to real files turns a correctly-adopted repo into
+two warnings (the mutation that does exactly that fails
+`test_a_symlink_whose_target_carries_the_block_is_ok`). The remedy now names the
+target and says to add the block there or replace the link, and the walk covers
+a symlinked PARENT directory too, because adopt refuses those as well.
+`test_adopt_really_does_refuse_a_symlinked_entry_file` asserts adopt's half
+against the real `run_adopt` rather than quoting its source, so the two sides of
+the loop cannot drift apart silently.
+
+**Also found, reported, not fixed:** a hand-typed hostile `--graph-id` now
+reaches the CLI as an uncaught `ArchiveError` (`aef/cli/loop.py` is G1a's);
+`aef loop bootstrap --module`'s help still says "module" and nothing tests the
+loop commands under a widened root.
+
+Twelve mutations, twelve kills, every restore verified against a `sha256` taken
+before the edit — never `git checkout --`. Eleven were killed by tests written
+before the mutation ran; **one survived the first pass** and is recorded: keying
+`sys.modules` on the file's basename still loads the right file and still
+returns a distinct module object, so `first is not second` passed while the
+registry entry pointed at whichever was loaded last. The control was rebuilt to
+assert `sys.modules` itself. That is what the mutation pass is for.
+
+Green bar: `pytest -q` 2195 passed, 5 skipped (2153 -> 2195, **+42**, none
+removed) · `mypy aef examples` 131 files clean · `ruff check .` clean ·
+`ruff format --check aef tests examples` 252 files clean · **0 model calls.**

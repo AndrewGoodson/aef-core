@@ -342,6 +342,7 @@ two CLI facts the design rests on (recursive agent discovery; a `.py` under
 Lower on breadth: one pilot repo, eight personas, one harness. Nothing here says
 a *changed* prompt survives the gates — that is M4/M5, and the corpus this
 increment recorded has no failing input for them to work from yet.
+<<<<<<< HEAD
 
 
 ## Erratum (2026-09-04, ADR 0169, fix wave G2)
@@ -376,3 +377,36 @@ node records it and the persona's channel per run
 `prompt_agent.persona_in_user_turn` error entry), and the generated header
 states the per-impl truth. ADR 0169 has the argv, the canary experiment and
 the raw JSON.
+=======
+\n
+
+---
+
+## Erratum, added by ADR 0168 (fix wave G1b)
+
+**The command this ADR's report prints for a widened root cannot be run.**
+
+§4 chose `--agent-root .claude/agents` as the opt-in, §2 has the report print
+`aef run <dotted> --objective "..."` per agent, and `dotted` is the output path
+with `/` replaced by `.`. Under the widened root that is
+`.claude.agents.migrated.marlin_accela.graph`, and:
+
+```
+$ aef run .claude.agents.migrated.marlin_accela.graph --objective "x" --config aef.yaml
+error: the 'package' argument is required to perform a relative import for
+'.claude.agents.migrated.marlin_accela.graph'
+```
+
+A leading dot is a relative import to `importlib`, and **no** dotted spelling of
+that path exists — `.claude` is not an identifier.
+
+This ADR's Measurements section ran `aef run` on a graph written at the
+**default** root, and ran `--agent-root` without ever running the command that
+flag makes migrate print. Each half was exercised; the join was not. It is the
+same seam shape as ADR 0168's F3 and it was in this increment's own evidence.
+
+Fixed in ADR 0168: `aef run` (and `aef loop record`, which shares the loader)
+accept a file path as well as a dotted name, and `migrate` prints whichever form
+is runnable for the root the adopter chose. Refusing the root was rejected —
+`.claude/agents` is this ADR's whole opt-in.
+>>>>>>> fix/g1b-doctor-discovery

@@ -323,3 +323,113 @@ def test_run_without_a_context_block_does_not_retrieve_another_tenants_record(
         wiki_graph_module, agent_id="mine", objective="settle it", memory_path=memory_path
     )
     assert final.retrieved_context == []
+
+
+# ---------------------------------------------------------------------------
+# ADR 0168 / M4 — `aef run` takes a file path, because some roots have no
+# dotted spelling.
+# ---------------------------------------------------------------------------
+FILE_GRAPH = """
+from aef.kernel import END, Context, Graph, Node, Route, Services
+from aef.state import AEFState, StateDelta
+
+
+def hello(state: AEFState, ctx: Context, services: Services) -> tuple[StateDelta, Route]:
+    return StateDelta(working_memory={"seen": state.objective}), END
+
+
+def build_graph() -> Graph:
+    node = Node(id="hello", version="0.1.0", fn=hello, deterministic=True)
+    return Graph(id="g", version="0.1.0", nodes={"hello": node}, edges=[], entry_node="hello")
+"""
+
+
+def test_a_dotted_name_under_a_dot_directory_is_the_reproduction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What `aef migrate --agent-root .claude/agents` used to print. It is not
+    a module name and never can be: a leading dot means relative import."""
+    from aef.cli.run import import_graph_module
+
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(TypeError, match="package.*argument is required"):
+        import_graph_module(".claude.agents.migrated.a.graph")
+
+
+def test_run_graph_module_loads_a_graph_from_a_file_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from aef.cli.run import run_graph_module
+
+    target = tmp_path / ".claude" / "agents" / "migrated" / "a"
+    target.mkdir(parents=True)
+    (target / "graph.py").write_text(FILE_GRAPH, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    state = run_graph_module(
+        ".claude/agents/migrated/a/graph.py", agent_id="a1", objective="do the thing"
+    )
+    assert state.working_memory == {"seen": "do the thing"}
+
+
+def test_two_graph_py_files_in_different_directories_do_not_collide(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`aef migrate` names EVERY generated file `graph.py`, so the `sys.modules`
+    key has to come from the whole path.
+
+    The detector is the registry, not the returned objects, and that was
+    established by mutation rather than assumed: keyed on the basename,
+    `spec_from_file_location` still loads the right file and still hands back a
+    distinct module, so `first is not second` PASSES while
+    `sys.modules["aef_graph_graph"]` silently points at whichever was loaded
+    last. A test that cannot see the fault is not a test (reproduce-first).
+    """
+    from aef.cli.run import import_graph_module
+
+    for name, marker in (("one", "ONE"), ("two", "TWO")):
+        target = tmp_path / ".claude" / "agents" / "migrated" / name
+        target.mkdir(parents=True)
+        (target / "graph.py").write_text(
+            FILE_GRAPH.replace('"seen": state.objective', f'"seen": "{marker}"'), encoding="utf-8"
+        )
+    monkeypatch.chdir(tmp_path)
+
+    first = import_graph_module(".claude/agents/migrated/one/graph.py")
+    second = import_graph_module(".claude/agents/migrated/two/graph.py")
+    try:
+        assert first is not second
+        assert first.__name__ != second.__name__, (
+            f"both graph.py files registered as {first.__name__!r}; the second load "
+            f"overwrites the first in sys.modules"
+        )
+        for module in (first, second):
+            assert sys.modules[module.__name__] is module
+            assert sys.modules[module.__name__].__file__ == module.__file__
+    finally:
+        for module in (first, second):
+            sys.modules.pop(module.__name__, None)
+
+
+def test_a_missing_file_says_so_rather_than_reporting_an_import_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from aef.cli.run import run_graph_module
+
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValueError, match="looks like a file path and there is no file there"):
+        run_graph_module("agents/nope/graph.py", agent_id="a1", objective="x")
+
+
+def test_a_dotted_name_is_never_retried_as_a_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A module that fails to import for its OWN reason must report that
+    reason, not `no such file` from a fallback that missed."""
+    (tmp_path / "boom_mod.py").write_text("raise RuntimeError('the real reason')\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    from aef.cli.run import import_graph_module
+
+    with pytest.raises(RuntimeError, match="the real reason"):
+        import_graph_module("boom_mod")
+    sys.modules.pop("boom_mod", None)

@@ -118,7 +118,14 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from aef.harness.vendor_scan import MODEL_SDK_ROOTS, SKIP_DIRS
-from aef.harness.zones import DEFAULT_AGENT_PATH, DEFAULT_AGENT_ROOT, ZonePolicy, inspect_path
+from aef.harness.zones import (
+    DEFAULT_AGENT_PATH,
+    DEFAULT_AGENT_ROOT,
+    LEGACY_AGENT_PATH,
+    ZonePolicy,
+    inspect_path,
+    segment_refusal,
+)
 from aef.providers.base import CompletionRequest
 from aef.reasoning.prompt_agent import (
     DEFAULT_PROMPT_AGENT_DIR,
@@ -151,7 +158,11 @@ DEFAULT_MIGRATED_OUT = DEFAULT_AGENT_PATH
 # `aef doctor` still discovers the graph in a repo migrated by an older
 # version, which would otherwise silently drop out of the model-call
 # advisory the day this default moved.
-LEGACY_MIGRATED_OUT = "aef_migrated.py"
+#
+# An ALIAS, for the same reason `DEFAULT_MIGRATED_OUT` is one: discovery moved
+# into `aef.harness.zones` so that `aef doctor` and the loop's own preflight
+# share it, and the harness does not import the CLI (ADR 0168).
+LEGACY_MIGRATED_OUT = LEGACY_AGENT_PATH
 
 # The keywords a routed node can actually carry, derived from the request type
 # **itself** rather than from a second hand-written list.
@@ -739,14 +750,71 @@ class PromptAgentSite:
     module: str
     # Repo-relative POSIX path of the generated graph.
     out_relative: str
+    # Why the persona's own `name:` could not be used as the graph id, or `""`
+    # when it could. A graph id is JOINED ONTO A DIRECTORY by
+    # `aef/harness/archive.py`, so it must be one safe path segment; the
+    # persona name is whatever a markdown file's frontmatter says.
+    unsafe_name_reason: str = ""
 
     @property
     def graph_id(self) -> str:
+        """The graph's id — the persona's name when that is a safe path
+        segment, and the sanitised module name when it is not.
+
+        ADR 0168. `graph_id` reaches `archive._graph_dir` as `root / graph_id`,
+        and a persona whose frontmatter said `name: ../escape` produced
+        `graph_id='../escape'` printed verbatim in this report as the value to
+        hand `aef loop bless` — which then wrote `state/escape/v000001/` one
+        level ABOVE the archive root and left the archive root empty
+        (reproduced). Archive refuses such an id now; this stops one being
+        minted in the first place, which is the half that keeps the agent
+        migrated instead of failing later.
+
+        The `module` is used rather than a freshly sanitised name because it is
+        already collision-disambiguated across this run and is the directory
+        the operator can see on disk. `AGENT_NAME` in the generated module is
+        untouched: the persona's own name is what the model is told it is, and
+        only the id that becomes a directory has to be a path segment.
+        """
+        if self.unsafe_name_reason:
+            return self.module
         return self.definition.name
 
     @property
     def dotted(self) -> str:
         return self.out_relative.removesuffix(".py").replace("/", ".")
+
+    @property
+    def importable(self) -> bool:
+        """Is `dotted` a name `importlib` could actually resolve?
+
+        Every component has to be an identifier and not a keyword. Under the
+        default root it always is. Under `--agent-root .claude/agents` —
+        ADR 0152 §4's opt-in, and the only way to put a persona in Zone A —
+        the first component is `.claude`, and no dotted spelling of that path
+        exists.
+        """
+        parts = self.dotted.split(".")
+        return bool(parts) and all(
+            part.isidentifier() and not keyword.iskeyword(part) for part in parts
+        )
+
+    @property
+    def run_target(self) -> str:
+        """What to put after `aef run`, and it must be RUNNABLE.
+
+        ADR 0168, erratum on ADR 0152. The report printed `aef run
+        {self.dotted}` unconditionally, so under the widened root it printed
+
+            aef run .claude.agents.migrated.marlin_accela.graph
+
+        which exits 1 with `the 'package' argument is required to perform a
+        relative import` — a leading dot is a relative import to `importlib`.
+        `aef run` (and `aef loop record`) now take a FILE PATH as well, which is
+        the spelling that works for any root an adopter may choose, so that is
+        what is printed when the dotted form cannot be imported.
+        """
+        return self.dotted if self.importable else self.out_relative
 
 
 def _module_name(name: str) -> str:
@@ -811,7 +879,18 @@ def discover_prompt_agents(
             module = f"{module}_{seen}"
         out = f"{agent_root}/{MIGRATED_DIR_NAME}/{module}/graph.py"
         sites.append(
-            PromptAgentSite(definition=definition, source=rel, module=module, out_relative=out)
+            PromptAgentSite(
+                definition=definition,
+                source=rel,
+                module=module,
+                out_relative=out,
+                # The module component was sanitised from the start; the GRAPH
+                # ID was not, and it is the one that becomes a directory under
+                # the archive root (ADR 0168). Recorded rather than applied
+                # silently: `PromptAgentSite.graph_id` falls back to `module`
+                # and the report names both.
+                unsafe_name_reason=segment_refusal(definition.name),
+            )
         )
     return sites
 
@@ -913,11 +992,17 @@ from aef.reasoning.prompt_agent import make_prompt_agent_node
 
 AGENT_NAME = {agent_name_literal}
 AGENT_FILE = {source_literal}
+# The graph's id is the persona's name whenever that name is one safe path
+# segment. It is JOINED ONTO A DIRECTORY — `aef/harness/archive.py` builds
+# `<archive root>/<graph id>/v000001/` — so a name that is not (`../escape`,
+# `a/b`) is replaced here by the sanitised module name, and `aef migrate`'s
+# report says which name was refused and why (ADR 0168).
+GRAPH_ID = {graph_id_literal}
 
 
 def build_graph() -> Graph:
     return Graph(
-        id=AGENT_NAME,
+        id=GRAPH_ID,
         version="0.1.0",
         nodes={{
             "prompt_agent": make_prompt_agent_node(
@@ -964,6 +1049,7 @@ def render_prompt_agent(site: PromptAgentSite, repo_name: str) -> str:
         # that fails the lint of the repo it lands in is a chore handed over
         # rather than work done (the same rule `_key_fn_kwarg` follows).
         agent_name_literal=json.dumps(site.definition.name),
+        graph_id_literal=json.dumps(site.graph_id),
         source_literal=json.dumps(site.source),
         unhonoured=unhonoured,
     )
@@ -1433,8 +1519,9 @@ def run_migrate(
     return result
 
 
-def _zone_note(relative: str | None) -> str:
-    """One line saying which zone the written path is in, and what that costs.
+def _zone_note(result: MigrateResult) -> list[str]:
+    """Which zone the written path is in **under the policy the loop will run**,
+    and what that costs.
 
     ADR 0143. This command wrote to Zone C for its whole life and its report
     said nothing about it, so the fact only surfaced later — as
@@ -1442,29 +1529,80 @@ def _zone_note(relative: str | None) -> str:
     cycle, or as a `bless` that archived a Zone A tree containing none of the
     agent. The zone is a property of the path, so it is answered by the
     classifier the gate itself uses rather than by a string comparison here.
+
+    ADR 0168 — and this is the whole reason it takes the result rather than a
+    path. It classified with the DEFAULT `ZonePolicy` and hardcoded
+    `DEFAULT_AGENT_ROOT` in its own string, so one run of
+
+        aef migrate --dir . --agent-root .claude/agents
+
+    printed `Zone A (agents/**)` for `agents/migrated/graph.py` twelve lines
+    above a BLAST RADIUS block saying `Zone A is '.claude/agents'` — while the
+    classifier the gates actually use says that file is Zone **C** under the
+    widened root. Two sentences in one report, disagreeing, with the wrong one
+    stated first and the gate agreeing with neither.
+
+    The call-site graph does NOT move with `--agent-root` (`--out` moves it),
+    so landing outside a widened root is the ORDINARY case rather than a
+    mistake — and the note says so in words, and names the `--agent-path`
+    values that ARE inside the root, because the next command the operator
+    types takes one of them.
     """
+    relative = result.out_relative
     if relative is None:
-        return (
+        return [
             "OUTSIDE the repo — the zone classifier only judges repo-relative paths, "
             "so nothing here can tell you whether the loop may touch this file"
-        )
-    verdict = inspect_path(relative)
+        ]
+    policy = ZonePolicy(agent_root=result.agent_root)
+    verdict = inspect_path(relative, policy)
     if verdict.zone.value == "A":
-        return (
-            f"Zone A ({DEFAULT_AGENT_ROOT}/**) — agent-writable, the only tree the "
+        return [
+            f"Zone A ({result.agent_root}/**) — agent-writable, the only tree the "
             f"self-rewiring loop may propose changes to"
-        )
+        ]
     if verdict.zone.value == "B":
-        return (
+        return [
             "Zone B (the harness) — a candidate touching this is a SECURITY EVENT, not a "
             "rejected proposal. Write the graph somewhere else."
-        )
-    return (
-        f"Zone C — NOT agent-writable. A candidate touching this file is rejected with "
+        ]
+
+    lines = [
+        f"Zone C under the agent root this run used ({result.agent_root!r}) — NOT "
+        f"agent-writable. A candidate touching this file is rejected with "
         f"`G0 rejected it: candidate touches paths outside Zone A`, and `aef loop bless` "
-        f"will archive a Zone A tree that does not contain it. Pass "
-        f"`--out {DEFAULT_MIGRATED_OUT}` (the default) to put it inside Zone A."
-    )
+        f"will archive a Zone A tree that does not contain it."
+    ]
+    if result.agent_root == DEFAULT_AGENT_ROOT:
+        lines.append(
+            f"  Pass `--out {DEFAULT_MIGRATED_OUT}` (the default) to put it inside Zone A."
+        )
+        return lines
+
+    # A widened root. `--out` is what moves this file, and the graphs that ARE
+    # inside the root are the ones every `aef loop --agent-path` should name.
+    inside = [
+        site.out_relative
+        for site in result.prompt_agents
+        if inspect_path(site.out_relative, policy).zone.value == "A"
+    ]
+    lines += [
+        f"  You widened the agent root to {result.agent_root!r}, and this file is not under",
+        "  it — `--agent-root` moves the PROMPT AGENT graphs, `--out` moves this one. That",
+        "  is expected, not a mistake: it is the call-site graph, and this repo's agents are",
+        "  elsewhere. Move it too with",
+        f"    aef migrate --dir . --agent-root {result.agent_root} "
+        f"--out {result.agent_root}/{MIGRATED_DIR_NAME}/graph.py",
+        "  or leave it where it is and point the loop at a graph that IS inside the root:",
+    ]
+    if inside:
+        lines += [f"    --agent-path {out}" for out in inside]
+    else:
+        lines.append(
+            f"    (none — no graph was written under {result.agent_root!r} this run, so "
+            f"`aef loop` has nothing inside Zone A to gate)"
+        )
+    return lines
 
 
 def _blast_radius(result: MigrateResult) -> list[str]:
@@ -1481,8 +1619,21 @@ def _blast_radius(result: MigrateResult) -> list[str]:
     lines = [
         "",
         "BLAST RADIUS — what the self-rewiring loop may now propose changes to.",
-        f"  Zone A is {result.agent_root!r}. The generated graphs are inside it.",
+        f"  Zone A is {result.agent_root!r}. The PROMPT AGENT graphs are inside it.",
     ]
+    # "The generated graphs are inside it" was false for one of them whenever
+    # the root was widened: `--agent-root` moves the prompt-agent graphs and
+    # `--out` moves the call-site graph, so under `--agent-root .claude/agents`
+    # the call-site graph stays at `agents/migrated/graph.py` and is Zone C.
+    # Said here as well as beside the file, because the two claims sat twelve
+    # lines apart and contradicted each other (ADR 0168).
+    if result.out_relative is not None:
+        call_site_zone = inspect_path(result.out_relative, policy).zone.value
+        if call_site_zone != "A":
+            lines.append(
+                f"  The CALL-SITE graph is NOT ({result.out_relative} is Zone "
+                f"{call_site_zone}) — `--out` moves that one, not `--agent-root`."
+            )
     if verdict.zone.value == "A":
         lines += [
             f"  The PERSONA FILES are inside it too ({persona} is Zone A).",
@@ -1528,11 +1679,28 @@ def _prompt_agent_lines(result: MigrateResult) -> list[str]:
     for site in result.prompt_agents:
         lines.append(f"  AGENT    {site.definition.name}  ({site.source})")
         lines.append(f"            -> {site.out_relative}")
-        lines.append(f'            -> aef run {site.dotted} --objective "..." --config aef.yaml')
+        lines.append(
+            f'            -> aef run {site.run_target} --objective "..." --config aef.yaml'
+        )
+        if not site.importable:
+            lines.append(
+                f"            (a file path, not {site.dotted!r}: no dotted module name exists under"
+            )
+            lines.append(f"            {result.agent_root!r}, and `aef run` takes either form)")
         lines.append(
             f"            graph_id={site.graph_id!r}, wired prompt_agent -> reflect "
             f"-> consolidate -> END"
         )
+        if site.unsafe_name_reason:
+            lines += [
+                f"            NAME REFUSED as a graph id: {site.unsafe_name_reason}.",
+                "            A graph id is joined onto a directory "
+                "(`<archive root>/<graph id>/v000001/`),",
+                f"            so {site.graph_id!r} is used instead. The persona keeps its own "
+                f"name for",
+                "            the model call; pass the id above to `aef loop bless --graph-id`,",
+                "            and rename the persona if you want the two to match.",
+            ]
         if site.definition.unhonoured_keys:
             lines.append(
                 "            frontmatter read and NOT honoured: "
@@ -1639,7 +1807,7 @@ def report(result: MigrateResult) -> str:
         ]
     if result.written is not None:
         lines += ["", f"wrote {result.written}"]
-        lines += [f"  {_zone_note(result.out_relative)}"]
+        lines += [f"  {note}" for note in _zone_note(result)]
     elif result.sites or result.skipped:
         lines += ["", "nothing written (file exists; pass --force to overwrite)"]
     lines += [
