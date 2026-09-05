@@ -517,3 +517,168 @@ def assess_halt(
             "cost without benefit and should stop regardless of safety"
         )
     return HaltAssessment(should_halt=bool(reasons), reasons=tuple(reasons))
+
+
+# --------------------------------------------------------------------------
+# Is the scheduled cycle producing anything? (ADR 0165)
+# --------------------------------------------------------------------------
+#
+# The metric that would have caught the defect ADR 0165 reproduces: this
+# repo's own nightly `aef loop cycle` passed no `--memory`, printed "no
+# memory store configured: nothing to learn from, no candidate", and exited
+# 0 — every night, for as long as the workflow had existed, with nothing
+# anywhere saying so.
+#
+# **The ledger cannot answer this on its own, and that is the whole problem.**
+# `cycle` writes a ledger entry when it PROPOSES. A cycle that proposes
+# nothing writes nothing at all, so the ledger is byte-identical between "a
+# loop nobody has ever run" and "a loop that has run 180 times and produced
+# nothing". Silence is the failure's own signature, which is exactly why a
+# missing signal cannot be the alarm.
+#
+# So the attempt is journalled separately, by the CLI, on every cycle — and
+# the alarm is `attempts exist AND no proposal in the last N of them`.
+
+CYCLE_JOURNAL_FILENAME = "cycles.jsonl"
+
+# Three nightly cycles in a row with nothing proposed. Not a tuned number: it
+# is "long enough that one quiet night is not an alarm, short enough that a
+# broken invocation is caught inside a week".
+DEFAULT_QUIET_CYCLES = 3
+
+
+@dataclass(frozen=True)
+class CycleAttempt:
+    """One invocation of `aef loop cycle`, whatever it produced."""
+
+    at: datetime
+    proposed: bool
+    # The last line the cycle printed — the reason, in the cycle's own words.
+    verdict: str = ""
+
+
+def record_cycle_attempt(
+    state_root: Path, *, at: datetime, proposed: bool, verdict: str = ""
+) -> None:
+    """Append one attempt. Called by `aef loop cycle` after every turn.
+
+    Deliberately NOT the ledger: the ledger is a tamper-evident hash chain of
+    decisions about candidates, and "a cycle ran and decided nothing" is not
+    a decision about a candidate. Putting non-decisions in it would also mean
+    the cycle mutates the audit trail on every no-op run.
+    """
+    state_root.mkdir(parents=True, exist_ok=True)
+    line = json.dumps(
+        {"at": at.isoformat(), "proposed": proposed, "verdict": verdict}, sort_keys=True
+    )
+    with (state_root / CYCLE_JOURNAL_FILENAME).open("a", encoding="utf-8") as handle:
+        handle.write(line + "\n")
+
+
+def read_cycle_attempts(state_root: Path) -> tuple[CycleAttempt, ...]:
+    """Attempts in the order they were written. A malformed line is skipped.
+
+    Skipping is right here and wrong in `FileMemoryStore`: this journal is a
+    monitoring signal, and a monitor that refuses to report because one line
+    is corrupt is a monitor that goes dark exactly when something is wrong.
+    """
+    path = state_root / CYCLE_JOURNAL_FILENAME
+    if not path.is_file():
+        return ()
+    out: list[CycleAttempt] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+            out.append(
+                CycleAttempt(
+                    at=datetime.fromisoformat(str(payload["at"])),
+                    proposed=bool(payload["proposed"]),
+                    verdict=str(payload.get("verdict", "")),
+                )
+            )
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            continue
+    return tuple(out)
+
+
+@dataclass(frozen=True)
+class CycleStaleness:
+    """How long since the loop last did the thing it exists to do."""
+
+    cycles_run: int = 0
+    cycles_since_last_proposal: int = 0
+    days_since_last_cycle: float | None = None
+    days_since_last_proposed: float | None = None
+    days_since_last_accepted: float | None = None
+    last_verdict: str = ""
+    warning: str | None = None
+
+    def lines(self) -> tuple[str, ...]:
+        def age(value: float | None) -> str:
+            return "never" if value is None else f"{value:.1f} day(s) ago"
+
+        out = [
+            f"cycles run: {self.cycles_run} (last {age(self.days_since_last_cycle)})",
+            f"last PROPOSED: {age(self.days_since_last_proposed)}",
+            f"last KEPT/MERGED: {age(self.days_since_last_accepted)}",
+        ]
+        if self.warning:
+            out.append(self.warning)
+        return tuple(out)
+
+
+def assess_cycle_staleness(
+    entries: tuple[LedgerEntry, ...],
+    attempts: tuple[CycleAttempt, ...],
+    *,
+    now: datetime,
+    quiet_cycles: int = DEFAULT_QUIET_CYCLES,
+) -> CycleStaleness:
+    """Report — and name — a loop that runs and produces nothing.
+
+    `PROPOSED` comes from the ledger because a proposal IS a ledger event.
+    Acceptance is `KEPT` or `MERGED`: `KEPT` is `aef loop run` advancing its
+    local branch (ADR 0114) and `MERGED` is Tier-1, which is off. Either one
+    means a candidate survived every gate, which is the thing being aged.
+    """
+
+    def _days(at: datetime | None) -> float | None:
+        return None if at is None else (now - at).total_seconds() / 86400.0
+
+    def _latest(*kinds: EventKind) -> datetime | None:
+        matching = [e.at for e in entries if e.kind in kinds]
+        return max(matching) if matching else None
+
+    last_proposed = _latest(EventKind.PROPOSED)
+    last_accepted = _latest(EventKind.KEPT, EventKind.MERGED)
+
+    quiet = 0
+    for attempt in reversed(attempts):
+        if attempt.proposed:
+            break
+        quiet += 1
+
+    warning: str | None = None
+    # `attempts` non-empty is the load-bearing half of the condition: a loop
+    # nobody has run is not stale, it is unstarted, and warning about it
+    # would train the reader to ignore the line.
+    if attempts and quiet >= quiet_cycles:
+        verdict = attempts[-1].verdict or "no reason recorded"
+        warning = (
+            f"WARNING: SCHEDULED CYCLE PRODUCING NOTHING — {quiet} consecutive cycle(s) "
+            f"have run and proposed nothing. Last verdict: {verdict!r}. A cycle that "
+            f"runs every night and never proposes is exit 0 having done nothing "
+            f"(ADR 0139); check that --memory names a file something actually writes."
+        )
+
+    return CycleStaleness(
+        cycles_run=len(attempts),
+        cycles_since_last_proposal=quiet,
+        days_since_last_cycle=_days(attempts[-1].at if attempts else None),
+        days_since_last_proposed=_days(last_proposed),
+        days_since_last_accepted=_days(last_accepted),
+        last_verdict=attempts[-1].verdict if attempts else "",
+        warning=warning,
+    )

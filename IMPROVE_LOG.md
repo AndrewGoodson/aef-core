@@ -2013,3 +2013,72 @@ either retroactively. Every fixture here was authored by this programme.
 ## S0 / J0 — the independent score is the score (ADR 0151)
 
 86 → **68**. Blind re-score verified on every dimension; the lower number stands per BEYOND_90's rule. Two findings became fixes tonight (no-op scheduled cycle; retrieval→prompt link). Report: `docs/research/j0-independent-score-2026-09-04.md`.
+
+---
+
+## J0F — the scheduled loop that ran every night and did nothing (ADR 0165)
+
+**Branch:** `upgrade/j0f-scheduled-cycle`, off `d1de68c`.
+**Rubric claim:** none. Dimension 1 is J0's to re-earn and this earns half of
+one of its three findings; the ADR says so and says what would earn the rest.
+
+**Reproduce (RUN, before any change).** This repo's own
+`.github/workflows/loop-monitor.yml`, nightly, with its own flags:
+
+```
+$ aef loop cycle --repo . --state <s>/state --workdir <s>/work \
+      --module agents.demo.graph --runs <s>/state/runs --corpus <s>/corpus
+  ledger verified: 0 entr(ies)
+  promoted 0 run(s) to the train split
+  no memory store configured: nothing to learn from, no candidate
+EXIT=0
+```
+
+The same command plus one admissible failure record in a JSONL file:
+
+```
+$ aef loop cycle ... --memory <s>/memory.jsonl --agent-path agents/demo/graph.py
+  proposed cycle-20260905T020022-0 on local branch loop/cycle-20260905T020022-0
+    (never pushed; proposer=rule_based)
+  gated: reject — G1 rejected it: build command failed (exit 1): python -m pytest -q
+EXIT=1
+```
+
+Nothing was broken. One flag was missing and its absence was silent, so a
+scheduled loop reported success against a night in which nothing happened —
+ADR 0139's shape, unattended, forever.
+
+**Change.** (1) One of `--memory` / `--no-memory` required, ADR 0141's
+`--state`/`--no-loop-state` shape, refused in the HANDLER with the parser
+deliberately left permissive and a test pinning both levels; exit 2, because a
+configuration error must not read as a verdict on a candidate (ADR 0075).
+(2) `aef loop monitor` reports days since last PROPOSED and last KEPT/MERGED
+and names `SCHEDULED CYCLE PRODUCING NOTHING` — built on a per-attempt journal
+because **the ledger cannot answer it**: `cycle` writes an entry only when it
+proposes, so a loop producing nothing for 180 nights has a ledger identical to
+one nobody started. (3) The workflow passes `--memory` into the cached state
+dir, tees both verdicts to `$GITHUB_STEP_SUMMARY`, and fails only on exit ≥ 2
+so an ordinary rejection is not surfaced as a halt.
+
+**Measured.** After: the bare invocation exits 2 with a message naming both
+flags; `--no-memory` exits 0 and says the silence was chosen; three such
+cycles then produce, from `aef loop monitor`, `cycles run: 3` /
+`last PROPOSED: never` / `WARNING: SCHEDULED CYCLE PRODUCING NOTHING — 3
+consecutive cycle(s) have run and proposed nothing`.
+
+**The honest half.** Nothing in CI writes runs or memory, so the file the
+workflow now names will be empty and tonight's cycle will say `no admissible
+failure memory` instead of `no memory store configured`. That is the truth,
+it distinguishes "the operator forgot" from "the agent has learned nothing
+yet", and it is now on the run summary in words with a staleness alarm behind
+it. It is **not** yet a loop that learns from CI, and no line in this entry
+should be read as saying it is.
+
+**Mutations.** 5 planted, 5 caught, every restore SHA-256 verified. M3 was the
+original defect restored into the YAML, caught by a test that reads the
+workflow — the finding was in a file CI never tests, so the assertion had to
+be too.
+
+**Verdict.** +24 tests, 2002 → 2026. `pytest -q`, `mypy aef examples`,
+`ruff check .`, `ruff format --check` all green. No rubric change. Zero model
+calls.

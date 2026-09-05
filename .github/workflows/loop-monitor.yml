@@ -46,18 +46,49 @@ jobs:
       # Rollback-by-default: an ambiguous window reverts rather than waiting
       # for more data. Exit 2 means the loop halted — a change every gate
       # passed still regressed, so the gates have a blind spot.
+      # Also reports days since the last PROPOSED and the last KEPT/MERGED,
+      # and names a cycle that has been running and producing nothing — the
+      # metric that would have caught ADR 0165's defect on night two.
       - name: Evaluate windows and roll back
         id: monitor
-        run: aef loop monitor --repo . --state ~/.aef-loop-state
+        run: |
+          aef loop monitor --repo . --state ~/.aef-loop-state | tee -a "$GITHUB_STEP_SUMMARY"
 
       # One turn of the loop. Creates a LOCAL candidate branch and gates it;
       # never pushes, which is why contents:read suffices.
+      #
+      # `--memory` is NOT optional and its absence is why this step was a
+      # no-op every night from the day it was written: with no memory store
+      # the cycle printed "no memory store configured: nothing to learn from,
+      # no candidate" and exited 0, so a green tick meant nothing had happened
+      # (reproduced, ADR 0165). The file lives in the cached state dir so it
+      # survives between runs.
+      #
+      # **It will be empty until something in CI writes runs.** After this fix
+      # the nightly cycle says `no admissible failure memory` instead of `no
+      # memory store configured` — the truth, and now visible in the step
+      # summary. That is an honest no-op, not yet a loop that learns from CI.
       - name: Daily cycle
         if: github.event.schedule == '0 3 * * *' || github.event_name == 'workflow_dispatch'
         run: |
+          echo "## Nightly cycle" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          set +e
           aef loop cycle --repo . --state ~/.aef-loop-state \
             --workdir "$RUNNER_TEMP/cycle" --module agents.demo.graph \
-            --runs ~/.aef-loop-state/runs --corpus corpus
+            --runs ~/.aef-loop-state/runs --corpus corpus \
+            --memory ~/.aef-loop-state/memory.jsonl \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "cycle exit: $status" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # 0 = escalated to a human (the normal outcome; Tier-1 is off) and
+          # 1 = the candidate was rejected, which is also normal. Only 2 —
+          # HALTED, or an invocation the CLI refuses — should fail the job and
+          # reach "Surface a halt". Letting exit 1 fail it would have made
+          # every ordinary rejection look like an incident.
+          if [ "$status" -ge 2 ]; then exit "$status"; fi
 
       - name: Weekly digest
         if: github.event.schedule == '0 9 * * 1' || github.event_name == 'workflow_dispatch'
