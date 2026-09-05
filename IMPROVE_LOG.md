@@ -2286,3 +2286,137 @@ otherwise.
 `claude_code / codex / anthropic`. It should name the two new backends; the
 line is reported rather than edited, because `aef/cli/` belongs to another
 worker this wave.
+
+## S5 / J3 — containment is provided, not merely required (ADR 0161)
+
+**The reproduction contradicted the increment's premise, and that is the
+finding.** J3 says "make the container the DEFAULT for the shadow when a
+runtime and image are available, with an explicit, logged, named fallback
+when they are not". Run first, changed nothing:
+
+```
+=== ARM C: ShadowRunner(incumbent, candidate) -- no session, no flag ===
+C: refused -> UncontainedShadowError: ... an in-process shadow contains only its T...
+
+=== ARM A: uncontained=True, node writes /var/.../tmprmtgc94l/escaped-to-host-A ===
+A: marker exists on the HOST: True
+A: contents: 'the shadow wrote this'
+A: observation.contained = False
+
+=== ARM B: contained, runtimes=('docker',) ===
+B: marker exists on the HOST: False
+B: observation.contained = True
+B: divergence.candidate_failed = "NodeEvaluationError: FileNotFoundError: [Errno 2]
+   No such file or directory: '/var/.../escaped-to-host-B'"
+```
+
+ADR 0105 had **already** made containment the default by refusal, so there
+was no uncontained-by-default constructor left to close. What was still
+wrong is Arm C read against Arm B: on this box — docker running,
+`aef-worker:test` built — the caller that asked for nothing got the same flat
+refusal as a caller with neither. **Nothing here ever *provided* the
+container.** Every contained run hand-builds `contained_candidate_graph`; the
+one-line way past the refusal is `uncontained=True`. Containment was the
+default the way a door is locked when nobody has a key.
+
+**After, same node, same box, no arguments beyond the image:**
+
+```
+  mode              : auto
+  contained         : True
+  reason            : contained by docker with image aef-worker:test; isolation verified
+  runtime.verified  : True
+  HOST marker exists: False   <-- was True before this increment
+  observation.contained: True
+```
+
+**`auto` does not fall back, and that is a deliberate refusal of half the
+brief.** An automatic in-process fallback is strictly weaker than ADR 0105's
+refusal and would put the weaker mode back on the path of least resistance
+after this increment spent its whole argument taking it off — HARD-STOP gate
+2, resolved in favour of the control rather than by stopping, because the
+increment is deliverable without weakening. `shadow.containment` has three
+values: `auto` (default) contains or refuses, naming which of the runtime and
+the image was missing; `fallback` and `off` are owner statements in
+`aef.yaml`.
+
+**The fallback is named and it is not only on stderr.** Four module constants
+so a test pins the exact words (`no container runtime found`, `no container
+image configured (shadow.image is unset)`, `image unavailable: <the runtime's
+own reason>`, `owner opted out in aef.yaml: shadow.containment: off`), and a
+new `EventKind.CONTAINMENT` ledger entry:
+
+```
+kind=containment summary=shadow containment: NOT contained (no container runtime found)
+detail={'containment': {'contained': False, 'image': 'aef-worker:test',
+        'isolation_verified': False, 'mode': 'fallback', 'owner_opted_out': True,
+        'reason': 'no container runtime found', 'runtime': None},
+        'security_event': True}
+```
+
+`security_event` is read by nothing in `shadow.py` — it is the key
+`build_digest` counts, so an uncontained shadow reaches the owner's weekly
+digest. Both directions are recorded: logging only the fallbacks would make
+"ran contained" and "never ran" the same absence.
+
+**The AST scan now allows exactly one `uncontained=True` in `aef/`** —
+`shadow_for`'s fallback branch, matched by file *and enclosing function name*
+so it cannot grow silently — paid for by a test proving the default mode
+raises before constructing any runner, even when handed an
+`in_process_candidate` it could have used, and writes no ledger entry. A
+second `ContainmentDecision` field on `ShadowRunner` that would have removed
+the literal was considered and rejected: two spellings of one security
+decision with nothing checking they agree is the drift ADR 0091 records, cited
+in this module's own docstring against exactly that move.
+
+`test_the_in_process_shadow_bypass_is_still_real_when_opted_into` →
+`test_the_in_process_bypass_exists_only_when_an_owner_opts_out_and_is_logged`.
+Both halves asserted: the bypass **is** still real under the opt-out (a
+control you cannot demonstrate is decoration) and the default cannot reach it.
+
+**Also fixed, and reproduced: the flake three workers hit.**
+`test_closing_the_session_leaves_no_container_running` diffed the whole
+daemon's `docker ps`, so any container another process started between the two
+calls failed it — ADR 0154's green-bar note records the third occurrence as
+"one unrelated flake".
+
+```
+OLD (unfiltered): survived={'d1abb74c744e'} -> FAILS (spurious)
+NEW (name=aef-worker-): survived={} -> passes
+```
+
+**Mutations: 5 perturbed, 5 detected**, each restored from a shasum-verified
+byte backup with hashes re-checked. M1 `auto` falls back instead of refusing —
+5 failed. M2 an uncontained run is not a `security_event` — 3 failed. M3 the
+config default becomes `fallback` — 1 failed. M4 `shadow_for` never
+containerises — 1 failed. M5 `close()` leaves the worker container running — 1
+failed, quoting the surviving container id. M5's first attempt failed in
+0.46 s, which is what a `SyntaxError` looks like rather than a leaked
+container; it was re-done against `NodeWorkerSession.close`'s `_force_remove`
+call until the failure had the right cause.
+
+**Live model calls: 0.**
+
+**Green bar.** `pytest -q` **2146 passed, 5 skipped** (2131 at the branch
+point; +17 test functions added, 2 renamed away, net +15 — counted from the
+diff, not asserted). `mypy aef examples` clean, 131 files. `ruff check .`
+clean. `ruff format --check aef tests examples` clean, 251 files.
+
+**Rubric: dimension 4, 14 → 15** (heading 68 → 69, arithmetic test green).
+The 14 read "one point off: shadow containment is opt-in"; it is not.
+
+**Stated rather than papered over.** Shadow execution still has **no
+production caller anywhere in `aef/`**, exactly as before this increment.
+`shadow_for` is the API an integrator should use and on a box with a runtime
+it contains; what changed is which outcome that integrator falls into, not
+that the loop now shadows. Nothing in `PolicyEngine`, the gates, or Tier-1 was
+touched.
+
+**Outside my file list, and why.** `aef/harness/ledger.py` gained one
+`EventKind` member: the increment requires the fallback to be "visible in the
+ledger event or the cycle summary, not only stderr", and `ledger.append`
+types its `kind` as the enum, so there was no honest way to write the entry
+without it. `EventKind` is iterated dynamically by
+`test_every_event_kind_round_trips` and looked up with `.get` by
+`monitoring._COUNTED`, so the addition needed no edit to either. Two lines
+plus a comment.

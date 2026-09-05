@@ -275,6 +275,44 @@ class ReflectionConfig(_StrictModel):
         return value
 
 
+# The containment modes a shadow run can be configured with (ADR 0161). The
+# strings are the enum VALUES of `aef.harness.shadow.ContainmentMode`, and a
+# test asserts the two sets are identical — two spellings of one security
+# decision that could disagree is the drift ADR 0091 records. Named here
+# rather than imported so `aef.config` keeps no dependency on `aef.harness`.
+CONTAINMENT_MODES: frozenset[str] = frozenset({"auto", "fallback", "off"})
+
+
+class ShadowConfig(_StrictModel):
+    """How a shadow run is contained (ADR 0161).
+
+    `auto` is the default and it does not fall back: a container when a
+    runtime and a verified image are available, and a REFUSAL naming what was
+    missing when they are not. The two non-default modes are owner statements
+    and are recorded as such in the ledger — an owner who accepts an
+    uncontained shadow says so in this file, and the run says so back.
+    """
+
+    containment: str = "auto"
+    # The worker image. There is no default because there is no image this
+    # repo can ship: it must contain the adopter's own `aef` and its
+    # dependencies (trust case §2.1). `None` under `auto` is a refusal that
+    # names the missing image, not a silent downgrade.
+    image: str | None = None
+
+    @field_validator("containment")
+    @classmethod
+    def _must_name_a_real_mode(cls, value: str) -> str:
+        if value not in CONTAINMENT_MODES:
+            raise ValueError(
+                f"shadow.containment={value!r} is not one of {sorted(CONTAINMENT_MODES)}. "
+                f"'auto' contains the candidate when a runtime and image are available and "
+                f"refuses when they are not; 'fallback' and 'off' accept an uncontained "
+                f"shadow and are recorded in the ledger as owner choices."
+            )
+        return value
+
+
 class AgentConfig(_StrictModel):
     extends: str = "_base"
 
@@ -303,5 +341,6 @@ class AgentConfig(_StrictModel):
     evaluator: EvaluatorConfig = EvaluatorConfig()
     tools: ToolsConfig = ToolsConfig()
     policies: PoliciesConfig = PoliciesConfig()
+    shadow: ShadowConfig = ShadowConfig()
     objectives: str
     evolution: EvolutionSettings = EvolutionSettings()

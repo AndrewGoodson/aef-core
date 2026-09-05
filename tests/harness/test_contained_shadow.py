@@ -259,8 +259,17 @@ def test_closing_the_session_leaves_no_container_running(tmp_path: Path) -> None
     (workdir / "escaping.py").write_text(ESCAPING_AGENT.format(target="/aef-workspace/x"))
 
     def running() -> set[str]:
+        # Filtered to OUR containers by the name prefix `isolated.py` gives
+        # them (`aef-worker-<hex>`). The unfiltered `docker ps` diffed the
+        # whole daemon, so any container another test — or another worker on
+        # this box — started between the two calls failed this one. Three
+        # spurious failures were observed that way; a control that cries wolf
+        # gets ignored, which is the same end state as not having it.
         out = subprocess.run(
-            [_RUNTIMES[0], "ps", "--quiet"], capture_output=True, text=True, check=False
+            [_RUNTIMES[0], "ps", "--quiet", "--filter", "name=aef-worker-"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         return set(out.stdout.split())
 
@@ -376,11 +385,23 @@ def test_a_contained_runner_reports_itself_contained(tmp_path: Path) -> None:
         session.close()
 
 
-def test_every_uncontained_call_site_in_the_repo_is_a_test() -> None:
+# The one production call site allowed to pass `uncontained=True`: the
+# fallback branch of `shadow_for`, which `resolve_containment` cannot reach
+# under the default mode. Named as a function rather than a line number so
+# the allowance survives an edit above it, and pinned to exactly one entry —
+# an allowlist that can grow silently is not an allowlist.
+ALLOWED_UNCONTAINED_SITE = ("aef/harness/shadow.py", "shadow_for")
+
+
+def test_every_uncontained_call_site_in_the_repo_is_a_test_or_the_named_fallback() -> None:
     """The default is only a default if nothing in `aef/` quietly opts out.
 
     A production caller passing `uncontained=True` would restore the bypass
-    while every test above still passed.
+    while every test above still passed. Exactly one is allowed — the branch
+    an owner reaches by writing `shadow.containment: fallback` or `off` — and
+    `test_the_single_production_opt_out_is_unreachable_under_the_default`
+    proves the default cannot get there. Every other one is a defect.
+
     AST, not grep: the first version of this test matched the error message
     that TELLS a caller how to opt out, and a `.pyc` alongside it. Inferring a
     call from text rather than reading the call is the mistake ADR 0064
@@ -389,17 +410,35 @@ def test_every_uncontained_call_site_in_the_repo_is_a_test() -> None:
     import ast
 
     root = Path(__file__).resolve().parents[2] / "aef"
-    offenders: list[str] = []
-    for path in root.rglob("*.py"):
+    sites: list[tuple[str, str, int]] = []
+    for path in sorted(root.rglob("*.py")):
         tree = ast.parse(path.read_text())
+        enclosing: dict[int, str] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                # Plain assignment, not setdefault: `ast.walk` is
+                # breadth-first, so a nested function is visited after the one
+                # containing it and overwrites with the INNERMOST name — which
+                # is the one that says where the opt-out actually lives.
+                for inner in ast.walk(node):
+                    enclosing[id(inner)] = node.name
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
             for kw in node.keywords:
                 if kw.arg == "uncontained" and isinstance(kw.value, ast.Constant):
                     if kw.value.value is True:
-                        offenders.append(f"{path.relative_to(root.parent)}:{node.lineno}")
-    assert not offenders, f"production code opts out of shadow containment: {offenders}"
+                        sites.append(
+                            (
+                                str(path.relative_to(root.parent)),
+                                enclosing.get(id(node), "<module>"),
+                                node.lineno,
+                            )
+                        )
+
+    assert [(f, fn) for f, fn, _ in sites] == [ALLOWED_UNCONTAINED_SITE], (
+        f"production code opts out of shadow containment somewhere new: {sites}"
+    )
 
 
 # --------------------------------------------------------------------------
@@ -503,3 +542,327 @@ def test_a_frozen_dataclass_is_not_the_security_boundary() -> None:
         "even after tampering, `contained` is derived from the session's own container "
         "rather than from a stored flag"
     )
+
+
+# --------------------------------------------------------------------------
+# The container is the DEFAULT, and the fallback is an owner statement
+# (ADR 0161)
+# --------------------------------------------------------------------------
+#
+# ADR 0105 made containment the default by refusing to construct without a
+# session. It never PROVIDED one: on this box, with a running daemon and the
+# image built, `ShadowRunner(incumbent, candidate)` still refused, and the
+# only one-line way past it was `uncontained=True`. These pin the resolver
+# that closes that, in both directions.
+
+
+def _no_runtimes() -> tuple[str, ...]:
+    return ()
+
+
+def _broken_image(image, *, binary=None, verify=True):  # type: ignore[no-untyped-def]
+    from aef.harness.sandbox import SandboxUnavailableError
+
+    raise SandboxUnavailableError(f"{binary or 'docker'} could not run image {image!r} (exit 125)")
+
+
+@needs_worker_image
+def test_the_container_is_the_default_when_a_runtime_and_image_are_available(
+    tmp_path: Path,
+) -> None:
+    """The increment, as one assertion. A caller that asks for nothing in
+    particular, on a box that HAS a runtime and an image, gets a contained
+    candidate — and the write that landed on the host before does not."""
+    from aef.harness.shadow import ContainmentMode, shadow_for
+
+    marker = Path(tempfile.mkdtemp()) / "escaped-under-the-default"
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    (workdir / "escaping.py").write_text(ESCAPING_AGENT.format(target=str(marker)))
+
+    with shadow_for(
+        _incumbent(),
+        entrypoint="escaping:build_graph",
+        workdir=workdir,
+        image=IMAGE,
+    ) as shadow:
+        assert shadow.decision.mode is ContainmentMode.AUTO, "the default is not `auto`"
+        assert shadow.decision.contained, shadow.decision.reason
+        assert shadow.runner.contained
+        observation = shadow.runner.observe(_state(), agent_services())
+
+    assert not marker.exists(), "the write reached the host under the DEFAULT configuration"
+    assert observation.contained
+    assert observation.divergence.diverged, "the container refusal must be recorded"
+
+
+def test_auto_refuses_rather_than_falling_back_when_there_is_no_runtime() -> None:
+    """`auto` does not fall back. An automatic in-process fallback would be
+    strictly weaker than the refusal ADR 0105 shipped, and the refusal names
+    which half was missing rather than saying 'containment unavailable'."""
+    from aef.harness.shadow import (
+        NO_RUNTIME_REASON,
+        UncontainedShadowError,
+        resolve_containment,
+    )
+
+    with pytest.raises(UncontainedShadowError) as caught:
+        resolve_containment(image=IMAGE, runtimes=_no_runtimes)
+    assert NO_RUNTIME_REASON in str(caught.value)
+    assert "shadow.containment: fallback" in str(caught.value), (
+        "a refusal an operator cannot act on gets routed around"
+    )
+
+
+def test_auto_refuses_when_the_image_is_unavailable_and_says_why() -> None:
+    """The other half. `container.py` distinguishes 'the runtime never started
+    the container' from 'isolation did not hold'; neither may be laundered
+    into a decision to run uncontained."""
+    from aef.harness.shadow import (
+        IMAGE_UNAVAILABLE_PREFIX,
+        UncontainedShadowError,
+        resolve_containment,
+    )
+
+    with pytest.raises(UncontainedShadowError) as caught:
+        resolve_containment(image=IMAGE, detect=_broken_image, runtimes=lambda: ("docker",))
+    assert IMAGE_UNAVAILABLE_PREFIX in str(caught.value)
+    assert "exit 125" in str(caught.value), "the runtime's own reason was dropped"
+
+
+def test_auto_refuses_when_no_image_is_configured() -> None:
+    """`shadow.image` has no default because this repo has no image to ship.
+    An unset one is a refusal that names it, not a silent downgrade."""
+    from aef.harness.shadow import NO_IMAGE_REASON, UncontainedShadowError, resolve_containment
+
+    with pytest.raises(UncontainedShadowError, match="shadow.image"):
+        resolve_containment(image=None)
+    with pytest.raises(UncontainedShadowError) as caught:
+        resolve_containment(image="")
+    assert NO_IMAGE_REASON in str(caught.value)
+
+
+def test_the_fallback_names_the_reason_and_is_printed() -> None:
+    """`fallback` is reachable only from config, and when taken it says which
+    of the two named causes it was — on stderr AND in the decision."""
+    from aef.harness.shadow import NO_RUNTIME_REASON, ContainmentMode, resolve_containment
+
+    decision = resolve_containment(
+        image=IMAGE, mode=ContainmentMode.FALLBACK, runtimes=_no_runtimes
+    )
+    assert not decision.contained
+    assert decision.reason == NO_RUNTIME_REASON
+    assert decision.owner_opted_out, "a fallback taken by owner choice is an owner choice"
+    assert NO_RUNTIME_REASON in decision.warning()
+    assert "contained=False" in decision.warning()
+
+
+def test_the_opt_out_is_an_owner_choice_and_says_so() -> None:
+    """`containment: off` never looks for a runtime. Its reason names the file
+    the owner wrote it in, because 'not contained' with no cause is the thing
+    an operator cannot act on."""
+    from aef.harness.shadow import OWNER_OPT_OUT_REASON, ContainmentMode, resolve_containment
+
+    decision = resolve_containment(image=IMAGE, mode=ContainmentMode.OFF)
+    assert not decision.contained
+    assert decision.reason == OWNER_OPT_OUT_REASON
+    assert "aef.yaml" in decision.reason
+    assert decision.owner_opted_out
+    assert "OFF by owner choice" in decision.warning()
+
+
+def test_the_fallback_is_in_the_ledger_not_only_on_stderr(tmp_path: Path) -> None:
+    """A stderr line from last Tuesday is not an audit trail. `security_event`
+    is what carries it into the owner's weekly digest — `build_digest` counts
+    that key and nothing in this module reads it."""
+    from aef.harness.ledger import EventKind, read
+    from aef.harness.shadow import (
+        NO_RUNTIME_REASON,
+        ContainmentMode,
+        record_containment_decision,
+        resolve_containment,
+    )
+
+    decision = resolve_containment(
+        image=IMAGE, mode=ContainmentMode.FALLBACK, runtimes=_no_runtimes
+    )
+    record_containment_decision(tmp_path, decision, proposal_id="p1")
+
+    (entry,) = read(tmp_path)
+    assert entry.kind is EventKind.CONTAINMENT
+    assert entry.detail["security_event"] is True
+    assert entry.detail["containment"]["contained"] is False
+    assert entry.detail["containment"]["reason"] == NO_RUNTIME_REASON
+    assert entry.detail["containment"]["mode"] == "fallback"
+    assert entry.detail["containment"]["owner_opted_out"] is True
+    assert "NOT contained" in entry.summary
+
+
+def test_the_digest_counts_an_uncontained_shadow_as_a_security_event(tmp_path: Path) -> None:
+    """The seam. `security_event` is only useful if the thing that reads it
+    agrees — a detail key nobody counts is a stderr line with extra steps."""
+    from datetime import UTC, datetime, timedelta
+
+    from aef.harness.ledger import read
+    from aef.harness.monitoring import build_digest
+    from aef.harness.shadow import ContainmentMode, record_containment_decision, resolve_containment
+
+    at = datetime.now(UTC)
+    record_containment_decision(
+        tmp_path,
+        resolve_containment(image=IMAGE, mode=ContainmentMode.OFF),
+        proposal_id="p1",
+        at=at,
+    )
+    digest = build_digest(
+        read(tmp_path), since=at - timedelta(hours=1), until=at + timedelta(hours=1)
+    )
+    assert digest.security_events == 1
+
+
+def test_a_contained_run_is_recorded_too(tmp_path: Path) -> None:
+    """Both directions. Recording only the fallbacks would make 'the shadow
+    ran contained' and 'no shadow ran at all' the same absence."""
+    from aef.harness.container import ContainerRuntime
+    from aef.harness.ledger import read
+    from aef.harness.shadow import ContainmentDecision, ContainmentMode, record_containment_decision
+
+    decision = ContainmentDecision(
+        mode=ContainmentMode.AUTO,
+        contained=True,
+        reason="contained by docker with image x; isolation verified",
+        runtime=ContainerRuntime(binary="docker", image="x", verified=True),
+        image="x",
+    )
+    record_containment_decision(tmp_path, decision, proposal_id="p1")
+    (entry,) = read(tmp_path)
+    assert "security_event" not in entry.detail
+    assert entry.detail["containment"]["contained"] is True
+    assert entry.detail["containment"]["isolation_verified"] is True
+    assert entry.summary.startswith("shadow containment: contained")
+
+
+def test_the_bypass_is_still_real_under_the_opt_out_and_is_announced(tmp_path: Path) -> None:
+    """The control on the control, run through the RESOLVER rather than a hand
+    -built runner. If the marker were never written, every assertion above
+    about containment would pass while proving nothing — and if the fallback
+    were silent, an owner would have no way to know which mode produced their
+    evidence."""
+    from aef.harness.ledger import EventKind, read
+    from aef.harness.shadow import ContainmentMode, shadow_for
+
+    marker = Path(tempfile.mkdtemp()) / "escaped-under-opt-out"
+
+    def writes(state, ctx, services):  # type: ignore[no-untyped-def]
+        marker.write_text("the shadow wrote this")
+        return StateDelta(), END
+
+    candidate = Graph(
+        id="c",
+        version="1",
+        nodes={"w": Node(id="w", version="1", fn=writes, deterministic=True)},
+        edges=[],
+        entry_node="w",
+    )
+    warnings: list[str] = []
+    with shadow_for(
+        _incumbent(),
+        entrypoint="unused:build_graph",
+        workdir=tmp_path,
+        image=IMAGE,
+        mode=ContainmentMode.OFF,
+        in_process_candidate=candidate,
+        ledger_root=tmp_path,
+        proposal_id="p1",
+        warn=warnings.append,
+    ) as shadow:
+        observation = shadow.runner.observe(_state(), agent_services())
+
+    assert marker.exists(), (
+        "the in-process bypass is gone — the trust case section 2.1 is stale and so is this test"
+    )
+    assert observation.contained is False
+    assert warnings and "OFF by owner choice" in warnings[0]
+    assert [e.kind for e in read(tmp_path)] == [EventKind.CONTAINMENT]
+
+
+def test_the_uncontained_path_will_not_import_the_candidate_for_you(tmp_path: Path) -> None:
+    """Loading a candidate's module into this interpreter is exactly what
+    containment prevents. Doing it silently on the fallback path would make
+    the weaker mode the more convenient one again."""
+    from aef.harness.shadow import ContainmentMode, ShadowError, shadow_for
+
+    with pytest.raises(ShadowError, match="in_process_candidate"):
+        shadow_for(
+            _incumbent(),
+            entrypoint="escaping:build_graph",
+            workdir=tmp_path,
+            image=IMAGE,
+            mode=ContainmentMode.OFF,
+            warn=lambda _m: None,
+        )
+
+
+def test_the_single_production_opt_out_is_unreachable_under_the_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The other half of the AST test below. One production call site passes
+    `uncontained=True`; this proves the DEFAULT mode cannot reach it —
+    `shadow_for` raises before constructing any runner, even when handed an
+    `in_process_candidate` it could have used.
+
+    Runtime detection is patched away rather than the box's docker stopped:
+    the branch being pinned is the one an adopter without a daemon takes, and
+    it must be exercised on a box that has one.
+    """
+    from aef.harness import shadow as shadow_module
+    from aef.harness.shadow import NO_RUNTIME_REASON, UncontainedShadowError, shadow_for
+
+    monkeypatch.setattr(shadow_module, "available_runtimes", _no_runtimes)
+
+    announced: list[str] = []
+    with pytest.raises(UncontainedShadowError) as caught:
+        shadow_for(
+            _incumbent(),
+            entrypoint="escaping:build_graph",
+            workdir=tmp_path,
+            image=IMAGE,
+            in_process_candidate=_incumbent(),
+            ledger_root=tmp_path,
+            warn=announced.append,
+        )
+    assert NO_RUNTIME_REASON in str(caught.value)
+    assert not announced, "nothing was announced because nothing ran"
+    assert not (tmp_path / "ledger.jsonl").exists(), (
+        "a refusal is not a run and must not be recorded as one"
+    )
+
+
+def test_the_config_mode_strings_and_the_enum_cannot_drift() -> None:
+    """Two spellings of one security decision, with nothing checking that they
+    agree, is the drift ADR 0091 records."""
+    from aef.config.schema import CONTAINMENT_MODES
+    from aef.harness.shadow import ContainmentMode
+
+    assert CONTAINMENT_MODES == {mode.value for mode in ContainmentMode}
+
+
+def test_the_config_default_is_the_contained_one() -> None:
+    """If this ever defaulted to `fallback`, every assertion above would still
+    pass and every adopter would be running uncontained."""
+    from aef.config.factory import build_containment_mode
+    from aef.config.schema import ShadowConfig
+    from aef.harness.shadow import ContainmentMode
+
+    assert ShadowConfig().containment == "auto"
+    assert build_containment_mode(ShadowConfig()) is ContainmentMode.AUTO
+
+
+def test_an_unknown_containment_mode_is_refused_at_load_time() -> None:
+    """A typo that validates is an owner believing a mode is on."""
+    import pydantic
+
+    from aef.config.schema import ShadowConfig
+
+    with pytest.raises(pydantic.ValidationError, match="is not one of"):
+        ShadowConfig(containment="contained")

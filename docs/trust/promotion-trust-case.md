@@ -179,18 +179,45 @@ containment by accident:
   /aef-workspace/ok.txt            WROTE   <-- the workspace, deliberately
 ```
 
-**Containment is now the DEFAULT.** `ShadowRunner` refuses to construct
-without a container session unless `uncontained=True` is passed explicitly,
-and every observation records which it was — one uncontained observation
-downgrades a whole report. An AST test asserts nothing in `aef/` opts out.
+**Containment is now the DEFAULT, and it is PROVIDED rather than merely
+required** (ADR 0161). ADR 0105 made `ShadowRunner` refuse to construct
+without a container session, which closed the silent bypass and left the
+container something every caller had to hand-build: on a box with a running
+daemon and the image present, a caller that asked for nothing got the same
+flat refusal as a caller with neither, and the only one-line way past it was
+`uncontained=True`. Reproduced. `shadow_for` now resolves a runtime, verifies
+its isolation in both directions, and returns a runner whose candidate
+executes inside the container:
+
+```
+BEFORE  — ShadowRunner(incumbent, candidate) on a box WITH docker and the image
+  UncontainedShadowError ... the one-line way forward is uncontained=True
+
+AFTER   — shadow_for(incumbent, entrypoint=..., workdir=..., image=...)
+  mode 'auto', contained True, isolation verified
+  host marker written: False    <-- True under the old convenient path
+```
+
+`shadow.containment` has three values. **`auto` is the default and does not
+fall back**: it contains the candidate, or it refuses and names which of the
+runtime and the image was missing. An automatic in-process fallback would be
+strictly weaker than the refusal above, so the fallback is reached only by an
+owner writing `fallback` or `off` in `aef.yaml`. Every uncontained run is
+announced on stderr AND written to the ledger as an `EventKind.CONTAINMENT`
+entry carrying `security_event: True`, which is the key the owner's weekly
+digest counts. Every observation still records which mode it ran under, one
+uncontained observation still downgrades a whole report, and an AST test
+allows exactly one `uncontained=True` in `aef/` — the fallback branch of
+`shadow_for`, with a companion test proving the default cannot reach it.
 
 **Two things remain, and neither is the bypass.** It requires the operator to
 supply an **image with `aef` importable**, which is their build, not this
-repo's; an adopter without one must opt out explicitly and will see
-`contained=False` on every observation, which is the intended trade — the
-weaker mode stays available and stops being invisible. And the candidate can
-still write to its own **workspace**, which is a host directory: that is what
-a workspace is, and containment means it cannot reach anywhere else.
+repo's; an adopter without one must state `containment: fallback` or `off` and
+will see `contained=False` on every observation and a security event in the
+ledger, which is the intended trade — the weaker mode stays available and
+stops being invisible. And the candidate can still write to its own
+**workspace**, which is a host directory: that is what a workspace is, and
+containment means it cannot reach anywhere else.
 
 Reproduce the image the tests use:
 
@@ -371,8 +398,10 @@ Not more tests. In rough order of value:
 - **An adopter with real traffic**, running shadow execution for a fixed
   period, with the divergence rate published. This is the single highest-value
   missing item and it converts criteria 1 and 6 from mechanisms into evidence.
-- ~~Shadow executed inside the Milestone 4 container~~ — **done**, and now
-  the **default** (ADR 0105).
+- ~~Shadow executed inside the Milestone 4 container~~ — **done**, the
+  **default** (ADR 0105), and since ADR 0161 provided by `shadow_for` rather
+  than hand-built, with the uncontained modes reachable only from `aef.yaml`
+  and recorded in the ledger.
 - ~~A keyed tenant hash~~ — **done** (ADR 0106).
 - **An adversarial review by someone who did not write this**, targeting the
   four attacks that held.

@@ -110,7 +110,38 @@ def test_the_residual_risk_is_a_number_with_a_basis(text: str) -> None:
 
 def test_the_adversarial_section_reports_failures_not_only_successes(text: str) -> None:
     """A list of attacks that all held is a claim of completeness, which this
-    program has three ADRs recording as a mistake."""
+    program has three ADRs recording as a mistake.
+
+    This test greps the DOCUMENT, and that is all it is for: keeping the prose
+    from drifting away from the attacks it reports. It is not the record of
+    the round — an independent reviewer read it as one (ADR 0151, dim 4), so
+    the executable record is named here rather than left to be found:
+
+      A1 Tier-1 from config/env/flag
+         this file::test_the_document_still_describes_a_disabled_switch
+         test_loop_driver.py (a fully passing candidate ESCALATEs)
+      A2 forged manifest, guessed key
+         test_promotion_safety.py::test_a_different_key_does_not_verify
+      A3 signature replayed onto another commit
+         test_promotion_safety.py
+             ::test_altering_the_promoted_commit_invalidates_the_signature
+      A4 shadow a MUTATING node
+         test_promotion_safety.py
+             ::test_a_mutating_candidate_is_refused_before_any_live_request
+      A5 shadow node does direct file I/O
+         test_contained_shadow.py
+             ::test_the_bypass_is_still_real_under_the_opt_out_and_is_announced
+             ::test_the_container_is_the_default_when_a_runtime_and_image_are_available
+      A6 tenant tag evading the candidate arm
+         test_promotion_safety.py
+             ::test_an_untagged_request_is_refused_rather_than_defaulted
+      A7 harness code via evaluator.suites
+         tests/harness/test_zones.py
+
+    The two that BROKE IT are re-executed, not asserted: A4 constructs the
+    mutating candidate and asserts the refusal, A5 runs the escaping candidate
+    both ways and checks the host.
+    """
     assert text.count("BROKE IT") >= 2
     assert "demonstrated bypass" in text
 
@@ -139,17 +170,27 @@ def test_the_known_canary_limit_is_still_a_limit() -> None:
     )
 
 
-def test_the_in_process_shadow_bypass_is_still_real_when_opted_into() -> None:
-    """§2.1 says the bypass is closed by containment, which is now the DEFAULT.
-    The uncontained mode still exists and still has the bypass — that is why
-    opting into it is explicit and recorded on every observation.
+def test_the_in_process_bypass_exists_only_when_an_owner_opts_out_and_is_logged(
+    tmp_path: Path,
+) -> None:
+    """What §2.1 now claims, in both halves (ADR 0161).
 
-    If the uncontained path ever contains its candidates too, §2.1 is
-    understating the harness and should be updated.
+    The earlier name — `..._is_still_real_when_opted_into` — read as a
+    concession that an uncontained path remains, and an independent reviewer
+    read it exactly that way (ADR 0151, dim 4). Both halves are the point:
+
+    1. The bypass IS still real under the opt-out. A control you cannot
+       demonstrate is decoration, and if this half ever stopped failing, §2.1
+       would be understating the harness rather than overstating it.
+    2. It is reached ONLY by an owner writing `shadow.containment: fallback`
+       or `off`. `auto` — the default — refuses instead of running, and the
+       opt-out is announced and written to the ledger as a security event, so
+       nobody reads the resulting evidence without knowing what it cost.
     """
     import tempfile
 
-    from aef.harness.shadow import ShadowRunner
+    from aef.harness.ledger import EventKind, read
+    from aef.harness.shadow import ContainmentMode, UncontainedShadowError, shadow_for
     from aef.kernel import END, Graph, Node
     from aef.services.runtime import agent_services
     from aef.state import AEFState, StateDelta
@@ -172,10 +213,39 @@ def test_the_in_process_shadow_bypass_is_still_real_when_opted_into() -> None:
             entry_node="w",
         )
 
-    ShadowRunner(
-        incumbent=graph(clean, "i"), candidate=graph(writes, "c"), uncontained=True
-    ).observe(AEFState(run_id="r", agent_id="a", objective="o"), agent_services())
+    announced: list[str] = []
+    shadow = shadow_for(
+        graph(clean, "i"),
+        entrypoint="unused:build_graph",
+        workdir=tmp_path,
+        image="aef-worker:test",
+        mode=ContainmentMode.OFF,
+        in_process_candidate=graph(writes, "c"),
+        ledger_root=tmp_path,
+        proposal_id="trust-case",
+        warn=announced.append,
+    )
+    observation = shadow.runner.observe(
+        AEFState(run_id="r", agent_id="a", objective="o"), agent_services()
+    )
+
     assert marker.exists(), (
         "the in-process shadow no longer performs direct I/O: §2.1 of the trust case is "
         "stale, and reason #2 of the recommendation rests partly on it"
     )
+    assert observation.contained is False
+    assert announced and "OFF by owner choice" in announced[0], "the opt-out was silent"
+    (entry,) = read(tmp_path)
+    assert entry.kind is EventKind.CONTAINMENT
+    assert entry.detail["security_event"] is True
+    assert entry.detail["containment"]["owner_opted_out"] is True
+
+    # And the default cannot get there: no owner statement, no bypass.
+    with pytest.raises(UncontainedShadowError):
+        shadow_for(
+            graph(clean, "i"),
+            entrypoint="unused:build_graph",
+            workdir=tmp_path,
+            image=None,
+            in_process_candidate=graph(writes, "c"),
+        )
