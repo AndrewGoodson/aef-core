@@ -228,3 +228,154 @@ def test_score_without_a_config_is_still_deny_by_default(  # type: ignore[no-unt
     code = main(["loop", "score", "polagent.graph:build_graph", "--corpus", str(root), "--json"])
     assert code == 0
     assert json.loads(capsys.readouterr().out)["train"]["mean"] == 0.0
+
+
+# --- `--json` says WHY a scenario scored what it did (ADR 0166) -------------
+#
+# `loop score --json` emitted per-scenario scores and a cassette hit/miss
+# count, and neither the `failure` string nor the check failures that
+# `run_scenario` already computes. A 0.0000 meaning "the provider died" and a
+# 0.0000 meaning "the answer was wrong" were indistinguishable, and telling
+# them apart in ADR 0156 took inferring from split-level token accounting.
+
+_MODEL_GRAPH = """
+from aef.kernel import END, Graph, Node, SideEffect
+from aef.providers.base import CompletionRequest, ProviderMessage
+from aef.state import Plan, Provenance, StateDelta
+
+
+def do(state, ctx, services):
+    result = services.require_model_provider().complete(
+        CompletionRequest(
+            messages=(ProviderMessage(role="user", content=state.objective),),
+            model="",
+        )
+    )
+    prov = Provenance(
+        node_id=ctx.node_id,
+        graph_version=ctx.graph_version,
+        model=result.model or None,
+        ts=ctx.now,
+        trace_id=ctx.trace_id,
+        token_cost=result.input_tokens + result.output_tokens,
+    )
+    return (
+        StateDelta(
+            plan=Plan(goal=state.objective, status="done"),
+            working_memory={"answer": result.content},
+            provenance=[prov],
+        ),
+        END,
+    )
+
+
+def build_graph():
+    return Graph(
+        id="model_agent", version="1",
+        nodes={"do": Node(
+            id="do", version="1", fn=do, deterministic=False,
+            side_effects=SideEffect.EXTERNAL_CALL,
+            idempotency_key_fn=lambda s: f"{s.run_id}:do",
+        )},
+        edges=[], entry_node="do",
+    )
+"""
+
+
+def _attribution_corpus(tmp_path: Path, monkeypatch) -> Path:  # type: ignore[no-untyped-def]
+    """Two scenarios of one model-calling graph, differing only in whether the
+    cassette can answer: `wrong-answer` replays a recorded reply that fails an
+    owner check; `provider-died` has an EMPTY cassette, so the call misses and
+    the node raises — which is how ADR 0156's live arm was built."""
+    import sys
+
+    from aef.providers.base import CompletionRequest, CompletionResult, ModelProvider
+    from aef.providers.cassette_provider import RecordedCall
+
+    pkg = tmp_path / "pkg"
+    (pkg / "modagent").mkdir(parents=True)
+    (pkg / "modagent" / "__init__.py").write_text("")
+    (pkg / "modagent" / "graph.py").write_text(_MODEL_GRAPH)
+    monkeypatch.syspath_prepend(str(pkg))
+    sys.modules.pop("modagent.graph", None)
+    sys.modules.pop("modagent", None)
+
+    from modagent.graph import build_graph  # type: ignore[import-not-found]
+
+    calls: list[RecordedCall] = []
+
+    class Stub(ModelProvider):
+        def complete(self, request: CompletionRequest) -> CompletionResult:
+            result = CompletionResult(content="blue", model="stub", input_tokens=7, output_tokens=3)
+            calls.append(RecordedCall.of(request, result))
+            return result
+
+    graph = build_graph()
+    root = tmp_path / "attcorpus"
+    manifest = CorpusManifest()
+    checks = (TaskCheck(path="working_memory.answer", op="contains", value="red"),)
+
+    for sid, keep_cassette in (("wrong-answer", True), ("provider-died", False)):
+        calls.clear()
+        state = AEFState(run_id=sid, agent_id="a", objective="name a colour")
+        recorded = GraphExecutor(graph.compile(), agent_services(model_provider=Stub())).run(
+            state, record_trace=True
+        )
+        assert recorded.trace is not None
+        save_scenario(
+            root,
+            Scenario(
+                id=sid,
+                split=Split.TRAIN,
+                graph_id="model_agent",
+                graph_version="1",
+                initial_state=state,
+                trace=recorded.trace,
+                recorded_at=datetime(2026, 9, 4, tzinfo=UTC),
+                checks=checks,
+                model_calls=tuple(calls) if keep_cassette else (),
+            ),
+        )
+        manifest.ids[sid] = Split.TRAIN
+    save_manifest(root, manifest)
+    return root
+
+
+def test_json_distinguishes_a_dead_provider_from_a_wrong_answer(  # type: ignore[no-untyped-def]
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    root = _attribution_corpus(tmp_path, monkeypatch)
+    code = main(["loop", "score", "modagent.graph:build_graph", "--corpus", str(root), "--json"])
+    assert code == 0
+    train = json.loads(capsys.readouterr().out)["train"]
+    # Both score 0.0000. Before this key existed, that was the whole report.
+    assert train["per_scenario"] == {"provider-died": 0.0, "wrong-answer": 0.0}
+
+    died = train["attribution"]["provider-died"]
+    assert "failure" in died and "ModelProviderError" in died["failure"]
+    assert "checks_failed" not in died  # the run never got far enough to answer
+
+    wrong = train["attribution"]["wrong-answer"]
+    assert "failure" not in wrong  # it ran cleanly
+    assert wrong["checks"] == "0/1 passed"
+    assert wrong["checks_failed"] == ["working_memory.answer contains 'red': got 'blue'"]
+
+
+def test_a_scenario_with_nothing_to_report_is_absent_from_the_attribution(  # type: ignore[no-untyped-def]
+    tmp_path: Path, capsys
+) -> None:
+    """The control: attribution lists what went wrong, not a row per scenario,
+    so a split where everything passed reports an empty object."""
+    root = _corpus(tmp_path)
+    assert main(["loop", "score", ENTRYPOINT, "--corpus", str(root), "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["train"]["attribution"] == {}
+    assert set(report["validation"]["attribution"]) == {"hard"}
+
+
+def test_human_output_says_why_a_scenario_failed(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    root = _corpus(tmp_path)
+    assert main(["loop", "score", ENTRYPOINT, "--corpus", str(root)]) == 0
+    out = capsys.readouterr().out
+    assert "0.0000  hard" in out
+    assert "check failed: scores.quality equals 1.0" in out

@@ -105,7 +105,13 @@ def _asking_graph(prompt_suffix: str = "") -> Graph:
 
 CHECKS = (
     TaskCheck(path="working_memory.summary", op="contains", value="Kestrel"),
-    TaskCheck(path="working_memory.summary", op="regex", value=r"^(?:\s*\S+){1,6}\s*$"),
+    # Was `regex ^(?:\s*\S+){1,6}\s*$`. Changed deliberately: that shape is the
+    # ReDoS of ADR 0166 and is now refused at construction. It did not hang
+    # HERE — a cap of 6 against nine short tokens is decided by the character
+    # classes, not by backtracking — but a test carrying the dangerous form is
+    # a test defending it through every later copy-paste, and this check only
+    # ever meant "at most six words".
+    TaskCheck(path="working_memory.summary", op="max_words", value=6),
 )
 
 

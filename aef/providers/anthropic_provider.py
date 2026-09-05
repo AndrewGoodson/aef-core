@@ -27,6 +27,29 @@ class _AnthropicClient(Protocol):
 class AnthropicProvider(ModelProvider):
     name = "anthropic"
 
+    #: Structural, not flag-derived: there is no CLI here and nothing to read
+    #: an argv back from. `messages.create` is called with no `tools`
+    #: parameter, so the model has none to call and no agent loop to take a
+    #: second turn in; an API has no `CLAUDE.md` discovery, no MCP server and
+    #: no local process; and the system text is the `system=` parameter
+    #: rather than a prefix on the user turn. Every one of those is a
+    #: property of the call this module makes, and a `tools=` argument added
+    #: here later must retract `no_tools` in the same edit.
+    _ISOLATION = frozenset(
+        {
+            "no_tools",
+            "no_mcp",
+            "single_turn",
+            "no_project_context",
+            "no_local_execution",
+            "system_role",
+        }
+    )
+
+    @property
+    def isolation(self) -> frozenset[str]:
+        return self._ISOLATION
+
     def __init__(self, api_key: str | None = None, client: _AnthropicClient | None = None) -> None:
         self._client: _AnthropicClient = (
             client

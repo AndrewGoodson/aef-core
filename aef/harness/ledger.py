@@ -61,13 +61,15 @@ class EventKind(StrEnum):
     KEPT = "kept"
     ROLLED_BACK = "rolled_back"
     HALTED = "halted"
-    # A shadow ran WITHOUT container containment, and said so. A security
-    # event — the owner must know the candidate was not contained — but not
-    # an ATTACK: the ordinary cause is no Docker on the runner, or the owner
-    # writing `containment: off`. The digest renders it under its own heading
-    # for that reason; reporting the fallback every Monday as "a proposal
-    # reached for the harness" is an alarm that fires on the normal case, and
-    # an alarm that fires on the normal case is one nobody reads (ADR 0167).
+    # What a shadow run's evidence was gathered UNDER (ADR 0161). A gate
+    # outcome cannot be read without it, and an uncontained shadow whose only
+    # trace is a line on stderr is a condition nobody reviewing the ledger a
+    # week later can see. Entries for an uncontained run also carry
+    # `security_event: True`, which is what puts them in the owner's digest —
+    # under their OWN heading there, because the ordinary cause is no Docker
+    # on the runner or an owner who wrote `containment: off`, and reporting
+    # that every Monday as "a proposal reached for the harness" is an alarm
+    # firing on the normal case (ADR 0167).
     CONTAINMENT = "containment"
 
 

@@ -38,13 +38,21 @@ diff answers in a fraction of the space.
 
 from __future__ import annotations
 
+import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from aef.harness.container import ContainerRuntime
+from aef.harness.container import (
+    ContainerRuntime,
+    available_runtimes,
+    detect_container_runtime,
+)
 from aef.harness.isolated import NodeWorkerSession, graph_from
-from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
+from aef.harness.sandbox import NetworkPolicy, SandboxPolicy, SandboxUnavailableError
 from aef.kernel.contracts import Services, SideEffect
 from aef.kernel.executor import GraphExecutor
 from aef.kernel.graph import Graph
@@ -432,3 +440,323 @@ def contained_candidate_graph(
         session.close()
         raise
     return graph, session
+
+
+# --------------------------------------------------------------------------
+# Containment is RESOLVED, not hand-built (ADR 0161)
+# --------------------------------------------------------------------------
+#
+# ADR 0105 made containment the default by REFUSAL: `ShadowRunner` will not
+# construct without a container session. That closed the silent bypass and
+# left a gap the trust case's second finding still sat in — nothing here ever
+# *provided* the container. A caller on a box with a running daemon and a
+# built image got the same flat refusal as a caller with neither, and the only
+# one-line way forward was `uncontained=True`. The path of least resistance
+# was the bypass.
+#
+# `resolve_containment` closes that: on a box with a runtime and a verified
+# image, the container is what you get without asking. Where the runtime or
+# the image is missing, `auto` still REFUSES and names which of the two it
+# was. It does not fall back on its own — an automatic in-process fallback
+# would be strictly weaker than the refusal ADR 0105 shipped, and weakening a
+# control to make a run complete is the thing this program does not do.
+#
+# The fallback is kept, because a mode nobody can reach is a deletion rather
+# than a control, and an adopter who cannot build a worker image still needs
+# to run a shadow and see what it cost them. It is reached only by an owner
+# writing it in `aef.yaml`, and every such run is named on stderr AND recorded
+# in the ledger as a security event.
+
+
+class ContainmentMode(StrEnum):
+    """What an owner asked for. The values are `shadow.containment` verbatim.
+
+    Deliberately not a bool. "Contained or not" is what a run REPORTS; what an
+    owner CONFIGURES is a policy about a resource that may or may not be
+    there, and collapsing the two makes "no image on this box"
+    indistinguishable from "we decided not to bother".
+    """
+
+    # Contain, or refuse and say what was missing. Never runs uncontained.
+    AUTO = "auto"
+    # Contain when possible; run in-process when not, loudly. An owner
+    # statement, recorded as one.
+    FALLBACK = "fallback"
+    # Never contain. Also an owner statement, also recorded.
+    OFF = "off"
+
+
+# The named reasons. Constants rather than f-strings at the call site so a
+# test can pin the exact words an operator will be shown — a refusal that
+# misnames its own cause sends them to fix the wrong thing (ADR 0074).
+NO_RUNTIME_REASON = "no container runtime found"
+NO_IMAGE_REASON = "no container image configured (shadow.image is unset)"
+IMAGE_UNAVAILABLE_PREFIX = "image unavailable: "
+OWNER_OPT_OUT_REASON = "owner opted out in aef.yaml: shadow.containment: off"
+
+
+@dataclass(frozen=True)
+class ContainmentDecision:
+    """What was asked for, what was obtained, and why they differ.
+
+    `contained` is what actually happened. It is never inferred from `mode`:
+    an owner asking for `auto` on a box with no daemon gets a decision that
+    says so, and a decision object that quietly reported the request back
+    would be the false capability report `SandboxCapabilities` exists to
+    prevent (ADR 0102).
+    """
+
+    mode: ContainmentMode
+    contained: bool
+    reason: str
+    runtime: ContainerRuntime | None = None
+    image: str | None = None
+
+    @property
+    def owner_opted_out(self) -> bool:
+        """True when the uncontained run was a CHOICE rather than a shortfall.
+
+        Kept apart from `contained` because the two need different answers: a
+        shortfall is fixed by installing a runtime or building an image, and a
+        choice is fixed only by the owner changing their mind.
+        """
+        return not self.contained and self.mode is not ContainmentMode.AUTO
+
+    def warning(self) -> str:
+        """The line an operator is shown. Empty when there is nothing to warn about."""
+        if self.contained:
+            return ""
+        if self.mode is ContainmentMode.OFF:
+            head = "shadow containment is OFF by owner choice"
+        else:
+            head = "shadow containment FELL BACK to in-process by owner choice"
+        return (
+            f"aef: {head} — {self.reason}. The candidate's nodes run in this process: the "
+            f"policy engine denies its TOOL CALLS and nothing contains a direct file write "
+            f"(trust case section 2.1). Every observation records contained=False and the "
+            f"whole report is downgraded for all of them."
+        )
+
+    def ledger_detail(self) -> dict[str, Any]:
+        """The ledger entry's `detail`.
+
+        `security_event` is set on an uncontained run, and nothing here reads
+        it — `aef.harness.monitoring.build_digest` counts it, so a fallback
+        reaches the owner's weekly digest without anyone having to remember to
+        go looking for a stderr line from a week ago.
+        """
+        detail: dict[str, Any] = {
+            "containment": {
+                "mode": self.mode.value,
+                "contained": self.contained,
+                "reason": self.reason,
+                "owner_opted_out": self.owner_opted_out,
+                "runtime": self.runtime.binary if self.runtime else None,
+                "image": self.image,
+                "isolation_verified": bool(self.runtime and self.runtime.verified),
+            }
+        }
+        if not self.contained:
+            detail["security_event"] = True
+        return detail
+
+    def summary_line(self) -> str:
+        """One line for a cycle summary. Always says which it was."""
+        if self.contained:
+            binary = self.runtime.binary if self.runtime else "?"
+            return f"shadow containment: contained ({binary}, image {self.image})"
+        return f"shadow containment: NOT contained ({self.reason})"
+
+
+def resolve_containment(
+    *,
+    image: str | None,
+    mode: ContainmentMode = ContainmentMode.AUTO,
+    binary: str | None = None,
+    verify: bool = True,
+    detect: Callable[..., ContainerRuntime] | None = None,
+    runtimes: Callable[[], tuple[str, ...]] | None = None,
+) -> ContainmentDecision:
+    """Decide how this shadow run will be contained. Raises under `auto`.
+
+    `detect` and `runtimes` are injected so the no-runtime and bad-image paths
+    can be exercised on a box that HAS both — a fallback nobody has ever seen
+    taken is a fallback nobody knows the shape of, and this repo has three
+    ADRs about branches that were wrong the first time they ran.
+
+    Bound here rather than in the signature's defaults so that patching the
+    module attribute reaches this function too: a default argument evaluated
+    at import time would leave `shadow_for` unreachable from a test that has
+    no injection point of its own.
+    """
+    detect = detect or detect_container_runtime
+    runtimes = runtimes or available_runtimes
+
+    if mode is ContainmentMode.OFF:
+        return ContainmentDecision(
+            mode=mode, contained=False, reason=OWNER_OPT_OUT_REASON, image=image
+        )
+
+    if not image:
+        return _unavailable(mode, NO_IMAGE_REASON, image)
+    if not runtimes():
+        return _unavailable(mode, NO_RUNTIME_REASON, image)
+
+    try:
+        runtime = detect(image, binary=binary, verify=verify)
+    except SandboxUnavailableError as exc:
+        # Includes the probe that did not behave in both directions. A runtime
+        # whose isolation could not be MEASURED is not one this may use:
+        # `container.py` refuses to claim what it did not observe, and
+        # accepting that refusal as "close enough" here would launder exactly
+        # the claim it declined to make.
+        return _unavailable(mode, f"{IMAGE_UNAVAILABLE_PREFIX}{exc}", image)
+
+    return ContainmentDecision(
+        mode=mode,
+        contained=True,
+        reason=f"contained by {runtime.binary} with image {image}"
+        + ("; isolation verified" if runtime.verified else "; isolation NOT verified"),
+        runtime=runtime,
+        image=image,
+    )
+
+
+def _unavailable(mode: ContainmentMode, reason: str, image: str | None) -> ContainmentDecision:
+    """`auto` refuses; `fallback` falls back, having been told to."""
+    if mode is ContainmentMode.AUTO:
+        raise UncontainedShadowError(
+            f"shadow containment is unavailable: {reason}. shadow.containment is 'auto', "
+            f"which contains the candidate or refuses — it does not run it uncontained, "
+            f"because an in-process shadow contains only its TOOL CALLS and a node that "
+            f"opens a file directly is outside the policy engine (trust case section 2.1). "
+            f"Build a worker image and set shadow.image, or set shadow.containment: "
+            f"fallback to accept an uncontained shadow here — that choice is recorded in "
+            f"the ledger."
+        )
+    return ContainmentDecision(mode=mode, contained=False, reason=reason, image=image)
+
+
+def record_containment_decision(
+    root: Path,
+    decision: ContainmentDecision,
+    *,
+    proposal_id: str,
+    at: datetime | None = None,
+) -> None:
+    """Put the decision in the audit trail, contained or not.
+
+    Both directions, deliberately. Recording only the fallbacks would make
+    "the shadow ran contained" and "no shadow ran at all" the same absence,
+    which is the shape `ShadowReport.contained` already refuses over zero
+    observations.
+    """
+    from aef.harness import ledger
+
+    ledger.append(
+        root,
+        kind=ledger.EventKind.CONTAINMENT,
+        at=at or datetime.now(UTC),
+        proposal_id=proposal_id,
+        summary=decision.summary_line(),
+        detail=decision.ledger_detail(),
+    )
+
+
+@dataclass
+class Shadow:
+    """A shadow runner, the session behind it, and the conditions it runs under.
+
+    The three travel together because reading any one without the others is
+    how a gate outcome gets read as stronger than it is. `close()` is not
+    optional: an unclosed session leaves a container running (ADR 0093's
+    defect in its third location), so this is also a context manager.
+    """
+
+    runner: ShadowRunner
+    decision: ContainmentDecision
+    session: NodeWorkerSession | None = None
+
+    def close(self) -> None:
+        if self.session is not None:
+            self.session.close()
+
+    def __enter__(self) -> Shadow:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
+
+def shadow_for(
+    incumbent: Graph,
+    *,
+    entrypoint: str,
+    workdir: Path,
+    image: str | None = None,
+    mode: ContainmentMode = ContainmentMode.AUTO,
+    in_process_candidate: Graph | None = None,
+    sandbox: SandboxPolicy | None = None,
+    read_only_mounts: dict[str, str] | None = None,
+    ledger_root: Path | None = None,
+    proposal_id: str = "shadow",
+    warn: Callable[[str], None] | None = None,
+    decision: ContainmentDecision | None = None,
+) -> Shadow:
+    """The shadow a caller should build. Contained wherever containment exists.
+
+    This is the whole of what "containment on by default" means in code: with
+    a runtime and a verified image on the box, a caller that asks for nothing
+    in particular gets a containerised candidate. Without them, `auto` refuses
+    and names the missing half.
+
+    `in_process_candidate` is used only on the uncontained path, and it is
+    required there rather than loaded for you: running a candidate's module
+    inside this interpreter is the thing being avoided, and it should be a
+    line the caller wrote.
+    """
+    decision = decision or resolve_containment(image=image, mode=mode)
+    emit = warn if warn is not None else _warn_to_stderr
+    if not decision.contained:
+        emit(decision.warning())
+    if ledger_root is not None:
+        record_containment_decision(ledger_root, decision, proposal_id=proposal_id)
+
+    if decision.contained:
+        if decision.runtime is None:  # pragma: no cover - resolve_containment guarantees it
+            raise ShadowError("a contained decision carries no runtime; refusing to guess")
+        graph, session = contained_candidate_graph(
+            entrypoint,
+            workdir=workdir,
+            runtime=decision.runtime,
+            sandbox=sandbox,
+            read_only_mounts=read_only_mounts,
+        )
+        try:
+            runner = ShadowRunner(incumbent=incumbent, candidate=graph, session=session)
+        except BaseException:
+            session.close()
+            raise
+        return Shadow(runner=runner, decision=decision, session=session)
+
+    if in_process_candidate is None:
+        raise ShadowError(
+            f"{decision.reason}: this shadow will run in-process, so the candidate graph "
+            f"must be supplied as `in_process_candidate`. It is not imported for you — "
+            f"loading a candidate's module into this interpreter is exactly what "
+            f"containment prevents, and it should be a line someone wrote on purpose."
+        )
+    # THE ONLY `uncontained=True` IN `aef/`, and it is unreachable under the
+    # default mode: `resolve_containment` raises before returning an
+    # uncontained decision unless the owner wrote `fallback` or `off`.
+    # `tests/harness/test_contained_shadow.py` pins both halves of that — the
+    # single call site, and that `auto` cannot reach it.
+    uncontained_runner = ShadowRunner(
+        incumbent=incumbent, candidate=in_process_candidate, uncontained=True
+    )
+    return Shadow(runner=uncontained_runner, decision=decision, session=None)
+
+
+def _warn_to_stderr(message: str) -> None:
+    if message:
+        print(message, file=sys.stderr)

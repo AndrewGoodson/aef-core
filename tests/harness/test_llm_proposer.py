@@ -408,7 +408,9 @@ class _Store:
 
 
 def test_the_default_proposer_is_rule_based_and_never_calls_the_model() -> None:
-    assert PROPOSERS == ("rule_based", "llm")
+    # `rule_based_prompt` (ADR 0157) joined the list and did NOT become a
+    # default for anything — see `tests/harness/test_prompt_proposer_wiring.py`.
+    assert PROPOSERS == ("rule_based", "rule_based_prompt", "llm")
     provider = FakeProvider(fail=True)
     config = LoopConfig(
         repo=GitRepo(root=Path(".")),

@@ -16,9 +16,15 @@ falls back to the rule-based implementation and says so in the rationale.
 **The judge sees the answer.** Evidence is the errors, the tool results, the
 scores, the reflections — and the string-valued `working_memory` entries,
 which on a content task is where the answer is (ADR 0126). Without them the
-judges were scoring a run they could not read: on the summary corpus the
-rule-based judge agreed with the owner's checks 3/18 and the LLM judge 9/18,
-and neither's evidence contained the summary.
+judges were scoring a run they could not read.
+
+The numbers that used to be quoted in this docstring now live where they can
+be re-run: **`docs/research/i14/` — the script, the raw judgments and the
+report** (ADR 0159). Read it before citing an agreement figure. Its finding
+about this module is worth carrying here in one line: with the answer in
+evidence the LLM judge's scores rose from the blind run's 0.23–0.50 to
+0.82–0.90, but the summary corpus cannot show whether that made it a better
+judge, because its only negatives are check-authoring defects.
 
 **Bias controls are structural, not requested.** The evidence the judge sees
 is capped per item (`MAX_EXCERPT_CHARS`, and `MAX_ANSWER_CHARS` for the
@@ -106,10 +112,10 @@ def _excerpt(value: object, limit: int = MAX_EXCERPT_CHARS) -> str:
 
 def _evidence(state: AEFState) -> _Evidence:
     items: list[str] = []
-    # First, because it is what the run produced. Measured on the summary
-    # corpus (ADR 0123's A/B): the rule-based judge agreed with the owner's
-    # checks on 3 of 18 states and the LLM judge on 9, and the reason was
-    # this — neither judge's evidence contained the answer it was scoring.
+    # First, because it is what the run produced. ADR 0123's A/B found both
+    # judges scoring a run they could not read — neither's evidence contained
+    # the answer — and ADR 0159 re-ran that A/B on this code, live, with the
+    # script and every judgment committed under `docs/research/i14/`.
     # Every counted field is still computed from the state; this only lets
     # the model see what it is being asked about. Sorted by key so two runs
     # with the same memory render the same prompt.

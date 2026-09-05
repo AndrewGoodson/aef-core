@@ -858,12 +858,38 @@ This module does not copy the persona; it names it, and
 the `.md` changes what the next run sends, with no regeneration step in
 between — which is what makes it worth putting the `.md` in Zone A.
 
-THE PROMPT RUNS; THE AGENT'S TOOLS DO NOT. The persona body becomes the
-`system` message of one `CompletionRequest`, `state.objective` is the user
-turn, and the harness adapters send `--tools ""` with `--max-turns 1`. A
-persona written to read files, edit configs or call an API produces text
-*describing* that and touches nothing. Its frontmatter `tools:` key is read
-and never honoured.{unhonoured}
+CONTAINMENT DEPENDS ON `model_provider.impl`, AND THIS RUN RECORDS WHICH ONE
+IT GOT. The persona body becomes the `system` message of one
+`CompletionRequest` and `state.objective` is the user turn. What happens next
+is the provider's, not this module's (ADR 0169):
+
+  claude_code  tool-suppressed by its own argv: `--tools ""` (its `--help`:
+               'Use "" to disable all tools'), `--max-turns 1`, `--safe-mode`,
+               and `--strict-mcp-config` with an empty server set. The persona
+               goes in `--system-prompt`.
+  grok         `--max-turns 1`, `--disable-web-search`, `--no-subagents`;
+               persona in `--system-prompt-override`. Its `--tools ""` is
+               MEASURED to suppress nothing — given one more turn the same
+               argv read a planted file and quoted it back — so what contains
+               a tool-using persona is the turn cap cancelling the run, and
+               the provider raises instead of answering. It has no
+               `--safe-mode`: ~17.9k tokens of project instructions still
+               reach the call.
+  codex        `--sandbox read-only` and nothing that suppresses tools: no
+               `--tools`, no `--max-turns`. It has no system-prompt flag, so
+               the persona is prepended to the USER turn.
+  command      enforces exactly what your argv template says and nothing else.
+               Its `isolation:` list is YOUR assertion, recorded unverified;
+               with no `{{system}}` slot the persona goes in the USER turn.
+  anthropic    an API call sent with no tools parameter; persona in `system=`.
+
+The frontmatter `tools:` key is read and never honoured under any of
+them.{unhonoured}
+
+WHERE TO LOOK: every run writes the provider's declared isolation set and the
+persona's channel to `state.working_memory["prompt_agent__containment"]`, and
+appends a `prompt_agent.persona_in_user_turn` entry to `state.errors` when the
+persona went out in the user turn. Per-run evidence beats this comment.
 
 WIRED `prompt_agent -> reflect -> consolidate -> END`. The reflect node is the
 only thing that writes the failure memory the self-rewiring loop's proposer
@@ -1514,11 +1540,24 @@ def _prompt_agent_lines(result: MigrateResult) -> list[str]:
             )
     lines += [
         "",
-        "THE PROMPT RUNS; THE AGENT'S TOOLS DO NOT. Each persona body becomes the system",
-        'message of one tool-less, single-turn completion (`--tools ""`, `--max-turns 1`).',
-        "A persona written to read files, edit configs or call an API now produces text",
-        "describing that and touches nothing — a real reduction in what it can do, said",
-        "here rather than discovered at the first run.",
+        "CONTAINMENT DEPENDS ON model_provider.impl, and each run records the one it got.",
+        "Each persona body becomes the system message of one completion; what that",
+        "completion may do is the provider's answer, not this command's (ADR 0169):",
+        '  claude_code  --tools "" (documented as "disable all tools"), --max-turns 1,',
+        "               --safe-mode, empty strict MCP config; persona in --system-prompt.",
+        '  grok         --tools "" is MEASURED to suppress nothing on 1.0.5 — the same argv',
+        "               read a planted file with one more turn allowed. --max-turns 1",
+        "               cancels such a run and the provider raises. No --safe-mode.",
+        "  codex        --sandbox read-only, no --tools, no --max-turns, no system flag —",
+        "               so the persona goes in the USER turn.",
+        "  command      whatever your argv template says; its isolation: list is YOUR",
+        "               unverified assertion, and with no {system} slot the persona goes",
+        "               in the USER turn.",
+        "  anthropic    no tools parameter is sent; persona in system=.",
+        "The frontmatter tools: key is read and never honoured under any of them. Every run",
+        "writes the provider's isolation set and the persona's channel to",
+        'working_memory["prompt_agent__containment"], and appends a',
+        "prompt_agent.persona_in_user_turn error when it was the user turn.",
     ]
     if result.prompt_written:
         lines += ["", f"wrote {len(result.prompt_written)} prompt agent graph(s):"]

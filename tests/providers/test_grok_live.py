@@ -82,9 +82,12 @@ def test_the_projects_instructions_do_not_reach_the_call() -> None:
     the first version failed that check.** Written against Grok's raw
     `usage.input_tokens`, it PASSED with `--cwd` removed from the provider:
     that field is the uncached remainder, and on a warm cache an unisolated
-    call reports less of it than a cold isolated one. `GrokProvider` now
-    reports the total context, which is the only column above that separates
-    the arms, and the same mutation then fails here as it should.
+    call reports less of it than a cold isolated one. The total context is the
+    only column above that separates the arms, and the same mutation then
+    fails here as it should. ADR 0154 got that total by folding the cache
+    counters into `input_tokens`; ADR 0169 gave `CompletionResult` the
+    counters and `total_input_tokens`, so this reads the property. Same sum,
+    and now the same field name as every other provider.
 
     The bound is 20,000, not 5,000, and that is the honest number: the
     operator's GLOBAL `~/.claude/Claude.md` still reaches the call — the
@@ -100,7 +103,9 @@ def test_the_projects_instructions_do_not_reach_the_call() -> None:
             max_tokens=200,
         )
     )
-    assert result.input_tokens < 20_000, (
-        f"{result.input_tokens} input tokens: --cwd is no longer isolating this repo's "
+    assert result.total_input_tokens < 20_000, (
+        f"{result.total_input_tokens} total input tokens (uncached {result.input_tokens}, "
+        f"cache read {result.cache_read_input_tokens}, cache creation "
+        f"{result.cache_creation_input_tokens}): --cwd is no longer isolating this repo's "
         f"CLAUDE.md/AGENTS.md from the call (24,001 unisolated when measured)"
     )

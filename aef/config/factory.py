@@ -17,12 +17,15 @@ a `model_provider` at all (see docs/adr/0014).
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from aef.config.schema import (
     CONTEXT_IMPLS,
     CommandProviderConfig,
     ContextConfig,
     ModelProviderConfig,
     PoliciesConfig,
+    ShadowConfig,
     ToolsConfig,
 )
 from aef.providers.base import FallbackProvider, ModelProvider
@@ -30,6 +33,9 @@ from aef.security.tool import PolicyConfig
 from aef.services.context.base import Retriever
 from aef.services.knowledge.base import KnowledgeStore
 from aef.services.memory.base import MemoryStore
+
+if TYPE_CHECKING:  # pragma: no cover - typing only, see build_containment_mode
+    from aef.harness.shadow import ContainmentMode
 
 # `claude_code` first: in the repos this scaffold is built for, the harness
 # login is the only credential there is (ADR 0112).
@@ -76,6 +82,9 @@ def _build_single(
             output_pointer=command.output_pointer,
             usage_pointer=command.usage_pointer,
             output_usage_pointer=command.output_usage_pointer,
+            # The owner's containment assertion, carried through unverified so
+            # `PromptAgentNode` can record it as theirs (ADR 0169).
+            isolation=command.isolation,
             default_model=model,
             timeout_s=command.timeout_s,
         )
@@ -174,3 +183,17 @@ class UnsupportedRetrieverImplError(NotImplementedError):
             f"no Retriever for context.impl={impl!r}; implemented: "
             f"{', '.join(sorted(CONTEXT_IMPLS))}"
         )
+
+
+def build_containment_mode(config: ShadowConfig) -> ContainmentMode:
+    """`shadow.containment` as the enum the shadow harness runs on (ADR 0161).
+
+    A local import: `aef.config` must not depend on `aef.harness` at module
+    scope — the harness reads configs, and a cycle between the two would make
+    either unimportable on its own. The string set is checked against the enum
+    by `tests/harness/test_contained_shadow.py`, so the two spellings of this
+    one security decision cannot drift apart (ADR 0091).
+    """
+    from aef.harness.shadow import ContainmentMode
+
+    return ContainmentMode(config.containment)

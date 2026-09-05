@@ -78,10 +78,20 @@ from aef.security.tool import PolicyConfig
 # The gates that judge a candidate WITHOUT executing it.
 _CHEAP: frozenset[str] = frozenset({"G0", "G1", "G4", "G5"})
 
-# The proposers `cycle` can run (ADR 0122). `rule_based` is the default and
-# `llm` is opt-in: measured on the flaky fixture and the demo agent before
-# the default was chosen, and the ADR carries the numbers.
-PROPOSERS: tuple[str, ...] = ("rule_based", "llm")
+# The proposers `cycle` can run (ADR 0122, ADR 0157). `rule_based` is the
+# default and `llm` is opt-in: measured on the flaky fixture and the demo agent
+# before the default was chosen, and ADR 0122 carries the numbers.
+#
+# `rule_based_prompt` edits a `.md` persona instead of Python (ADR 0157), and
+# it is NOT the default for any agent path, including a markdown one. The
+# reason is stated rather than assumed: nothing available at this point knows
+# what kind of node the graph's entry is — `Node` carries no kind, and
+# `_build_proposer` is handed a `LoopConfig`, never a `Graph` (`cycle`'s
+# `graph=` is optional and exists for `harvest`). The only signal in reach is
+# the agent path's suffix, which is a filename convention rather than a fact
+# about the agent, and switching proposers on a filename would make
+# `--proposer` mean different things in different repos. An owner names it.
+PROPOSERS: tuple[str, ...] = ("rule_based", "rule_based_prompt", "llm")
 
 OBSERVATIONS_FILENAME = "observations.jsonl"
 
@@ -1303,14 +1313,24 @@ def cycle(
         lines.append(f"no agent source at {agent_path} in {config.base_ref}: no candidate")
         return CycleRun(harvested=harvested, lines=tuple(lines))
 
-    proposals = _build_proposer(config).propose_from_memory(
+    source = config.repo.show(config.base_ref, agent_path)
+    proposer = _build_proposer(config)
+    proposals = proposer.propose_from_memory(
         evidence,
         proposal_id=f"cycle-{now:%Y%m%dT%H%M%S}",
         path=agent_path,
-        source=config.repo.show(config.base_ref, agent_path),
+        source=source,
     )
     if not proposals:
-        lines.append("the proposer produced nothing from the available evidence")
+        # WHY it produced nothing, when the proposer can say. "produced
+        # nothing from the available evidence" is true of a two-record store
+        # below the recurrence threshold, of a lesson already in the prompt,
+        # and of a proposer pointed at a file it cannot edit — three different
+        # operator actions behind one sentence (ADR 0157).
+        lines.append(
+            "the proposer produced nothing from the available evidence"
+            + _no_proposal_reason(proposer, evidence, agent_path, source)
+        )
         return CycleRun(harvested=harvested, lines=tuple(lines))
 
     proposal = proposals[0]  # at most one candidate per cycle, deliberately
@@ -1337,6 +1357,28 @@ def cycle(
     )
 
 
+def _no_proposal_reason(proposer: Any, evidence: Any, agent_path: str, source: str) -> str:
+    """The proposer's own account of an empty result, when it has one.
+
+    An optional hook, read with `getattr`, because the two older proposers
+    predate it and a protocol change would be a change to the file that
+    defines what a proposal IS. A proposer that cannot explain itself gets the
+    generic sentence, plus the one hint that is computable here: a non-Python
+    agent path is a prompt file, and `rule_based`/`llm` have no operation to
+    perform on one (ADR 0157).
+    """
+    explain = getattr(proposer, "no_proposal_reason", None)
+    if callable(explain):
+        reason = explain(evidence, path=agent_path, source=source)
+        return f": {reason}" if reason else ""
+    if not agent_path.endswith(".py"):
+        return (
+            f": {agent_path} is not Python, and this proposer edits numeric constants and "
+            f"Python structure. A prompt file's proposer is --proposer rule_based_prompt."
+        )
+    return ""
+
+
 def _build_proposer(config: LoopConfig) -> Any:
     """The proposer `config.proposer` names (ADR 0122). Both share
     `propose_from_memory(evidence, *, proposal_id, path, source)`; the LLM
@@ -1344,6 +1386,17 @@ def _build_proposer(config: LoopConfig) -> Any:
     gates read, so it refuses what they would refuse."""
     from aef.harness.proposer import RuleBasedProposer
 
+    if config.proposer == "rule_based_prompt":
+        from aef.harness.prompt_proposer import RuleBasedPromptProposer
+
+        # The zone policy, graph id and corpus come from the same config the
+        # gates read, so the proposer refuses the paths G0 would refuse and
+        # learns only from this graph's own runs.
+        return RuleBasedPromptProposer(
+            zone_policy=config.zone_policy,
+            graph_id=config.graph_id,
+            corpus=config.corpus,
+        )
     if config.proposer != "llm":
         return RuleBasedProposer()
     from aef.harness.gates.g0_static_safety import DEFAULT_MAX_CHANGED_LINES

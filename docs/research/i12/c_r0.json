@@ -1,0 +1,45 @@
+{
+  "answered_by": {
+    "claude-haiku-4-5-20251001": 6
+  },
+  "arm": "c",
+  "calls": 6,
+  "draft_prompts": {
+    "sum-13-cider-press": "Summarise the passage below in at most 35 words.\nThe summary must mention each of these terms, spelled exactly as given: Dunmere cider press, oak, apples.\n\nPassage:\nThe Dunmere cider press, a hand-turned screw press built from oak beams in the 1850s, has been rebuilt and will press apples again this autumn for the first time in forty years. Volunteers replaced the rotten base beam with seasoned oak from a fallen tree on the estate and re-cut the screw thread by hand. Anyone with surplus apples can bring them on the two pressing days and take juice home in exchange. The press sits in a barn beside the estate's walled garden.",
+    "sum-14-quarry-lake": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Ketley quarry lake, swimming, lifeguards.\n\nLessons from this agent's earlier runs (most relevant first):\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nSwimming will be allowed at Ketley quarry lake this summer for the first time, with lifeguards on duty between ten and six from June to September. The lake, which flooded when the quarry closed, is cold and deep, and the council has roped off a shallow area near the beach for swimmers and set a buoyed course for those who want to swim further. Entry is free but swimmers must register once at the kiosk. Parking on the quarry road will be limited to sixty cars.",
+    "sum-15-bookbinder": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Marisa Venn, bookbinder, apprentice.\n\nLessons from this agent's earlier runs (most relevant first):\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nMarisa Venn, the last working bookbinder in the county, has taken on an apprentice for the first time in her thirty-year career. The apprentice will spend two years learning to sew text blocks, pare leather and tool lettering by hand before being allowed to take customer work. Venn's shop repairs family bibles and rebinds worn library books, and she says demand has risen as people bring in books that cannot be replaced. The apprenticeship is funded partly by a heritage crafts grant.",
+    "sum-16-cliff-path": "Summarise the passage below in at most 35 words.\nThe summary must mention each of these terms, spelled exactly as given: Gannet Head, coast path, landslip.\n\nLessons from this agent's earlier runs (most relevant first):\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nA section of the coast path at Gannet Head has been closed after a landslip took away about twenty metres of the cliff edge following a week of heavy rain. Walkers are being diverted inland along a farm track that adds roughly a mile to the route. The national trail authority will survey the cliff once the ground has dried and expects to build a new path further from the edge rather than repair the old line. The nearby car park and cafe remain open.",
+    "sum-17-clockmaker": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Holloway town clock, pendulum, 1911.\n\nLessons from this agent's earlier runs (most relevant first):\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nThe Holloway town clock, which has stood over the market hall since 1911, has been stopped for the first time in decades while its pendulum is repaired. The clock lost about a minute a day after a bearing wore through, and the clockmaker found the pendulum rod had also bent slightly. Both parts will be made new to the original drawings, which the town still holds. The chimes will be silent for about six weeks. The clock's four faces are being cleaned while the mechanism is out.",
+    "sum-18-heron-rookery": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Wimble Carr, herons, nests.\n\nLessons from this agent's earlier runs (most relevant first):\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nThe heronry at Wimble Carr held forty-one nests this spring, the highest count since records began there in 1962. The herons nest high in a stand of old alders at the edge of the marsh and are counted each April by a warden with a telescope from the far bank. Last year's mild winter is thought to have helped, along with a ban on shooting over the marsh that came into force three years ago. The site is closed to visitors during the nesting season."
+  },
+  "failures": {},
+  "knowledge_entries": [],
+  "lessons_in_prompt": {
+    "sum-13-cider-press": false,
+    "sum-14-quarry-lake": true,
+    "sum-15-bookbinder": true,
+    "sum-16-cliff-path": true,
+    "sum-17-clockmaker": true,
+    "sum-18-heron-rookery": true
+  },
+  "mean": 0.7917,
+  "model_arg": "(session default; --model omitted)",
+  "per_scenario": {
+    "sum-13-cider-press": 0.75,
+    "sum-14-quarry-lake": 0.5,
+    "sum-15-bookbinder": 1.0,
+    "sum-16-cliff-path": 0.75,
+    "sum-17-clockmaker": 0.75,
+    "sum-18-heron-rookery": 1.0
+  },
+  "repeat": 0,
+  "secs": 16.3,
+  "summaries": {
+    "sum-13-cider-press": "The Dunmere cider press, an 1850s hand-turned oak screw press, has been restored by volunteers using estate oak and will press apples this autumn after forty years, with locals invited to bring surplus apples for juice.",
+    "sum-14-quarry-lake": "Swimming will be permitted at Ketley quarry lake for the first time this summer, with lifeguards on duty from ten to six, June through September. A roped-off shallow area and buoyed course are provided; entry is free but requires one-time registration, and parking is capped at sixty cars.",
+    "sum-15-bookbinder": "Marisa Venn, the county's last bookbinder, has taken her first apprentice in thirty years, funded partly by a heritage crafts grant, as demand for irreplaceable book repairs grows.",
+    "sum-16-cliff-path": "A landslip after heavy rain destroyed twenty metres of cliff edge at Gannet Head, closing the coast path and diverting walkers inland. Authorities plan a new path set further back; car park and cafe stay open.",
+    "sum-17-clockmaker": "The Holloway town clock, in place above the market hall since 1911, has been stopped so its worn bearing and bent pendulum can be replaced using the original drawings. Chimes will be silent roughly six weeks while the faces are cleaned.",
+    "sum-18-heron-rookery": "Wimble Carr's heronry recorded forty-one nests this spring, a record since 1962, with herons nesting in old alders; a shooting ban and mild winter likely helped."
+  }
+}

@@ -41,6 +41,15 @@ class CommandProviderConfig(_StrictModel):
     output_pointer: str | None = None
     usage_pointer: str | None = None
     output_usage_pointer: str | None = None
+    isolation: list[str] = []
+    """What the owner ASSERTS this CLI's argv enforces, e.g.
+    `[no_tools, single_turn, no_project_context]`. Never verified against the
+    binary and recorded in the trace as an assertion (ADR 0169) — because
+    `--tools ""` disables every tool on `claude` and disables nothing on
+    `grok`, so no amount of reading an unknown template can tell this repo
+    which one an owner has. The default is the empty list, which claims
+    nothing; `system_role`/`user_turn_persona` are refused here because the
+    `{system}` slot already decides them."""
     timeout_s: float = 600.0
 
     @model_validator(mode="after")
@@ -50,7 +59,11 @@ class CommandProviderConfig(_StrictModel):
         # `test_importing_aef_config_does_not_require_anthropic` pins.
         # `aef.providers.command_provider` imports no SDK, but the lazy
         # import keeps that guarantee independent of what it grows into.
-        from aef.providers.command_provider import OUTPUT_MODES, validate_template
+        from aef.providers.command_provider import (
+            OUTPUT_MODES,
+            validate_command_isolation,
+            validate_template,
+        )
 
         validate_template(
             self.argv,
@@ -58,6 +71,7 @@ class CommandProviderConfig(_StrictModel):
             system_argv=self.system_argv,
             stdin=self.stdin,
         )
+        validate_command_isolation(self.isolation)
         if self.output not in OUTPUT_MODES:
             raise ValueError(f"command.output={self.output!r} is not one of {sorted(OUTPUT_MODES)}")
         if self.output == "json_pointer" and self.output_pointer is None:
@@ -275,6 +289,44 @@ class ReflectionConfig(_StrictModel):
         return value
 
 
+# The containment modes a shadow run can be configured with (ADR 0161). The
+# strings are the enum VALUES of `aef.harness.shadow.ContainmentMode`, and a
+# test asserts the two sets are identical — two spellings of one security
+# decision that could disagree is the drift ADR 0091 records. Named here
+# rather than imported so `aef.config` keeps no dependency on `aef.harness`.
+CONTAINMENT_MODES: frozenset[str] = frozenset({"auto", "fallback", "off"})
+
+
+class ShadowConfig(_StrictModel):
+    """How a shadow run is contained (ADR 0161).
+
+    `auto` is the default and it does not fall back: a container when a
+    runtime and a verified image are available, and a REFUSAL naming what was
+    missing when they are not. The two non-default modes are owner statements
+    and are recorded as such in the ledger — an owner who accepts an
+    uncontained shadow says so in this file, and the run says so back.
+    """
+
+    containment: str = "auto"
+    # The worker image. There is no default because there is no image this
+    # repo can ship: it must contain the adopter's own `aef` and its
+    # dependencies (trust case §2.1). `None` under `auto` is a refusal that
+    # names the missing image, not a silent downgrade.
+    image: str | None = None
+
+    @field_validator("containment")
+    @classmethod
+    def _must_name_a_real_mode(cls, value: str) -> str:
+        if value not in CONTAINMENT_MODES:
+            raise ValueError(
+                f"shadow.containment={value!r} is not one of {sorted(CONTAINMENT_MODES)}. "
+                f"'auto' contains the candidate when a runtime and image are available and "
+                f"refuses when they are not; 'fallback' and 'off' accept an uncontained "
+                f"shadow and are recorded in the ledger as owner choices."
+            )
+        return value
+
+
 class AgentConfig(_StrictModel):
     extends: str = "_base"
 
@@ -303,5 +355,6 @@ class AgentConfig(_StrictModel):
     evaluator: EvaluatorConfig = EvaluatorConfig()
     tools: ToolsConfig = ToolsConfig()
     policies: PoliciesConfig = PoliciesConfig()
+    shadow: ShadowConfig = ShadowConfig()
     objectives: str
     evolution: EvolutionSettings = EvolutionSettings()

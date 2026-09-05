@@ -11,24 +11,50 @@ agent layer". `ClaudeCodeProvider` (ADR 0112) removed the premise of that
 sentence — a node's model call is one headless `claude -p` under the harness's
 own login — but nothing turned a persona file into a node. This does.
 
-## The safety property, stated because it is the whole point
+## The safety property, and what it is actually conditional on
 
-**The prompt runs; the agent's tools do not.**
+The previous version of this section said, flatly: *"The prompt runs; the
+agent's tools do not ... nothing in this path can open a file, spawn a
+process or reach a network service."* **That was a claim about
+`ClaudeCodeProvider` written as a claim about the path**, and the path takes
+whatever `model_provider.impl` names (ADR 0169, F4):
 
-The persona body becomes a `system` message on one `CompletionRequest`. It
-reaches the model through `Services.model_provider`, and the harness adapters
-send `--tools ""` with `--max-turns 1` (`ClaudeCodeProvider`), so the run is a
-single tool-less completion. A persona that says "read the repo, edit the
-config, call the Accela API" produces *text describing* that; nothing in this
-path can open a file, spawn a process or reach a network service. The
-frontmatter's own `tools:` key is read and **deliberately not honoured** — it
-is reported, never obeyed — because honouring it would be this module handing
-an untrusted markdown file a capability grant, which is exactly what
-`PolicyEngine`'s deny-by-default exists to refuse (constraint #6).
+- `claude_code` sends `--tools ""`, which `claude --help` documents as "Use
+  \"\" to disable all tools", plus `--max-turns 1`, `--safe-mode` and an empty
+  strict MCP config. This is the configuration the sentence described.
+- `grok` sends the same `--tools ""` spelling and it **suppresses nothing** —
+  measured: with one more turn allowed, the run listed a directory and quoted
+  a planted file's first line back. `--max-turns 1` cancels such a run
+  instead, and `GrokProvider` then raises.
+- `codex` sends neither flag. It is an agentic loop in a `--sandbox
+  read-only` jail, which may still read the working tree.
+- `command` enforces exactly what an owner's argv template says, and its
+  `isolation:` list is that owner's unverified assertion.
+- `anthropic` calls the API with no `tools` parameter at all.
 
-That is a real reduction in what the agent can do, and it is stated here
-rather than discovered: a migrated persona is a *reasoner over the objective*,
-not the tool-using session the persona was written for.
+So this node **records the containment it actually got, every run**, instead
+of asserting one: `Services.model_provider`'s `isolation` set and the role the
+persona travelled in are written to
+`state.working_memory["<node id>__containment"]`, and a persona sent in the
+USER turn — `codex`, or a `command` template with no `{system}` slot — appends
+a named `prompt_agent.persona_in_user_turn` entry to `state.errors`. Per-run
+evidence in the trace beats a sentence in a docstring, which is the whole
+lesson of F4.
+
+It is a warning and not a refusal, because some CLIs genuinely have no system
+flag and refusing would make the node unusable on them. It IS an error entry,
+so `RuleBasedEvaluator` scores that run 0 and `make_reflect_node` writes it to
+failure memory — deliberately: under ADR 0152 the persona being the system
+message is the safety story, and a run where it was not should be visible to
+the loop that reads those signals.
+
+What has not changed: the frontmatter's own `tools:` key is read and
+**deliberately not honoured** — reported, never obeyed — because honouring it
+would be this module handing an untrusted markdown file a capability grant,
+which is exactly what `PolicyEngine`'s deny-by-default exists to refuse
+(constraint #6). Under every impl, a migrated persona is a *reasoner over the
+objective* rather than the tool-using session it was written for; how firmly
+that is enforced is what varies, and what is now recorded.
 
 ## What is parsed, and what is not
 
@@ -65,6 +91,34 @@ DEFAULT_PROMPT_AGENT_DIR = ".claude/agents"
 # Written by `aef migrate` under the agent root. Excluded from discovery so a
 # second `migrate` never treats its own output as an agent to migrate.
 MIGRATED_DIR_NAME = "migrated"
+
+# `working_memory["<node id>__containment"]` — the run's own record of what
+# the provider it got actually enforces. Suffixed rather than nested under the
+# reply, because `working_memory[node_id]` is the answer text and a reader
+# grepping a trace for the answer should not find a dict there instead.
+CONTAINMENT_SUFFIX = "__containment"
+
+# The `type` on the error entry appended when the persona went out in the user
+# turn. A stable string so a gate, a check or a grep can name it.
+PERSONA_IN_USER_TURN = "prompt_agent.persona_in_user_turn"
+
+# The three states of `containment["persona_role"]`. "unknown" is not a
+# failure to compute: it is a provider that declared nothing about its
+# channel, and it is recorded as such rather than defaulted to either
+# neighbour. Manufacturing a claim out of an absence is how the unconditional
+# containment sentence survived five providers (ADR 0169).
+PERSONA_ROLE_SYSTEM = "system"
+PERSONA_ROLE_USER = "user"
+PERSONA_ROLE_UNKNOWN = "unknown"
+
+
+def persona_role(isolation: frozenset[str]) -> str:
+    """Which turn the persona travelled in, per the provider's declaration."""
+    if "system_role" in isolation:
+        return PERSONA_ROLE_SYSTEM
+    if "user_turn_persona" in isolation:
+        return PERSONA_ROLE_USER
+    return PERSONA_ROLE_UNKNOWN
 
 
 class PromptAgentError(RuntimeError):
@@ -227,13 +281,16 @@ def make_prompt_agent_node(
     version: str = "0.1.0",
     route: Route = "reflect",
 ) -> Node:
-    """A `Node` that runs one persona file as a single tool-less completion.
+    """A `Node` that runs one persona file as a single completion.
 
-    **The prompt runs; the agent's tools do not.** The persona body is the
-    `system` message, `state.objective` is the user turn, and the harness
-    adapters issue `--tools ""` with `--max-turns 1` — so a persona written
-    for a tool-using session becomes a reasoner over the objective and touches
-    nothing. The frontmatter's `tools:` key is read and never honoured.
+    The persona body is the `system` message and `state.objective` is the user
+    turn. **How contained that completion is depends on
+    `model_provider.impl`** — see the module docstring for the five answers —
+    so this node records the provider's `isolation` set and the persona's
+    channel into `working_memory["<node id>__containment"]` on every run, and
+    appends a `prompt_agent.persona_in_user_turn` error when the persona went
+    out in the user turn. The frontmatter's `tools:` key is read and never
+    honoured under any impl.
 
     Pass `agent_file` (repo-relative, the form `aef migrate` generates) to
     read the persona at execution time, or `definition` to supply one
@@ -277,7 +334,18 @@ def make_prompt_agent_node(
         state: AEFState, ctx: Context, services: Services
     ) -> tuple[StateDelta, Route]:
         agent = _definition()
-        result = services.require_model_provider().complete(
+        provider = services.require_model_provider()
+        # Read BEFORE the call and recorded whatever the call does: the
+        # containment a run had is a property of the provider it was given,
+        # not of whether the answer came back.
+        isolation = provider.isolation
+        role = persona_role(isolation)
+        containment = {
+            "provider": provider.name,
+            "isolation": sorted(isolation),
+            "persona_role": role,
+        }
+        result = provider.complete(
             CompletionRequest(
                 messages=(
                     ProviderMessage(role="system", content=agent.body),
@@ -286,19 +354,45 @@ def make_prompt_agent_node(
                 model="",
             )
         )
+        errors: list[dict[str, object]] = []
+        if role == PERSONA_ROLE_USER:
+            errors.append(
+                {
+                    "node_id": ctx.node_id,
+                    "type": PERSONA_IN_USER_TURN,
+                    "provider": provider.name,
+                    "isolation": sorted(isolation),
+                    "message": (
+                        f"provider {provider.name!r} has no system channel, so persona "
+                        f"{agent.name!r} was prepended to the USER turn. ADR 0152's "
+                        f"containment rests on the persona BEING the system message; here "
+                        f"it is untrusted-channel text. Not a refusal — some CLIs have no "
+                        f"system flag — but recorded (ADR 0169)."
+                    ),
+                }
+            )
         provenance = Provenance(
             node_id=ctx.node_id,
             graph_version=ctx.graph_version,
             model=result.model or None,
             ts=ctx.now,
             trace_id=ctx.trace_id,
-            token_cost=result.input_tokens + result.output_tokens,
+            # `total_input_tokens`, not `input_tokens`: on a harness backend
+            # the latter is the uncached remainder and is routinely 2 while
+            # the prompt is tens of thousands of tokens (ADR 0169). A
+            # provenance `token_cost` of 241 for a 200k-token call is not a
+            # cheap run, it is an unrecorded one.
+            token_cost=result.total_input_tokens + result.output_tokens,
         )
         return (
             StateDelta(
-                working_memory={node_id: result.content.strip()},
+                working_memory={
+                    node_id: result.content.strip(),
+                    f"{node_id}{CONTAINMENT_SUFFIX}": containment,
+                },
                 plan=Plan(goal=state.objective, status="done"),
                 provenance=[provenance],
+                errors=errors,
             ),
             route,
         )

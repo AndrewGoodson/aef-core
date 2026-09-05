@@ -15,6 +15,15 @@ replays under any configured default (`CassetteProvider`, ADR 0123). It is
 `deterministic=False` and `EXTERNAL_CALL`, as the node contract requires of
 anything that asks a model.
 
+**The draft node reads `state.retrieved_context` (ADR 0155).** Until it did,
+the retrieve node in this very graph wrote chunks that no prompt ever
+carried, so the four arms of ADR 0110's A/B — no retrieval, raw records,
+records + knowledge — produced byte-identical model requests. Rendering is
+`render_retrieved_context`, generic and in `aef/reasoning/`, because what a
+retrieved lesson looks like is not a property of summarisation. With nothing
+retrieved the prompt is byte-identical to the pre-ADR-0155 one, which is
+what keeps every committed cassette a hit.
+
 Working memory in: `text` (the passage), `max_words` (the cap), and
 `must_mention` (terms the summary has to carry). Out: `summary`. The node
 computes nothing about its own quality — `scores` stays empty here on
@@ -27,7 +36,12 @@ from __future__ import annotations
 
 from aef.kernel import END, Context, Edge, Graph, Node, Route, Services, SideEffect
 from aef.providers.base import CompletionRequest, ProviderMessage
-from aef.reasoning.nodes import make_consolidate_node, make_reflect_node, make_retrieve_node
+from aef.reasoning.nodes import (
+    make_consolidate_node,
+    make_reflect_node,
+    make_retrieve_node,
+    render_retrieved_context,
+)
 from aef.state import AEFState, Plan, Provenance, StateDelta
 
 DEFAULT_MAX_WORDS = 40
@@ -43,9 +57,18 @@ def _terms(state: AEFState) -> list[str]:
     return [str(t) for t in raw] if isinstance(raw, list) else []
 
 
-def draft_prompt(text: str, max_words: int, must_mention: list[str]) -> str:
+def draft_prompt(text: str, max_words: int, must_mention: list[str], lessons: str = "") -> str:
     """The user turn. A function rather than an f-string in the node so the
-    prompt is one place a proposer (or a planted regression) can change."""
+    prompt is one place a proposer (or a planted regression) can change.
+
+    `lessons` is the block `render_retrieved_context` built from whatever the
+    retrieve node put on state, and it defaults to `""` for a reason the
+    cassettes depend on: **with no lessons this returns exactly the bytes it
+    returned before retrieval was wired in** (ADR 0155). Every recording made
+    under the pre-retrieval prompt therefore still hits, and a scenario run
+    with an empty store is unchanged. `tests/agents/test_summary_prompt.py`
+    pins that with a golden.
+    """
     lines = [
         f"Summarise the passage below in at most {max_words} words.",
     ]
@@ -58,6 +81,13 @@ def draft_prompt(text: str, max_words: int, must_mention: list[str]) -> str:
             + ", ".join(must_mention)
             + "."
         )
+    if lessons:
+        # Before the passage, not after it: the passage is the object of the
+        # task and stays adjacent to nothing but the answer. Prefixed with a
+        # line saying what the block is, so retrieved text is never mistaken
+        # for part of the passage — the lessons are this agent's own recorded
+        # feedback, but they are still text from outside this turn.
+        lines += ["", lessons]
     lines += ["", "Passage:", text]
     return "\n".join(lines)
 
@@ -66,11 +96,18 @@ def draft_node(state: AEFState, ctx: Context, services: Services) -> tuple[State
     text = str(state.working_memory.get("text", ""))
     max_words = int(state.working_memory.get("max_words", DEFAULT_MAX_WORDS))
     must_mention = _terms(state)
+    # What the retrieve node put on state, if anything. Read here rather than
+    # in `build_graph` because a graph assembled without a retrieve node
+    # simply finds the list empty and renders "" — the arms of ADR 0155's A/B
+    # differ by wiring, not by a branch in this node.
+    lessons = render_retrieved_context(state)
 
     request = CompletionRequest(
         messages=(
             ProviderMessage(role="system", content=SYSTEM_PROMPT),
-            ProviderMessage(role="user", content=draft_prompt(text, max_words, must_mention)),
+            ProviderMessage(
+                role="user", content=draft_prompt(text, max_words, must_mention, lessons)
+            ),
         ),
         # Empty: the provider's configured default answers. The cassette key
         # includes this string, so a recording made under one default replays

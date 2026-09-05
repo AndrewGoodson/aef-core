@@ -403,3 +403,54 @@ def test_json_pointer_follows_rfc_6901_including_the_escapes(
 def test_a_pointer_that_is_not_a_pointer_is_refused() -> None:
     with pytest.raises(ModelProviderError, match="must start with"):
         resolve_pointer({"a": 1}, "a")
+
+
+# ---------------------------------------------------------------------------
+# Isolation: asserted by the owner, channel derived here (ADR 0169, F4)
+# ---------------------------------------------------------------------------
+def test_an_undeclared_command_provider_claims_no_containment() -> None:
+    """F4: `impl: command` is how ADR 0154 says every future harness is wired,
+    and `aef migrate` was stamping "the harness adapters send `--tools ''`
+    with `--max-turns 1`" into every generated module as a fact about it.
+    This provider sends whatever the template says and nothing else."""
+    provider = CommandProvider(argv=["cli", "-p", "{prompt}"])
+    assert provider.asserted_isolation == frozenset()
+    # The channel is still derived: no `{system}` slot means the persona is
+    # concatenated into the user turn.
+    assert provider.isolation == frozenset({"user_turn_persona"})
+
+
+def test_the_owners_assertion_is_carried_through_unverified() -> None:
+    provider = CommandProvider(
+        argv=["cli", "--tools", "", "{system}", "-p", "{prompt}"],
+        system_argv=["--system-prompt", "{system}"],
+        isolation=["no_tools", "single_turn"],
+    )
+    assert provider.asserted_isolation == frozenset({"no_tools", "single_turn"})
+    assert provider.isolation == frozenset({"no_tools", "single_turn", "system_role"})
+
+
+def test_the_flags_in_the_template_are_never_read_as_evidence() -> None:
+    """`--tools ""` disables every tool on `claude` and disables nothing on
+    `grok` — measured (ADR 0169). Inferring semantics from an unknown CLI's
+    flag spelling would be a guess dressed as evidence, so this class does
+    not do it: the same argv with no `isolation:` claims nothing."""
+    provider = CommandProvider(
+        argv=["cli", "--tools", "", "--max-turns", "1", "-p", "{prompt}"],
+    )
+    assert "no_tools" not in provider.isolation
+    assert "single_turn" not in provider.isolation
+
+
+def test_the_channel_is_not_the_owners_to_assert() -> None:
+    with pytest.raises(ValueError, match="not the owner's to assert"):
+        CommandProvider(argv=["cli", "-p", "{prompt}"], isolation=["system_role"])
+    with pytest.raises(ValueError, match="unknown isolation"):
+        CommandProvider(argv=["cli", "-p", "{prompt}"], isolation=["no_toolz"])
+
+
+def test_the_persona_channel_follows_the_slot_through_stdin_too() -> None:
+    """`stdin: true` is the same guarantee by a different door, and the same
+    concatenation: the system text still ends up in the user's payload."""
+    provider = CommandProvider(argv=["cli", "--stdin"], stdin=True)
+    assert provider.isolation == frozenset({"user_turn_persona"})
