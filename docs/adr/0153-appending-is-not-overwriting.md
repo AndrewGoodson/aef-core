@@ -418,6 +418,45 @@ model calls made                       0
   visibly, which is the right direction, but it is a cron job that fails every
   night until someone edits three lines.
 
+## Erratum (ADR 0172, 2026-09-04) — two claims above are wrong
+
+Both were found by running things this ADR did not run.
+
+**1. "Every pre-existing byte survives verbatim" held for LF only.** That
+sentence is the whole argument of D2, and the Evidence section's
+`original bytes are a prefix of the result: True` and
+`git diff --stat` → `41 insertions(+)` were measured on LF files. Every
+byte-preservation test above used an LF fixture. `Path.read_text()` translates
+`\r\n` to `\n`, `apply_block` was byte-exact on the *translated* text, and
+`Path.write_text()` wrote it back with `os.linesep` — so on a CRLF `AGENTS.md`
+the same code path rewrote all five of the adopter's lines
+(`41 insertions(+), 5 deletions(-)`, every original line a `-`) while the CLI
+printed `your bytes outside it are unchanged`. On Windows the mirror applies to
+every file this scaffold *writes*. ADR 0172 reads and writes bytes, renders
+only the added bytes in the file's own line ending, and enforces the claim with
+an assertion (`_verify_preserved`) that refuses the write rather than a
+sentence in a document.
+
+**2. "The job fails visibly" was false on a prompt-file repo.** The
+Consequences section says a repo that commits the generated workflow unedited
+"runs a cycle against `agents.migrated.graph`, which may not exist — the job
+fails visibly, which is the right direction". On a prompt-file repo — the shape
+every repo in the survey has — that module *always* exists, because `aef
+migrate` writes the placeholder whenever it finds no wrappable call site. Its
+`build_graph()` raises, `main()`'s catch-all returns 1 = `EXIT_REJECTED`, and
+D3's own rule (`exit 1 does not fail the job; exit 2 does`) reads that as a
+healthy rejection. Measured: `EXIT=1`, job green, nothing proposed, and nothing
+in `cycles.jsonl` for ADR 0165's staleness warning to count. ADR 0172 adds a
+guard step that imports the module and calls `build_graph()` before the cycle,
+and fails the job by name when it cannot.
+
+**Under-stated rather than wrong:** D2's three refusal shapes are described as
+covering "markers adopt cannot resolve". They cover the three *unbalanced*
+shapes. A **balanced** pair adopt did not author — a `CLAUDE.md` quoting the
+markers this kit teaches — was neither covered nor refused, and it was the only
+one of the four that destroyed anything. ADR 0172's marker signature is the
+fix.
+
 ## Confidence
 
 **High on R2 and its fix.** The gap and the repair were both measured on a

@@ -2960,3 +2960,127 @@ stays off, third measurement running.
 
 **Green bar:** 2016 passed / 3 skipped (plus 17 new), `mypy aef examples`
 clean, `ruff check` and `ruff format --check` clean.
+
+## Fix wave H1 — the bytes, the marker, and the nightly green tick (ADR 0172)
+
+Five findings of the second seam hunt, all in `aef adopt` and the workflow it
+renders. Four reproduced by RUNNING a command before anything was changed; the
+fifth is a property of a string in YAML for a scheduler this branch cannot run,
+and is labelled that way rather than dressed up as a measurement.
+
+**R1 — ADR 0153's whole argument held for LF only.** That ADR's justification
+for appending inside markers is one sentence: *every pre-existing byte survives
+verbatim*. `Path.read_text()` translates `\r\n` to `\n`; `apply_block` was
+byte-exact on the TRANSLATED text; `Path.write_text()` wrote it back with
+`os.linesep`. On a CRLF `AGENTS.md`:
+
+```
+$ aef adopt --dir r1
+appended aef block to .../r1/AGENTS.md (your bytes outside it are unchanged)
+$ git -C r1 diff --stat -- AGENTS.md
+ 1 file changed, 41 insertions(+), 5 deletions(-)
+-# House rules^M
+-Our agents read this file.^M          # every original line, as a deletion
+```
+
+Five deletions and a report saying nothing outside the block moved. The mirror
+is on Windows, where `write_text` would make every file this scaffold *writes*
+CRLF while its own tests compare against LF. Fixed by reading and writing
+bytes, rendering only the ADDED bytes in the file's dominant line ending, and
+pasting the outside slices back verbatim — so a **mixed** file keeps every line
+exactly as its author left it. The claim is now executable:
+`_verify_preserved(prefix, suffix, result)` runs before every write and the
+write is refused if it fails. After: `36 insertions(+)`, zero deletions,
+original bytes at offset 0.
+
+**R2 — a balanced marker pair in the adopter's own prose made adopt delete the
+text between it.** `apply_block` took the first `<!-- aef:begin -->` and the
+next `<!-- aef:end -->` anywhere in the file. This kit teaches those exact
+strings in four generated documents, so an adopter quoting them is the ordinary
+case. A `CLAUDE.md` quoting both with two house rules between them:
+
+```
+$ grep -c "RULE 7" r2/CLAUDE.md     # before: 1
+$ aef adopt --dir r2
+appended aef block to .../r2/CLAUDE.md (your bytes outside it are unchanged)
+$ grep -c "RULE 7" r2/CLAUDE.md     # after: 0
+```
+
+ADR 0153's three refusals cover the *unbalanced* shapes. The balanced pair
+adopt did not author was the missing fourth, and the only destructive one. The
+begin marker now carries a signature — `<!-- aef:begin sha256=1a2b3c4d5e6f7081 -->`,
+16 hex over the block body — and **only a signed pair is adopt's**; every other
+`aef:begin`/`aef:end` is inert prose. A pre-signature block is upgraded ONCE
+with a printed checklist notice, recognised only when its first body line is
+one adopt itself emits: treating it as prose would leave the stale block and
+append a second, and two contradicting copies of the contract in the file the
+repo's agents read is the worse failure.
+
+**R3 — the rendered nightly workflow read every exception as a healthy
+rejection.** `aef migrate` writes the placeholder `agents/migrated/graph.py`
+whenever it finds no wrappable call site — every prompt-file repo, which is
+every repo in the survey — and its `build_graph()` raises. The workflow's
+`AEF_MODULE` defaulted to it, so the module the job names exists and cannot
+build:
+
+```
+$ aef loop cycle ... --module agents.migrated.graph ...
+error: aef migrate found no wrappable call site in this repo.
+EXIT=1
+```
+
+1 is `EXIT_REJECTED`; the step fails only on `status >= 2`. Green job, nothing
+proposed, and nothing in `cycles.jsonl` for ADR 0165's staleness warning to
+count. **ADR 0153's "the job fails visibly" was false**, and both errata are
+appended there. Fixed twice over: the workflow names the first migrated
+prompt-agent module (derived from migrate's own discovery and sanitiser, never
+the placeholder), and a guard step before the cycle imports the module, calls
+`build_graph()`, and fails the job with the actual exception in
+`$GITHUB_STEP_SUMMARY` — not migrate's call-site sentence, which explains why
+the placeholder exists and not why tonight failed. The guard was extracted from
+the rendered YAML and EXECUTED in three states: missing module (exit 1),
+placeholder named by name (exit 1), real graph after `aef migrate` (exit 0).
+The exit-code test reads `aef/harness/loop.py`'s constants at test time, so it
+is sharp whether or not G1a's distinct `EXIT_ERROR` has landed.
+
+**R4 — adopt counted prompt agents flat while migrate recurses.** ADR 0152
+measured `rglob` against the Claude Code CLI. `detect_prompt_surface` globbed
+one level. One nested persona:
+
+```
+detected framework: prompt_files (7 agents, 5 skills)     # and in the checklist,
+                                                          # and in the appended block
+$ aef migrate --dir r4 && ls r4/agents/migrated/ | wc -l   # 8 graphs + placeholder
+```
+
+Adopt imports `discover_prompt_agents`/`discover_skills` from migrate now, with
+its own-output exclusion applied on top. One discovery, one number.
+
+**S1 (reasoned, NOT executed) — the nightly cycle's state was frozen after run
+1.** `actions/cache` skips its post-job save on an exact key hit, and
+`key: loop-state-${{ github.repository }}` contains nothing that varies. Both
+rendered workflows now use a run-scoped key with a prefix `restore-keys`.
+
+Also: `render_aef_yaml` finally mentions `shadow.containment` — the mode
+defaults to `auto`, and `auto` *refuses* rather than downgrading, which is a
+default an adopter should not have to meet as an error message.
+
+**Reported, NOT fixed** (neither file is this worker's):
+
+1. `discover_skills` counts the `SKILL.md` that `aef adopt` itself writes — 5
+   from adopt against 6 from migrate on the same tree. `aef/cli/migrate.py`;
+   the exclusion adopt applies should be mirrored there.
+2. This repo's own `.github/workflows/loop-monitor.yml` **and**
+   `loop-gate.yml` carry the same constant `loop-state-${{ github.repository }}`
+   cache key S1 fixes in the rendered ones. G1a owns those files.
+
+**Mutations:** 11 planted, 11 caught, every restore sha256-verified and every
+patch asserting its anchor first. M10 (the cycle summary loses its exit-code
+meanings) **survived the first pass**, because the test asserted every arm
+except exit 0 — the arm the nightly job is actually green on. The test now
+parses all four arms out of the rendered shell `case` and requires each to be
+non-empty and correct.
+
+**Green bar:** 2291 passed / 5 skipped (2269 → 2296 collected, +27),
+`mypy aef examples` clean over 132 files, `ruff check .` clean,
+`ruff format --check aef tests examples` clean. Zero live model calls.
