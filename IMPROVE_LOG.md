@@ -2888,3 +2888,75 @@ scores. No generated document lists the check ops — `grep "contains"` across
 nothing — so nothing under `adopt` needed an edit, recorded so M2 does not go
 looking. ADR 0156's third defect (`next(iter(modelUsage))`) is ADR 0154's and
 is not touched here.
+
+---
+
+## S1 / I12 — the ACE four-arm on the task metric (ADR 0155)
+
+**Model: `claude-opus-5[1m]`** — the session default, `--model` omitted from
+the argv; Fable's quota is exhausted and the owner authorised Opus, so all
+four arms were re-measured and no earlier Fable number is reused.
+
+**Expected, stated before running** (`TO_90_LOOP.md` §I12): four arms over
+the summary validation split, dim 2 moves 17 → 19 only if (c) > (b) by more
+than the spread. Falsifications fixed in advance: (c) ≤ (b) demotes ADR
+0110's coverage result to a proxy; (d) ≤ (c) keeps LLM reflection off; a gain
+smaller than the spread is not a gain.
+
+**Reproduced first, zero calls.** The four arms were the same experiment four
+times: `draft_node` built its prompt from `working_memory` and never read
+`state.retrieved_context`, so arms (a), (b), (c) and (d) produced **one
+identical SHA-256 over every rendered prompt** while chunks retrieved climbed
+0→5. ADR 0118's "the retriever finally has a caller" was true and
+insufficient — a caller that writes state nobody reads. Erratum appended to
+0118.
+
+**Changed.** `render_retrieved_context(state, *, max_items=5)` in
+`aef/reasoning/nodes.py` — generic, state-only, no clock, no randomness, safe
+in a `deterministic=True` node; `draft_node` appends it. With nothing
+retrieved the prompt is **byte-identical** to before, pinned by a literal
+golden, so every committed cassette still hits and `aef loop score` still
+makes no live call.
+
+**Mutations, both detected.** `lessons = ""` in `draft_node` → the regression
+test fails. `render_retrieved_context` returning the header instead of `""`
+→ the golden and three renderer tests fail. Reverted, shasum-verified.
+
+**Measured**, 84 live calls, `--repeats 2`, one arm-repeat per foreground
+invocation, results written as they landed (`docs/research/i12/`):
+
+| arm | mean | r0 | r1 | spread | calls | knowledge entries |
+|---|---|---|---|---|---|---|
+| (a) no retrieve | 0.8541 | 0.8333 | 0.8750 | 0.0417 | 12 | 0 |
+| (b) raw records | 0.8541 | 0.8333 | 0.8750 | 0.0417 | 12 | 0 |
+| (c) + knowledge | 0.8334 | 0.7917 | 0.8750 | 0.0833 | 12 | 0 |
+| (d) + LLM reflection | 0.9166 | 0.8750 | 0.9583 | 0.0833 | 48 | 0 |
+
+Largest within-arm spread **0.0833**. (b) − (a) = +0.0000. (c) − (b) =
+−0.0207. (d) − (c) = +0.0832, under the spread.
+
+**Verdict: dim 2 does not move. 17/20 stands, delta 0.** The (c) ≤ (b)
+falsification fired. The sharper finding is that **no knowledge entry formed
+in any arm**: six distinct objectives, no `state.errors`, so every record is
+a `success` with a unique signature and the consolidator's two-distinct-runs
+rule is never met — (c) and (b) are the same arm. ADR 0110's coverage result
+is demoted to a proxy that has *not been shown* to predict task outcome; it
+is not disproved, because this corpus cannot test it. `reflection.impl: llm`
+stays off, third measurement running.
+
+**Two defects found, reported, NOT fixed** (neither file is this worker's):
+
+1. The corpus word-cap check `^(?:\s*\S+){1,35}\s*$` **does not terminate in
+   600 s on a 36-word summary** (35 words: 0.0000 s). The check that catches
+   over-length summaries hangs on over-length summaries. Invisible under
+   cassettes, where every recorded summary is within the cap; it fires only
+   live. This is the likely true cause of ADR 0123's "three attempts past a
+   ten-minute wall", which was read as a throttle. Blocks any live scoring on
+   this corpus — S2's noise floor above all. `corpus/**/sum-*.json` +
+   `aef/harness/checks.py`.
+2. `ClaudeCodeProvider` reads the answering model as the first `modelUsage`
+   key, which is the CLI's own auxiliary haiku call, so `Provenance.model` in
+   every recorded run names the wrong model. `aef/providers/harness_provider.py`.
+
+**Green bar:** 2016 passed / 3 skipped (plus 17 new), `mypy aef examples`
+clean, `ruff check` and `ruff format --check` clean.

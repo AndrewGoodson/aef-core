@@ -1,0 +1,50 @@
+{
+  "a": {
+    "n_prompts": 6,
+    "prompt_sha256": "17530200d8e8f45407f825d667ff43cc82a1c8af1950bfaf1d9b70c23cdc7ac0",
+    "retrieved_chunks_per_scenario": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "b": {
+    "n_prompts": 6,
+    "prompt_sha256": "17530200d8e8f45407f825d667ff43cc82a1c8af1950bfaf1d9b70c23cdc7ac0",
+    "retrieved_chunks_per_scenario": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  "c": {
+    "n_prompts": 6,
+    "prompt_sha256": "17530200d8e8f45407f825d667ff43cc82a1c8af1950bfaf1d9b70c23cdc7ac0",
+    "retrieved_chunks_per_scenario": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  "d": {
+    "n_prompts": 6,
+    "prompt_sha256": "17530200d8e8f45407f825d667ff43cc82a1c8af1950bfaf1d9b70c23cdc7ac0",
+    "retrieved_chunks_per_scenario": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  }
+}

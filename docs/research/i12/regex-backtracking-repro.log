@@ -1,0 +1,9 @@
+pattern: ^(?:\s*\S+){1,35}\s*$
+
+ words   matches       seconds
+    30      True        0.0000
+    31      True        0.0000
+    32      True        0.0000
+    33      True        0.0000
+    34      True        0.0000
+    35      True        0.0000
