@@ -134,6 +134,28 @@ found by running `run_graph_module` rather than by reading it.
 Both are regression-tested in `tests/cli/test_run.py`. See ADR 0125 for the
 reproductions and the numbers.
 
+## Erratum (2026-09-05, ADR 0180): the tally had no third outcome
+
+**Decision 3 named two outcomes and there are three.** "A run that had the
+lesson in context and did *not* reproduce that failure is helpful" has no room
+for *had it in context, resolved that failure, and failed something else* — so
+a run that the lesson demonstrably made worse was counted in the good column.
+
+Not a corner case. ADR 0162 rig B built the corpus this ADR's decision 6 said
+was missing, and the single run in it with that shape —
+`sum-35-priory-gatehouse`, where a word-cap lesson shortened the summary from
+30 words to 28 and the shortened text stopped matching a content regex the
+baseline passed — was scored `helpful`. Over the rig's ten runs the shipped
+tally read `helpful=7 harmful=3`, with the one genuinely harmful run inside the
+7, and ADR 0162 refused to rank on a signal that moves the wrong way as harm
+rises.
+
+`_tally` now splits three ways and `KnowledgeEntry` carries
+`harmful_elsewhere` beside `helpful` and `harmful`. `helpful` is narrower than
+this ADR defined it: it requires that the run failed **nothing**. Decision 6
+is untouched and reaffirmed — the tally is still surfaced and still not a
+retrieval multiplier. See ADR 0180.
+
 ## Erratum (2026-09-04, ADR 0155): a caller that writes state nobody reads
 
 **"The retriever finally has a caller" was true and insufficient.**
