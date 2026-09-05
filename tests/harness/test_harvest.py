@@ -660,3 +660,42 @@ def test_a_run_of_another_graph_is_not_re_executed_against_this_one(tmp_path: Pa
     assert outcome.rejected_nondeterministic == ()
     assert "recorded from another graph, not re-executed here" in " ".join(outcome.lines)
     assert {s.graph_id for s in load_corpus(tmp_path / "corpus").scenarios} == {"g"}
+
+
+def test_the_harness_run_id_is_held_out_of_the_scan_wherever_it_appears() -> None:
+    """ADR 0192's F-N7-4. The run id is not only the scenario's `id` and its
+    `initial_state.run_id`: it is threaded through every trace record's
+    `input_state.run_id` and its `context.run_id`, `trace_id` and
+    `idempotency_key`. ADR 0197 gave the policy a `uuid` pattern, so the
+    output scan rejected every recorded run for carrying its own identifier.
+    Held out by VALUE — a path list would grow silently the next time a field
+    carries it."""
+    from aef.harness.harvest import _blank_values
+    from aef.harness.redaction import RedactionPolicy
+
+    rid = "512e9cc3-23e8-410d-8b3a-358c55c106b8"
+    payload = {
+        "id": rid,
+        "initial_state": {"run_id": rid},
+        "trace": [
+            {
+                "input_state": {"run_id": rid},
+                "context": {"run_id": rid, "trace_id": rid, "idempotency_key": rid},
+            }
+        ],
+    }
+    assert RedactionPolicy().find(payload) == ("uuid",), "the defect, before the hold-out"
+    assert not RedactionPolicy().find(_blank_values(payload, {rid}))
+
+
+def test_a_uuid_that_is_not_the_harness_own_still_rejects() -> None:
+    """The other side: only THIS scenario's identifiers are held out."""
+    from aef.harness.harvest import _blank_values
+    from aef.harness.redaction import RedactionPolicy
+
+    mine = "512e9cc3-23e8-410d-8b3a-358c55c106b8"
+    theirs = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
+    payload = {"id": mine, "trace": [{"context": {"run_id": mine}, "note": theirs}]}
+    held = _blank_values(payload, {mine})
+    assert RedactionPolicy().find(held) == ("uuid",), "a foreign UUID must still be seen"
+    assert mine not in str(held)

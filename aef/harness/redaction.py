@@ -168,7 +168,21 @@ class RedactionPolicy:
             if key in self.drop_working_memory_keys:
                 del wm[key]
                 dropped += 1
+        # The harness's OWN identifiers are held out by exact field path, the
+        # same rule `harvest._scannable` applies to the output scan and for the
+        # same reason: `run_id` is a `uuid4` this process assigned, it carries
+        # no tenant information, and since ADR 0197 gave the policy a `uuid`
+        # pattern it matches every time. Redacting it rewrote the key the
+        # grounding chain joins on — a harvested scenario could no longer be
+        # traced to the failure record that justified a candidate (ADR 0192's
+        # F-N7-4, reproduced: `run_id` in, `[REDACTED:uuid]` out).
+        #
+        # By path, never by pattern: a tenant-typed UUID anywhere else in the
+        # state is still redacted, which `test_a_tenant_uuid_is_still_redacted`
+        # pins from the other side.
+        held_out = {k: payload.pop(k) for k in ("run_id", "agent_id") if k in payload}
         redacted, count = self.redact_value(payload)
+        redacted.update(held_out)
         return AEFState.model_validate(redacted), count + dropped
 
     def find(self, value: Any) -> tuple[str, ...]:

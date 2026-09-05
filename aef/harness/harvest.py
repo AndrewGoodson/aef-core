@@ -434,6 +434,22 @@ _HARNESS_IDENTIFIERS: tuple[tuple[str, ...], ...] = (
 )
 
 
+def _blank_values(node: Any, values: set[str]) -> Any:
+    """`node` with every occurrence of a string in `values` replaced by a
+    fixed placeholder. Used to hold the harness's own identifiers out of the
+    output scan by value rather than by an ever-growing list of field paths
+    (ADR 0192's F-N7-4)."""
+    if isinstance(node, dict):
+        return {k: _blank_values(v, values) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_blank_values(v, values) for v in node]
+    if isinstance(node, str):
+        for value in values:
+            node = node.replace(value, "<harness-id>")
+        return node
+    return node
+
+
 def _scannable(scenario: Scenario) -> dict[str, Any]:
     """The scenario payload the output scan reads: everything except the
     identifiers the harness itself generated.
@@ -462,6 +478,19 @@ def _scannable(scenario: Scenario) -> dict[str, Any]:
     Everything a model was actually asked and answered is still scanned.
     """
     payload = scenario.to_payload()
+    # The scenario's own run id is not only at the two paths below: the harness
+    # threads it through every trace record's `input_state.run_id`, and its
+    # `context.run_id`, `context.trace_id` and `context.idempotency_key`
+    # (ADR 0192's F-N7-4, found on the peptideindex pilot when the corpus could
+    # not be rebuilt). A path list that must name each of those is a list that
+    # grows silently the next time a field carries the id, so the hold-out is
+    # by VALUE: the exact identifiers THIS harness assigned to THIS scenario,
+    # wherever they appear. A UUID from anywhere else — a tenant's, a tool's,
+    # one typed into an objective — is a different string and still rejects the
+    # run, which is what ADR 0197's pattern is for.
+    harness_ids = {i for i in (scenario.id, scenario.initial_state.run_id) if i}
+    if harness_ids:
+        payload = _blank_values(payload, harness_ids)
     for path in _HARNESS_IDENTIFIERS:
         node: Any = payload
         for key in path[:-1]:
