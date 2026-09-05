@@ -453,9 +453,14 @@ class ClaudeCodeProvider(ModelProvider):
 
 class CodexProvider(ModelProvider):
     """`codex exec` under the Codex login. Built from the CLI's documented
-    flags and NOT reproduced: the Codex on the authoring box fails before
-    reading a prompt (it cannot parse the server's model catalog). Treat the
-    output parsing as a hypothesis until a run confirms it (ADR 0112).
+    flags and **reproduced against the real binary** — ADR 0112 shipped this
+    parsing as an avowed hypothesis because the Codex on the authoring box
+    could not parse its own server's model catalogue; ADR 0131 upgraded the
+    CLI and every derived field matched on the first live run, and ADR 0199
+    added the end-to-end half (a `PromptAgentNode` through this provider, over
+    the binary, recording `user_turn_persona`). Both live tests are opt-in
+    twice over and are the ones `ci.yml`'s `live-harness` job selects wherever
+    a CLI and a credential exist.
 
     `codex exec` has no system-prompt flag; system text is prepended to the
     prompt. The last assistant message is read from `--output-last-message`
@@ -483,8 +488,13 @@ class CodexProvider(ModelProvider):
         and was stamped into every generated module as if it described this
         one too.
 
-        Unchanged and still true: this adapter has never been run (ADR 0112).
-        The declaration is what the argv says, and the argv is a hypothesis.
+        No longer a hypothesis: `tests/providers/test_codex_live.py` runs
+        this adapter against the installed CLI, and since ADR 0199 it asserts
+        the consequence rather than only the parsing — a `PromptAgentNode`
+        driven through this provider records `user_turn_persona` and the
+        `prompt_agent.persona_in_user_turn` warning, and records neither
+        `no_tools` nor `single_turn`, which is the difference from
+        `ClaudeCodeProvider` stated as an assertion instead of a comment.
         """
         argv = self.argv(PROBE_REQUEST, Path("aef-isolation-probe-last-message.txt"))
         found: set[str] = set()

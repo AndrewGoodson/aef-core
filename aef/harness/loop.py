@@ -1967,6 +1967,75 @@ def _parent_weight(member: ArchiveMember) -> float:
     return fitness / (1.0 + member.children)
 
 
+@dataclass(frozen=True)
+class LineageEntry:
+    """One persisted member as an owner reads it (ADR 0198).
+
+    J0b's second deduction on dimension 6 was that the archive had *"no
+    owner-facing `aef loop lineage list` — only a counts line"*. A store whose
+    only surface is `archive: 9 member(s), 0 distinct kept tree(s)` cannot be
+    used to answer the question the store exists for — *which* candidate came
+    from which, and which of them the next turn may build on.
+
+    `sampleable` is not re-derived here. It is `_parent_weight` — the function
+    the sampler itself calls — plus the ref check `_resume_lineage` applies,
+    because a listing that computed eligibility its own way would eventually
+    disagree with the sampler and the listing would be the lie.
+    """
+
+    record: archive.LineageRecord
+    weight: float
+    ref_resolves: bool
+
+    @property
+    def sampleable(self) -> bool:
+        return self.weight > 0.0 and self.ref_resolves
+
+    @property
+    def why_not(self) -> str:
+        """Empty when it is sampleable; otherwise the reason, in the sampler's
+        own terms rather than a restatement of the flag."""
+        if self.sampleable:
+            return ""
+        if not self.ref_resolves:
+            return "ref no longer resolves — history only"
+        return "rejected before G3 scored it — recorded, never a parent"
+
+
+def read_lineage_entries(
+    lineage_dir: Path, graph_id: str, *, repo: GitRepo | None = None
+) -> tuple[LineageEntry, ...]:
+    """Every persisted member, folded, in the order the refs first appear.
+
+    `repo` is optional so a listing still works against a state directory whose
+    repository is elsewhere; without it every ref is reported as resolving,
+    which is the honest default — the alternative is claiming a member is dead
+    because nothing was available to look.
+    """
+    entries: list[LineageEntry] = []
+    for record in archive.fold_lineage(archive.read_lineage(lineage_dir, graph_id)).values():
+        member = ArchiveMember(
+            ref=record.ref,
+            score=record.score,
+            parent_ref=record.parent_ref,
+            children=record.children,
+            tree=record.tree,
+            kept=record.kept,
+            disposition=record.disposition,
+            resumed=True,
+        )
+        resolves = True
+        if repo is not None:
+            try:
+                repo.rev_parse(record.ref)
+            except Exception:  # noqa: BLE001 - "unknown revision" is the only thing we act on
+                resolves = False
+        entries.append(
+            LineageEntry(record=record, weight=_parent_weight(member), ref_resolves=resolves)
+        )
+    return tuple(entries)
+
+
 def _choose_parent(archive: list[ArchiveMember], rng: random.Random) -> ArchiveMember:
     weights = [_parent_weight(m) for m in archive]
     if not any(weights):  # pragma: no cover - the root always weighs > 0
@@ -2003,16 +2072,17 @@ def _resume_lineage(
     records = archive.read_lineage(config.paths.lineage_dir, config.graph_id)
     rejected = {r.tree for r in records if not r.kept}
     kept_trees = {r.tree for r in records if r.kept}
-    # Fold by ref, LAST record wins. `run_loop` appends a closing record for
-    # every member it proposed from, carrying the children count the novelty
-    # term needs; without the fold, resuming would read the count as it stood
-    # at the moment the member was created — always zero — and the term that
-    # pushes the sampler away from over-explored parents would reset itself
-    # every invocation, which is the knob quietly not working rather than the
-    # knob being off.
-    folded: dict[str, archive.LineageRecord] = {}
-    for record in records:
-        folded[record.ref] = record
+    # Fold by ref through `archive.fold_lineage` — THE fold, shared with
+    # `aef loop lineage list`, because two of them disagreed (ADR 0198).
+    # `run_loop` appends a closing record for every member it proposed from,
+    # carrying the children count the novelty term needs; without the fold,
+    # resuming would read the count as it stood at the moment the member was
+    # created — always zero — and the term that pushes the sampler away from
+    # over-explored parents would reset itself every invocation, which is the
+    # knob quietly not working rather than the knob being off. What the fold
+    # must NOT do is let that closing record overwrite the immutable facts:
+    # see `fold_lineage` for the resumed root that erased its own parent.
+    folded = archive.fold_lineage(records)
     added = 0
     gone = 0
     seen = {root.ref}

@@ -1,0 +1,13 @@
+lineage for 'demo_agent' — 9 member(s) — /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/n8/rig/llm-sampling/state/lineage/demo_agent.jsonl
+  ref           parent          score  verdict    kids  sampleable
+  ed8f6d96059b  827d4d50a1af   0.8182  escalate      2  yes
+  93bde3892d55  ed8f6d96059b   0.8182  reject        1  yes
+  5c0ef2ff254a  93bde3892d55   0.8182  reject        2  yes
+  21465feb3b05  ed8f6d96059b   0.8182  reject        1  yes
+  827d4d50a1af  -              0.4545  kept          1  yes
+  bd5fd25ebb74  21465feb3b05   0.8182  reject        1  yes
+  61929a9259d8  bd5fd25ebb74   0.8182  reject        0  yes
+  df2556411a91  5c0ef2ff254a   0.8182  reject        0  yes
+  ee6f978a473a  5c0ef2ff254a   0.8182  reject        0  yes
+  2 kept, 7 rejected; 9 sampleable as a parent
+  no kept member descends from a rejected one

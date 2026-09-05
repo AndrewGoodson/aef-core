@@ -41,3 +41,90 @@ jobs:
 
       - name: Full test suite
         run: pytest -q
+
+  # The two coding-agent backends this repo's "works with any coding agent"
+  # claim rests on (ADR 0040/0112/0131) are the only things `pytest -q` cannot
+  # judge: their tests are skipped unless the CLI is installed AND
+  # AEF_LIVE_HARNESS is set, so on a hosted runner they are three skips and the
+  # path is exercised NOWHERE. The blind reviewer scored dimension 8 down for
+  # exactly that (ADR 0188). This job exercises them wherever they CAN be — an
+  # owner points the AEF_LIVE_RUNNER variable at a self-hosted machine that is
+  # logged in — and says plainly why it did not, otherwise.
+  #
+  # It never fails the build for a missing CLI or a missing credential: those
+  # are facts about the runner, not about the code. It DOES fail when a CLI is
+  # present and its adapter is broken, which is the whole point (ADR 0199).
+  live-harness:
+    runs-on: ${{ vars.AEF_LIVE_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Detection is deliberately two questions, not one. "Is the CLI on PATH"
+      # is cheap and certain; "is it logged in" is not knowable without
+      # spending a call, so this checks the two forms a credential takes — an
+      # API key handed in from repository secrets, or the CLI's own auth file
+      # written by its login. A guess at a third form would be the shape ADR
+      # 0150 is about: a check that passes on the wrong thing.
+      - name: Which harness backends can answer here
+        id: detect
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -u
+          targets=""
+          if command -v codex >/dev/null 2>&1; then
+            if [ -n "${OPENAI_API_KEY:-}" ] || [ -f "$HOME/.codex/auth.json" ]; then
+              targets="$targets tests/providers/test_codex_live.py"
+              echo "codex: CLI $(codex --version 2>/dev/null || echo '?'), credential present"
+            else
+              echo "codex: CLI present, NO credential (no OPENAI_API_KEY, no ~/.codex/auth.json)"
+            fi
+          else
+            echo "codex: not installed on this runner"
+          fi
+          if command -v claude >/dev/null 2>&1; then
+            if [ -n "${ANTHROPIC_API_KEY:-}" ] || [ -f "$HOME/.claude/.credentials.json" ]; then
+              targets="$targets tests/providers/test_harness_live.py"
+              echo "claude: CLI present, credential present"
+            else
+              echo "claude: CLI present, NO credential"
+            fi
+          else
+            echo "claude: not installed on this runner"
+          fi
+          echo "targets=$targets" >> "$GITHUB_STEP_SUMMARY"
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+
+      # The guard is on the TARGET LIST, not on a boolean: a runner with codex
+      # and no claude runs the codex file and nothing else, rather than being
+      # skipped wholesale because one of the two is missing.
+      - name: Live harness tests
+        if: steps.detect.outputs.targets != ''
+        env:
+          AEF_LIVE_HARNESS: "1"
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: pytest -q ${{ steps.detect.outputs.targets }}
+
+      # A skip that prints nothing is indistinguishable from a pass, which is
+      # the failure mode ADR 0188 found in this repo's own nightly job.
+      - name: No backend to exercise
+        if: steps.detect.outputs.targets == ''
+        run: |
+          echo "No harness CLI with a credential on this runner, so no live test ran."
+          echo "This is not a failure: the adapters are exercised where a login exists."
+          echo "To exercise them, set the AEF_LIVE_RUNNER repository variable to a"
+          echo "self-hosted runner label whose machine has 'codex' and/or 'claude'"
+          echo "installed and logged in, or supply OPENAI_API_KEY / ANTHROPIC_API_KEY"
+          echo "as repository secrets."

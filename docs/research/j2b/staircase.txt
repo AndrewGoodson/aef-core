@@ -1,0 +1,8 @@
+RETRY_BUDGET / QUALITY_THRESHOLD -> task metric on the reduced demo corpus
+
+  3 / 3   mean 0.5000   boundary-3=1  easy-1=1  easy-2=1  hard-both-4=0  hard-both-5=0  tripwire-impossible-train=0
+  4 / 3   mean 0.5000   boundary-3=1  easy-1=1  easy-2=1  hard-both-4=0  hard-both-5=0  tripwire-impossible-train=0
+  3 / 4   mean 0.5000   boundary-3=1  easy-1=1  easy-2=1  hard-both-4=0  hard-both-5=0  tripwire-impossible-train=0
+  4 / 4   mean 0.6667   boundary-3=1  easy-1=1  easy-2=1  hard-both-4=1  hard-both-5=0  tripwire-impossible-train=0
+  5 / 5   mean 0.8333   boundary-3=1  easy-1=1  easy-2=1  hard-both-4=1  hard-both-5=1  tripwire-impossible-train=0
+  6 / 6   mean 0.8333   boundary-3=1  easy-1=1  easy-2=1  hard-both-4=1  hard-both-5=1  tripwire-impossible-train=0

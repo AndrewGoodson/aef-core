@@ -50,3 +50,83 @@ def test_codex_answers_through_the_provider() -> None:
     # scan found no `usage` object and quietly reported free.
     assert result.input_tokens > 0
     assert result.output_tokens > 0
+
+
+@needs_codex
+def test_a_prompt_agent_run_through_codex_records_the_persona_channel() -> None:
+    """The containment fact, end to end, against the real CLI (ADR 0199).
+
+    J0b's dimension-8 deduction was that *"the Codex path is never exercised
+    against the real CLI — its only live test is one of the three skips"*. The
+    test above answers that for the adapter's parsing. This one answers it for
+    the thing an adopter's containment story actually turns on.
+
+    `codex exec` has no system-prompt flag, so `CodexProvider` prepends the
+    persona to the USER turn and declares `user_turn_persona` (ADR 0169/0179).
+    `PromptAgentNode` must then record that in
+    `working_memory["<node>__containment"]` with the
+    `prompt_agent.persona_in_user_turn` warning — because on this backend ADR
+    0152's sentence, *the file in Zone A IS the system message*, is FALSE, and
+    a run that does not say so lets an adopter inherit a containment claim
+    that was measured on a different provider.
+
+    Every previous assertion of this was against a `_Declaring` fake whose
+    `isolation` was a hard-coded frozenset. This runs the real graph, with the
+    real provider, over the real binary: the isolation set is derived from the
+    argv the adapter actually builds, the model actually answers, and the
+    containment record is read off the final state.
+    """
+    from aef.kernel import END, Graph
+    from aef.kernel.executor import GraphExecutor
+    from aef.reasoning.prompt_agent import (
+        CONTAINMENT_SUFFIX,
+        CONTAINMENT_WARNING_KEY,
+        PERSONA_IN_USER_TURN,
+        PERSONA_ROLE_USER,
+        PromptAgentDefinition,
+        make_prompt_agent_node,
+    )
+    from aef.services.runtime import agent_services
+    from aef.state import AEFState
+
+    node = make_prompt_agent_node(
+        definition=PromptAgentDefinition(
+            name="one-word-answerer",
+            description="answers in exactly one word",
+            body="You are a terse assistant. Answer with exactly one word and nothing else.",
+        ),
+        node_id="persona",
+        route=END,
+    )
+    graph = Graph(
+        id="codex_live",
+        version="0.1.0",
+        nodes={"persona": node},
+        edges=[],
+        entry_node="persona",
+    )
+    services = agent_services(model_provider=CodexProvider(timeout_s=600))
+    result = GraphExecutor(graph.compile(), services).run(
+        AEFState(
+            agent_id="codex_live",
+            run_id="codex-live",
+            objective="Reply with the single word OK",
+        )
+    )
+
+    assert result.final_state.working_memory["persona"].strip() == "OK"
+    containment = result.final_state.working_memory["persona" + CONTAINMENT_SUFFIX]
+    assert containment["provider"] == "codex"
+    assert "user_turn_persona" in containment["isolation"]
+    assert "read_only_fs" in containment["isolation"]
+    # And NOT the claim `claude_code` earns: `codex exec` is an agentic loop,
+    # this argv sends no `--tools` and no `--max-turns`, and a containment
+    # record that said otherwise would be the ADR 0169 defect restored.
+    assert "no_tools" not in containment["isolation"]
+    assert "single_turn" not in containment["isolation"]
+    assert containment["persona_role"] == PERSONA_ROLE_USER
+    warning = containment[CONTAINMENT_WARNING_KEY]
+    assert warning["type"] == PERSONA_IN_USER_TURN
+    assert "no system channel" in warning["message"]
+    # A property of the provider, never the run's error (ADR 0179, R3).
+    assert result.final_state.errors == []
