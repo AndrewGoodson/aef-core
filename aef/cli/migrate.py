@@ -967,18 +967,38 @@ them.{unhonoured}
 
 WHERE TO LOOK: every run writes the provider's declared isolation set and the
 persona's channel to `state.working_memory["prompt_agent__containment"]`, and
-appends a `prompt_agent.persona_in_user_turn` entry to `state.errors` when the
-persona went out in the user turn. Per-run evidence beats this comment.
+adds a `prompt_agent.persona_in_user_turn` warning under that record's
+`warning` key when the persona went out in the user turn. It is a containment
+FACT about the provider you installed, not an error against the run, so it
+does not zero the task metric and never becomes a bullet in your persona
+(ADR 0179). `aef.reasoning.prompt_agent.containment_warnings(state)` reads
+them back. Per-run evidence beats this comment.
 
-WIRED `prompt_agent -> reflect -> consolidate -> END`. The reflect node is the
-only thing that writes the failure memory the self-rewiring loop's proposer
-reads; route the first node to `END` instead and the loop does not break, it
-goes silent — `aef loop cycle` exits 0 with `no admissible failure memory: no
-candidate this cycle`, every cycle (ADR 0139/0143).
+WIRED `retrieve -> prompt_agent -> reflect -> consolidate -> END`, a cycle
+with both halves:
 
-Running it needs `critic`, `judge`, `memory` and `knowledge` on `Services`;
-`aef.services.runtime.agent_services()` supplies all four, so `aef run
---config`, `aef loop bootstrap` and the gates are unaffected. A hand-built
+  retrieve     asks `Services.retriever` for lessons this agent's earlier runs
+               produced and puts them on `state.retrieved_context`. The prompt
+               agent renders them into the USER turn, after the objective —
+               the persona stays the system message and is never modified at
+               runtime. With nothing retrieved the request is byte-identical
+               to one made with no retrieve node at all.
+  reflect      the only thing that writes the failure memory the self-rewiring
+               loop's proposer reads, and the thing that records WHICH lessons
+               were in context when the run went the way it went. Route the
+               first node to `END` instead and the loop does not break, it
+               goes silent — `aef loop cycle` exits 0 with `no admissible
+               failure memory: no candidate this cycle`, every cycle (ADR
+               0139/0143). Drop the retrieve node and the loop still runs, but
+               `retrieved_signatures` is `[]` on every record forever and
+               every lesson's helpful/harmful tally is a constant 0/0 (ADR
+               0179, R6).
+  consolidate  folds repeated records into `Services.knowledge`, which is what
+               the retrieve node reads on the next run.
+
+Running it needs `retriever`, `critic`, `judge`, `memory` and `knowledge` on
+`Services`; `aef.services.runtime.agent_services()` supplies all five, so `aef
+run --config`, `aef loop bootstrap` and the gates are unaffected. A hand-built
 bare `Services(model_provider=...)` is not.
 
 Regenerate with `aef migrate --dir .`; it never overwrites without --force.
@@ -987,7 +1007,7 @@ Regenerate with `aef migrate --dir .`; it never overwrites without --force.
 from __future__ import annotations
 
 from aef.kernel import END, Edge, Graph
-from aef.reasoning.nodes import make_consolidate_node, make_reflect_node
+from aef.reasoning.nodes import make_consolidate_node, make_reflect_node, make_retrieve_node
 from aef.reasoning.prompt_agent import make_prompt_agent_node
 
 AGENT_NAME = {agent_name_literal}
@@ -1005,6 +1025,10 @@ def build_graph() -> Graph:
         id=GRAPH_ID,
         version="0.1.0",
         nodes={{
+            # Before the work, not after: the lessons have to be in context
+            # when the persona answers, or they are a record of learning
+            # rather than an instance of it (ADR 0118/0179).
+            "retrieve": make_retrieve_node(route="prompt_agent"),
             "prompt_agent": make_prompt_agent_node(
                 agent_file=AGENT_FILE,
                 agent_name=AGENT_NAME,
@@ -1018,10 +1042,11 @@ def build_graph() -> Graph:
             "consolidate": make_consolidate_node(route=END),
         }},
         edges=[
+            Edge(from_node="retrieve", to_node="prompt_agent"),
             Edge(from_node="prompt_agent", to_node="reflect"),
             Edge(from_node="reflect", to_node="consolidate"),
         ],
-        entry_node="prompt_agent",
+        entry_node="retrieve",
     )
 '''
 

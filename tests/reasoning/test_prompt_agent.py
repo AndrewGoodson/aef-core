@@ -17,6 +17,7 @@ comes with it.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -26,12 +27,15 @@ from aef.kernel import END, Edge, Graph, GraphExecutor, Services, SideEffect
 from aef.providers.base import CompletionRequest, CompletionResult, ModelProvider
 from aef.reasoning.nodes import make_consolidate_node, make_reflect_node
 from aef.reasoning.prompt_agent import (
+    PERSONA_IN_USER_TURN,
     PromptAgentError,
+    containment_warnings,
     make_prompt_agent_node,
     parse_agent_file,
     prompt_agent_idempotency_key,
 )
 from aef.reasoning.rule_based_reflection import RuleBasedCritic, RuleBasedJudge
+from aef.services.eval.rule_based import RuleBasedEvaluator
 from aef.services.knowledge.in_memory import InMemoryKnowledgeStore
 from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.state import AEFState
@@ -366,16 +370,25 @@ def test_a_persona_sent_in_the_user_turn_is_warned_about_and_not_refused(
     untrusted-channel text, so the run says so.
 
     Not a refusal: some CLIs genuinely have no system flag, and a node that
-    refused would be unusable on them."""
+    refused would be unusable on them.
+
+    **Deliberately rewritten** (ADR 0179, R3): this used to assert the warning
+    was `delta.errors[0]`, which pinned the behaviour that scored a correct
+    answer 0.0 and pasted the provider's flag set into the persona. The
+    warning is the same warning, in the same words, beside the containment
+    record it belongs to."""
     containment, errors = _run(
         _Declaring("codex", frozenset({"read_only_fs", "user_turn_persona"})), tmp_path
     )
     assert containment["persona_role"] == "user"
-    assert len(errors) == 1
-    assert errors[0]["type"] == "prompt_agent.persona_in_user_turn"
-    assert errors[0]["node_id"] == "prompt_agent"
-    assert errors[0]["provider"] == "codex"
-    assert "USER turn" in str(errors[0]["message"])
+    warning = containment["warning"]
+    assert isinstance(warning, dict)
+    assert warning["type"] == "prompt_agent.persona_in_user_turn"
+    assert warning["node_id"] == "prompt_agent"
+    assert warning["provider"] == "codex"
+    assert "USER turn" in str(warning["message"])
+    # The whole point: it is NOT an error against the run.
+    assert errors == []
 
 
 def test_a_provider_that_claims_nothing_is_recorded_as_claiming_nothing(
@@ -404,3 +417,135 @@ def test_token_cost_counts_the_cached_context_too(tmp_path: Path) -> None:
         _services(_Declaring("claude_code", frozenset({"system_role"}))),
     )
     assert delta.provenance[0].token_cost == 4_688  # 2 + 4600 + 82 uncached/cached + 4 out
+
+
+# ---------------------------------------------------------------------------
+# R3 — a provider property is a fact about the run, not a failure of it
+# (ADR 0179)
+# ---------------------------------------------------------------------------
+def test_a_correct_answer_through_a_slotless_provider_still_scores(tmp_path: Path) -> None:
+    """The reproduction, as a test. Three `aef run` of an agent that answered
+    CORRECTLY, through a `command` provider with no `{system}` slot — ADR
+    0169's own `codex` row — produced `task_completion 0.0` on every one,
+    because the containment note was an `errors` entry and
+    `RuleBasedEvaluator` zeroes a run with any error.
+
+    The provider has no system channel; the agent still did the job. Those are
+    two different facts and only one of them is the task metric."""
+    (tmp_path / "persona.md").write_text(PERSONA, encoding="utf-8")
+    node = make_prompt_agent_node(
+        agent_file=str(tmp_path / "persona.md"), agent_name="marlin-accela"
+    )
+    state = AEFState(run_id="r1", agent_id="a1", objective="Reconcile the caps.")
+    delta, _ = node.fn(
+        state,
+        _ctx(),
+        _services(_Declaring("codex", frozenset({"read_only_fs", "user_turn_persona"}))),
+    )
+    record = RuleBasedEvaluator().evaluate(delta.apply(state))
+    assert record.task_completion == 1.0
+    # And the fact is still on the run, in full.
+    containment = delta.working_memory["prompt_agent__containment"]
+    assert containment["warning"]["type"] == PERSONA_IN_USER_TURN
+
+
+def test_the_containment_note_never_becomes_failure_memory(tmp_path: Path) -> None:
+    """Through the REAL executor and the REAL reflect node, which is where the
+    consequence lived: `failure_signals` reads `state.errors`, so an error
+    entry made every run on such a provider a `kind="failure"` record — and
+    three distinct runs is all ADR 0110's two-run threshold needs to turn one
+    into a bullet in the persona."""
+    persona = tmp_path / "persona.md"
+    persona.write_text(PERSONA, encoding="utf-8")
+    services = _services(_Declaring("codex", frozenset({"user_turn_persona"})))
+    result = GraphExecutor(_graph(str(persona)).compile(), services).run(
+        AEFState(run_id="r1", agent_id="a1", objective="Reconcile the caps.")
+    )
+    memory = services.require_memory()
+    assert memory.query("failure", agent_id="a1") == []
+    assert memory.query("success", agent_id="a1")
+    assert result.final_state.errors == []
+    # Still recorded, and findable without knowing the key shape.
+    found = containment_warnings(result.final_state)
+    assert [node_id for node_id, _ in found] == ["prompt_agent"]
+    assert found[0][1]["type"] == PERSONA_IN_USER_TURN
+
+
+def test_containment_warnings_reads_only_real_warnings(tmp_path: Path) -> None:
+    """The reader is the surface a doctor command or a cycle summary uses, so
+    it must not invent one. A system-channel run records no `warning` key at
+    all, which is why "no warning" and "an empty warning" cannot be
+    confused."""
+    (tmp_path / "persona.md").write_text(PERSONA, encoding="utf-8")
+    node = make_prompt_agent_node(
+        agent_file=str(tmp_path / "persona.md"), agent_name="marlin-accela"
+    )
+    state = AEFState(run_id="r1", agent_id="a1", objective="go")
+    delta, _ = node.fn(
+        state, _ctx(), _services(_Declaring("claude_code", frozenset({"system_role"})))
+    )
+    after = delta.apply(state)
+    assert "warning" not in after.working_memory["prompt_agent__containment"]
+    assert containment_warnings(after) == []
+    # A non-dict parked in working_memory under a colliding key is data, not a
+    # warning, and must not crash the reader.
+    noisy = after.model_copy(
+        update={"working_memory": {**after.working_memory, "x__containment": "not a dict"}}
+    )
+    assert containment_warnings(noisy) == []
+
+
+# ---------------------------------------------------------------------------
+# R6 — the retrieved lessons reach the user turn (ADR 0179)
+# ---------------------------------------------------------------------------
+def _chunk(text: str, signature: str) -> dict[str, object]:
+    return {
+        "content": json.dumps({"latest_feedback": text}, sort_keys=True),
+        "source": "knowledge:entry-1",
+        "relevance_score": 0.9,
+        "token_estimate": 12,
+        "metadata": {"signature": signature, "kind": "failure"},
+    }
+
+
+def test_retrieved_lessons_go_in_the_user_turn_after_the_objective(tmp_path: Path) -> None:
+    """The persona stays the system message and is never modified at runtime
+    (ADR 0152). A lesson is evidence produced by earlier runs, so it travels
+    in the turn evidence travels in — and after the objective, so the question
+    is still the first thing read."""
+    (tmp_path / "persona.md").write_text(PERSONA, encoding="utf-8")
+    node = make_prompt_agent_node(
+        agent_file=str(tmp_path / "persona.md"), agent_name="marlin-accela"
+    )
+    provider = _Recorder()
+    state = AEFState(
+        run_id="r1",
+        agent_id="a1",
+        objective="Reconcile the Sarasota cap counts.",
+        retrieved_context=[_chunk("always cite the permit id", "failure:prompt_agent")],
+    )
+    node.fn(state, _ctx(), _services(provider))
+    system, user = provider.requests[0].messages
+    assert system.content.startswith("# Marlin Accela agent")
+    assert "always cite the permit id" not in system.content
+    assert user.content.startswith("Reconcile the Sarasota cap counts.")
+    assert "always cite the permit id" in user.content
+    assert "[failure:prompt_agent]" in user.content
+
+
+def test_the_request_is_byte_identical_when_nothing_was_retrieved(tmp_path: Path) -> None:
+    """The replay contract (ADR 0123). A caller that appends unconditionally
+    would miss every cassette recorded before retrieval existed, so the
+    no-retrieval user turn must be the objective and nothing else — not the
+    objective plus a header, and not the objective plus a newline."""
+    (tmp_path / "persona.md").write_text(PERSONA, encoding="utf-8")
+    node = make_prompt_agent_node(
+        agent_file=str(tmp_path / "persona.md"), agent_name="marlin-accela"
+    )
+    provider = _Recorder()
+    node.fn(
+        AEFState(run_id="r1", agent_id="a1", objective="Reconcile the caps."),
+        _ctx(),
+        _services(provider),
+    )
+    assert provider.requests[0].messages[1].content == "Reconcile the caps."

@@ -279,3 +279,22 @@ coverage result to an unconfirmed proxy stands until those arms are re-run.
 ## Note (orchestrator, at merge)
 
 Written against the pre-J0 rubric: dim 2 was 17/20 on this branch and is **12/20** on `main` after ADR 0151 — J0 deducted precisely for the open retrieval→prompt link this ADR closes. The delta claimed is 0 either way; no row moves. The two defects reported here (the word-cap regex, the first-key model attribution) were fixed on `main` by ADRs 0166 and 0154 before this merge.
+
+
+## Erratum (fix wave J3, ADR 0179): the one caller was this repo's own fixture
+
+This ADR gave `render_retrieved_context` its caller and closed "a caller that
+writes state nobody reads". The caller was `agents/summary/graph.py::draft_node`
+— this repo's own validation fixture, which ships in **no** adopted repo — and
+`aef migrate`'s generated template had no retrieve node at all. So the same
+shape survived one level out: on every repo the scaffold generates,
+`make_retrieve_node` was absent, `retrieved_context` was empty, and no prompt
+read anything. Reproduced end to end with the real `run_migrate` and the real
+runner.
+
+Closed by ADR 0179's R6: the template gains the retrieve node and
+`PromptAgentNode` becomes the second caller of this ADR's helper — the first
+one that reaches an adopter. What is NOT closed is this ADR's actual result:
+the four arms still show no task-metric benefit from retrieval, and R6
+supplies a path to re-run them on an adopter rather than any evidence about
+the outcome.

@@ -34,6 +34,13 @@ Four rules, each of which is a rule this repo already made somewhere else:
    Zone A under the gate's own `ZonePolicy` raises `PromptOutsideZoneAError`
    — a named refusal, not an empty result, because a proposer aimed at the
    harness is a configuration to fix rather than a cycle with nothing to say.
+5. **A provider fact is not a lesson** (ADR 0179). A record naming a
+   `prompt_agent.*` containment type describes the CLI the owner installed —
+   whether it has a `--system-prompt` flag — and no sentence a persona can
+   contain will change it. Such records are dropped from the evidence and
+   counted in the reason, so the cycle says what it refused rather than
+   quietly finding less. This is the second line of defence; the first is
+   that the node stopped recording that fact as an error at all.
 
 Determinism: no clock read, no randomness, every ordering a stable total
 order. The same evidence produces the same bullet, and a second cycle over
@@ -49,6 +56,7 @@ from dataclasses import dataclass, field
 from aef.harness.corpus import Corpus
 from aef.harness.proposer import MemoryEvidence, Proposal, ProposalError
 from aef.harness.zones import ZonePolicy, inspect_path
+from aef.reasoning.prompt_agent import PROVIDER_FACT_TYPE_PREFIX
 from aef.services.knowledge.base import KnowledgeEntry
 from aef.services.knowledge.consolidate import (
     DEFAULT_MIN_OCCURRENCES,
@@ -90,6 +98,25 @@ _HEADING_RE = re.compile(r"^(?P<hashes>#{1,6})\s")
 # custom `signature_fn` could, and a marker that cannot be read back is a
 # bullet this proposer would duplicate on the next cycle.
 _UNWRITABLE_IN_SIGNATURE = ("--", ">", "<")
+
+# A record naming one of these describes THE PROVIDER THE RUN GOT, not what
+# the run did, and must never become a bullet in somebody's persona.
+#
+# The first line of defence is that `PromptAgentNode` no longer records such a
+# fact as an error, so no reflect node writes one as failure memory (ADR 0179,
+# R3). This is the second: a memory file written by an older `aef`, or a
+# future node that reaches for `state.errors` for the same wrong reason, still
+# cannot put "your CLI has no --system-prompt flag" in front of the model.
+#
+# Matched as a TOKEN in the record's own text rather than on the signature,
+# and the reason is a measurement: the signature of the reproduced case is
+# `failure:prompt_agent`, which is a NODE id — refusing that prefix would
+# discard every genuine lesson the prompt-agent node ever produces. The error
+# type is the only thing in the record that names the provider property, and
+# the record carries it inside `verbal_feedback` because that is what
+# `RuleBasedCritic` quotes. A text match is the honest description of what
+# this can see.
+_PROVIDER_FACT_RE = re.compile(re.escape(PROVIDER_FACT_TYPE_PREFIX) + r"[A-Za-z0-9_]+")
 
 
 class PromptOutsideZoneAError(ProposalError):
@@ -196,8 +223,15 @@ class RuleBasedPromptProposer:
                 f"would corrupt anything else. Use --proposer rule_based for source files.",
             )
 
-        records, foreign = self._admissible(evidence)
+        records, foreign, provider_facts = self._admissible(evidence)
         note = f"{foreign} record(s) dropped as another graph's scenario; " if foreign else ""
+        if provider_facts:
+            note += (
+                f"{provider_facts} record(s) dropped as a provider fact rather than a "
+                f"lesson (a `{PROVIDER_FACT_TYPE_PREFIX}*` containment note describes the "
+                f"CLI the owner installed, not what this agent did, and a persona cannot "
+                f"act on it); "
+            )
         if not records:
             return _Decision((), f"{note}no admissible failure record for this graph")
 
@@ -274,22 +308,31 @@ class RuleBasedPromptProposer:
 
     # -- evidence ------------------------------------------------------------
 
-    def _admissible(self, evidence: MemoryEvidence) -> tuple[tuple[MemoryRecord, ...], int]:
-        """`evidence.records` minus anything recorded for another graph.
+    def _admissible(self, evidence: MemoryEvidence) -> tuple[tuple[MemoryRecord, ...], int, int]:
+        """`evidence.records` minus another graph's, minus provider facts.
 
         `MemoryEvidence` has already removed validation- and holdout-derived
         records; this removes a *train* record belonging to a different
         graph's scenario, which is not a leak but is another agent's lesson,
         and ADR 0110's `agent_id` finding is that merging those is worse than
         having none.
+
+        And it removes a record that describes the PROVIDER rather than the
+        run — see `_PROVIDER_FACT_RE`. Returns the two drop counts separately
+        because they are two different things for an operator to fix: one is a
+        corpus that mixes graphs, the other is a CLI with no system channel.
         """
-        if self.corpus is None or self.graph_id is None:
-            return evidence.records, 0
-        foreign = frozenset(
-            s.id for s in self.corpus.scenarios if s.graph_id and s.graph_id != self.graph_id
-        )
-        kept = tuple(r for r in evidence.records if r.run_id not in foreign)
-        return kept, len(evidence.records) - len(kept)
+        kept = evidence.records
+        foreign_count = 0
+        if self.corpus is not None and self.graph_id is not None:
+            foreign = frozenset(
+                s.id for s in self.corpus.scenarios if s.graph_id and s.graph_id != self.graph_id
+            )
+            after = tuple(r for r in kept if r.run_id not in foreign)
+            foreign_count = len(kept) - len(after)
+            kept = after
+        after_facts = tuple(r for r in kept if not _names_a_provider_fact(r))
+        return after_facts, foreign_count, len(kept) - len(after_facts)
 
     def _lessons(self, records: tuple[MemoryRecord, ...]) -> list[KnowledgeEntry]:
         """Consolidate the admissible records and return the failure entries,
@@ -335,6 +378,24 @@ class RuleBasedPromptProposer:
                 else ""
             )
         )
+
+
+def _names_a_provider_fact(record: MemoryRecord) -> bool:
+    """Does this record's text name a `prompt_agent.*` containment fact?
+
+    Every string in `content` is scanned, not just `verbal_feedback`: nothing
+    constrains that dict's shape, `rationale` and `grounded_in` are rendered
+    from the same state, and a filter that reads one field is a filter one
+    refactor away from reading none of the right ones.
+    """
+    for value in record.content.values():
+        if isinstance(value, str) and _PROVIDER_FACT_RE.search(value):
+            return True
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                if isinstance(item, str) and _PROVIDER_FACT_RE.search(item):
+                    return True
+    return False
 
 
 def _order(entry: KnowledgeEntry) -> tuple[int, float, str]:

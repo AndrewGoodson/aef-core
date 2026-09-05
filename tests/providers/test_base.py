@@ -9,6 +9,7 @@ from aef.providers.base import (
     ProviderMessage,
     validate_isolation,
 )
+from aef.reasoning.prompt_agent import persona_role
 
 
 class _FailingProvider(ModelProvider):
@@ -174,6 +175,56 @@ def test_a_fallback_chain_is_as_isolated_as_its_least_isolated_member() -> None:
     # An uncharacterised member costs the chain every claim it had.
     unknown = _Fixed("unknown", frozenset())
     assert FallbackProvider([strong, unknown]).isolation == frozenset()
+
+
+def test_a_chains_channel_marker_is_the_hazard_not_the_intersection() -> None:
+    """R4 (ADR 0179). `weak` above carries `single_turn` and deliberately no
+    channel, so the intersection bug this pins was invisible to the test right
+    next to it: the chain that exposes it is `claude_code` + `codex`, which is
+    the pair an `aef.yaml` `fallback:` list is most likely to hold.
+
+    Intersecting there erased BOTH halves of the mutually exclusive pair, so
+    `persona_role()` said `unknown` and `PromptAgentNode` stayed silent
+    exactly when the persona did go out in the user turn. Reproduced against
+    the real adapters: `fallback role=unknown isolation=[]`.
+
+    Claims still intersect; the hazard marker wins."""
+
+    class _Fixed(ModelProvider):
+        def __init__(self, name: str, props: frozenset[str]) -> None:
+            self.name = name
+            self._props = props
+
+        @property
+        def isolation(self) -> frozenset[str]:
+            return self._props
+
+        def complete(self, request: CompletionRequest) -> CompletionResult:
+            return CompletionResult(content="", model="", input_tokens=0, output_tokens=0)
+
+    system_channel = _Fixed("claude_code", frozenset({"no_tools", "single_turn", "system_role"}))
+    user_channel = _Fixed("codex", frozenset({"read_only_fs", "user_turn_persona"}))
+
+    chain = FallbackProvider([system_channel, user_channel]).isolation
+    # No claim survives — the two share none — but the hazard does, in both
+    # orders, because which member answers is not the caller's choice.
+    assert chain == frozenset({"user_turn_persona"})
+    assert FallbackProvider([user_channel, system_channel]).isolation == chain
+    assert persona_role(chain) == "user"
+
+    # All-system-channel keeps the claim: it is true of every member.
+    both_system = _Fixed("anthropic", frozenset({"no_tools", "system_role"}))
+    homogeneous = FallbackProvider([system_channel, both_system]).isolation
+    assert homogeneous == frozenset({"no_tools", "system_role"})
+    assert persona_role(homogeneous) == "system"
+
+    # One member saying nothing about its channel leaves the chain with NO
+    # channel claim. Manufacturing one out of an absence is the failure mode
+    # ADR 0169 exists to close, and it is no better in this direction.
+    silent = _Fixed("mystery", frozenset({"no_tools"}))
+    mixed = FallbackProvider([system_channel, silent]).isolation
+    assert mixed == frozenset({"no_tools"})
+    assert persona_role(mixed) == "unknown"
 
 
 def test_total_input_tokens_is_the_whole_context_and_input_tokens_is_not() -> None:

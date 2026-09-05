@@ -36,17 +36,51 @@ So this node **records the containment it actually got, every run**, instead
 of asserting one: `Services.model_provider`'s `isolation` set and the role the
 persona travelled in are written to
 `state.working_memory["<node id>__containment"]`, and a persona sent in the
-USER turn — `codex`, or a `command` template with no `{system}` slot — appends
-a named `prompt_agent.persona_in_user_turn` entry to `state.errors`. Per-run
+USER turn — `codex`, or a `command` template with no `{system}` slot — adds a
+named `prompt_agent.persona_in_user_turn` **warning** beside them. Per-run
 evidence in the trace beats a sentence in a docstring, which is the whole
 lesson of F4.
 
-It is a warning and not a refusal, because some CLIs genuinely have no system
-flag and refusing would make the node unusable on them. It IS an error entry,
-so `RuleBasedEvaluator` scores that run 0 and `make_reflect_node` writes it to
-failure memory — deliberately: under ADR 0152 the persona being the system
-message is the safety story, and a run where it was not should be visible to
-the loop that reads those signals.
+## Why the warning is not an error entry (ADR 0179, R3)
+
+ADR 0169 put that warning in `state.errors` and said so deliberately: under
+ADR 0152 the persona being the system message *is* the safety story, so a run
+where it was not should reach the things that read failure signals. The
+argument is right about visibility and wrong about which channel carries it,
+and the difference was measured rather than argued. Three `aef run` of an
+agent that answered *correctly*, through a `command` provider with no
+`{system}` slot — ADR 0169's own `codex` row — produced three
+`kind="failure"` records and `task_completion 0.0` on every one; three
+distinct runs clears ADR 0110's two-run threshold, so the next
+`aef loop cycle --proposer rule_based_prompt` wrote
+
+    - <!-- aef sig=failure:prompt_agent runs=3 --> 1 error(s) recorded …
+      'type': 'prompt_agent.persona_in_user_turn' …
+
+into the persona itself. Three consequences, none of them intended by 0169:
+a property of *the CLI the owner installed* became a bullet in the *agent's
+prompt*; it occupies one of five bullet slots forever, because its
+`runs_since_last_seen` never grows while the provider is unchanged; and the
+task metric is pinned at 0 for every prompt agent on a Codex adopter no
+matter how good the answers are, which makes the loop's own evidence
+worthless on exactly the repos ADR 0152 was written for.
+
+`state.errors` means *this run did something wrong*. The persona's channel is
+a fact about the provider the run was handed, true before the objective was
+read and unchanged by the answer. So it is recorded where the rest of that
+fact already lives — under `working_memory["<node id>__containment"]`, in a
+`warning` key — which `RuleBasedEvaluator` does not count, `failure_signals`
+does not see, and `make_reflect_node` therefore never turns into failure
+memory. `containment_warnings(state)` is the one reader, so a doctor command
+or a cycle summary surfaces it without re-deriving the key shape.
+
+`AEFState` gets no new top-level field for this, and that is a deliberate
+reading of its own docstring: per-agent data belongs in `working_memory`,
+never in a new field on the one shape every agent shares. `StateDelta` offers
+`working_memory`, and the containment dict was already there.
+
+It remains a warning and not a refusal, because some CLIs genuinely have no
+system flag and refusing would make the node unusable on them.
 
 What has not changed: the frontmatter's own `tools:` key is read and
 **deliberately not honoured** — reported, never obeyed — because honouring it
@@ -70,6 +104,34 @@ A file with no frontmatter is still an agent: its name falls back to the
 filename stem and the whole file is the body. A file with a frontmatter fence
 and no `name` does the same. Neither is an error, because a persona that a
 harness would happily run is not made invalid by this runtime's preferences.
+
+## What goes in the user turn, and why not the system prompt
+
+The persona is the system message and `state.objective` is the user turn.
+Retrieved lessons — whatever `make_retrieve_node` put on
+`state.retrieved_context` — are rendered by `render_retrieved_context` and
+appended **after the objective, in the user turn** (ADR 0179, R6).
+
+Three reasons, in the order they bind:
+
+1. **The persona is never modified at runtime.** ADR 0152's containment story
+   is that the file in Zone A *is* the system message; splicing runtime text
+   into it would make the system prompt something this runtime composed
+   rather than something an owner wrote and the gates measure drift on.
+2. **A lesson is derived from model output.** Putting it in the system
+   channel grants text the runtime produced the authority of the operator's
+   instructions — the elevation `PolicyEngine`'s deny-by-default exists to
+   refuse (constraint #6). Lessons are evidence about earlier runs; evidence
+   is data, and data belongs in the turn the data arrives in.
+3. **On half the providers there is no difference anyway.** Under
+   `user_turn_persona` the system text is concatenated into the user turn, so
+   a "system-prompt" placement would be a distinction only some backends
+   could keep.
+
+When nothing was retrieved the request is **byte-identical** to what it was
+before retrieval existed — `render_retrieved_context` returns `""` and the
+user turn is `state.objective` and nothing else — which is what keeps every
+cassette recorded before this change on its hit path (ADR 0123).
 """
 
 from __future__ import annotations
@@ -80,6 +142,7 @@ from pathlib import Path
 
 from aef.kernel.contracts import Context, Node, Route, Services, SideEffect
 from aef.providers.base import CompletionRequest, ProviderMessage
+from aef.reasoning.nodes import render_retrieved_context
 from aef.state import AEFState, Plan, Provenance, StateDelta
 
 FRONTMATTER_FENCE = "---"
@@ -98,9 +161,25 @@ MIGRATED_DIR_NAME = "migrated"
 # grepping a trace for the answer should not find a dict there instead.
 CONTAINMENT_SUFFIX = "__containment"
 
-# The `type` on the error entry appended when the persona went out in the user
-# turn. A stable string so a gate, a check or a grep can name it.
-PERSONA_IN_USER_TURN = "prompt_agent.persona_in_user_turn"
+# The reserved namespace for types that describe THE PROVIDER A RUN GOT rather
+# than what the run did. Everything under it is a containment fact: true
+# before the objective was read, unchanged by the answer, and never the
+# agent's error. `RuleBasedPromptProposer` refuses to build a prompt bullet
+# out of a record naming one (ADR 0179, R3) — a second line of defence behind
+# "do not record it as an error in the first place".
+PROVIDER_FACT_TYPE_PREFIX = "prompt_agent."
+
+# The `type` on the containment warning recorded when the persona went out in
+# the user turn. A stable string so a gate, a check or a grep can name it. It
+# lives in `working_memory[...][CONTAINMENT_SUFFIX]["warning"]`, NOT in
+# `state.errors` — see the module docstring for the measurement that moved it.
+PERSONA_IN_USER_TURN = f"{PROVIDER_FACT_TYPE_PREFIX}persona_in_user_turn"
+
+# The key inside the containment record that holds the warning, when there is
+# one. Absent when the persona travelled in the system channel or the provider
+# declared no channel at all, so "no warning" and "warning with nothing in it"
+# cannot be confused.
+CONTAINMENT_WARNING_KEY = "warning"
 
 # The three states of `containment["persona_role"]`. "unknown" is not a
 # failure to compute: it is a provider that declared nothing about its
@@ -119,6 +198,32 @@ def persona_role(isolation: frozenset[str]) -> str:
     if "user_turn_persona" in isolation:
         return PERSONA_ROLE_USER
     return PERSONA_ROLE_UNKNOWN
+
+
+def containment_warnings(state: AEFState) -> list[tuple[str, dict[str, object]]]:
+    """`(node id, warning)` for every containment warning this run recorded.
+
+    THE reader, so a doctor command or a cycle summary surfaces the fact
+    without re-deriving where it is kept. It exists because the fact stopped
+    being an `errors` entry (ADR 0179, R3) and a fact nothing can find is a
+    fact nobody acts on — which is the failure mode 0169 was avoiding when it
+    reached for `state.errors` in the first place.
+
+    Reads `AEFState` and nothing else: no services, no clock, no randomness,
+    safe inside a `deterministic=True` node and callable from the CLI.
+    """
+    found: list[tuple[str, dict[str, object]]] = []
+    for key, value in state.working_memory.items():
+        if not key.endswith(CONTAINMENT_SUFFIX) or not isinstance(value, dict):
+            continue
+        warning = value.get(CONTAINMENT_WARNING_KEY)
+        if isinstance(warning, dict) and warning:
+            found.append((key[: -len(CONTAINMENT_SUFFIX)], warning))
+    # Sorted by node id: `working_memory` is insertion-ordered, and a summary
+    # whose line order depends on which node happened to run first is one more
+    # thing a reader has to hold in their head.
+    found.sort(key=lambda pair: pair[0])
+    return found
 
 
 class PromptAgentError(RuntimeError):
@@ -283,14 +388,18 @@ def make_prompt_agent_node(
 ) -> Node:
     """A `Node` that runs one persona file as a single completion.
 
-    The persona body is the `system` message and `state.objective` is the user
-    turn. **How contained that completion is depends on
-    `model_provider.impl`** — see the module docstring for the five answers —
-    so this node records the provider's `isolation` set and the persona's
-    channel into `working_memory["<node id>__containment"]` on every run, and
-    appends a `prompt_agent.persona_in_user_turn` error when the persona went
-    out in the user turn. The frontmatter's `tools:` key is read and never
-    honoured under any impl.
+    The persona body is the `system` message; the user turn is
+    `state.objective` followed by whatever `render_retrieved_context` makes of
+    `state.retrieved_context` — nothing at all when nothing was retrieved, so
+    the request is byte-identical without a retrieve node upstream. **How
+    contained that completion is depends on `model_provider.impl`** — see the
+    module docstring for the five answers — so this node records the
+    provider's `isolation` set and the persona's channel into
+    `working_memory["<node id>__containment"]` on every run, adding a
+    `prompt_agent.persona_in_user_turn` warning under that record's `warning`
+    key when the persona went out in the user turn. That warning is NOT an
+    `errors` entry: it describes the provider, not the run (ADR 0179). The
+    frontmatter's `tools:` key is read and never honoured under any impl.
 
     Pass `agent_file` (repo-relative, the form `aef migrate` generates) to
     read the persona at execution time, or `definition` to supply one
@@ -340,37 +449,47 @@ def make_prompt_agent_node(
         # not of whether the answer came back.
         isolation = provider.isolation
         role = persona_role(isolation)
-        containment = {
+        containment: dict[str, object] = {
             "provider": provider.name,
             "isolation": sorted(isolation),
             "persona_role": role,
         }
+        if role == PERSONA_ROLE_USER:
+            containment[CONTAINMENT_WARNING_KEY] = {
+                "node_id": ctx.node_id,
+                "type": PERSONA_IN_USER_TURN,
+                "provider": provider.name,
+                "isolation": sorted(isolation),
+                "message": (
+                    # "declares no system channel" rather than "has none": a
+                    # `fallback` chain declares `user_turn_persona` when ANY
+                    # member lacks a system flag, so on a chain this is the
+                    # honest sentence and "has no system channel" would not
+                    # be (ADR 0179, R4).
+                    f"provider {provider.name!r} declares no system channel, so persona "
+                    f"{agent.name!r} was prepended to the USER turn. ADR 0152's "
+                    f"containment rests on the persona BEING the system message; here "
+                    f"it is untrusted-channel text. Not a refusal — some CLIs have no "
+                    f"system flag — and not this run's error either: it is a property "
+                    f"of the provider the run was handed, so it is recorded here rather "
+                    f"than in `state.errors` (ADR 0169, corrected by ADR 0179)."
+                ),
+            }
+        # The lessons this run was shown, after the objective, in the USER
+        # turn. `""` when nothing was retrieved, and the `if` keeps the request
+        # byte-identical in that case — see the module docstring for why not
+        # the system prompt, and why byte-identical matters.
+        lessons = render_retrieved_context(state)
+        user_turn = f"{state.objective}\n\n{lessons}" if lessons else state.objective
         result = provider.complete(
             CompletionRequest(
                 messages=(
                     ProviderMessage(role="system", content=agent.body),
-                    ProviderMessage(role="user", content=state.objective),
+                    ProviderMessage(role="user", content=user_turn),
                 ),
                 model="",
             )
         )
-        errors: list[dict[str, object]] = []
-        if role == PERSONA_ROLE_USER:
-            errors.append(
-                {
-                    "node_id": ctx.node_id,
-                    "type": PERSONA_IN_USER_TURN,
-                    "provider": provider.name,
-                    "isolation": sorted(isolation),
-                    "message": (
-                        f"provider {provider.name!r} has no system channel, so persona "
-                        f"{agent.name!r} was prepended to the USER turn. ADR 0152's "
-                        f"containment rests on the persona BEING the system message; here "
-                        f"it is untrusted-channel text. Not a refusal — some CLIs have no "
-                        f"system flag — but recorded (ADR 0169)."
-                    ),
-                }
-            )
         provenance = Provenance(
             node_id=ctx.node_id,
             graph_version=ctx.graph_version,
@@ -392,7 +511,6 @@ def make_prompt_agent_node(
                 },
                 plan=Plan(goal=state.objective, status="done"),
                 provenance=[provenance],
-                errors=errors,
             ),
             route,
         )

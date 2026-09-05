@@ -374,3 +374,45 @@ heuristic. And the root cause named above is fixed: `agent_services` passes
 the provider's `default_model` to the judge when no reflection model is
 named, so judge calls take the `requested` rule. Both mutation-checked.
 
+
+## Erratum (fix wave J3, ADR 0179): three things this ADR got wrong
+
+Reproduced by running, before anything changed. All three are in §3 (the
+node's record), §1's fallback row, and the addendum's rule 4.
+
+**1. The error entry.** §3 said, deliberately and out loud, that the
+`persona_in_user_turn` warning IS an `errors` entry, so `RuleBasedEvaluator`
+scores that run 0.0 and it reaches failure memory. Three `aef run` of an agent
+that ANSWERED CORRECTLY through a `command` provider with no `{system}` slot —
+this ADR's own `codex` row — scored `task_completion 0.0` three times, wrote
+three `kind="failure"` records, and the next `aef loop cycle --proposer
+rule_based_prompt` appended
+
+    - <!-- aef sig=failure:prompt_agent runs=3 --> 1 error(s) recorded …
+      'type': 'prompt_agent.persona_in_user_turn' …
+
+to the persona. The premise ("a run where the persona was not the system
+message should be visible") is right; the conclusion does not follow.
+"Visible" is a claim about SURFACING and `state.errors` is a CLASSIFICATION —
+`failure_signals` calls itself "the **single** what-counts-as-a-failure
+convention" — so this reached for one property and inherited four. The
+warning now lives under `working_memory["<node>__containment"]["warning"]`,
+with `containment_warnings(state)` as the reader; the consequence this ADR
+listed as intended ("a `codex`- or slotless-`command`-backed prompt agent now
+scores 0.0") is reversed. See ADR 0179, R3.
+
+**2. The fallback row.** §1's table gives `fallback` the **intersection**, and
+that is right for a containment claim and inverted for the channel marker:
+`system_role` / `user_turn_persona` are mutually exclusive per provider, so a
+real `ClaudeCodeProvider` + `CodexProvider` chain intersected to neither —
+`fallback role=unknown isolation=[]` — and `PromptAgentNode` stayed silent
+exactly when the persona did travel in the user turn. Claims still intersect;
+the hazard marker now wins. ADR 0179, R4.
+
+**3. `usage_match` was wired into one adapter.** The addendum added rule 4 and
+passed `usage` from `ClaudeCodeProvider` only. On identical payloads Claude
+reported `usage_match` and Grok `heuristic` — the rule this ADR's own D1
+measured wrong 1 time in 36. Worse, `test_grok_uses_the_same_rule_so_the_two_
+adapters_cannot_drift` requests `model="grok-4.6"`, so rule 2 answers before
+rule 4 is consulted: **the anti-drift test could not see the drift.** ADR
+0179, R7.

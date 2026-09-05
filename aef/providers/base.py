@@ -65,6 +65,18 @@ all tools". Same spelling, different semantics; see ADR 0169.
 """
 
 
+CHANNEL_PROPERTIES: frozenset[str] = frozenset({"system_role", "user_turn_persona"})
+"""The mutually exclusive pair inside `ISOLATION_PROPERTIES` that says WHERE a
+system message ends up rather than what the call cannot do.
+
+Named as its own set because the two halves of `isolation` do not compose the
+same way. Every other property is a **claim** — "this call reaches no tool" —
+and a set of claims combines by intersection: a chain enforces only what all
+of its members enforce. `user_turn_persona` is a **hazard marker**, and
+intersecting hazards erases them, which is the wrong direction (ADR 0179, R4).
+"""
+
+
 def validate_isolation(properties: object, *, where: str = "isolation") -> frozenset[str]:
     """Normalise a declared isolation set, refusing anything unrecognised.
 
@@ -230,21 +242,56 @@ class FallbackProvider(ModelProvider):
 
     @property
     def isolation(self) -> frozenset[str]:
-        """The INTERSECTION of every member's declaration.
+        """Containment claims INTERSECT; the channel marker does not.
 
-        A chain is only as isolated as its least-isolated member, because the
-        caller does not choose who answers: the primary failing is exactly
-        when the fallback runs, and a property the fallback does not enforce
-        was never enforced for that call. Union would describe a call that
-        never happens; the primary's own set would describe the happy path
-        and be wrong precisely when it matters.
+        **The claims.** A chain is only as isolated as its least-isolated
+        member, because the caller does not choose who answers: the primary
+        failing is exactly when the fallback runs, and a property the fallback
+        does not enforce was never enforced for that call. Union would
+        describe a call that never happens; the primary's own set would
+        describe the happy path and be wrong precisely when it matters. A
+        member declaring nothing therefore empties the chain's claims, which
+        is the intended behaviour and not an edge case.
 
-        A member declaring nothing therefore empties the chain's declaration,
-        which is the intended behaviour and not an edge case: adding an
-        uncharacterised provider to a chain costs the chain its claims.
+        **The channel is not a claim, and intersecting it was inverted** (ADR
+        0179, R4). `system_role` and `user_turn_persona` are mutually
+        exclusive per provider, so a heterogeneous chain — `claude_code` +
+        `codex`, the pair `aef.yaml`'s `fallback:` list is most likely to
+        hold — intersected to neither, `persona_role()` returned `"unknown"`,
+        and `PromptAgentNode` stayed silent *exactly* in the case the marker
+        exists to report. Reproduced: `fallback role=unknown isolation=[]`,
+        and through the node with the `codex` member answering, no containment
+        warning at all.
+
+        So the hazard wins, which is the same argument the intersection makes,
+        applied to a marker that points the other way:
+
+        - any member declaring `user_turn_persona` -> the chain declares it;
+        - otherwise, `system_role` only when **every** member declares it —
+          a member that says nothing about its channel leaves the chain with
+          no channel claim, because manufacturing a claim out of an absence
+          is how the unconditional containment sentence survived five
+          providers (ADR 0169).
+
+        This is deliberately conservative rather than exact. `isolation` is a
+        static declaration read before any call, so "the member that actually
+        answered" is not available to it without turning a property into
+        per-call mutable state shared across threads. The cost of being
+        conservative is a containment note on a run whose persona did travel
+        in the system channel; the cost of being exact-or-silent is no note
+        on a run whose persona did not. Under ADR 0179 that note is a recorded
+        fact rather than an error against the task, so the first cost is
+        attention and the second was evidence.
         """
         sets = [p.isolation for p in self._providers]
-        return frozenset.intersection(*sets) if sets else frozenset()
+        if not sets:  # pragma: no cover - __init__ refuses an empty chain
+            return frozenset()
+        claims = frozenset.intersection(*[s - CHANNEL_PROPERTIES for s in sets])
+        if any("user_turn_persona" in s for s in sets):
+            return claims | {"user_turn_persona"}
+        if all("system_role" in s for s in sets):
+            return claims | {"system_role"}
+        return claims
 
     def complete(self, request: CompletionRequest) -> CompletionResult:
         errors: list[tuple[str, Exception]] = []
