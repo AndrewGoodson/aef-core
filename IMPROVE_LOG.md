@@ -2625,3 +2625,77 @@ without it. `EventKind` is iterated dynamically by
 `test_every_event_kind_round_trips` and looked up with `.get` by
 `monitoring._COUNTED`, so the addition needed no edit to either. Two lines
 plus a comment.
+
+---
+
+## S3 / I14 — the judge with the answer in evidence (ADR 0159)
+
+**Branch:** `upgrade/s3-i14-judge`, off `999fa17`.
+**Rubric claim stated before running:** dimension 3, 6 → 7, and only if all
+three of (a) the measurement becomes an artifact, (b) the LLM judge agrees
+with the owner checks materially more often than the rule-based one on Opus
+with the answer in evidence, (c) the position delta stays small (max ≤ 0.2,
+as in I11). **Claimed after measuring: +0.**
+
+**Reproduce (RUN, before any change).** `docs/research/i14/run_i14.py
+--dry-run`: 18 `summary_agent` states (`sum-01` … `sum-18`, train +
+validation, holdout excluded), judged at the state the reflect node actually
+receives. Owner checks: 15 pass, 3 fail — `sum-07`, `sum-14`, `sum-16`, the
+same three ADR 0123 named. Rule-based judge: **0.000 on all 18**, because
+this agent writes no `state.scores`. `evidence_has_answer` true on all 18, so
+ADR 0126's change does reach this path. Zero model calls to establish all of
+that.
+
+**Preflight** (ADR 0150's corrected argv, `--mcp-config
+'{"mcpServers":{}}'`): `is_error: false`, `result: "OK"`,
+`usage.input_tokens: 2`. Committed as `docs/research/i14/preflight.json`.
+
+**Measurement.** 36 live calls on **`claude-opus-5[1m]`** (session default,
+no `--model` passed), 3 foreground batches of 6 judgments, each row flushed
+to JSONL as it landed. Both arms re-measured on the same 18 states and the
+same model — Fable's 3/18 and 9/18 are not comparable and are not carried
+forward.
+
+| arm | agrees with the owner checks | scores |
+|---|---|---|
+| rule-based | **3/18** | 0.000 ×18 |
+| LLM | **15/18** | 0.820 – 0.900 |
+
+The judges agree with each other on **0/18**; the 2×2 has one non-empty cell
+(rule fail × LLM pass = 18, of which 15 owner-pass). Flat at thresholds
+0.25 / 0.4 / 0.5 / 0.6 / 0.75. Position delta **max 0.06**, mean 0.023,
+non-zero on 12/18 (I11: up to 0.2 on 9/18). 0 fallbacks; 9.3 s mean per
+judgment.
+
+**Verdict.** (a) held — script, raw judgments, preflight and report are
+committed and `--report` regenerates every table from the data alone. (c)
+held — 0.06 against a 0.2 threshold. (b) held in the letter and **fired in
+substance**, which is why the point is not claimed: the corpus is 15/18
+pass, so answering "pass" to everything scores 15/18; both arms are constant
+functions; AUC over the 45 pass/fail pairs is **0.322**; and the three
+negatives are the case-sensitive `contains` defects ADR 0123 already
+recorded (`Volunteers`, `Swimming`, `Landslip`), so corrected the corpus is
+**18/18 pass with no negatives at all**. The summary corpus cannot grade a
+judge — which applies retroactively to I11's 9/18.
+
+What *did* change is real and is recorded as the finding: with the answer in
+evidence the LLM judge's scores moved from the blind run's 0.23–0.50 to
+0.82–0.90 and its order-sensitivity collapsed. Nothing available here can
+say whether that made it a better judge. The next increment for dimension 3
+is a corpus with true content negatives, not a better judge.
+
+**Found, not fixed** (reported, outside this worker's scope): 1 of 36 judge
+calls was attributed to `claude-haiku-4-5-20251001` by `answering_model`'s
+rule 3 ("most output tokens") — a JSON-only judge reply can be 12 tokens and
+the CLI's helper model writes more, so the rule's premise is false exactly
+for the judge; and `CompletionResult` keeps only `usage.input_tokens` (2 per
+call), not the `cache_creation`/`cache_read` where the prompt's real cost
+lives.
+
+**Changed under `aef/`:** the `llm_reflection.py` docstring's prose numbers
+became a pointer to `docs/research/i14/`. No logic.
+
+Green bar: `pytest -q` **2153 passed, 5 skipped** · `mypy aef examples`
+clean (131 files) · `ruff check .` clean · `ruff format --check aef tests
+examples docs/research/i14` clean (252 files) · **36 model calls, all
+accounted for in `results.jsonl`.**

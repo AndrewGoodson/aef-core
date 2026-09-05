@@ -1,0 +1,23 @@
+18 summary states (graph_id=summary_agent), judged at node 'reflect'
+36 live calls if run with --live (2 per state: evidence forward + reversed)
+
+id                         split        checks owner    rule  answer in evidence
+--------------------------------------------------------------------------------
+sum-01-kestrel-ferry       train       4/4     pass    0.000                True
+sum-02-orchard-blight      train       4/4     pass    0.000                True
+sum-03-tidewell-library    train       4/4     pass    0.000                True
+sum-04-halden-reservoir    train       4/4     pass    0.000                True
+sum-05-bramble-bakery      train       4/4     pass    0.000                True
+sum-06-weir-otters         train       4/4     pass    0.000                True
+sum-07-signal-box          train       3/4     FAIL    0.000                True
+sum-08-glasshouse-tomatoes train       4/4     pass    0.000                True
+sum-09-choir-tour          train       4/4     pass    0.000                True
+sum-10-clay-pit            train       4/4     pass    0.000                True
+sum-11-lantern-festival    train       4/4     pass    0.000                True
+sum-12-bell-recast         train       4/4     pass    0.000                True
+sum-13-cider-press         validation  4/4     pass    0.000                True
+sum-14-quarry-lake         validation  3/4     FAIL    0.000                True
+sum-15-bookbinder          validation  4/4     pass    0.000                True
+sum-16-cliff-path          validation  3/4     FAIL    0.000                True
+sum-17-clockmaker          validation  4/4     pass    0.000                True
+sum-18-heron-rookery       validation  4/4     pass    0.000                True
