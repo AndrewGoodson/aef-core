@@ -1,0 +1,33 @@
+18 states scored; threshold 0.5; answering model(s): ['claude-haiku-4-5-20251001', 'claude-opus-5[1m]']
+36 calls; input tokens total 72, output tokens total 11142
+
+rule-based agrees with the owner checks: 3/18
+LLM        agrees with the owner checks: 15/18
+the two judges agree with each other:    0/18
+
+2x2, rule-based verdict x LLM verdict (cell = count, [k owner-pass]):
+                  llm pass    llm fail
+rule pass            0 [0]       0 [0]
+rule fail          18 [15]       0 [0]
+
+position delta: max 0.06, mean 0.02278, nonzero on 12/18
+per-judgment wall clock: mean 9.3s, max 11.4s
+fell back to rule-based: 0/18
+
+agreement vs threshold (the headline should not rest on one cut):
+ threshold    rule     llm
+      0.25       3      15
+       0.4       3      15
+       0.5       3      15
+       0.6       3      15
+      0.75       3      15
+
+the same A/B against two oracles — see `_case_insensitive`:
+--- oracle A (the corpus's checks as written): 15/18 pass; a constant answer scores 15/18 ---
+  rule-based agrees: 3/18
+  LLM        agrees: 15/18
+  LLM score AUC(pass > fail): 0.322
+--- oracle B (contains made case-insensitive): 18/18 pass; a constant answer scores 18/18 ---
+  rule-based agrees: 0/18
+  LLM        agrees: 18/18
+  LLM score AUC(pass > fail): n/a (one class only)
