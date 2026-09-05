@@ -1648,6 +1648,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         # in-process caller and the last on the old loader — and which lacks
         # ADR 0085's `BaseException` guard, so a candidate factory raising
         # `SystemExit` exited this process cleanly.
+        # `run` had the identical silent no-op ADR 0190 closed on `cycle`:
+        # `--runs` with no graph reference harvested nothing and said so
+        # nowhere (reported by L2, closed here).
+        refusal = _require_module_for_runs(args, "run")
+        if refusal is not None:
+            return refusal
         graph = load_graph_reference(args.module) if args.module else None
         run = run_loop(
             config,
