@@ -6319,3 +6319,93 @@ case the code that consumed the request was correct about the request and wrong
 about the world, and in each case the repair was the same: carry the fact from
 where it is known, and refuse when it is not known rather than proceeding on
 the request.
+
+---
+
+## N2 — the arms re-run on the corpus that exists, and the knob answered for nothing (ADR 0193)
+
+**Branch:** `upgrade/n2-dim2-one-model`, off `d8357c2`.
+**Rubric claim, stated before any live call:** dimension 2, 12 → 14 only if the
+pre-registered rule's first branch fires. Total before: 69.
+
+**Why this ran.** ADR 0191 withdrew S1c's `+2` (ADR 0184) because ADR 0186
+re-recorded eighteen corpus scenarios on Opus in the same hour, on a branch S1c
+never saw, so its step 0 no longer reproduces on `main`. Withdrawn, not
+disproved. *A measurement that cannot be re-run on the current tree is
+asserted.*
+
+**Step 0 — the seed, re-run first (0 live calls).** Same script, unchanged
+logic, different table:
+
+| | S1c (ADR 0184) | N2 |
+|---|---|---|
+| entries / signature | 1, `failure:check:working_memory.summary:max_words` | **identical** |
+| recurrence | 3 distinct runs | **7** |
+| confidence | 0.4286 | **0.6364** |
+| lesson text ends | `…observed 31 words, 208 chars` | **`…observed 37 words, 233 chars`** |
+| validation negatives | 4 | **8** |
+
+`NEGATIVES` is now derived from each scenario's own trace and asserted, so a
+corpus edit moves the list instead of invalidating the run silently.
+
+**Step 1 — the knob's own A/B, for 0 calls.** Arm (c) at the shipped
+`knowledge_boost=0.0` sends arm (b)'s prompts **byte for byte on all 17** (one
+sha256, `c6873a50…`); the entry ranks 20–23 of 28 and never reaches the five
+bullets `render_retrieved_context` renders. So (b)'s three live repeats ARE
+(c)@0.0's, and the 34 calls ADR 0184 budgeted for this question were not spent.
+Arm (c) ran at **8.0** — the smallest value on a 1.0 grid that keeps the lesson
+in the prompt in all 17 scenarios under the WORST-case dry trajectory, chosen
+offline before any quota.
+
+**Step 2 — the arms.** 119 live calls, `claude-opus-5[1m]` on 119 of 119, equal
+repeats this time:
+
+| arm | repeats | mean | spread | negatives (n=8) | neg spread |
+|---|---|---|---|---|---|
+| (a) no retrieve | 1 | 0.9529 | – | 0.9000 | – |
+| (b) raw records | 3 | **0.9373** | 0.0118 | 0.8667 | 0.0250 |
+| (c) + knowledge @ 8.0 | 3 | **0.9843** | 0.0353 | 0.9833 | 0.0250 |
+
+```
+    (c) − (b) on the mean       = +0.0470     larger repeat spread    = 0.0353
+    (c) − (b) on the negatives  = +0.1167     larger negatives spread = 0.0250
+    BRANCH: 12 -> 14
+```
+
+**What arm (b) actually showed the model**, at every scenario, in every repeat:
+
+```
+- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed   (×5)
+```
+
+Five byte-identical no-op bullets. Seven records of a real recurring word-cap
+failure sat in the same store, out-ranked by twenty near-duplicate successes.
+ADR 0110's crowding thesis, live in a prompt rather than in a coverage proxy —
+and the reason **(b) − (a) = −0.0156**, the fourth measurement of that
+comparison and its third sign change.
+
+**Config fix (ADR 0184's defect 2).** `knowledge_boost`, `staleness_half_life`
+and `knowledge_min_occurrences` are now `aef.yaml` fields. Unset means `None`
+and `build_retriever` omits it, so `MemoryRetriever`'s dataclass keeps the
+single copy of every measured default; `0` is not unset (it disables the
+demotion); each refusal mirrored at config-load time.
+
+**Mutation:** 4 planted (falsy check for `is not None`; drop `**knobs`; move the
+shipped boost default to 8.0; delete the boost validator) — 4 caught, every file
+restored byte-identically and `shasum -a 256 -c` verified. No `git checkout --`.
+
+**Not claimed.** `knowledge_boost`'s shipped default does **not** move. 8.0
+guarantees engagement on a store holding exactly ONE entry; ADR 0110 measured a
+raised boost displacing a precisely-relevant record when there are many, and
+this corpus cannot form a second entry to test it on. What the default's basis
+becomes is narrower and sharper: not "the knob buys nothing" but "the knob is
+the difference between an inert layer and an engaged one here, and 8.0 is
+unmeasured on a many-entry store".
+
+**Green bar:** `pytest -q` 2891 passed, 7 skipped, 1 xfailed · `mypy aef
+examples` clean · `ruff check .` clean · `ruff format --check` clean.
+
+**Calls:** 120 of 120 (1 preflight + 17 + 51 + 51). Seed, static sweep, nine dry
+arms and the knob's A/B cost 0.
+
+**Score:** dimension 2 12 → 14, total **69 → 71**.

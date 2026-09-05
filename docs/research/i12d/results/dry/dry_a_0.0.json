@@ -1,0 +1,389 @@
+{
+  "answered_by": {},
+  "arm": "a",
+  "calls": 17,
+  "draft_prompt_sha256": "5956e7ffb9b0fcc95c941f0907432efc1556d36ec3c63c1078e2bc52dd26908a",
+  "draft_prompts": {
+    "sum-13-cider-press": "Summarise the passage below in at most 35 words.\nThe summary must mention each of these terms, spelled exactly as given: Dunmere cider press, oak, apples.\n\nPassage:\nThe Dunmere cider press, a hand-turned screw press built from oak beams in the 1850s, has been rebuilt and will press apples again this autumn for the first time in forty years. Volunteers replaced the rotten base beam with seasoned oak from a fallen tree on the estate and re-cut the screw thread by hand. Anyone with surplus apples can bring them on the two pressing days and take juice home in exchange. The press sits in a barn beside the estate's walled garden.",
+    "sum-14-quarry-lake": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Ketley quarry lake, swimming, lifeguards.\n\nPassage:\nSwimming will be allowed at Ketley quarry lake this summer for the first time, with lifeguards on duty between ten and six from June to September. The lake, which flooded when the quarry closed, is cold and deep, and the council has roped off a shallow area near the beach for swimmers and set a buoyed course for those who want to swim further. Entry is free but swimmers must register once at the kiosk. Parking on the quarry road will be limited to sixty cars.",
+    "sum-15-bookbinder": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Marisa Venn, bookbinder, apprentice.\n\nPassage:\nMarisa Venn, the last working bookbinder in the county, has taken on an apprentice for the first time in her thirty-year career. The apprentice will spend two years learning to sew text blocks, pare leather and tool lettering by hand before being allowed to take customer work. Venn's shop repairs family bibles and rebinds worn library books, and she says demand has risen as people bring in books that cannot be replaced. The apprenticeship is funded partly by a heritage crafts grant.",
+    "sum-16-cliff-path": "Summarise the passage below in at most 35 words.\nThe summary must mention each of these terms, spelled exactly as given: Gannet Head, coast path, landslip.\n\nPassage:\nA section of the coast path at Gannet Head has been closed after a landslip took away about twenty metres of the cliff edge following a week of heavy rain. Walkers are being diverted inland along a farm track that adds roughly a mile to the route. The national trail authority will survey the cliff once the ground has dried and expects to build a new path further from the edge rather than repair the old line. The nearby car park and cafe remain open.",
+    "sum-17-clockmaker": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Holloway town clock, pendulum, 1911.\n\nPassage:\nThe Holloway town clock, which has stood over the market hall since 1911, has been stopped for the first time in decades while its pendulum is repaired. The clock lost about a minute a day after a bearing wore through, and the clockmaker found the pendulum rod had also bent slightly. Both parts will be made new to the original drawings, which the town still holds. The chimes will be silent for about six weeks. The clock's four faces are being cleaned while the mechanism is out.",
+    "sum-18-heron-rookery": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Wimble Carr, herons, nests.\n\nPassage:\nThe heronry at Wimble Carr held forty-one nests this spring, the highest count since records began there in 1962. The herons nest high in a stand of old alders at the edge of the marsh and are counted each April by a warden with a telescope from the far bank. Last year's mild winter is thought to have helped, along with a ban on shooting over the marsh that came into force three years ago. The site is closed to visitors during the nesting season.",
+    "sum-29-brindle-viaduct": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Brindle Viaduct, strengthening.\n\nPassage:\nThe first assessment of Brindle Viaduct put the strengthening work at eighteen months and 2.4 million pounds. The revised scheme published in August is nine months and 3.1 million pounds: fewer closures, more night working, and a steel deck rather than the concrete originally specified. The line will shut for four weekends in total, the first in October, and a replacement bus will run from Brindle Halt.",
+    "sum-30-ganister-tarn": "Summarise the passage below in at most 28 words.\nThe summary must mention each of these terms, spelled exactly as given: Ganister Tarn.\n\nPassage:\nThe upper path at Ganister Tarn has not been closed, despite a notice circulating online that says it has. What closed on 1 September is the short link between the north car park and the boathouse, for bank stabilisation. The upper path is open, though the surface above the scree is loose after the wet summer and the ranger service advises boots. The link is due to reopen before Christmas.",
+    "sum-31-quernmore-kiln": "Summarise the passage below in at most 26 words.\nThe summary must mention each of these terms, spelled exactly as given: Quernmore, kiln.\n\nPassage:\nThe bottle kiln at Quernmore has been surveyed ahead of repair. Its brick shell leans 340 millimetres out of plumb at the crown, and the survey recommends grouting the crown ring and rebuilding the top two metres. The trust has 55,000 pounds of the 190,000 pounds needed and has applied for the rest. Firing has not taken place since 1962 and no firing is proposed.",
+    "sum-32-hessle-mills": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Hessle Low Mill.\n\nPassage:\nGrants have been awarded to Hessle Low Mill and refused to Hessle High Mill. Hessle Low Mill, the tower mill by the beck, receives 74,000 pounds for its cap and sails. Hessle High Mill, the smock mill on the ridge, was judged too far gone to justify the works proposed and its trustees have been asked to submit a revised scheme. Both mills are listed.",
+    "sum-33-cotterdale-bus": "Summarise the passage below in at most 25 words.\nThe summary must mention each of these terms, spelled exactly as given: Cotterdale, Saturdays.\n\nPassage:\nThe 831 bus between Cotterdale and Hawes will run on Saturdays only from November, instead of Tuesdays and Saturdays. The Tuesday journey carried an average of three passengers and the county council has withdrawn its subsidy for it. The Saturday service keeps its four return journeys and the 09:15 departure is unchanged. A demand-responsive minibus will be trialled on Tuesdays from January.",
+    "sum-34-alder-carr": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Alder Carr, willow tit.\n\nPassage:\nThe 2026 breeding-bird survey at Alder Carr counted 46 pairs of willow tit, up from 31 in 2023 and the highest since the survey began in 2011. Reed bunting fell to 12 pairs. The wet woodland on the reserve was extended by four hectares in the winter, and the survey team put the increase down to that work and to a mild spring.",
+    "sum-35-priory-gatehouse": "Summarise the passage below in at most 28 words.\nThe summary must mention each of these terms, spelled exactly as given: Priory gatehouse.\n\nPassage:\nScaffolding goes up at the Priory gatehouse in February for a twelve-week programme of stone replacement, repointing and the renewal of the lead roof over the gate lodge. The gatehouse stays open to visitors throughout except for two weeks in April, when the roof is off. The adjoining stretch of precinct wall is not part of this contract and will be assessed separately in the autumn.",
+    "sum-36-larkfield-quarry": "Summarise the passage below in at most 38 words.\nThe summary must mention each of these terms, spelled exactly as given: Larkfield quarry.\n\nPassage:\nPermission for the Larkfield quarry extension was granted on Tuesday, subject to conditions. Extraction may not begin until a bat survey has been completed and the access road has been widened at the Pitt Lane junction; lorry movements are capped at 48 a day and none may pass before 07:00. The operator expects the survey in the spring. Objectors had asked for refusal on noise grounds.",
+    "sum-37-ryhope-pool": "Summarise the passage below in at most 36 words.\nThe summary must mention each of these terms, spelled exactly as given: Ryhope pool.\n\nPassage:\nRyhope pool was due to reopen on 3 June. It reopened on 19 August, after the new plant room flooded during commissioning and a second circulation pump had to be ordered from Italy. The pool now opens at 06:30 on weekdays, half an hour earlier than before, and the diving boards remain out of use pending a separate inspection.",
+    "sum-38-bewick-refusals": "Summarise the passage below in at most 36 words.\nThe summary must mention each of these terms, spelled exactly as given: Bewick.\n\nPassage:\nThe proportion of licences refused at Bewick fell from 9 per cent to 6 per cent last year. Because the number of applications almost doubled, the number of refusals rose, from 41 to 58. The committee heard 14 appeals, of which 9 succeeded. Officers attribute the growth in applications to the new late-night levy exemption.",
+    "sum-39-coldbeck-society": "Summarise the passage below in at most 38 words.\nThe summary must mention each of these terms, spelled exactly as given: Coldbeck Co-operative Society.\n\nPassage:\nThe Coldbeck Co-operative Society has bought the former auction mart at Stang Bridge, not the mill site at Coldbeck Foot that it had been negotiating for since 2023. The mart will house a food store and eleven flats. The Coldbeck Foot mill remains on the market and its owner says talks with another buyer are at an early stage."
+  },
+  "dry_run": true,
+  "entry_before": {
+    "sum-13-cider-press": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 1,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-14-quarry-lake": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 2,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-15-bookbinder": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 3,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-16-cliff-path": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 4,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-17-clockmaker": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 5,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-18-heron-rookery": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 6,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-29-brindle-viaduct": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 7,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-30-ganister-tarn": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 8,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-31-quernmore-kiln": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 9,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-32-hessle-mills": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 10,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-33-cotterdale-bus": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 11,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-34-alder-carr": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 12,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-35-priory-gatehouse": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 13,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-36-larkfield-quarry": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 14,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-37-ryhope-pool": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 15,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-38-bewick-refusals": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 16,
+      "signature": "failure:check:working_memory.summary:max_words"
+    },
+    "sum-39-coldbeck-society": {
+      "confidence": 0.6364,
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "occurrences": 7,
+      "runs_since_last_seen": 17,
+      "signature": "failure:check:working_memory.summary:max_words"
+    }
+  },
+  "entry_in_prompt": {
+    "sum-13-cider-press": false,
+    "sum-14-quarry-lake": false,
+    "sum-15-bookbinder": false,
+    "sum-16-cliff-path": false,
+    "sum-17-clockmaker": false,
+    "sum-18-heron-rookery": false,
+    "sum-29-brindle-viaduct": false,
+    "sum-30-ganister-tarn": false,
+    "sum-31-quernmore-kiln": false,
+    "sum-32-hessle-mills": false,
+    "sum-33-cotterdale-bus": false,
+    "sum-34-alder-carr": false,
+    "sum-35-priory-gatehouse": false,
+    "sum-36-larkfield-quarry": false,
+    "sum-37-ryhope-pool": false,
+    "sum-38-bewick-refusals": false,
+    "sum-39-coldbeck-society": false
+  },
+  "entry_rank": {
+    "sum-13-cider-press": null,
+    "sum-14-quarry-lake": null,
+    "sum-15-bookbinder": null,
+    "sum-16-cliff-path": null,
+    "sum-17-clockmaker": null,
+    "sum-18-heron-rookery": null,
+    "sum-29-brindle-viaduct": null,
+    "sum-30-ganister-tarn": null,
+    "sum-31-quernmore-kiln": null,
+    "sum-32-hessle-mills": null,
+    "sum-33-cotterdale-bus": null,
+    "sum-34-alder-carr": null,
+    "sum-35-priory-gatehouse": null,
+    "sum-36-larkfield-quarry": null,
+    "sum-37-ryhope-pool": null,
+    "sum-38-bewick-refusals": null,
+    "sum-39-coldbeck-society": null
+  },
+  "failures": {},
+  "knowledge_boost": 0.0,
+  "knowledge_entries": [
+    {
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "kind": "failure",
+      "occurrences": 17,
+      "runs_since_last_seen": 0,
+      "signature": "failure:check:working_memory.summary:regex"
+    },
+    {
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "kind": "failure",
+      "occurrences": 7,
+      "runs_since_last_seen": 18,
+      "signature": "failure:check:working_memory.summary:max_words"
+    }
+  ],
+  "lessons_in_prompt": {
+    "sum-13-cider-press": false,
+    "sum-14-quarry-lake": false,
+    "sum-15-bookbinder": false,
+    "sum-16-cliff-path": false,
+    "sum-17-clockmaker": false,
+    "sum-18-heron-rookery": false,
+    "sum-29-brindle-viaduct": false,
+    "sum-30-ganister-tarn": false,
+    "sum-31-quernmore-kiln": false,
+    "sum-32-hessle-mills": false,
+    "sum-33-cotterdale-bus": false,
+    "sum-34-alder-carr": false,
+    "sum-35-priory-gatehouse": false,
+    "sum-36-larkfield-quarry": false,
+    "sum-37-ryhope-pool": false,
+    "sum-38-bewick-refusals": false,
+    "sum-39-coldbeck-society": false
+  },
+  "mean": 0.4,
+  "mean_negatives": 0.4,
+  "mean_positives": 0.4,
+  "model_arg": "(session default; --model omitted)",
+  "negatives": {
+    "sum-13-cider-press": 0.4,
+    "sum-14-quarry-lake": 0.4,
+    "sum-16-cliff-path": 0.4,
+    "sum-17-clockmaker": 0.4,
+    "sum-30-ganister-tarn": 0.4,
+    "sum-33-cotterdale-bus": 0.4,
+    "sum-35-priory-gatehouse": 0.4,
+    "sum-36-larkfield-quarry": 0.4
+  },
+  "order": [
+    "sum-13-cider-press",
+    "sum-14-quarry-lake",
+    "sum-15-bookbinder",
+    "sum-16-cliff-path",
+    "sum-17-clockmaker",
+    "sum-18-heron-rookery",
+    "sum-29-brindle-viaduct",
+    "sum-30-ganister-tarn",
+    "sum-31-quernmore-kiln",
+    "sum-32-hessle-mills",
+    "sum-33-cotterdale-bus",
+    "sum-34-alder-carr",
+    "sum-35-priory-gatehouse",
+    "sum-36-larkfield-quarry",
+    "sum-37-ryhope-pool",
+    "sum-38-bewick-refusals",
+    "sum-39-coldbeck-society"
+  ],
+  "per_scenario": {
+    "sum-13-cider-press": 0.4,
+    "sum-14-quarry-lake": 0.4,
+    "sum-15-bookbinder": 0.4,
+    "sum-16-cliff-path": 0.4,
+    "sum-17-clockmaker": 0.4,
+    "sum-18-heron-rookery": 0.4,
+    "sum-29-brindle-viaduct": 0.4,
+    "sum-30-ganister-tarn": 0.4,
+    "sum-31-quernmore-kiln": 0.4,
+    "sum-32-hessle-mills": 0.4,
+    "sum-33-cotterdale-bus": 0.4,
+    "sum-34-alder-carr": 0.4,
+    "sum-35-priory-gatehouse": 0.4,
+    "sum-36-larkfield-quarry": 0.4,
+    "sum-37-ryhope-pool": 0.4,
+    "sum-38-bewick-refusals": 0.4,
+    "sum-39-coldbeck-society": 0.4
+  },
+  "recorded_failures": {
+    "sum-13-cider-press": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-14-quarry-lake": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-15-bookbinder": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-16-cliff-path": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-17-clockmaker": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-18-heron-rookery": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-29-brindle-viaduct": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-30-ganister-tarn": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-31-quernmore-kiln": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-32-hessle-mills": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-33-cotterdale-bus": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-34-alder-carr": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-35-priory-gatehouse": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-36-larkfield-quarry": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-37-ryhope-pool": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-38-bewick-refusals": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-39-coldbeck-society": [
+      "check:working_memory.summary:regex"
+    ]
+  },
+  "repeat": 0,
+  "secs": 0.0,
+  "seeded_entries": [
+    "failure:check:working_memory.summary:max_words"
+  ],
+  "summaries": {
+    "sum-13-cider-press": "dry run summary placeholder text one two three four five",
+    "sum-14-quarry-lake": "dry run summary placeholder text one two three four five",
+    "sum-15-bookbinder": "dry run summary placeholder text one two three four five",
+    "sum-16-cliff-path": "dry run summary placeholder text one two three four five",
+    "sum-17-clockmaker": "dry run summary placeholder text one two three four five",
+    "sum-18-heron-rookery": "dry run summary placeholder text one two three four five",
+    "sum-29-brindle-viaduct": "dry run summary placeholder text one two three four five",
+    "sum-30-ganister-tarn": "dry run summary placeholder text one two three four five",
+    "sum-31-quernmore-kiln": "dry run summary placeholder text one two three four five",
+    "sum-32-hessle-mills": "dry run summary placeholder text one two three four five",
+    "sum-33-cotterdale-bus": "dry run summary placeholder text one two three four five",
+    "sum-34-alder-carr": "dry run summary placeholder text one two three four five",
+    "sum-35-priory-gatehouse": "dry run summary placeholder text one two three four five",
+    "sum-36-larkfield-quarry": "dry run summary placeholder text one two three four five",
+    "sum-37-ryhope-pool": "dry run summary placeholder text one two three four five",
+    "sum-38-bewick-refusals": "dry run summary placeholder text one two three four five",
+    "sum-39-coldbeck-society": "dry run summary placeholder text one two three four five"
+  }
+}

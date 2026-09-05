@@ -17,7 +17,7 @@ a `model_provider` at all (see docs/adr/0014).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from aef.config.schema import (
     CONTEXT_IMPLS,
@@ -165,11 +165,26 @@ def build_retriever(
     if config.impl == "memory":
         from aef.services.context.memory_retriever import MemoryRetriever
 
+        # An unset knob is OMITTED rather than passed as a literal, so
+        # `MemoryRetriever`'s dataclass defaults remain the single source of
+        # every measured default (ADR 0110's boost, ADR 0116's half-life).
+        # Writing them out here would be a second copy of a number set by
+        # measurement, and two copies of one measurement is the drift ADR 0091
+        # records. See ADR 0193 for why the fields exist at all.
+        knobs: dict[str, Any] = {}
+        if config.knowledge_boost is not None:
+            knobs["knowledge_boost"] = config.knowledge_boost
+        if config.staleness_half_life is not None:
+            knobs["staleness_half_life"] = config.staleness_half_life
+        if config.knowledge_min_occurrences is not None:
+            knobs["knowledge_min_occurrences"] = config.knowledge_min_occurrences
+
         return MemoryRetriever(
             memory=memory,
             agent_id=agent_id,
             knowledge=knowledge,
             max_token_budget=config.token_budget,
+            **knobs,
         )
     # Unreachable while `ContextConfig` validates against the same set, and
     # kept anyway: the two would otherwise be a pair that must agree with
