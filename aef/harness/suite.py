@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from aef.harness.candidate import CandidateDiff
 from aef.harness.corpus import Scenario
@@ -74,7 +75,7 @@ def run_variant(
     policy: SandboxPolicy,
     policy_config: PolicyConfig | None = None,
     cassette_miss: str = "fail",
-    live_provider: dict[str, str] | None = None,
+    live_provider: dict[str, Any] | None = None,
 ) -> VariantRun:
     """Score one already-materialised workspace over the corpus.
 
@@ -153,7 +154,7 @@ class CohortBuilder:
     # ADR 0123. "fail" keeps every variant's score deterministic; "live" is
     # the owner's opt-in, and `live_provider` is read from the base ref.
     cassette_miss: str = "fail"
-    live_provider: dict[str, str] | None = None
+    live_provider: dict[str, Any] | None = None
 
     def plan(self, scenarios: tuple[Scenario, ...]) -> CohortPlan:
         return CohortPlan(cohort_size=self.cohort_size, scenarios=len(scenarios))

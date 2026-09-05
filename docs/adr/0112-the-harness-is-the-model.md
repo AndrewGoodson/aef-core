@@ -108,6 +108,25 @@ when written and are now superseded; see ADR 0131.
 - Anything about `aef/evolution/`. The provider is a model path; the
   disablement (constraint #7) is unchanged and the AST scan still holds.
 
+## Erratum (2026-09-05, ADR 0181)
+
+"The coding agent's own login IS the credential — no API key anywhere" was
+true of every process this repo spawned **except the one that runs candidate
+code**. The gates' sandbox worker (ADR 0094) inherits an environment scrubbed
+to `sandbox.DEFAULT_ENV_ALLOWLIST`, which carries no `USER`, and `claude -p`
+answers `Not logged in · Please run /login` without it — measured, and
+narrowed to that one variable (`LOGNAME` does not substitute; `HOME` is not
+needed). So from the day node bodies moved into a worker until ADR 0181, the
+credential this ADR is about never reached the one place a candidate executes,
+and `--cassette-miss live` failed every request from inside the gates.
+
+Nothing above is wrong; it simply never said which processes it covered, and
+the answer was "not the important one". It is now: the login reaches the gates'
+worker when, and only when, the repo sets `gates.live_model_calls: true` in
+`aef.yaml` — an explicit per-repo opt-in, off by default, read from the base
+ref, and recorded on every `gated` ledger event. The default is still that a
+candidate's code inherits no credential and cannot spend the operator's quota.
+
 ## Confidence
 
 High on the Claude Code path and the wiring; the Codex path is documented,

@@ -4906,3 +4906,82 @@ the merge base — verified by exporting `git archive HEAD` to a clean tree and
 running the same suite there (`1 failed, 2572 passed, 7 skipped, 4 xfailed`,
 same test, same assertion). It is ADR 0178's `loop doctor` surface and nothing
 here goes near it.
+
+
+## Fix wave K1 — the login that never reached the one place candidates run (ADR 0181)
+
+ADR 0158's two HIGH findings, closed. They were separate defects with one
+consequence: **no provider served a live cassette miss inside the gates, on any
+repo.** `UPGRADE_LOOP.md` says *a prompt candidate is gated live, or not at
+all*; it resolved to the second, every time, everywhere.
+
+**F-M5-3 was a decision, and M5 said so** — "the allowlist exists so no
+credential is inherited, and adding `USER` is how the shadow run gains the
+operator's quota". Both halves true, pointing opposite ways: `sandbox.py`
+scrubs the environment of the one process that runs agent-written code, and
+ADR 0112's premise is that the harness login IS the credential. The decision:
+**live model calls inside the gates are an explicit per-repo opt-in, off by
+default** — `gates.live_model_calls` in `aef.yaml`, read from the **base ref**
+like every other rule a candidate is judged by (ADR 0082: a candidate that
+could set this in its own branch would be handing itself the operator's
+login). False — the default, and what every existing repo gets — leaves the
+worker's allowlist byte-for-byte what it was, and `--cassette-miss live` is
+**refused by name** instead of rejecting every candidate on an environment
+artifact. True adds `HARNESS_LOGIN_ENV`, and every `gated` ledger event records
+`live_model_calls` so the audit trail says which passes spent the quota.
+
+**The variable was measured, not guessed.** Five probes of the exact argv
+`ClaudeCodeProvider` builds: allowlist as shipped → `Not logged in`;
+**+`LOGNAME` → still `Not logged in`**; +`USER` → `OK`; allowlist *minus*
+`HOME` +`USER` → `OK`; `PATH`+`USER` alone → `OK`. So `USER` and only `USER` —
+not `HOME` (the credential is not in the config directory), and **not the other
+conventional spelling of the same fact**, which is ADR 0150's rule one more
+time. The table lives in `HARNESS_LOGIN_ENV`'s docstring, next to what it
+justifies. `DEFAULT_ENV_ALLOWLIST` is unchanged, and two tests say so out loud,
+because the obvious fix is one word on that line and it would let every gate
+pass on every repo spend the operator's quota with nobody asked.
+
+**F-M5-2**: `_live_provider_from_base_ref` put `{impl, model}` on the wire, so
+`impl: command` — the provider needing **no credential at all**, the one ADR
+0154 points every new adopter at — was refused worker-side (`worker refused
+configuration: … no `command:` block is present`) and G2 reported that as a
+behavioural regression. `ModelProviderConfig` is data; the validated block
+crosses whole now and `model_validate` rebuilds it, argv template, output
+pointer, `isolation:` assertion and fallback chain intact.
+
+**The live proof**, same pilot clone, persona, proposer and flag as ADR 0158:
+
+```
+G2 pass  2 scenario(s) re-executed; every previously-passing one still passes.
+G3 fail  candidate does not beat the p95 of the random control cohort
+evidence: 7 corpus pass(es) (14 scenario execution(s)) … live_model_calls: True
+```
+
+ADR 0158 got `G2 fail — 2 previously-passing scenario(s) no longer pass` out of
+29 `claude -p` runs that exited in ~30 ms with `Not logged in`, and its whole
+gate pass took 20 seconds. This one took 115 and served 12 live misses inside
+the worker. **Same verdict word, completely different claim**: the rejection is
+a judgement of the prompt now, and G3's arithmetic is what said no. Drift
+0.007/0.500. Acceptance is *reachable*, not reached — **this fixes the
+apparatus, not the learning**, and the two should not be confused: the
+rule-based lesson still moved nothing, exactly as ADR 0157's falsification and
+0158's paired `loop score` predicted.
+
+Both defects reached G2 as an ordinary regression, so **the exit code and the
+verdict cannot distinguish a live gate pass from the two defects that made one
+impossible** — which is why the live test now asserts `live_model_calls is
+True`, asserts real executions in the evidence line, and asserts that neither
+`worker refused configuration` nor `Not logged in` appears in the run.
+
+**Green bar:** `pytest -q` 2700 passed / 7 skipped / 1 xfailed, `mypy aef
+examples` clean (135 files), `ruff check .` clean, `ruff format --check` clean.
+**+19 tests, 2689 → 2708**, and the two strict xfails became passing tests
+rather than being deleted. **6 mutations planted, 6 killed**, every restore
+sha256-verified. **18 live calls** of a ≤30 budget. **No rubric dimension
+moves** — this is apparatus.
+
+**Reported, not fixed:** the one remaining strict xfail in
+`tests/cli/test_prompt_repo_acceptance.py` is F-M5-1 (obligation 6's
+every-graph scan, unreachable under a widened root), which belongs to another
+worker; and the generated `FIRST_DAY.md`/`aef.yaml` templates say nothing about
+the new opt-in — the exact paragraph M7 should place is in ADR 0181.
