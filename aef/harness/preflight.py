@@ -211,6 +211,109 @@ def _reflect_is_routed_to(agent_source: Path) -> tuple[bool, str]:
     )
 
 
+@dataclass(frozen=True)
+class AgentSource:
+    """Which file the graph obligations should actually read, and why.
+
+    `--agent-path` is ONE flag with TWO meanings. Under `--proposer
+    rule_based_prompt` it names the PERSONA `.md` the proposer edits (ADR
+    0157, and that is what its own help text says); everywhere else it names
+    the Python module that builds the graph. The obligations here only ever
+    understood the second meaning, so on the documented prompt-proposer
+    invocation they read a markdown file as Python:
+
+        $ aef loop doctor ... --agent-root .claude/agents \\
+              --agent-path .claude/agents/accela.md
+          [--] reflect node routed to  no reflect node in the graph
+               fix: add make_reflect_node() to your graph AND make a node
+                    `return delta, 'reflect'` ...
+          [OK] model calls visible     1 graph scanned, none reaches a model
+                                       SDK the harness cannot see
+
+    Both lines are wrong about a correctly generated graph. The first told
+    the reader to add a node `aef migrate` had already written and routed;
+    the second reported a clean bill of health for a repo with `import
+    anthropic` planted in the generated graph — the ADR 0167/0168 false pass
+    again, one flag over (ADR 0178).
+
+    `problem` non-empty means the two obligations are unmet **with that
+    sentence as the reason**, rather than with a Python answer about a file
+    that is not Python.
+    """
+
+    path: str
+    persona: str = ""
+    problem: str = ""
+
+    @property
+    def from_persona(self) -> bool:
+        return bool(self.persona)
+
+
+def resolve_agent_source(
+    repo_root: Path,
+    agent_path: str,
+    *,
+    agent_root: str = DEFAULT_AGENT_ROOT,
+) -> AgentSource:
+    """A persona `.md` resolved to the graph `aef migrate` generated for it.
+
+    The mapping is **imported, not re-derived**: `discover_prompt_agents` is
+    the one function that decides which persona becomes which module, with
+    the sanitiser (`marlin-accela` -> `marlin_accela`), the keyword and
+    leading-digit prefixes and the collision disambiguation ADR 0152
+    specifies. A second spelling of that rule here would be the ADR 0149
+    shape — two answers to one question, drifting the first time either
+    gains a case — and this file already lost a whole obligation to exactly
+    that (ADR 0167's C<->D finding).
+
+    Anything not ending in `.md` is returned unchanged, so every existing
+    caller is unaffected. A `.md` that no persona discovery claims is
+    reported as a problem rather than parsed: it is neither a graph nor a
+    persona, and "no reflect node in the graph" is not what is wrong with it.
+    """
+    if not agent_path.endswith(".md"):
+        return AgentSource(path=agent_path)
+
+    from aef.cli.migrate import discover_prompt_agents
+    from aef.reasoning.prompt_agent import DEFAULT_PROMPT_AGENT_DIR
+
+    wanted = PurePosixPath(agent_path).as_posix()
+    for site in discover_prompt_agents(repo_root, agent_root=agent_root):
+        if PurePosixPath(site.source).as_posix() != wanted:
+            continue
+        graph = site.out_relative
+        if (repo_root / graph).is_file():
+            return AgentSource(path=graph, persona=wanted)
+        return AgentSource(
+            path=graph,
+            persona=wanted,
+            problem=(
+                f"persona {wanted} has no generated graph — `aef migrate` would write it "
+                f"to {graph} and nothing is there. Nothing was read, so nothing is claimed "
+                f"about the graph's wiring or its model calls"
+            ),
+        )
+
+    return AgentSource(
+        path=wanted,
+        problem=(
+            f"{wanted} is a markdown file, and no persona under {DEFAULT_PROMPT_AGENT_DIR} "
+            f"has that path — so it is neither a graph module nor a persona this can resolve "
+            f"to one. --agent-path takes the module that builds your graph; with --proposer "
+            f"rule_based_prompt it takes the persona `.md` instead (ADR 0157)"
+        ),
+    )
+
+
+_MIGRATE_FIX = (
+    "run `aef migrate --dir . --agent-root {root}` to generate the graph for this persona, "
+    "or pass --agent-path naming the module that builds your graph. `--agent-path` means the "
+    "persona only for --proposer rule_based_prompt (ADR 0157); these obligations are always "
+    "about the GRAPH, and resolve the persona to it (ADR 0178)."
+)
+
+
 def _module_candidates(repo_root: Path, dotted: str) -> list[Path]:
     """Where an absolute `import a.b.c` could live inside this repo.
 
@@ -443,9 +546,19 @@ def preflight(
     package's guess rather than the owner's answer, and a diagnostic that
     reports on one file out of nine is how ADR 0168's false pass happened.
     Default `False`, so a caller that names a path still gets an answer about
-    that path.
+    that path. It is forced on when `agent_path` was a PERSONA, because the
+    graph is then this package's derivation from the persona rather than the
+    owner's answer — the same reason the CLI passes it for the defaulted path
+    (ADR 0178).
+
+    `agent_path` may be a persona `.md`: `--proposer rule_based_prompt` reads
+    it as one (ADR 0157) and it is one flag. `resolve_agent_source` maps it to
+    the generated graph so obligations 2 and 6 report on Python rather than on
+    markdown; the proposer is untouched and still gets the persona.
     """
     checks: list[Obligation] = []
+    source = resolve_agent_source(repo_root, agent_path, agent_root=agent_root)
+    migrate_fix = _MIGRATE_FIX.format(root=agent_root)
 
     # 1 — corpus with at least one tripwire
     try:
@@ -471,16 +584,28 @@ def preflight(
         )
 
     # 2 — a reflect node something routes to
-    routed, why = _reflect_is_routed_to(repo_root / agent_path)
+    #
+    # It read `--agent-path` as Python. Under `--proposer rule_based_prompt`
+    # that flag names a persona `.md`, so this printed `no reflect node in the
+    # graph` — with a fix telling the reader to add a node `aef migrate` had
+    # already written and routed — on every prompt-proposer cycle, forever
+    # (reproduced, ADR 0178).
+    if source.problem:
+        routed, why, reflect_fix = False, source.problem, migrate_fix
+    else:
+        routed, why = _reflect_is_routed_to(repo_root / source.path)
+        if source.from_persona:
+            why = f"{source.path}: {why}"
+        reflect_fix = (
+            "add make_reflect_node() to your graph AND make a node "
+            "`return delta, 'reflect'` — an Edge alone does not route (ADR 0070)"
+        )
     checks.append(
         Obligation(
             name="reflect node routed to",
             met=routed,
             detail=why,
-            fix=(
-                "add make_reflect_node() to your graph AND make a node "
-                "`return delta, 'reflect'` — an Edge alone does not route (ADR 0070)"
-            ),
+            fix=reflect_fix,
         )
     )
 
@@ -509,7 +634,12 @@ def preflight(
     # 5 — blessed baseline, OF THE TREE THIS LOOP IS ACTUALLY MEASURING
     versions = archive.versions(state_root / "archive", graph_id)
     root_flag = f" --agent-root {agent_root}" if agent_root != DEFAULT_AGENT_ROOT else ""
-    bless_fix = f"aef loop bless --repo . --state {state_root} --agent-path {agent_path}{root_flag}"
+    # The GRAPH, never the persona: under the default root a persona lives
+    # outside the tree `bless` archives, so a fix line naming it is a command
+    # that refuses ("... is NOT inside the tree this would archive").
+    bless_fix = (
+        f"aef loop bless --repo . --state {state_root} --agent-path {source.path}{root_flag}"
+    )
     blessed_root = ""
     if versions:
         try:
@@ -565,9 +695,30 @@ def preflight(
     # module(s), none imports a model SDK`. Exactly the false pass ADR 0168
     # fixed in `aef doctor`, in the other diagnostic, sharing the discovery
     # function 0168 added rather than a second answer to the same question.
-    targets = [agent_path]
-    if scan_all_graphs:
-        targets = discover_graph_files(repo_root, agent_root=agent_root) or [agent_path]
+    #
+    # And it read a persona `.md` as a graph: `model_calls_are_visible`
+    # found the file, reached no imports out of it and reported `1 graph
+    # scanned, none reaches a model SDK the harness cannot see` while an
+    # `import anthropic` planted in the generated graph went unopened — with
+    # the wide scan disabled, because `--agent-path` was not at its default
+    # (reproduced, ADR 0178). A persona resolves to its generated graph, and
+    # the graph it resolves to is this package's derivation rather than the
+    # owner's answer, so the wide scan applies for the same reason it applies
+    # to the defaulted path.
+    if source.problem:
+        checks.append(
+            Obligation(
+                name="model calls visible",
+                met=False,
+                detail=source.problem,
+                fix=migrate_fix,
+            )
+        )
+        return Preflight(obligations=tuple(checks))
+
+    targets = [source.path]
+    if scan_all_graphs or source.from_persona:
+        targets = discover_graph_files(repo_root, agent_root=agent_root) or [source.path]
     invisible: list[tuple[str, str, str]] = []
     for target in targets:
         ok, why, how = model_calls_are_visible(repo_root, target)

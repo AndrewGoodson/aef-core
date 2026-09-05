@@ -1680,10 +1680,97 @@ def test_the_cycle_summary_says_what_the_exit_code_MEANS(tmp_path: Path) -> None
     cycle = [s for s in _steps(_monitor_workflow(tmp_path)) if s.get("name") == "Daily cycle"][0]
     run = str(cycle["run"])
     arms = dict(_re.findall(r'\n\s+(\d|\*)\)\s+meaning="([^"]*)"', run))
-    assert set(arms) == {"0", "1", "2", "*"}, arms
+    assert set(arms) == {"0", "1", "2", "3", "*"}, arms
     assert all(text.strip() for text in arms.values()), arms
     assert "escalated" in arms["0"] and "nothing to propose" in arms["0"], arms["0"]
     assert "REJECTED" in arms["1"], arms["1"]
     assert "HALTED" in arms["2"], arms["2"]
+    # 3 is EXIT_ERROR (ADR 0167 §6), chosen over reusing 2 precisely because a
+    # crash's remedy — fix the invocation — is not a halt's — clear the kill
+    # switch. It was reaching the reader as "HALTED" anyway (ADR 0178).
+    assert "HALTED" not in arms["3"], arms["3"]
+    assert "ERROR" in arms["3"] and "crashed" in arms["3"], arms["3"]
+    assert "kill switch" in arms["2"] and "kill switch" in arms["3"], arms
+    assert arms["2"] != arms["3"], "a halt and a crash must not read the same"
     assert "raised" in arms["*"], "an exception must not read as a verdict"
     assert "GITHUB_STEP_SUMMARY" in run
+
+
+def test_the_exit_code_case_is_shell_that_maps_every_code(tmp_path: Path) -> None:
+    """The arms are ASSERTED as text above and EXECUTED here, because a `case`
+    that does not parse maps nothing at all and a text assertion cannot tell."""
+    import shutil
+    import subprocess
+
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover - bash exists on every runner here
+        pytest.skip("no bash")
+
+    _adopt(tmp_path)
+    cycle = [s for s in _steps(_monitor_workflow(tmp_path)) if s.get("name") == "Daily cycle"][0]
+    run = str(cycle["run"])
+    case = run[run.index('case "$status"') : run.index("esac") + 4]
+    seen = {}
+    for status in (0, 1, 2, 3, 9):
+        done = subprocess.run(
+            [bash, "-c", f'status={status}\n{case}\nprintf "%s" "$meaning"'],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        seen[status] = done.stdout
+    assert "HALTED" in seen[2] and "HALTED" not in seen[3], seen
+    assert "ERROR" in seen[3], seen
+    assert len({seen[0], seen[1], seen[2], seen[3]}) == 4, seen
+    assert seen[9] == seen[9].replace("$status", ""), "the fallback must interpolate the code"
+    assert "9" in seen[9], seen[9]
+
+
+def test_the_failure_step_does_not_call_a_crash_a_halt(tmp_path: Path) -> None:
+    """`Surface a halt` fired on `if: failure()` and printed
+    `## Self-rewiring loop HALTED` for exit 3 — a crash, for which there is no
+    kill switch to clear. It is the summary an owner reads first, so it named
+    the wrong remedy for the failure most likely to repeat (ADR 0178)."""
+    import shutil
+    import subprocess
+
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover - bash exists on every runner here
+        pytest.skip("no bash")
+
+    _adopt(tmp_path)
+    steps = _steps(_monitor_workflow(tmp_path))
+    cycle = [s for s in steps if s.get("name") == "Daily cycle"][0]
+    assert 'echo "$status" > "$RUNNER_TEMP/cycle.status"' in str(cycle["run"]), (
+        "the failure step cannot tell a halt from a crash unless the code is recorded"
+    )
+
+    failing = [s for s in steps if s.get("if") == "failure()"]
+    assert len(failing) == 1, [s.get("name") for s in failing]
+    (surface,) = failing
+    body = str(surface["run"])
+    body = body[: body.index("aef loop status")]
+
+    printed = {}
+    for status in ("2", "3", ""):
+        script = body.replace(
+            'status=$(cat "$RUNNER_TEMP/cycle.status" 2>/dev/null || echo "")',
+            f'status="{status}"',
+        )
+        done = subprocess.run(
+            [bash, "-c", f"GITHUB_STEP_SUMMARY=/dev/stdout\n{script}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        printed[status] = done.stdout
+
+    assert "HALTED" in printed["2"], printed["2"]
+    assert "HALTED" not in printed["3"], printed["3"]
+    assert "ERROR" in printed["3"] and "crashed" in printed["3"], printed["3"]
+    assert "NOT a halt" in printed["3"], printed["3"]
+    # The two remedies, and they are different sentences.
+    assert "HALTED to resume" in printed["2"], printed["2"]
+    assert "fix" in printed["3"] and "invocation" in printed["3"], printed["3"]
+    # A failure with no cycle code is neither — some other step broke.
+    assert "HALTED" not in printed[""] and "FAILED" in printed[""], printed[""]

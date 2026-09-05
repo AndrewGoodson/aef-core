@@ -375,3 +375,26 @@ Unchanged: **defects 1 and 2 above reproduce exactly** — G2 still raises
 has no null hypothesis for a `.md`, so a prompt candidate can still be rejected
 and never accepted. The L4 table's live flip (0.0 → 1.0) is **not** re-claimed
 under the new rendering and has not been re-measured.
+
+
+## Erratum (2026-09-05, ADR 0178, fix wave J2)
+
+**`--agent-path <persona>.md` is documented here and under `--proposer`, and
+was documented nowhere the flag's other reader could see it.**
+
+§1's reproduced invocation is
+`--agent-path .claude/agents/accela-agent.md`, and `--proposer`'s help says
+`rule_based_prompt: for a `.md` prompt-file agent (--agent-path <persona>.md)`.
+The four `--agent-path` arguments on `cycle`, `run`, `bless` and `doctor`
+carried **no help text at all**, so the only written record of the second
+meaning lived under a different flag — and `aef/harness/preflight.py`, which
+reads the same flag, understood only the first. Every prompt-proposer cycle
+therefore printed `reflect node routed to: no reflect node in the graph`
+about a graph that routes correctly, and reported obligation 6 green over a
+planted invisible model call (reproduced, ADR 0178).
+
+Nothing about the proposer changes: it still receives the persona and still
+appends its lesson to the `.md`. What changed is that the flag now carries
+help text naming both forms on every subcommand that takes it, derived from
+one string, and that preflight resolves the persona to its generated graph
+before asking a question about Python.

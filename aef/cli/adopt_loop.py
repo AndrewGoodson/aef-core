@@ -756,11 +756,17 @@ jobs:
           # In WORDS, not only as an exit code: `no admissible failure memory`
           # and `escalated` both exit 0, and a nightly job that is green
           # either way tells nobody which one happened.
+          #
+          # 2 and 3 both fail the job and their REMEDIES DIFFER — clear the
+          # kill switch versus fix the invocation — which is why they are two
+          # codes and not one (ADR 0167 §6), and why announcing 3 as a halt
+          # sent the reader to the wrong file (ADR 0178).
           case "$status" in
             0) meaning="escalated, or nothing to propose — read the verdict line" ;;
             1) meaning="REJECTED by a gate — the system working, not a broken job" ;;
-            2) meaning="HALTED — do not retry, a person must look" ;;
-            *) meaning="the cycle raised: this is an ERROR, not a verdict" ;;
+            2) meaning="HALTED — the kill switch is on; clearing it is a deliberate act" ;;
+            3) meaning="ERROR — the cycle crashed; no kill switch is set, fix the invocation" ;;
+            *) meaning="exit $status is not a code this loop defines — the cycle raised" ;;
           esac
           {{
             echo "## Loop cycle — {repo_name} (exit $status: $meaning)"
@@ -768,9 +774,14 @@ jobs:
             cat "$RUNNER_TEMP/cycle.log"
             echo '```'
           }} >> "$GITHUB_STEP_SUMMARY"
-          # 1 is a REJECTION — the system working, not a broken job. 2 is a
-          # HALT, and that must fail loudly enough to reach a person.
-          if [ "$status" -ge 2 ]; then exit 1; fi
+          # 1 is a REJECTION — the system working, not a broken job. 2 (a
+          # HALT) and 3 (a CRASH) must both fail loudly enough to reach a
+          # person, and the failure step below has to know WHICH, so the code
+          # is written down before the job dies.
+          if [ "$status" -ge 2 ]; then
+            echo "$status" > "$RUNNER_TEMP/cycle.status"
+            exit 1
+          fi
         env:
           # EDIT THESE THREE. `AEF_MODULE` is {module_note} —
           # `aef migrate` prints the path it wrote; one graph per prompt agent
@@ -789,10 +800,28 @@ jobs:
 
       # A failed job is the ONLY halt signal wired by default, and it depends
       # on someone reading GitHub notifications. Wire a channel you read.
-      - name: Surface a halt
+      #
+      # It said HALTED for every failure, including exit 3 — a CRASH, whose
+      # remedy is to fix the invocation and for which there is no kill switch
+      # to clear. A summary that names the wrong remedy is worse than one that
+      # names none (ADR 0178).
+      - name: Surface a halt or an error
         if: failure()
         run: |
-          echo "## Self-rewiring loop HALTED in {repo_name}" >> "$GITHUB_STEP_SUMMARY"
+          status=$(cat "$RUNNER_TEMP/cycle.status" 2>/dev/null || echo "")
+          case "$status" in
+            2) echo "## Self-rewiring loop HALTED in {repo_name}"
+               echo "The kill switch is on. Read the ledger, then remove"
+               echo "~/.aef-loop-state/HALTED to resume — a deliberate act, not an"
+               echo "automatic one." ;;
+            3) echo "## Self-rewiring loop ERROR in {repo_name} — the cycle crashed"
+               echo "This is NOT a halt: no kill switch is set and clearing one changes"
+               echo "nothing. The exception is in the cycle log above; the remedy is to fix"
+               echo "the invocation (the module, the entrypoint, the corpus, the config)." ;;
+            *) echo "## Self-rewiring loop job FAILED in {repo_name}"
+               echo "No cycle exit code was recorded, so the cycle is not what failed —"
+               echo "read the failing step above." ;;
+          esac >> "$GITHUB_STEP_SUMMARY"
           aef loop status --repo . --state ~/.aef-loop-state >> "$GITHUB_STEP_SUMMARY" || true
           exit 1
 """

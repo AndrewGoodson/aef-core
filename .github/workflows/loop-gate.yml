@@ -87,7 +87,14 @@ jobs:
             --network-isolated
         # exit 0 = passed and escalated to the owner (Tier-1 is off)
         # exit 1 = a gate rejected it
-        # exit 2 = the loop halted; do not retry, read the ledger
+        # exit 2 = the loop halted; do not retry, clear the kill switch
+        #          (~/.aef-loop-state/HALTED) deliberately, or leave it set
+        # exit 3 = the command CRASHED (EXIT_ERROR, ADR 0167 §6). Not a halt:
+        #          no kill switch is set and clearing one changes nothing —
+        #          fix the invocation. `aef loop gate` does not return it yet;
+        #          `cycle`, `run`, `doctor` and `bless` do, and `main()`'s
+        #          catch-all still reports an escaped exception as 1, which is
+        #          also "a gate rejected it" (open, ADR 0167 R3 / 0178).
 
       - name: Report
         if: always()

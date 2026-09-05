@@ -595,3 +595,38 @@ Nothing is claimed about whether any scheduled loop will now propose anything.
 As ADR 0165 said of its own change, nothing here makes that more likely; what
 changes is that a loop producing nothing says so, from both of the commands
 that can produce something.
+
+
+## Erratum (2026-09-05, ADR 0178, fix wave J2)
+
+**§3 and §8 fixed the two graph obligations, and the FLAG feeding them was
+carrying a second meaning neither section knew about.**
+
+§3 taught `_reflect_is_routed_to` the factory shape, so
+`make_prompt_agent_node(route="reflect")` counts. §8 widened obligation 6 to
+every graph when `--agent-path` was left at its default. Both are correct and
+both stayed permanently wrong on the invocation ADR 0157 documents, because
+`--proposer rule_based_prompt` reads `--agent-path` as the **persona `.md`**:
+
+```
+$ aef loop doctor ... --agent-root .claude/agents \
+      --agent-path .claude/agents/accela.md
+    [--] reflect node routed to  no reflect node in the graph
+    [OK] model calls visible     1 graph scanned, none reaches a model SDK the
+                                 harness cannot see
+```
+
+The first line is §3's detector reading markdown. The second is §8's own
+false pass, reached the other way: the wide scan is off because the path is
+not the default, and the path that IS named is not a graph — so the planted
+`import anthropic` in the generated graph went unopened, exactly as it did
+before §8.
+
+The condition in §8 — *"the CLI passes it when `--agent-path` is
+`DEFAULT_AGENT_PATH`, because then the path is this package's guess"* — was
+right about its reason and short by one case. A persona-resolved graph is
+also this package's guess; the owner named an agent, not a file. ADR 0178
+resolves the persona to its generated graph through migrate's own
+`discover_prompt_agents` and widens the scan for that case too. §8's
+deliberate narrowness for an explicitly named `.py` is left standing, for the
+reason §4 gives about strengthening controls.

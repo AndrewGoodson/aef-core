@@ -3884,3 +3884,95 @@ G2/G3 defects reproduce unchanged; `loop score` wants `module:factory` where
 `loop bootstrap` wants `module`; and a copied corpus's stale `manifest.json`
 makes the next cycle refuse with `corpus shrank`, with no command to reconcile
 it.
+
+
+## Fix wave J2 — one flag with two meanings, and a crash announced as a halt (ADR 0178)
+
+Two findings from the third seam hunt. Both reproduced by RUNNING a command on
+the parent commit (db2987a) before anything was edited; zero live model calls.
+
+**R2 — `--agent-path` is one flag with two meanings.** `--proposer
+rule_based_prompt` reads it as the persona `.md` (ADR 0157 §1's reproduced
+invocation, and `--proposer`'s own help text); `aef/harness/preflight.py` reads
+it as a Python module. On the documented invocation, against a real `aef
+migrate` output with `import anthropic` planted in one generated graph:
+
+```
+$ aef loop doctor --repo <pilot> --state <s> --corpus <c> \
+      --agent-root .claude/agents --agent-path .claude/agents/accela.md
+    [--] reflect node routed to  no reflect node in the graph
+         fix: add make_reflect_node() to your graph AND make a node
+              `return delta, 'reflect'` — an Edge alone does not route (ADR 0070)
+    [--] blessed baseline        0 archived version(s)
+         fix: aef loop bless ... --agent-path .claude/agents/accela.md ...
+    [OK] model calls visible     1 graph scanned, none reaches a model SDK the
+                                 harness cannot see
+EXIT=1
+```
+
+Three wrong lines about a correct repo: a fix already applied, a `bless`
+command that refuses, and a clean bill of health over the planted fault. And
+`_warn_unmet_obligations` prints the same list on every cycle.
+
+After — the persona resolved through migrate's own `discover_prompt_agents`:
+
+```
+    [OK] reflect node routed to  .claude/agents/migrated/marlin_accela/graph.py:
+         make_prompt_agent_node(route='reflect') builds a node that routes to it
+    [--] blessed baseline        fix: aef loop bless ...
+         --agent-path .claude/agents/migrated/marlin_accela/graph.py --agent-root .claude/agents
+    [--] model calls visible     .claude/agents/migrated/marlin_accela/graph.py:
+         src/client.py:1 imports anthropic — the harness cannot see it
+```
+
+and, with the graph deleted, in words rather than as a Python answer:
+
+```
+    [--] reflect node routed to  persona .claude/agents/accela.md has no generated
+         graph — `aef migrate` would write it to
+         .claude/agents/migrated/marlin_accela/graph.py and nothing is there.
+         Nothing was read, so nothing is claimed about the graph's wiring or its
+         model calls
+```
+
+The proposer is untouched: it still gets the persona and still appends its
+lesson to the `.md`. `--agent-path` gains help text naming both forms on all
+five arguments, with the list derived from the parser.
+
+**R8 — exit 3 is announced as "HALTED".** `EXIT_ERROR = 3` exists because a
+crash's remedy is not a halt's (ADR 0167 §6). The rendered workflow's `case`
+had arms `['*','0','1','2']`, and `-ge 2` sent a 3 into a step named `Surface a
+halt` printing `## Self-rewiring loop HALTED in target`. Now, executed in bash
+from the rendered YAML:
+
+```
+  exit 2 -> HALTED — the kill switch is on; clearing it is a deliberate act
+  exit 3 -> ERROR — the cycle crashed; no kill switch is set, fix the invocation
+
+  cycle.status = 3:
+      ## Self-rewiring loop ERROR in target — the cycle crashed
+      This is NOT a halt: no kill switch is set and clearing one changes
+      nothing. ... the remedy is to fix the invocation ...
+```
+
+with a third arm for a job that failed outside the cycle — which the old step
+was also calling a halt. Same shape in this repo's own `loop-monitor.yml`;
+`loop-gate.yml`'s comment gains exit 3. The `-ge 2` rule is unchanged and
+asserted in both repos.
+
+**Mutations:** 11 planted, 11 caught, every restore sha256-verified. M2 (the
+persona wide scan) SURVIVED the first pass, because the planted fault sat
+inside the narrow scan's own target — the test proved nothing until the fault
+moved to the other agent's graph. That is the reproduce-first rule about
+verifying a detector against a planted fault, applied to a test of a widening.
+
+**Green bar:** 2529 passed, 6 skipped (from 2510/6, +19); `mypy aef examples` clean;
+`ruff check .` and `ruff format --check aef tests examples` clean.
+
+**Defects found outside this worker's files (reported, not fixed).** Eleven of
+the thirteen `aef loop` subcommands still report a crash as exit **1** via
+`aef/cli/main.py`'s catch-all, and 1 is also `EXIT_REJECTED` — "the candidate
+was rejected, the system is working". Only `cycle`, `run`, `doctor` and `bless`
+return `EXIT_ERROR`. That is ADR 0167's R3 still standing across the rest of the
+surface, and it is a `cli/loop.py`-wide change two other workers held during
+this wave. `loop-gate.yml`'s new comment says so in the file where it matters.

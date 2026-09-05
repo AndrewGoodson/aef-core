@@ -13,6 +13,7 @@ green, and the bill arrives at gate time (ADR 0137).
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -1069,3 +1070,213 @@ def test_the_cli_scans_every_graph_when_agent_path_was_left_at_its_default(
     line = next(ln for ln in out.splitlines() if "model calls visible" in ln)
     assert "[--]" in line, line
     assert "marlin_accela" in line, line
+
+
+# --------------------------------------------------------------------------
+# `--agent-path` is ONE flag with TWO meanings (ADR 0178)
+#
+# Reproduced on a real `aef migrate` output, with an `import anthropic`
+# planted in one generated graph:
+#
+#   $ aef loop doctor ... --agent-root .claude/agents \
+#         --agent-path .claude/agents/accela.md
+#     [--] reflect node routed to  no reflect node in the graph
+#          fix: add make_reflect_node() to your graph AND make a node
+#               `return delta, 'reflect'` ...
+#     [OK] model calls visible     1 graph scanned, none reaches a model SDK
+#                                  the harness cannot see
+#   EXIT=1
+#
+# The first line is about a graph that routes correctly and whose fix was
+# already applied; the second is a clean bill of health over a repo with a
+# planted invisible model call. `--proposer rule_based_prompt` documents this
+# exact invocation (ADR 0157) — so every prompt-proposer cycle printed it,
+# forever. ADR 0167's F2 shape, one flag over.
+# --------------------------------------------------------------------------
+
+
+def _prompt_repo(tmp_path: Path, *, agent_root: str = ".claude/agents") -> tuple[Path, Any]:
+    """The REAL `aef migrate` on a two-persona repo. Returns (root, result)."""
+    from aef.cli.migrate import run_migrate
+
+    root = tmp_path / "pilot"
+    agents = root / ".claude" / "agents"
+    agents.mkdir(parents=True)
+    for name in ("accela", "azure"):
+        (agents / f"{name}.md").write_text(
+            f"---\nname: marlin-{name}\ndescription: d\n---\n\nbody\n", encoding="utf-8"
+        )
+    result = run_migrate(root, agent_root=agent_root)
+    assert result.prompt_agents, "migrate wrote no prompt-agent graph; the fixture is wrong"
+    return root, result
+
+
+def _preflight_at(root: Path, tmp_path: Path, agent_path: str, **kw: object) -> Any:
+    defaults: dict[str, object] = {
+        "repo_root": root,
+        "state_root": tmp_path / "state",
+        "corpus_root": tmp_path / "corpus",
+        "agent_path": agent_path,
+        "graph_id": "g",
+        "halt_channel_configured": False,
+        "observations": tmp_path / "obs.jsonl",
+    }
+    defaults.update(kw)
+    return preflight(**defaults)  # type: ignore[arg-type]
+
+
+def test_a_persona_resolves_to_the_graph_migrate_generated_for_it(tmp_path: Path) -> None:
+    """C<->D again: the REAL `run_migrate` output read back through the REAL
+    preflight, this time addressed the way `--proposer rule_based_prompt`
+    documents (by the persona). Obligation 2 was PERMANENTLY red here."""
+    root, result = _prompt_repo(tmp_path)
+    site = result.prompt_agents[0]
+
+    obligation = _obligation(
+        _preflight_at(root, tmp_path, site.source, agent_root=".claude/agents"),
+        "reflect node routed to",
+    )
+    assert obligation.met, obligation.detail
+    # ...and it names WHICH file it read, because the answer is about a file
+    # the caller did not type.
+    assert site.out_relative in obligation.detail, obligation.detail
+    assert "route='reflect'" in obligation.detail, obligation.detail
+
+
+def test_the_mapping_is_migrates_own_not_a_second_spelling_of_it(tmp_path: Path) -> None:
+    """`marlin-accela` -> `marlin_accela` is ADR 0152's sanitiser. Resolving
+    by re-deriving it here would be the ADR 0149 shape: two answers to one
+    question, drifting the first time either gains a case."""
+    from aef.harness.preflight import resolve_agent_source
+
+    root, result = _prompt_repo(tmp_path)
+    for site in result.prompt_agents:
+        resolved = resolve_agent_source(root, site.source, agent_root=".claude/agents")
+        assert resolved.path == site.out_relative, (site.source, resolved)
+        assert resolved.persona == site.source
+        assert not resolved.problem
+
+
+def test_the_persona_form_catches_a_planted_sdk_import_in_the_generated_graph(
+    tmp_path: Path,
+) -> None:
+    """The false pass, closed. The wide scan was off because `--agent-path`
+    was not at its default — while the path it named was not a graph at all."""
+    root, result = _prompt_repo(tmp_path)
+    (root / "src").mkdir()
+    (root / "src" / "__init__.py").write_text("")
+    (root / "src" / "client.py").write_text("import anthropic\n\nC = anthropic.Anthropic\n")
+    target = root / result.prompt_agents[0].out_relative
+    target.write_text(target.read_text() + "\nfrom src.client import C  # noqa: E402,F401\n")
+
+    obligation = _obligation(
+        _preflight_at(
+            root,
+            tmp_path,
+            result.prompt_agents[0].source,
+            agent_root=".claude/agents",
+        ),
+        "model calls visible",
+    )
+    assert not obligation.met, obligation.detail
+    assert "marlin_accela" in obligation.detail, obligation.detail
+    assert "imports anthropic" in obligation.detail, obligation.detail
+
+
+def test_naming_one_persona_still_scans_the_OTHER_agents_graphs(tmp_path: Path) -> None:
+    """The wide scan, and it needs the fault in a graph the named persona does
+    NOT resolve to — otherwise the narrow scan finds it and the test proves
+    nothing (a mutation removing the widening survived the first version).
+
+    Why widen at all here: with a persona the graph is this package's
+    derivation from it, not a path the owner typed, which is exactly the
+    condition ADR 0167 §8 widens for. The owner asked about an agent; the
+    answer "your other agent reaches a model SDK the harness cannot see" is
+    about the repo they are about to run a loop over.
+    """
+    root, result = _prompt_repo(tmp_path)
+    (root / "src").mkdir()
+    (root / "src" / "__init__.py").write_text("")
+    (root / "src" / "client.py").write_text("import anthropic\n\nC = anthropic.Anthropic\n")
+    other = root / result.prompt_agents[1].out_relative
+    other.write_text(other.read_text() + "\nfrom src.client import C  # noqa: E402,F401\n")
+
+    named = result.prompt_agents[0]
+    assert "azure" in result.prompt_agents[1].out_relative
+    obligation = _obligation(
+        _preflight_at(root, tmp_path, named.source, agent_root=".claude/agents"),
+        "model calls visible",
+    )
+    assert not obligation.met, obligation.detail
+    assert "marlin_azure" in obligation.detail, obligation.detail
+
+
+def test_a_persona_with_no_generated_graph_says_so_in_words(tmp_path: Path) -> None:
+    """`no reflect node in the graph` is not what is wrong when there is no
+    graph. The fix line must send the reader to `aef migrate`, not to an edit
+    of a file that does not exist."""
+    root, result = _prompt_repo(tmp_path)
+    site = result.prompt_agents[0]
+    (root / site.out_relative).unlink()
+
+    checked = _preflight_at(root, tmp_path, site.source, agent_root=".claude/agents")
+    for name in ("reflect node routed to", "model calls visible"):
+        obligation = _obligation(checked, name)
+        assert not obligation.met, obligation.detail
+        assert "has no generated graph" in obligation.detail, obligation.detail
+        assert site.source in obligation.detail, obligation.detail
+        assert "no reflect node" not in obligation.detail, obligation.detail
+        assert "aef migrate" in obligation.fix, obligation.fix
+
+
+def test_a_markdown_file_that_is_no_persona_is_not_reported_as_a_missing_node(
+    tmp_path: Path,
+) -> None:
+    root, _ = _prompt_repo(tmp_path)
+    (root / "NOTES.md").write_text("# not a persona\n")
+
+    obligation = _obligation(
+        _preflight_at(root, tmp_path, "NOTES.md", agent_root=".claude/agents"),
+        "reflect node routed to",
+    )
+    assert not obligation.met
+    assert "markdown file" in obligation.detail, obligation.detail
+    assert "no reflect node" not in obligation.detail, obligation.detail
+
+
+def test_the_bless_fix_names_the_graph_not_the_persona(tmp_path: Path) -> None:
+    """Under the DEFAULT root a persona lives outside the tree `bless`
+    archives, so a fix line naming it is a command that refuses."""
+    root, result = _prompt_repo(tmp_path, agent_root="agents")
+    site = result.prompt_agents[0]
+
+    obligation = _obligation(_preflight_at(root, tmp_path, site.source), "blessed baseline")
+    assert site.out_relative in obligation.fix, obligation.fix
+    assert site.source not in obligation.fix, obligation.fix
+
+
+def test_a_python_agent_path_is_untouched_by_persona_resolution(tmp_path: Path) -> None:
+    """The CONTROL. ADR 0167 §8 decided that a caller who NAMES a graph gets
+    an answer about that graph — the wide scan is for a path this package
+    guessed. A persona IS such a guess (the graph is derived from it); an
+    explicitly named `.py` is not, and widening it here would be a fix wave
+    strengthening a control nobody reproduced a problem with (ADR 0141)."""
+    from aef.harness.preflight import resolve_agent_source
+
+    root, result = _prompt_repo(tmp_path)
+    (root / "src").mkdir()
+    (root / "src" / "__init__.py").write_text("")
+    (root / "src" / "client.py").write_text("import anthropic\n\nC = anthropic.Anthropic\n")
+    dirty = root / result.prompt_agents[0].out_relative
+    dirty.write_text(dirty.read_text() + "\nfrom src.client import C  # noqa: E402,F401\n")
+
+    clean = result.prompt_agents[1].out_relative
+    resolved = resolve_agent_source(root, clean, agent_root=".claude/agents")
+    assert resolved.path == clean and not resolved.from_persona and not resolved.problem
+
+    obligation = _obligation(
+        _preflight_at(root, tmp_path, clean, agent_root=".claude/agents"),
+        "model calls visible",
+    )
+    assert obligation.met, obligation.detail
+    assert "1 graph scanned" in obligation.detail, obligation.detail

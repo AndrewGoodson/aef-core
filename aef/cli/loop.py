@@ -72,6 +72,22 @@ from aef.providers.base import ModelProvider
 # It is imported now, never derived, and `zones` derives it once from what
 # `aef migrate` writes.
 
+# One flag, TWO meanings, and four of the five `--agent-path` arguments
+# carried no help text at all while `--proposer`'s own help documented the
+# second one. So the only place the persona form was written down was under
+# a different flag, and preflight — which reads this one — understood only
+# the first (reproduced, ADR 0178).
+_AGENT_PATH_HELP = (
+    "the module that builds your graph, repo-relative — e.g. "
+    f"{DEFAULT_AGENT_PATH} (the default), or {DEFAULT_AGENT_ROOT}/migrated/<agent>/graph.py, "
+    "which is what `aef migrate` prints for a prompt agent. SECOND FORM: with "
+    "`--proposer rule_based_prompt` this names the PERSONA `.md` the proposer appends its "
+    "lesson to (ADR 0157) — the preflight obligations then resolve that persona to the "
+    "graph `aef migrate` generated for it, so both meanings are answered from one flag "
+    "(ADR 0178). Left at its default, obligation 6 widens to every graph in the repo, "
+    "because the path is then this package's guess (ADR 0167)."
+)
+
 
 def _build_commands(args: argparse.Namespace) -> tuple[tuple[str, ...], ...] | None:
     """Repo-specific build commands, or None to take G1's default.
@@ -1391,9 +1407,8 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_gate.add_argument(
         "--agent-path",
         default=DEFAULT_AGENT_PATH,
-        help="the module that builds your graph, repo-relative. Read only to report "
-        "unmet preflight obligations before gating (ADR 0141); the gates themselves "
-        "take --entrypoint.",
+        help="Read only to report unmet preflight obligations before gating (ADR 0141); "
+        "the gates themselves take --entrypoint. " + _AGENT_PATH_HELP,
     )
     p_gate.add_argument(
         "--network-isolated",
@@ -1704,7 +1719,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         help="module:factory that builds your graph; G2/G3 refuse without it",
     )
     _cassette_miss(p_cycle)
-    p_cycle.add_argument("--agent-path", default=DEFAULT_AGENT_PATH)
+    p_cycle.add_argument("--agent-path", default=DEFAULT_AGENT_PATH, help=_AGENT_PATH_HELP)
     p_cycle.add_argument(
         "--memory",
         default=None,
@@ -1768,7 +1783,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "left empty and `aef loop monitor` reporting `cycles run: 0 (last never)` — "
         "indistinguishable from a loop nobody had started (ADR 0167).",
     )
-    p_run.add_argument("--agent-path", default=DEFAULT_AGENT_PATH)
+    p_run.add_argument("--agent-path", default=DEFAULT_AGENT_PATH, help=_AGENT_PATH_HELP)
     p_run.add_argument("--turns", type=int, default=10)
     p_run.add_argument("--budget-minutes", type=float, default=60.0)
     p_run.add_argument(
@@ -1783,7 +1798,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "bless", help="archive the current Zone A state as the owner-blessed baseline"
     )
     _common(p_bless)
-    p_bless.add_argument("--agent-path", default=DEFAULT_AGENT_PATH)
+    p_bless.add_argument("--agent-path", default=DEFAULT_AGENT_PATH, help=_AGENT_PATH_HELP)
     p_bless.add_argument("--note", default="", help="why this state is the baseline")
     p_bless.set_defaults(handler=cmd_bless)
 
@@ -1792,6 +1807,6 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     )
     _common(p_doctor)
     p_doctor.add_argument("--corpus", default="corpus")
-    p_doctor.add_argument("--agent-path", default=DEFAULT_AGENT_PATH)
+    p_doctor.add_argument("--agent-path", default=DEFAULT_AGENT_PATH, help=_AGENT_PATH_HELP)
     p_doctor.add_argument("--observations", default=None)
     p_doctor.set_defaults(handler=cmd_doctor)
