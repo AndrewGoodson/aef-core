@@ -248,12 +248,30 @@ def test_the_turn_running_commands_are_the_two_that_run_turns() -> None:
 
 
 @pytest.mark.parametrize("name", sorted(LOOP_TURN_COMMANDS))
-def test_a_crash_in_a_turn_running_command_is_journalled(name: str, tmp_path: Path) -> None:
+def test_a_crash_in_a_turn_running_command_is_journalled(
+    name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """G1a journalled `cycle`/`run` from inside their own `try`. The wrapper
-    covers what happens BEFORE it — a `--state` that cannot be parsed, an
-    argument read outside the block — because a nightly turn that died is
-    still a slot that produced nothing, and a `cycles.jsonl` byte-identical to
-    one nobody ever ran is the ambiguity the journal exists to remove."""
+    covers the region BEFORE it — the flag guards, and everything read outside
+    the block — because a nightly turn that died there is still a slot that
+    produced nothing, and a `cycles.jsonl` byte-identical to one nobody ever
+    ran is the ambiguity the journal exists to remove.
+
+    The fault is PLANTED in that pre-`try` region rather than assumed: the
+    first version of this test raised inside `_config`, which is inside each
+    handler's own `try`, so the handler journalled it and the wrapper was
+    never exercised — mutation M3 (delete the wrapper's `_journal_crash`
+    call) SURVIVED, and that survival is what found the hole.
+    `_require_agent_path_under_root` runs before the `try` in both handlers
+    and can genuinely raise (`inspect_path` on a malformed `--agent-path`
+    under a widened root).
+    """
+    import aef.cli.loop as loop_cli
+
+    def _boom(args: argparse.Namespace, command: str) -> int | None:
+        raise RuntimeError("planted: a guard that runs before the handler's own try")
+
+    monkeypatch.setattr(loop_cli, "_require_agent_path_under_root", _boom)
     handler = _loop_handlers()[name]
     assert callable(handler)
     state = tmp_path / "state"
@@ -265,7 +283,23 @@ def test_a_crash_in_a_turn_running_command_is_journalled(name: str, tmp_path: Pa
     assert len(attempts) == 1, attempts
     assert attempts[0].command == name
     assert not attempts[0].proposed
-    assert "AttributeError" in attempts[0].verdict
+    assert "RuntimeError" in attempts[0].verdict
+
+
+@pytest.mark.parametrize("name", sorted(LOOP_TURN_COMMANDS))
+def test_a_crash_inside_the_handler_is_still_journalled_once(name: str, tmp_path: Path) -> None:
+    """And the region G1a already covered is not journalled twice: the
+    handler's own `finally` writes the entry, the wrapper never sees the
+    exception, and the count is one."""
+    handler = _loop_handlers()[name]
+    assert callable(handler)
+    state = tmp_path / "state"
+
+    assert handler(_crashing_args(state=str(state))) == EXIT_ERROR
+
+    attempts = read_cycle_attempts(state)
+    assert len(attempts) == 1, attempts
+    assert attempts[0].command == name
 
 
 def test_a_crash_in_a_reporting_command_is_not_journalled(tmp_path: Path) -> None:

@@ -4985,3 +4985,126 @@ moves** — this is apparatus.
 every-graph scan, unreachable under a widened root), which belongs to another
 worker; and the generated `FIRST_DAY.md`/`aef.yaml` templates say nothing about
 the new opt-in — the exact paragraph M7 should place is in ADR 0181.
+
+## Fix wave K3 — a crash, a spelling, a namespace, and a fact nobody printed (ADR 0182)
+
+Five findings other workers left **named and open**: ADR 0178's *Still open*,
+ADR 0176's outside-defects 1, 2 and 3, ADR 0179's *Open and named*, and one
+handed over mid-wave after ADR 0180's S1b measurement. Every one reproduced by
+RUNNING a command before anything changed. **Zero live model calls** — the one
+reproduction that needs a provider drives a local stub script through
+`model_provider.impl: command`. **No rubric dimension moves**: nothing here
+adds a capability.
+
+**K3-1 — eleven of thirteen `aef loop` subcommands reported a crash as exit 1.**
+That is ADR 0167's R3 — *a crash's remedy is not a rejection's* — still standing
+for the majority of the surface after G1a fixed `cycle`/`run` and ADR 0167 fixed
+`doctor`/`bless`. `aef loop score … --splits bogus`, `aef loop record --corpus
+<a path under a plain file>` and `aef loop harvest <a missing module>` each
+printed `error: …` and returned **1**, which is `EXIT_REJECTED`, "the candidate
+was rejected, the system is working" — while the nightly workflow fails the job
+on `-ge 2` and, since ADR 0178, gives exit 3 its own summary telling the owner
+to fix the invocation.
+
+The fix is a **wrapper over every handler `add_loop_parser` registers**,
+including the nested `loop corpus reconcile` that neither ADR's count of
+thirteen had reached, so a fourteenth subcommand is covered without being told
+to be. **Deliberately not `main()`'s catch-all**, and this is the load-bearing
+choice: `aef adopt`, `migrate`, `init`, `run`, `eval`, `trace` and `doctor`
+issue no verdicts, so 1 is the ordinary "this command failed" every CLI returns
+and nothing distinguishes a rejection from a crash for them. Moving seven
+commands onto a vocabulary they do not use, to fix a defect in the one that
+does, is a fix wave strengthening a control nobody has reproduced a problem
+with (ADR 0141's rule). `test_a_top_level_command_still_returns_one` asserts the
+catch-all is unchanged rather than leaving that in a comment.
+
+A **named refusal stays a rejection** — and the suite found one handler relying
+on the catch-all for one: `cmd_record` let `RecorderError` through, which is how
+ADR 0149's tripwire guard ("refusing to label a scenario `must_fail` when the
+agent completed the task") reported itself. It is caught by name now, as
+`cmd_bootstrap` already did, and that test is green on its original assertion.
+
+**K3-2 — `run --module` was the last in-process caller on the old loader, and
+`--entrypoint` was a fourth spelling of "which graph".** I1's note was
+**verified against current main rather than assumed**: ADR 0177 gave the
+loaders one *importer* and left the *splitter* demanding `module:factory`, so
+`aef loop cycle --module agents/x/graph.py --entrypoint agents/x/graph.py` still
+accepted the first and refused the second inside one invocation. All four
+combinations of three loaders × four spellings are in the ADR, run.
+
+`split_entrypoint` becomes the union rule ADR 0176 wrote for the CLI, and moves
+into `aef/harness/graph_loading.py` with `GRAPH_REFERENCE_HELP` — because
+`--entrypoint` is read by the harness and **the harness may not import the
+CLI**, and a second copy there is the ADR 0149 shape. That it reaches
+`node_worker` too is the point rather than a side effect: those are the two
+sides of G2, and ADR 0177's whole finding is that an import error on one side
+only is indistinguishable downstream from a behavioural regression. `cmd_run`
+uses `load_graph_reference` (gaining ADR 0085's `BaseException` guard for the
+first time), and one `ENTRYPOINT_HELP` replaces three descriptions of one flag,
+all three of which were wrong about what it accepted.
+
+**K3-3 — `LoopConfig.graph_id` was one field for two namespaces.** ADR 0125
+separated the archive key from the `Graph.id` the prompt proposer admits
+records under; one field could not serve both, so ADR 0176's F2 had to keep a
+warn-instead-of-fix branch — deriving the id moved the archive key out from
+under a blessed baseline and G5 then rejected every candidate for having
+nothing to compare to. The configuration left broken is the **documented**
+one: `aef loop bless` takes no `--corpus`, so the first-week sequence blesses
+under `default` while the corpus records `demo_agent`.
+
+`evidence_graph_id` (`None` meaning "the same as the archive key", so every
+existing caller is byte-for-byte unchanged) is read by `_build_proposer` and
+nothing else. `resolve_graph_id_from_corpus` never moves the archive key again,
+and the rule collapses from four cases with two warnings to one derivation with
+one refusal — the refusal on an ambiguous corpus, which is unchanged and is the
+only warning left, because which graph's evidence a turn may ground in is still
+not guessable.
+
+**K3-4 — the containment warning was recorded and printed nowhere.** ADR 0179
+moved `prompt_agent.persona_in_user_turn` out of `state.errors` and named
+`containment_warnings(state)` as its reader, then said plainly that nothing
+called it. Reproduced end to end: a real `aef migrate`d prompt agent
+bootstrapped through a real slotless `command` provider, the fact demonstrably
+on the recorded scenario, and neither `doctor` nor `cycle` mentioning it.
+
+`aef loop doctor` prints `[!!] persona channel  prompt_agent: persona sent in
+the USER turn by provider '…' (isolation: …) — see ADR 0179` **below** the six
+obligations and outside them, because a property of a CLI the owner already
+installed has no `fix:` that is an edit in this repo, and listing it would make
+`doctor` exit 1 forever on a correctly configured Codex adopter — ADR 0179's own
+finding, one surface over. Cycle and gate print the same sentence, one line per
+**distinct provider**. `--memory` is not a source, and that is asserted rather
+than commented, because ADR 0179's finding is precisely that this fact never
+becomes a memory record.
+
+**K3-5 — `aef loop score --memory`**, handed over after ADR 0180's S1b measured
+that wiring the check-failure producer into `bootstrap` alone lets staleness
+walk a lesson out of the prompt while a scored split never re-sees it
+(`runs_since_last_seen` 17 → 0). Opt-in, off by default, in-process only:
+scoring writes exactly one check-derived failure record per failed check, and a
+second score or `--repeat 3` writes none. **ADR 0174's refusal of the gate path
+stands** — an AST scan asserts `aef/cli/loop.py::cmd_score` is the only caller
+that supplies a durable store.
+
+**Green bar:** `pytest -q` 2788 passed / 7 skipped / 1 xfailed, `mypy aef
+examples` clean (135 files), `ruff check .` clean, `ruff format --check` clean.
+**+68 tests, 2679 → 2788** on this worker's baseline (the `origin/main` merge
+with K1 and K2 accounts for 41 of the difference), counted per file in the ADR.
+**14 mutations planted, 14 killed**, every restore verified byte-identical by
+SHA-256; `git checkout --` was never used.
+
+**Two mutations SURVIVED their first version, and both are the reproduce-first
+rule earning its place.** M3 — delete the wrapper's journalling — survived
+because the test meant to prove it raised inside `cmd_cycle`'s *own* `try`, so
+the handler journalled it and the wrapper was never exercised; the fault is
+planted in the pre-`try` region now. M13 — a gate path supplying the durable
+store — survived because the owner-only scan asserted a FILE, so a call planted
+in `cmd_gate`, the same file, walked past it; it asserts `file::function` now.
+
+**Reported, not fixed** (in the ADR's own section): the cassette recorder masks
+the provider name in the containment record, so an adopter's surfaced line says
+`provider: 'cassette'` rather than `'codex'` while `isolation` passes through
+correctly; `aef migrate`'s report still says the node "appends a
+`prompt_agent.persona_in_user_turn` error", which ADR 0179 made false; and `aef
+loop bootstrap` returns `EXIT_REJECTED` where `cycle`/`run` return `EXIT_USAGE`
+for the equivalent missing-flag refusal.

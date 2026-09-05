@@ -379,3 +379,187 @@ def test_human_output_says_why_a_scenario_failed(tmp_path: Path, capsys) -> None
     out = capsys.readouterr().out
     assert "0.0000  hard" in out
     assert "check failed: scores.quality equals 1.0" in out
+
+
+# ---------------------------------------------------------------------------
+# `--memory`: a failed owner check becomes failure memory (ADR 0182, K3-5)
+# ---------------------------------------------------------------------------
+#
+# ADR 0174 gave the check-failure producer to `aef loop bootstrap` and refused
+# it to every GATE path — a gate that wrote to the adopter's durable store
+# would let scoring a candidate manufacture the next one's evidence. That
+# refusal stands and is asserted below.
+#
+# Wiring it into bootstrap ALONE left the other half open, which K2 measured
+# (ADR 0180, S1b): staleness demotes a lesson by `runs_since_last_seen`, and
+# with nothing producing the signature on a SCORED split the counter climbed
+# to 17 by the seventeenth scenario while the lesson could never be re-seen —
+# 0 with the producer here. `aef loop score` is neither a gate nor a
+# recording: it scores the INCUMBENT the owner already trusts, in-process,
+# over the owner's own corpus, with the owner naming the file.
+
+
+def _records(path: Path) -> list[dict[str, object]]:
+    if not path.is_file():
+        return []
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+
+def _corpus_with_a_wrong_check(tmp_path: Path) -> Path:
+    """One scenario the graph COMPLETES and whose owner check it fails.
+
+    Not `_corpus`'s `hard`, deliberately: that run records an error of its
+    own, and `check_failure_record` returns `None` for those on purpose — the
+    run's own reflect node already wrote failure memory, and a second record
+    would double-count one observation. The case this flag exists for is ADR
+    0113's: a run that fails WITHOUT an error, which is exactly what an owner
+    check is for.
+    """
+    from agents.demo.graph import build_graph
+
+    root = tmp_path / "wrong-check-corpus"
+    manifest = CorpusManifest()
+    state = AEFState(
+        run_id="wrong-one",
+        agent_id="a",
+        objective="an easy task",
+        working_memory={"difficulty": 1, "quality_needed": 1},
+    )
+    recorded = GraphExecutor(build_graph().compile(), agent_services()).run(
+        state, record_trace=True
+    )
+    assert recorded.trace is not None
+    assert not recorded.final_state.errors, "the fixture must COMPLETE, or nothing is recorded"
+    save_scenario(
+        root,
+        Scenario(
+            id="wrong-one",
+            split=Split.TRAIN,
+            graph_id="demo_agent",
+            graph_version="0.1.0",
+            initial_state=state,
+            trace=recorded.trace,
+            recorded_at=datetime(2026, 9, 5, tzinfo=UTC),
+            checks=(TaskCheck(path="scores.quality", op="equals", value=0.5),),
+        ),
+    )
+    manifest.ids["wrong-one"] = Split.TRAIN
+    save_manifest(root, manifest)
+    return root
+
+
+def test_scoring_without_memory_writes_nothing(tmp_path: Path) -> None:
+    """The default is unchanged: no flag, no store, no record. `--repeat 3`,
+    so a per-run write would be impossible to miss."""
+    root = _corpus_with_a_wrong_check(tmp_path)
+    memory = tmp_path / "memory.jsonl"
+
+    assert main(["loop", "score", ENTRYPOINT, "--corpus", str(root), "--repeat", "3"]) == 0
+
+    assert _records(memory) == []
+
+
+def test_scoring_with_memory_writes_one_check_derived_failure(tmp_path: Path) -> None:
+    """One scenario, one failed check, one record — the score is 0.0 and the
+    run raised nothing, which is the case ADR 0113 added checks for."""
+    root = _corpus_with_a_wrong_check(tmp_path)
+    memory = tmp_path / "memory.jsonl"
+
+    code = main(["loop", "score", ENTRYPOINT, "--corpus", str(root), "--memory", str(memory)])
+
+    assert code == 0
+    written = _records(memory)
+    assert len(written) == 1, written
+    assert written[0]["kind"] == "failure"
+    assert written[0]["run_id"] == "wrong-one"
+    assert "scores.quality" in str(written[0]["content"])
+
+
+def test_a_run_that_errored_is_not_double_counted(tmp_path: Path) -> None:
+    """The control, and the reason the fixture above is not `_corpus`'s
+    `hard`: that scenario's run records an error of its own, so its reflect
+    node already wrote failure memory and `check_failure_record` returns
+    `None` (ADR 0174). A second record for one observation would inflate the
+    occurrence count a lesson is formed from."""
+    root = _corpus(tmp_path)
+    memory = tmp_path / "memory.jsonl"
+
+    assert (
+        main(
+            [
+                "loop",
+                "score",
+                ENTRYPOINT,
+                "--corpus",
+                str(root),
+                "--splits",
+                "train,validation",
+                "--memory",
+                str(memory),
+            ]
+        )
+        == 0
+    )
+
+    assert _records(memory) == []
+
+
+def test_scoring_twice_writes_one(tmp_path: Path) -> None:
+    """K2's idempotence, at the caller. `record_check_outcomes` keys on
+    (run_id, signature), so a second `aef loop score` over the same corpus —
+    and `--repeat`, which re-executes every scenario N times — leave the store
+    exactly as the first pass did. Without that, a nightly score would inflate
+    one lesson's occurrence count without a single new observation.
+    """
+    root = _corpus_with_a_wrong_check(tmp_path)
+    memory = tmp_path / "memory.jsonl"
+    argv = ["loop", "score", ENTRYPOINT, "--corpus", str(root), "--memory", str(memory)]
+
+    assert main(argv) == 0
+    after_one = _records(memory)
+    assert main(argv) == 0
+    assert main([*argv, "--repeat", "3"]) == 0
+
+    assert _records(memory) == after_one, "a re-score manufactured a second record"
+
+
+def test_cmd_score_is_the_only_caller_that_supplies_a_durable_store() -> None:
+    """The refusal ADR 0174 made, and this does NOT reopen: a gate run that
+    writes to the adopter's durable store lets scoring a candidate manufacture
+    the next one's evidence.
+
+    An AST scan over all of `aef/` rather than an assertion about one module,
+    because the property is "no OTHER caller supplies one" — and the first
+    version of this test scanned `isolated_suite`, which does not call
+    `run_scenario` at all, so it proved nothing (mutation M13 SURVIVED, which
+    is how that was found). The default is asserted too: a caller that passes
+    nothing gets today's behaviour exactly.
+    """
+    import ast
+    import inspect
+
+    from aef.harness import scenario_runner
+
+    assert inspect.signature(scenario_runner.run_scenario).parameters["memory"].default is None
+
+    suppliers: set[str] = set()
+    for path in sorted(Path("aef").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for holder in ast.walk(tree):
+            if not isinstance(holder, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            for node in ast.walk(holder):
+                if not isinstance(node, ast.Call):
+                    continue
+                func = node.func
+                name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+                if name == "run_scenario" and any(kw.arg == "memory" for kw in node.keywords):
+                    suppliers.add(f"{path.as_posix()}::{holder.name}")
+
+    # `file::function`, not `file`: the first version of this asserted the FILE
+    # and a planted `run_scenario(..., memory=...)` inside `cmd_gate` — the
+    # same file — survived it (mutation M13).
+    assert suppliers == {"aef/cli/loop.py::cmd_score"}, (
+        f"a durable store reaches run_scenario from {sorted(suppliers)}; only `aef loop "
+        f"score --memory`, which the OWNER names, may supply one (ADR 0174/0180)"
+    )

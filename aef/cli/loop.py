@@ -1019,6 +1019,7 @@ def cmd_score(args: argparse.Namespace) -> int:
     independent read, and reading it casually spends it.
     """
     from aef.harness.evaluation import ScoreSet
+    from aef.harness.memory_store import FileMemoryStore
     from aef.harness.scenario_runner import run_scenario
 
     corpus = load_corpus(Path(args.corpus))
@@ -1081,6 +1082,25 @@ def cmd_score(args: argparse.Namespace) -> int:
     # graph against another's scenarios measures nothing about either.
     other_graph = sorted(s.id for s in corpus.scenarios if s.graph_id != graph.id)
 
+    # `--memory`: the durable store a FAILED OWNER CHECK is recorded into,
+    # through ADR 0180's one idempotent producer (ADR 0182, K3-5).
+    #
+    # ADR 0174 gave the check-failure producer to `bootstrap` and refused it
+    # to every GATE path, and that refusal stands: a gate that wrote to the
+    # adopter's store would let scoring a candidate manufacture the next one's
+    # evidence. But wiring it into bootstrap ALONE let staleness walk a lesson
+    # out of the prompt while nothing ever re-saw it — K2's S1b measured
+    # `runs_since_last_seen` climbing to 17 by the seventeenth scenario, and
+    # 0 with the producer on the scored split.
+    #
+    # `aef loop score` is the one caller that is neither: it scores the
+    # INCUMBENT the owner already trusts, in-process, over the owner's own
+    # corpus, with the owner naming the file. So this is opt-in, off by
+    # default, and the isolated path is untouched — see the flag's help.
+    memory_store = (
+        FileMemoryStore(path=Path(args.memory)) if getattr(args, "memory", None) else None
+    )
+
     runs: list[dict[str, ScoreSet]] = []
     # split -> scenario id -> why it scored what it did. First repeat only, to
     # match `per_scenario`, which is also read off the first run.
@@ -1099,6 +1119,11 @@ def cmd_score(args: argparse.Namespace) -> int:
                     score_policy,
                     cassette_miss=cassette_miss,
                     live_provider=live_provider,
+                    # `record_check_outcomes` is idempotent on
+                    # (run_id, signature), so `--repeat 5` and a second
+                    # `aef loop score` over the same corpus both leave ONE
+                    # record per failed check (ADR 0180).
+                    memory=memory_store,
                 )
                 per_scenario[scenario.id] = float(result["score"])
                 cost += int(result["cost_tokens"])
@@ -2298,6 +2323,24 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "run gets — the same one `aef run --config` and the gates apply; without "
         "it the run is deny-by-default. Its model_provider also answers cassette "
         "misses under --cassette-miss live.",
+    )
+    p_score.add_argument(
+        "--memory",
+        default=None,
+        help=(
+            "durable memory JSONL — the SAME file `aef loop bootstrap --memory`, `aef run "
+            "--memory` and `aef loop cycle --memory` use. Given it, a scenario whose OWNER "
+            "CHECK fails is recorded as failure memory through the one producer (ADR 0180), "
+            "idempotently: --repeat 5 and a second run over the same corpus leave ONE record "
+            "per failed check. Off by default. WHY IT MATTERS: with the producer wired into "
+            "`bootstrap` only, a lesson's `runs_since_last_seen` climbs on every scored "
+            "scenario and staleness walks it out of the prompt while nothing ever re-sees it "
+            "(17 by the seventeenth scenario; 0 with this flag). WHAT IT DOES NOT DO: this is "
+            "the IN-PROCESS path only. The gates' isolated path runs each scenario in a "
+            "worker with no store and never writes one — a gate that could would let scoring "
+            "a candidate manufacture the next one's evidence, which ADR 0174 refused and this "
+            "does not reopen."
+        ),
     )
     p_score.set_defaults(handler=cmd_score)
 

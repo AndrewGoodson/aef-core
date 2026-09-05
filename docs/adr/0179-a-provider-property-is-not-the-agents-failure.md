@@ -556,6 +556,42 @@ the evidence. The row stays 17/20 and its "remaining" text is now accurate
 about a different thing: not "no prompt reads it" but "no measurement shows
 reading it helps".
 
+## Erratum — the "Open and named" item is CLOSED (ADR 0182)
+
+**K3-4 of the K wave gave `containment_warnings()` its callers.** `aef loop
+doctor` prints
+
+```
+  [!!] persona channel  prompt_agent: persona sent in the USER turn by provider
+       'codex' (isolation: read_only_fs, user_turn_persona) — see ADR 0179
+```
+
+**below** `Preflight.render()` and outside the six obligations — a property of a
+CLI the owner already installed has no `fix:` that is an edit in this repo, and
+adding it to the list would make `doctor` exit 1 forever on a correctly
+configured Codex adopter, which is this ADR's own R3 finding one surface over.
+`cycle` and `gate` print the same sentence beside the verdict, one line per
+**distinct provider**, and both are silent when the persona was the system
+message.
+
+Two things this ADR left implicit, settled by running them:
+
+- **the memory store is not a source, and that is now asserted.** R3's whole
+  point is that the fact never becomes a `MemoryRecord`, so a reader looking
+  in `--memory` would find nothing on every repo. The sources are the corpus
+  scenarios and the most recent recorded run under `--runs`, which is a new
+  flag on `doctor`.
+- the closing sentence — the fact is "strictly more visible than it would be if
+  this ADR had simply deleted the entry, and strictly less than it should be" —
+  is now false in its second half.
+
+**One defect found while closing it, reported in ADR 0182 and not fixed there:**
+through the recording path an adopter actually uses (`aef loop bootstrap
+--config`), the containment record says `provider: 'cassette'` rather than
+`'codex'` — the recording wrapper's `.name` reaches the dict while `isolation`
+passes through correctly. So the surfaced line names a wrapper instead of the
+CLI the owner installed.
+
 ## Confidence
 
 **High** on all four reproductions: each was run before anything changed, the
