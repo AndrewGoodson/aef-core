@@ -21,6 +21,58 @@ become a measurement of memorisation.
 `aef loop record` writes to `train` by default and **refuses** to write to
 `holdout` without `--i-am-spending-the-holdout`.
 
+## Provenance — which model wrote each recording
+
+**This corpus is not one model's output, and nothing said so until now.** Six
+validation scenarios were recorded on a model whose quota is exhausted, and a
+judge A/B ran across the mixture without knowing it — a judge grading its own
+writing and a judge grading a stranger's are not the same measurement, and
+that is the entire variable in a self-preference rig (ADR 0162, amendment 1).
+
+Each scenario carries its answering model in
+`model_calls[].result.model`, so the table is derived rather than remembered:
+
+```
+$ python -c "import json,glob,collections;
+  agg=collections.defaultdict(list)
+  for f in sorted(glob.glob('corpus/*/*.json')):
+      d=json.load(open(f))
+      m=tuple(sorted({(c.get('result') or {}).get('model') for c in (d.get('model_calls') or [])}-{None}))
+      agg[(d['split'],m)].append(d['id'])
+  [print(s, m or '(no model call)', len(i), i[0], '..', i[-1]) for (s,m),i in sorted(agg.items())]"
+
+holdout     claude-fable-5-1       n= 2  sum-19-tram-depot .. sum-20-seed-bank
+train       (no model call)        n= 6  boundary-3 .. tripwire-impossible-train
+train       claude-fable-5-1       n=12  sum-01-kestrel-ferry .. sum-12-bell-recast
+train       claude-opus-5[1m]      n= 8  sum-21-ardvey-ferry .. sum-28-kellet-branch
+validation  (no model call)        n= 5  tripwire-impossible-val .. val-hard-5
+validation  claude-fable-5-1       n= 6  sum-13-cider-press .. sum-18-heron-rookery
+validation  claude-opus-5[1m]      n=11  sum-29-brindle-viaduct .. sum-39-coldbeck-society
+```
+
+| recording model | scenarios | splits | can it be re-recorded? |
+|---|---|---|---|
+| `claude-fable-5-1` | `sum-01` … `sum-20` (20) | 12 train, 6 validation, 2 holdout | **no — that model's quota is exhausted** |
+| `claude-opus-5[1m]` | `sum-21` … `sum-39` (19) | 8 train, 11 validation | yes |
+| none (the `agents/demo` scenarios) | 11 | 6 train, 5 validation | n/a — the demo agent calls no model |
+
+Two consequences that are not obvious from the counts:
+
+- **The validation split is 6/17 Fable.** Any measurement that treats it as
+  one model's output is wrong by that fraction. ADR 0171 states "model,
+  everywhere in this document: `claude-opus-5[1m]`", which is true of *its own
+  nineteen new recordings* and reads, in a document about this corpus, as
+  though it were true of all of them.
+- **The Fable twenty are frozen.** They cannot be regenerated, so anything
+  that would change what the agent *said* on them — a re-record, a prompt
+  change scored against them live — loses them rather than updating them.
+  Check edits are a different thing and are fine: the checks are the owner's
+  data (ADR 0113) and have been migrated twice without touching a cassette.
+
+`docs/research/j4/`'s `load_pairs` refuses a pair whose recording is not the
+writer it is comparing. Nothing else in the repo enforces this; the table
+above is the only other place it is written down.
+
 ## Scenarios are recorded, never hand-written
 
 A hand-written scenario encodes what someone *believed* the graph does; a
@@ -58,7 +110,8 @@ body can match one input many ways is now refused when the scenario **loads**,
 with the safe rewrite in the message.
 
 **Every summary scenario now states its cap as `max_words` + `min_words: 1`**
-(ADR 0171). They carried the linear-time regex `^\s*\S+(?:\s+\S+){0,N-1}\s*$`
+(ADR 0171) — checked, not assumed: 39 of 39 carry both ops. They carried the
+linear-time regex `^\s*\S+(?:\s+\S+){0,N-1}\s*$`
 until the corpus was next re-recorded, because a bare `max_words` accepts an
 empty summary and adding `min_words: 1` changes a scenario's check count and
 therefore its recorded score. Both objections are discharged: `min_words: 1`
@@ -114,10 +167,18 @@ separates them.
 
 ## What this seed corpus covers, and does not
 
-Nine scenarios over `agents/demo`, deliberately spanning both sides of the
-incumbent's capability: five that pass under the current constants and four
-that do not. A corpus where everything already passes cannot demonstrate an
-improvement; one where everything fails cannot demonstrate a regression.
+**Eleven** scenarios over `agents/demo` — six in `train`, five in
+`validation`, two of them `must_fail` tripwires — deliberately spanning both
+sides of the incumbent's capability. (This said "nine … five that pass and
+four that do not" from before the tripwires were added; the number is
+`ls corpus/*/*.json | grep -v sum-`.) A corpus where everything already passes
+cannot demonstrate an improvement; one where everything fails cannot
+demonstrate a regression.
+
+Beside them sit the **39 `summary_agent` scenarios** (`sum-01` … `sum-39`),
+which are the model-backed half and the ones every judge and knowledge
+measurement in this repo has run against. The demo scenarios call no model at
+all — see the provenance table above.
 
 **It does not cover:** model-backed nodes, tool calls, policy denials,
 multi-node routing, or failure modes of any real workload. It exists to prove
