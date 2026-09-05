@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 from aef.cli.migrate import (
+    discover_adopter_skills,
     discover_prompt_agents,
     discover_skills,
     render_prompt_agent,
@@ -694,3 +695,70 @@ def test_a_consolidated_lesson_reaches_the_generated_graphs_user_turn(
     ]
     assert written, "reflection wrote no record for this run"
     assert written[0].content["retrieved_signatures"] == ["failure:prompt_agent"]
+
+
+# The count migrate prints is the adopter's, not aef's own (ADR 0176, F1)
+# ---------------------------------------------------------------------------
+
+
+def test_migrate_does_not_count_the_skill_adopt_wrote(tmp_path: Path) -> None:
+    """THE regression test for H1's finding 1, reproduced on the pilot clone:
+
+        $ aef adopt --dir clone
+        adopt   skills=5
+        migrate skills=6      <- the sixth is adopt's own new-model-check
+
+    `discover_skills` globbed `<skills>/*/SKILL.md` with no exclusion, so the
+    scaffold counted its own output as the adopter's prompt surface — a number
+    that changes the moment adoption runs, which is the same class of defect
+    ADR 0172 D4 fixed on adopt's side.
+    """
+    from aef.harness.zones import ADOPT_SKILL_PATH
+
+    root = _prompt_repo(tmp_path, names=("pilot-accela",), skills=2)
+    ours = root / ADOPT_SKILL_PATH
+    ours.parent.mkdir(parents=True)
+    ours.write_text("---\nname: new-model-check\n---\n\nRe-audit.\n", encoding="utf-8")
+
+    assert len(discover_skills(root)) == 3, "the raw listing still sees all three"
+    assert len(discover_adopter_skills(root)) == 2, "the adopter has two"
+    assert ADOPT_SKILL_PATH not in discover_adopter_skills(root)
+
+
+def test_the_report_counts_two_and_still_names_the_third_marked(tmp_path: Path) -> None:
+    """Excluding it from the LISTING as well would make `aef migrate` silent
+    about a file it declined to migrate, which is the one thing that block
+    exists not to be."""
+    from aef.harness.zones import ADOPT_SKILL_PATH
+
+    root = _prompt_repo(tmp_path, names=("pilot-accela",), skills=2)
+    ours = root / ADOPT_SKILL_PATH
+    ours.parent.mkdir(parents=True)
+    ours.write_text("---\nname: new-model-check\n---\n\nRe-audit.\n", encoding="utf-8")
+
+    text = report(run_migrate(root, write=False))
+
+    assert "found 2 skill(s) and did NOT migrate any of them:" in text, text
+    assert f"SKILL    {ADOPT_SKILL_PATH}   (aef's own — not yours)" in text, text
+    assert text.count("  SKILL    ") == 3, "all three are still named"
+
+
+def test_adopt_and_migrate_agree_on_the_same_tree(tmp_path: Path) -> None:
+    """The join, run for real: the REAL `aef adopt` into the REAL migrate
+    discovery. Two numbers nobody compares is how this repo keeps finding
+    drift (ADR 0091), so they are compared."""
+    from aef.cli.adopt import detect_prompt_surface, run_adopt
+
+    root = _prompt_repo(tmp_path, names=("pilot-accela",), skills=3)
+    run_adopt(root)
+
+    assert detect_prompt_surface(root).skills == len(discover_adopter_skills(root)) == 3
+
+
+def test_a_repo_with_no_adopt_skill_is_unchanged(tmp_path: Path) -> None:
+    """The control: the exclusion must not remove anything on a tree adopt has
+    never touched."""
+    root = _prompt_repo(tmp_path, names=("pilot-accela",), skills=4)
+
+    assert discover_adopter_skills(root) == discover_skills(root)
+    assert len(discover_adopter_skills(root)) == 4

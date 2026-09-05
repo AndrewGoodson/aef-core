@@ -581,6 +581,24 @@ The other thing standing between a prompt candidate and an *accept* is ADR
    run on a corpus that could not produce this shape, and this is the first
    corpus that can. Reported for whoever re-runs S1's arms.
 
+> **ERRATUM (ADR 0176, fix worker I1): defects 1, 3 and 4 below are CLOSED.**
+> Each was reproduced again on I1's own base — the commands and their output are
+> in ADR 0176 — and fixed there. Defect 1: `aef loop cycle` now derives
+> `--graph-id` from the corpus it already loaded when that is unambiguous and
+> cannot orphan a blessed baseline, refuses with the list when it is ambiguous,
+> and says which it did in the verdict line. Defect 3: one
+> `GRAPH_REFERENCE_HELP` and one `load_graph_reference` behind `record`,
+> `bootstrap`, `harvest`, `cycle --module` and `score`, all three forms on every
+> one of them. Defect 4: `aef loop corpus reconcile` exists, prints every id it
+> drops, and the `corpus shrank` refusal — unweakened — names it. Defect 0
+> (`knowledge_boost = 0.0`) is untouched and still open; defect 2 was already
+> closed by M4c.
+>
+> One correction to defect 1's text while closing it: the drop is specific to
+> `--proposer rule_based_prompt`, the only proposer that reads `config.graph_id`
+> as a `Graph.id`. The default `rule_based` proposer never filtered, which is why
+> this repo's own end-to-end adoption test was green throughout.
+
 1. **`aef loop cycle` needs `--graph-id` or it silently drops all the
    evidence.** Without it the run reports `2 record(s) dropped as another
    graph's scenario; no admissible failure record for this graph` — correct

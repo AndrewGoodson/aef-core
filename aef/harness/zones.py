@@ -72,6 +72,22 @@ DEFAULT_AGENT_PATH = f"{DEFAULT_AGENT_ROOT}/migrated/graph.py"
 ADAPTER_SHIM = "aef_adapter.py"
 LEGACY_AGENT_PATH = "aef_migrated.py"
 
+# The `SKILL.md` that `aef adopt` writes into the repo it is adopting: the
+# per-model-release re-audit (ADR 0111). It is aef's OWN output, not part of
+# the adopter's prompt surface, and every count of "how many skills does this
+# repo have" must exclude it or the answer changes the moment adoption runs.
+#
+# It lives HERE for the same reason `DEFAULT_AGENT_PATH` does: two CLI modules
+# need it, `aef/cli/adopt.py` already imports `aef/cli/migrate.py`, and the
+# reverse import is a hard cycle — reproduced (ADR 0176), both directions:
+#
+#     ImportError: cannot import name '_ADOPT_SKILL_PATH' from partially
+#     initialized module 'aef.cli.adopt' (most likely due to a circular import)
+#
+# `aef/harness/zones.py` is what both of them already import, and the harness
+# imports neither, so this is the one place the string can be derived from.
+ADOPT_SKILL_PATH = ".claude/skills/new-model-check/SKILL.md"
+
 
 def discover_graph_files(root: Path, *, agent_root: str = DEFAULT_AGENT_ROOT) -> list[str]:
     """Every file in `root` that is "a graph this repo runs", repo-relative.

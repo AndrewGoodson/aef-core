@@ -372,18 +372,37 @@ def load_manifest(root: Path) -> CorpusManifest:
     return CorpusManifest.from_payload(loads(path.read_text()))
 
 
+def reconcile_command(root: Path) -> str:
+    """The command an OWNER runs to make the manifest describe the files on
+    disk. Named by every refusal that a stale manifest can cause, because a
+    control whose only remedy is hand-editing JSON is a control adopters route
+    around (ADR 0176)."""
+    return f"aef loop corpus reconcile --corpus {root}"
+
+
 def check_never_shrinks(corpus: Corpus, baseline: CorpusManifest) -> None:
     """Raise unless `corpus` still contains every id `baseline` recorded.
 
     Growth is fine and expected; a scenario changing split is not, because
     that is deletion from one split dressed as an addition to another.
+
+    The refusal now NAMES the reconcile command. It is not a softening: the
+    check fires exactly as often as before, on exactly the same condition, and
+    the command it names is one an owner types. Reproduced (ADR 0176): copy a
+    corpus directory, delete one scenario file, and the next `aef loop cycle`
+    exits 3 with `corpus shrank` — correct, and with no documented way back
+    except editing `manifest.json` by hand.
     """
     missing = sorted(set(baseline.ids) - corpus.ids)
     if missing:
         raise CorpusShrankError(
             f"corpus shrank: {len(missing)} previously-admitted scenario(s) are gone: "
             f"{missing}. A suite that can be made to pass by deleting the failing case is "
-            f"not a suite."
+            f"not a suite. If those scenarios were retired deliberately — or this corpus "
+            f"was copied and its manifest came with it — run `{reconcile_command(corpus.root)}` "
+            f"BY HAND: it rewrites the manifest from the files on disk and prints every id "
+            f"it drops. No loop subcommand does this for you; a loop that can rewrite its "
+            f"own evidence ledger has no ledger."
         )
     current = corpus.manifest().ids
     moved = sorted(
@@ -392,4 +411,57 @@ def check_never_shrinks(corpus: Corpus, baseline: CorpusManifest) -> None:
         if current[sid] is not baseline.ids[sid]
     )
     if moved:
-        raise CorpusShrankError(f"scenario(s) changed split, which erases evidence: {moved}")
+        raise CorpusShrankError(
+            f"scenario(s) changed split, which erases evidence: {moved}. If the move was "
+            f"deliberate, run `{reconcile_command(corpus.root)}` by hand."
+        )
+
+
+@dataclass(frozen=True)
+class ReconcileReport:
+    """What `reconcile_manifest` changed, so the CLI can print it and a test
+    can assert it without parsing prose."""
+
+    root: Path
+    dropped: dict[str, Split] = field(default_factory=dict)
+    moved: dict[str, tuple[Split, Split]] = field(default_factory=dict)
+    added: dict[str, Split] = field(default_factory=dict)
+    kept: int = 0
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.dropped or self.moved or self.added)
+
+
+def reconcile_manifest(root: Path, *, write: bool = True) -> ReconcileReport:
+    """Rewrite `manifest.json` from the scenarios actually on disk.
+
+    **This is an owner action and has exactly one caller: the CLI subcommand
+    `aef loop corpus reconcile`.** `tests/harness/test_corpus_reconcile.py`
+    AST-scans `aef/` and fails if anything else calls it — because the
+    never-shrinks manifest is the audit trail the gates are measured against,
+    and a loop that reconciles its own ledger between turns can delete the
+    scenario it fails and call the result an improvement. That is ADR 0060's
+    shape: the harness prints the command, a person runs it.
+
+    `_record_in_manifest` deliberately does a UNION and never a rewrite, for
+    the same reason. This function is the rewrite, and it is why it is not
+    reachable from `cycle` or `run`.
+    """
+    corpus = load_corpus(root)
+    baseline = load_manifest(root)
+    current = corpus.manifest().ids
+    report = ReconcileReport(
+        root=root,
+        dropped={sid: split for sid, split in sorted(baseline.ids.items()) if sid not in current},
+        moved={
+            sid: (baseline.ids[sid], current[sid])
+            for sid in sorted(baseline.ids)
+            if sid in current and current[sid] is not baseline.ids[sid]
+        },
+        added={sid: split for sid, split in sorted(current.items()) if sid not in baseline.ids},
+        kept=len(current),
+    )
+    if write and report.changed:
+        save_manifest(root, corpus.manifest())
+    return report

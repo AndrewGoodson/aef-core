@@ -4660,3 +4660,158 @@ what replaces it is "no measurement shows reading it helps", which is ADR
 the containment warning in `aef loop doctor` / the cycle summary —
 `containment_warnings()` is written and tested, `aef/cli/loop.py` and
 `preflight.py` belong to J2 in this wave and were not touched.
+
+## Fix wave I1 — two spellings of "which graph", and no way back (ADR 0176)
+
+Four findings, none of them this worker's own discovery: three from ADR 0174's
+"Defects found outside this worker's files" (M4b) and one from ADR 0172's
+"Reported for migrate's owner, not fixed here" (H1). Every one was reproduced
+by RUNNING a command before anything changed. **Zero live model calls** — the
+graphs here never reach their model path.
+
+**F2 — `aef loop cycle` dropped all its evidence without `--graph-id`.**
+Bootstrap two inputs whose owner checks the graph fails, so ADR 0174's producer
+writes two `failure` records, then cycle with the prompt proposer:
+
+```
+$ aef loop cycle --repo repo --state state --workdir work --corpus corpus \
+    --memory memory.jsonl --proposer rule_based_prompt \
+    --agent-path agents/demo/persona.md
+  the proposer produced nothing from the available evidence: 2 record(s)
+  dropped as another graph's scenario; no admissible failure record for this graph
+exit=0
+
+$ aef loop cycle … --graph-id demo_agent
+  proposed cycle-20260905T040818-prompt on local branch loop/cycle-…-prompt
+  gated: reject — G1 rejected it: build command failed (exit -1): python -m pytest -q
+exit=1
+```
+
+Same evidence, one flag, and the flag's value was in the corpus the command had
+already loaded.
+
+**The complication, and it is why the fix has a branch nobody would guess at.**
+`--graph-id` is TWO things: the archive key G5 reads a blessed baseline under,
+and — only for `RuleBasedPromptProposer` — a `Graph.id` scenarios are matched
+against. ADR 0125 separated those namespaces deliberately, and
+`_scenarios_for_graph` still gates every scenario when the corpus records one
+graph for exactly that reason. So the first version of this fix, which derived
+unconditionally, moved the archive key out from under an already-blessed
+baseline:
+
+```
+$ pytest tests/cli/test_adoption_sequence.py
+E   AssertionError: not built: G5 rejected the candidate first, so its code
+E   was never executed
+```
+
+`aef loop bless` takes no `--corpus` at all, so the documented adoption sequence
+blesses under `"default"` and would then cycle under `demo_agent`. That is a
+worse defect than the one being fixed, and the suite found it, not a reading of
+the code.
+
+Shipped: the parser default becomes `None`, so **omitting the flag is
+distinguishable from typing it** — everything rests on that — and
+`resolve_graph_id_from_corpus` settles the value before `_config` freezes it
+into `LoopConfig`. Derive from a single-graph corpus when there is no baseline
+to orphan, and say so **in the verdict line** (the line a workflow tees into its
+step summary); keep the key and warn with the exact `bless` command when there
+is; refuse with the list when the corpus records several; refuse an explicit id
+the corpus has never heard of unless a baseline sits under it, in which case it
+is ADR 0125's archive-key namespace and gets a warning rather than a refusal.
+The refusals are `GraphIdError`, exit 1 and journalled, never a halt.
+
+**F3 — `loop score` took `module:factory`, `loop bootstrap` took `module`.**
+
+```
+$ aef loop score agents.demo.graph --corpus corpus
+error: entrypoint must be 'module:factory', got 'agents.demo.graph'
+$ aef loop bootstrap agents.demo.graph:build_graph --corpus corpus2 --inputs …
+error: No module named 'agents.demo.graph:build_graph'
+$ aef loop score /…/agents/demo/graph.py --corpus corpus
+error: entrypoint must be 'module:factory', got '/…/agents/demo/graph.py'
+```
+
+Two loaders, neither wrong alone: `cli.run.load_graph_module` has ADR 0168's
+file path and no `BaseException` guard; `scenario_runner.load_graph` has ADR
+0085's guard and no file path. One `GRAPH_REFERENCE_HELP` shared **by
+reference** by five arguments — five copies of a help string is how `score` came
+to describe the same argument a sixth way — and one `load_graph_reference` that
+keeps BOTH controls and adds the `isinstance(graph, Graph)` check to all five.
+The split is on the last colon and only when the tail is an identifier, so
+`a/b/graph.py`, `a/b/graph.py:make` and `C:\a\graph.py` all read the way they
+look. The enumerating test derives the covered set from the REAL parser (the
+G1a pattern) and runs all fifteen combinations producer→parser→loader.
+`run --module` and `--entrypoint` are other workers' files and are pinned as
+known gaps rather than half-converted.
+
+**F4 — a copied corpus's stale manifest, and no way back.**
+
+```
+$ aef loop cycle … --corpus copied --no-memory
+error (CorpusShrankError): corpus shrank: 1 previously-admitted scenario(s) are
+gone: ['s-2']. A suite that can be made to pass by deleting the failing case is
+not a suite.
+exit=3
+
+$ aef loop --help
+  {gate,monitor,digest,status,record,bootstrap,score,skills,harvest,cycle,run,bless,doctor}
+```
+
+No `corpus` subcommand at all. The refusal is RIGHT — ADR 0141 built it because
+deleting the two scenarios the agent failed raised `aef loop score` from 0.6667
+to 1.0000 with nothing complaining — and it is **not weakened**: it fires on
+exactly the same condition, and mutation M11 re-verifies that it still fires
+after being given a remedy. What was missing was the remedy. Without one the
+thing people actually do is delete `manifest.json`, which loses every id it was
+keeping.
+
+```
+$ aef loop corpus reconcile --corpus copied
+  DROPPED  s-2 (was train) — no file on disk
+manifest rewritten from disk: 1 dropped, 0 moved, 0 added, 2 scenario(s) now recorded
+  Those ids are no longer admitted evidence. Commit this manifest in its own
+  reviewable change — retiring a scenario is an owner's decision and the diff is
+  the record of it (ADR 0141).
+```
+
+**The loop provably cannot run it** (ADR 0060's shape): an AST scan over `aef/`
+pinning the single caller, a ban on the word `reconcile` inside `cmd_cycle` and
+`cmd_run` so an indirect helper cannot slip past a one-hop scan, and a
+`save_manifest` caller pin. Verified against the planted fault — putting
+`reconcile_manifest(...)` inside `cmd_cycle` fails the test, naming that call
+site. A malformed scenario is NOT reconciled away, because a corrupt write must
+not be able to retire evidence.
+
+**F1 (H1's finding 1) — `discover_skills` counted adopt's own skill.** On the
+pilot clone, adopt said 5 and migrate said 6 about the same tree, the sixth
+being the `new-model-check/SKILL.md` adopt had just written. Migrate importing
+adopt is a hard cycle, and it was reproduced rather than assumed — the import
+patched into the real file, run both directions, restore SHA-256 verified:
+
+```
+ImportError: cannot import name '_ADOPT_SKILL_PATH' from partially initialized
+module 'aef.cli.adopt' (most likely due to a circular import)
+```
+
+So the string moved to `aef/harness/zones.py`, which both CLI modules already
+import and which imports neither — the same home and the same argument
+`DEFAULT_AGENT_PATH` already has. Only the COUNT excludes it; the listing still
+NAMES it, marked `(aef's own — not yours)`, because a migrate that goes silent
+about a file it declined to migrate is the one thing that block exists not to
+be. H1 wrote its pinned test to hold both numbers so that *"the day migrate
+mirrors it, that test says so"*. It said so, and it now asserts the two AGREE,
+with the history in its docstring.
+
+**Green bar:** `pytest -q` 2570 passed / 6 skipped, `mypy aef examples` clean,
+`ruff check` clean, `ruff format --check` clean. **+60 tests, 2510 → 2570.**
+**14 mutations planted, 14 killed**, every restore byte-identical by SHA-256.
+
+**Reported, not fixed** (in ADR 0176's own defects section): `--entrypoint` is
+a fourth spelling of "which graph" and `run --module` a fifth, both in other
+workers' files; `LoopConfig.graph_id` is one field serving two namespaces, which
+is the root of F2 and the reason its fix needs a warning branch at all;
+`aef/cli/adopt.py` still spells the skill path itself, pinned by a test until
+its owner makes it an alias; one flaky container-sandbox test; and the fact that
+the suite fails 28 tests with `[Errno 2] No such file or directory: 'python'`
+when the venv is not on `PATH`, which looks exactly like a regression and is not.

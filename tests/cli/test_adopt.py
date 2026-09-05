@@ -1380,12 +1380,20 @@ def test_adopt_still_does_not_count_its_own_skill_after_reusing_migrates_discove
     writes `.claude/skills/new-model-check/SKILL.md` itself, and counting it
     would make the numbers differ between run 1 and run 2.
 
-    `aef migrate`'s own skills count does NOT apply this exclusion — measured
-    5 from adopt against 6 from migrate on the same tree after adoption. That
-    is migrate's to mirror; it is reported in ADR 0172 rather than fixed here,
-    because this worker does not own `aef/cli/migrate.py`."""
+    UPDATED DELIBERATELY (ADR 0176), and the history is the point. ADR 0172
+    (H1) wrote this test to pin BOTH numbers — `detect_prompt_surface` said 2
+    and `discover_skills` said 3 on the same tree, measured 5 against 6 on the
+    pilot clone — with the note "that is migrate's to mirror; it is reported
+    in ADR 0172 rather than fixed here, because this worker does not own
+    `aef/cli/migrate.py`", and the explicit intent that the day migrate
+    mirrored it, this test would say so. It did. Migrate now has
+    `discover_adopter_skills`, and the two AGREE.
+
+    `discover_skills` itself still returns three, and that is not the defect
+    coming back: `aef migrate` names every file it declined to migrate,
+    including aef's own, and only the COUNT excludes it."""
     from aef.cli.adopt import _ADOPT_SKILL_PATH, detect_prompt_surface
-    from aef.cli.migrate import discover_skills
+    from aef.cli.migrate import discover_adopter_skills, discover_skills
 
     _nested_prompt_repo(tmp_path)
     for name in ("one", "two"):
@@ -1396,7 +1404,33 @@ def test_adopt_still_does_not_count_its_own_skill_after_reusing_migrates_discove
 
     assert detect_prompt_surface(tmp_path).skills == 2, "adopt counted its own skill"
     assert _ADOPT_SKILL_PATH in discover_skills(tmp_path), "the skill adopt writes"
-    assert len(discover_skills(tmp_path)) == 3, "migrate counts adopt's own — reported, not fixed"
+    assert len(discover_skills(tmp_path)) == 3, "the raw listing still names aef's own"
+    assert len(discover_adopter_skills(tmp_path)) == 2, "migrate mirrors the exclusion now"
+    assert detect_prompt_surface(tmp_path).skills == len(discover_adopter_skills(tmp_path))
+
+
+def test_adopts_own_skill_path_is_the_one_in_the_harness(tmp_path: Path) -> None:
+    """One derivation (ADR 0149). `aef/cli/adopt.py` imports `aef/cli/migrate.py`,
+    so migrate importing adopt is a hard cycle — reproduced in ADR 0176 by
+    patching the import in and running it, both directions:
+
+        ImportError: cannot import name '_ADOPT_SKILL_PATH' from partially
+        initialized module 'aef.cli.adopt' (most likely due to a circular
+        import)
+
+    The string therefore lives in `aef.harness.zones`, which both CLI modules
+    already import and which imports neither. Migrate reads it from there.
+    Adopt still spells its own copy because `aef/cli/adopt.py` was another
+    worker's file in the wave that moved it; this assertion is what catches
+    the two drifting until adopt's owner makes it an alias, the same shape
+    `DEFAULT_MIGRATED_OUT` already has."""
+    from aef.cli.adopt import _ADOPT_SKILL_PATH
+    from aef.harness.zones import ADOPT_SKILL_PATH
+
+    assert _ADOPT_SKILL_PATH == ADOPT_SKILL_PATH, (
+        "adopt and the harness must name the same file; make adopt's constant an "
+        "alias for `aef.harness.zones.ADOPT_SKILL_PATH`"
+    )
 
 
 def test_the_generated_config_names_the_shadow_containment_default(tmp_path: Path) -> None:

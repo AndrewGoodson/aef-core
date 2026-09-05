@@ -228,13 +228,51 @@ def test_a_loop_command_accepts_the_file_path_module_form_under_a_widened_root(
     assert code == 0, "the file-path --module form did not load"
 
 
+def _graph_reference_arguments() -> list[tuple[str, str, str]]:
+    """(subcommand, dest, help) for every `aef loop` argument that names a
+    graph, read off the REAL parser rather than a hand-kept list — the G1a
+    pattern. A sixth subcommand that grows one is caught by the enumeration
+    in `tests/cli/test_loop_graph_reference.py`."""
+    import argparse as _argparse
+
+    from aef.cli.loop import GRAPH_REFERENCE_HELP
+    from aef.cli.main import build_parser
+
+    found: list[tuple[str, str, str]] = []
+    for action in build_parser()._actions:
+        if not isinstance(action, _argparse._SubParsersAction):
+            continue
+        loop = action.choices.get("loop")
+        if loop is None:
+            continue
+        for inner in loop._actions:
+            if not isinstance(inner, _argparse._SubParsersAction):
+                continue
+            for name, sub in inner.choices.items():
+                for arg in sub._actions:
+                    if arg.help == GRAPH_REFERENCE_HELP:
+                        found.append((name, arg.dest, arg.help))
+    return found
+
+
 def test_every_loop_module_argument_says_a_file_path_works() -> None:
     """The help was the whole defect for `aef run` (ADR 0168): a flag whose
-    generated command could not be run under it. These are the loop's."""
-    import aef.cli.loop as loop_cli
+    generated command could not be run under it. These are the loop's.
 
-    source = Path(loop_cli.__file__).read_text()
-    assert source.count("OR a path to the graph") == 5, (
-        "every `module`/`--module` argument in `aef loop` must say the file form works — "
-        "record, bootstrap, harvest, cycle, run"
-    )
+    UPDATED DELIBERATELY (ADR 0176). This counted the substring "OR a path to
+    the graph" five times in the source, and five identical help strings had
+    been written out five times — which is how `aef loop score` came to
+    describe the same argument a sixth way ("'module:factory' returning the
+    incumbent Graph") and accept a different language. There is one help
+    string now, `GRAPH_REFERENCE_HELP`, so the assertion moved from counting a
+    substring to reading the REAL parser: every argument that names a graph
+    carries it, and it says all three forms.
+    """
+    from aef.cli.loop import GRAPH_REFERENCE_HELP
+
+    helps = _graph_reference_arguments()
+    assert helps, "no graph-reference argument found in the loop parser"
+    for subcommand, dest, help_text in helps:
+        assert help_text == GRAPH_REFERENCE_HELP, f"{subcommand} {dest} says something else"
+    for form in ("build_graph()", "module:factory", ".py file"):
+        assert form in GRAPH_REFERENCE_HELP, form
