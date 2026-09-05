@@ -424,19 +424,50 @@ def _reexecute(
     return result.trace
 
 
+#: Fields the HARNESS generates and the tenant never types. Each is dropped
+#: from the output scan by exact path, never by teaching a pattern to ignore a
+#: shape — the shape is the point, and a UUID in an objective is exactly the
+#: thing ADR 0197 added a pattern for.
+_HARNESS_IDENTIFIERS: tuple[tuple[str, ...], ...] = (
+    ("id",),
+    ("initial_state", "run_id"),
+)
+
+
 def _scannable(scenario: Scenario) -> dict[str, Any]:
     """The scenario payload the output scan reads: everything except the
-    cassette's own request digests.
+    identifiers the harness itself generated.
+
+    Two kinds, and both are the same argument.
 
     A `RecordedCall.key` is a 64-character SHA-256 hex string the harness
     computes from the request — it is not tenant text, it is recomputed on
     load rather than trusted, and it matches `opaque_secret` every single
     time. Left in, it rejected EVERY model-calling run as
     "a secret survived redaction" (found while fixing ADR 0126's F12; the
-    twenty summary scenarios ADR 0123 recorded all match it too). Everything
-    a model was actually asked and answered is still scanned.
+    twenty summary scenarios ADR 0123 recorded all match it too).
+
+    A run id is a `uuid4` the harness assigns, and it is the scenario's `id`
+    and its `initial_state.run_id`. It carries no tenant information for the
+    same reason the digest does not, and since ADR 0197 gave the policy a
+    `uuid` pattern it matches every single time too — which rejected every
+    harvest of a recorded run (`tests/cli/test_run.py::test_a_recorded_run_
+    re_executes_identically_and_is_harvested` caught it).
+
+    Dropping is by exact field path, not by weakening the pattern: a UUID a
+    tenant typed into an objective, or one a tool returned, is still scanned
+    and still rejects the run — which is the whole point of ADR 0197 and of
+    ADR 0163's residual.
+
+    Everything a model was actually asked and answered is still scanned.
     """
     payload = scenario.to_payload()
+    for path in _HARNESS_IDENTIFIERS:
+        node: Any = payload
+        for key in path[:-1]:
+            node = node.get(key) if isinstance(node, dict) else None
+        if isinstance(node, dict):
+            node.pop(path[-1], None)
     calls = payload.get("model_calls")
     if isinstance(calls, list):
         for call in calls:

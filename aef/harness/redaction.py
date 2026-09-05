@@ -37,12 +37,66 @@ from typing import Any
 from aef.state import AEFState
 
 # Order matters only for the label a match gets; a string matching two
-# patterns is redacted by the first.
+# patterns is redacted by the first. Every pattern carries its own name so the
+# report says WHICH shape matched — "a UUID leaked" and "something long and
+# opaque leaked" are different findings for whoever has to go and rotate it.
+#
+# The six shapes below `aws_key` are ADR 0197. M6's pilot (ADR 0163) scanned
+# a real repo clean and then named its own residual: marlin's boundary rule is
+# written around a subscription UUID and the list did not match it, because
+# ADR 0126 had removed `-` from `opaque_secret`'s character class to stop a
+# hyphenated plain-English objective being redacted into a placeholder. The
+# answer is not to put `-` back — that reintroduces the false positive — but
+# to name the hyphenated shapes explicitly, which is what prefix- and
+# structure-anchored patterns do and what shape-guessing by length cannot.
 DEFAULT_PATTERNS: tuple[tuple[str, str], ...] = (
+    # First, because the credential in `scheme://user:password@host` ends in
+    # something the `email` pattern matches: before this existed, a leaked
+    # connection string was reported as "an email address", which sends the
+    # operator to rotate the wrong thing.
+    (
+        "connection_string",
+        r"\b[A-Za-z][A-Za-z0-9+.\-]*://[^\s:/@]+:[^\s:/@]+@[^\s/]+",
+    ),
     ("email", r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
-    ("api_key", r"\b(?:sk|pk|rk|ak)[-_](?:live|test|ant|proj)?[-_]?[A-Za-z0-9]{16,}\b"),
+    # ADR 0197 widened the middle of this. It used to be
+    # `[-_](?:live|test|ant|proj)?[-_]?[A-Za-z0-9]{16,}`, a fixed vocabulary of
+    # ONE optional segment, and `sk-ant-api03-<36>` — the shape of a real
+    # Anthropic API key, the credential this repo's own adopters are most
+    # likely to hold — matched NOTHING: `ant` consumed the vocabulary slot and
+    # `api03` was left in front of a class that has no hyphen. Now up to three
+    # short segments may sit between the prefix and the body, so the pattern
+    # follows the vendor convention rather than a list of the four words
+    # somebody happened to think of.
+    ("api_key", r"\b(?:sk|pk|rk|ak)(?:[-_][A-Za-z0-9]{2,10}){0,3}[-_][A-Za-z0-9]{16,}\b"),
     ("bearer", r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{16,}"),
-    ("aws_key", r"\bAKIA[0-9A-Z]{16}\b"),
+    # Three dot-separated base64url segments with a JOSE header. Kept after
+    # `bearer` on purpose: `Bearer <jwt>` is a bearer header and is reported as
+    # one, while a bare JWT — in a tool result, a log line, a working-memory
+    # value — now gets its own name instead of being torn into two
+    # `opaque_secret` matches at the dots.
+    (
+        "jwt",
+        r"\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}",
+    ),
+    # AKIA is the long-lived access key; the other five prefixes are the
+    # temporary/role/instance ids that leak just as usefully.
+    ("aws_key", r"\b(?:AKIA|ASIA|ABIA|ACCA|AIDA|AROA)[0-9A-Z]{16}\b"),
+    # GitHub's prefixed tokens: personal (ghp), OAuth (gho), user-to-server
+    # (ghu), server-to-server (ghs), refresh (ghr).
+    ("github_token", r"\bgh[pousr]_[A-Za-z0-9]{30,}\b"),
+    # Slack bot/user/app/refresh/legacy tokens.
+    ("slack_token", r"\bxox[baprse]-[A-Za-z0-9-]{10,}\b"),
+    # 8-4-4-4-12 hex. This is the shape ADR 0163 named as the pilot's residual.
+    # It cannot revive ADR 0126's false positive: the false positive was a
+    # hyphenated *English* slug, and every group here is hex-only and
+    # length-exact, so `migrate-the-customer-billing-pipeline-to-v2-...` has no
+    # substring that fits. Nor does a 64-hex SHA digest, which carries no
+    # hyphens at all.
+    (
+        "uuid",
+        r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
+    ),
     # Long, high-entropy-looking: 40+ chars carrying BOTH a letter and a
     # digit, and no hyphen. All three constraints are corrections (ADR 0126):
     # the first version matched any 40+ run of `[A-Za-z0-9+/=_-]`, so
@@ -119,9 +173,28 @@ class RedactionPolicy:
 
     def find(self, value: Any) -> tuple[str, ...]:
         """Labels of every pattern that still matches anywhere in `value`.
-        Empty means clean. This is the output scan."""
+        Empty means clean. This is the output scan.
+
+        Patterns are applied IN ORDER, each to the text the previous ones
+        already substituted — the same way `redact_text` works — so the labels
+        reported are the labels a redaction would actually stamp. Before ADR
+        0197 this searched the raw text with every pattern independently, and
+        one leaked database URL came back as
+        `("connection_string", "email")`: two findings for one credential,
+        naming a shape nobody has to rotate.
+
+        The detector is not weakened by this. If any pattern matches the raw
+        text, let P be the first such in list order; no pattern before P
+        matched, so nothing before P changed the text, so P still matches.
+        Non-empty before ⟺ non-empty after.
+        """
         text = _flatten(value)
-        return tuple(label for label, pattern in self._compiled if pattern.search(text))
+        labels = []
+        for label, pattern in self._compiled:
+            text, n = pattern.subn(f"[REDACTED:{label}]", text)
+            if n:
+                labels.append(label)
+        return tuple(labels)
 
 
 def _flatten(value: Any) -> str:
