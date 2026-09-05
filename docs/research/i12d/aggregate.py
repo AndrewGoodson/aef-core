@@ -59,7 +59,13 @@ def spread(values: list[float]) -> float:
 
 
 def main() -> None:
-    root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent / "results"
+    # `--verify` (ADR 0196's shared interface) prints and writes nothing —
+    # which is what this script already did. Taking argv[1] as the results
+    # root unconditionally made `--verify` a directory name, so the driver
+    # got `KeyError: 'a'` from an empty load: the re-runner's first catch of
+    # a measurement that could not re-derive itself.
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    root = Path(args[0]) if args else Path(__file__).resolve().parent / "results"
     arms = load(root)
     ids = list(arms["a"][0]["per_scenario"])
 
