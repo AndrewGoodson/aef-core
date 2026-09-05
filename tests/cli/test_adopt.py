@@ -1,13 +1,30 @@
+import hashlib
+import re
 from pathlib import Path
 
 import pytest
 
 from aef.cli.adopt import (
+    GITIGNORE_MARKERS,
+    MD_MARKERS,
     AdoptResult,
     detect_framework,
     render_migration_checklist,
     run_adopt,
+    signed_begin,
 )
+
+# `<!-- aef:begin sha256=... -->`, the only begin marker `aef adopt` writes
+# and the only one it will ever replace between (ADR 0172). Spelled out here
+# rather than imported from the private helper so the TEST pins the format an
+# adopter sees, and a change to it has to be made twice, on purpose.
+_SIGNED_BEGIN_RE = re.compile(r"<!-- aef:begin sha256=[0-9a-f]{16} -->")
+_SIGNED_GITIGNORE_BEGIN_RE = re.compile(r"# aef:begin sha256=[0-9a-f]{16}")
+
+
+def signed_begins(text: str, gitignore: bool = False) -> int:
+    pattern = _SIGNED_GITIGNORE_BEGIN_RE if gitignore else _SIGNED_BEGIN_RE
+    return len(pattern.findall(text))
 
 
 def test_detect_langgraph(tmp_path: Path) -> None:
@@ -149,7 +166,11 @@ def test_run_adopt_appends_to_existing_harness_files_without_touching_a_byte(
     ):
         text = path.read_text()
         assert text.startswith(original), f"{path} lost the adopter's own bytes"
-        assert "<!-- aef:begin -->" in text and "<!-- aef:end -->" in text
+        # The SIGNED begin marker (ADR 0172) — a bare `<!-- aef:begin -->` is
+        # something an adopter's own prose may contain, so it can no longer be
+        # what identifies adopt's block.
+        assert signed_begins(text) == 1, text
+        assert "<!-- aef:end -->" in text
         assert "AGENT_INTEGRATION.md" in text, "the block must point at the canonical guide"
         assert path in result.appended_files
         assert path not in result.skipped_files
@@ -202,7 +223,7 @@ def test_run_adopt_appends_to_an_existing_claude_md_and_destroys_nothing(tmp_pat
 
     text = (tmp_path / "CLAUDE.md").read_text()
     assert text.startswith("# my own notes, do not touch\n")
-    assert "<!-- aef:begin -->" in text
+    assert signed_begins(text) == 1, text
     assert tmp_path / "CLAUDE.md" in result.appended_files
     assert "CLAUDE.md" not in {p.name for p in result.skipped_files}
 
@@ -591,7 +612,10 @@ def test_run_adopt_appends_the_bytecode_patterns_to_an_existing_gitignore(tmp_pa
 
     text = (tmp_path / ".gitignore").read_text()
     assert text.startswith("# mine\nnode_modules/\n"), "the adopter's own bytes must survive"
-    assert "# aef:begin\n__pycache__/\n*.py[cod]\n# aef:end" in text
+    body = "__pycache__/\n*.py[cod]"
+    assert f"{signed_begin(GITIGNORE_MARKERS[0], body)}\n{body}\n{GITIGNORE_MARKERS[1]}" in text, (
+        text
+    )
     assert tmp_path / ".gitignore" in result.appended_files
 
     told = [item for item in result.checklist if "__pycache__/" in item]
@@ -799,20 +823,23 @@ def test_the_block_is_replaced_in_place_and_the_bytes_outside_it_are_untouched(
     """The load-bearing property, asserted with a hash of the text outside the
     markers: an OLDER block version is replaced, and nothing else moves. This
     is what makes appending different from overwriting — and the only reason
-    ADR 0153 is allowed to extend ADR 0034/0040's rule rather than break it."""
-    import hashlib
+    ADR 0153 is allowed to extend ADR 0034/0040's rule rather than break it.
 
-    from aef.cli.adopt import MD_MARKERS
-
-    begin, end = MD_MARKERS
-    original = f"# My rules\n\nLine one.\n\n{begin}\nan ANCIENT aef block\n{end}\n\nLine two.\n"
+    The planted stale block is SIGNED (ADR 0172): a signed pair is the only
+    thing adopt replaces between, and its signature is over the stale body —
+    so this also pins that a *changed* block is still found and replaced."""
+    end = MD_MARKERS[1]
+    stale = "an ANCIENT aef block"
+    begin = signed_begin(MD_MARKERS[0], stale)
+    original = f"# My rules\n\nLine one.\n\n{begin}\n{stale}\n{end}\n\nLine two.\n"
     (tmp_path / "AGENTS.md").write_text(original)
 
     result = run_adopt(tmp_path)
     text = (tmp_path / "AGENTS.md").read_text()
 
     def outside(body: str) -> str:
-        start, stop = body.index(begin), body.index(end) + len(end)
+        start = _SIGNED_BEGIN_RE.search(body).start()  # type: ignore[union-attr]
+        stop = body.index(end, start) + len(end)
         return body[:start] + body[stop:]
 
     assert hashlib.sha256(outside(text).encode()).hexdigest() == (
@@ -824,15 +851,21 @@ def test_the_block_is_replaced_in_place_and_the_bytes_outside_it_are_untouched(
     assert tmp_path / "AGENTS.md" in result.appended_files
 
 
+_SIGNED_A = signed_begin(MD_MARKERS[0], "a")
+_SIGNED_B = signed_begin(MD_MARKERS[0], "b")
+_LEGACY_ONE = "<!-- aef:begin -->\n## AEF scaffold (one) — generated section\nx\n<!-- aef:end -->"
+_LEGACY_TWO = "<!-- aef:begin -->\n## AEF scaffold (two) — generated section\ny\n<!-- aef:end -->"
+
+
 @pytest.mark.parametrize(
     "content,why",
     [
-        ("# mine\n<!-- aef:begin -->\nhalf a block\n", "a begin with no end"),
-        ("# mine\nstray\n<!-- aef:end -->\n", "an end with no begin"),
+        (f"# mine\n{_SIGNED_A}\nhalf a block\n", "a signed begin with no end"),
         (
-            "<!-- aef:begin -->\na\n<!-- aef:end -->\n<!-- aef:begin -->\nb\n<!-- aef:end -->\n",
-            "two blocks",
+            f"{_SIGNED_A}\na\n<!-- aef:end -->\n{_SIGNED_B}\nb\n<!-- aef:end -->\n",
+            "two signed blocks",
         ),
+        (f"# mine\n{_LEGACY_ONE}\n\n{_LEGACY_TWO}\n", "two pre-signature blocks"),
     ],
 )
 def test_a_file_with_markers_adopt_cannot_resolve_is_skipped_with_the_reason(
@@ -840,7 +873,12 @@ def test_a_file_with_markers_adopt_cannot_resolve_is_skipped_with_the_reason(
 ) -> None:
     """Guessing where someone else's block ends is how a never-destroy tool
     destroys. Each of these is left exactly as it was, and the skip says why
-    rather than reading as "already exists"."""
+    rather than reading as "already exists".
+
+    UPDATED DELIBERATELY (ADR 0172): the three shapes are now stated on the
+    marker adopt actually WRITES. The unbalanced *bare* shapes that used to be
+    here are covered by the fourth case below — they are the adopter's prose,
+    and prose is left alone and appended after, not refused."""
     (tmp_path / "AGENTS.md").write_text(content)
 
     result = run_adopt(tmp_path)
@@ -848,6 +886,51 @@ def test_a_file_with_markers_adopt_cannot_resolve_is_skipped_with_the_reason(
     assert (tmp_path / "AGENTS.md").read_text() == content, why
     assert tmp_path / "AGENTS.md" in result.skipped_files
     assert "refusing to guess" in result.skip_reason(tmp_path / "AGENTS.md"), why
+
+
+@pytest.mark.parametrize(
+    "content,why",
+    [
+        ("# mine\n<!-- aef:begin -->\nhalf a quotation\n", "a bare begin with no end"),
+        ("# mine\nstray\n<!-- aef:end -->\n", "a bare end with no begin"),
+        (
+            "<!-- aef:begin -->\na\n<!-- aef:end -->\n<!-- aef:begin -->\nb\n<!-- aef:end -->\n",
+            "two bare pairs",
+        ),
+        (
+            "# mine\n\nadopt writes a block between <!-- aef:begin --> and\n"
+            "**RULE 7: no agent may push to main.**\n"
+            "...and closes it with <!-- aef:end --> at the end.\n",
+            "a BALANCED bare pair around the adopter's own rule",
+        ),
+    ],
+)
+def test_bare_markers_in_the_adopters_prose_are_inert_and_nothing_between_them_is_lost(
+    tmp_path: Path, content: str, why: str
+) -> None:
+    """R2, as a test. `apply_block` used to take the FIRST `<!-- aef:begin -->`
+    and the next `<!-- aef:end -->` anywhere in the file and replace everything
+    between them. This kit's own documentation teaches those two strings, so an
+    adopter's `CLAUDE.md` quoting them — with a house rule in between — had the
+    rule deleted, while `aef adopt` printed "your bytes outside it are
+    unchanged".
+
+    Reproduced before the fix on a scratch repo: `RULE 7` and `RULE 8` were in
+    the file before, `grep -c "RULE 7" CLAUDE.md` returned 0 after.
+
+    A signature makes the difference legible: only `<!-- aef:begin sha256=... -->`
+    is adopt's. Everything here is prose, so every byte of it survives and the
+    block is appended after it."""
+    (tmp_path / "AGENTS.md").write_text(content)
+
+    result = run_adopt(tmp_path)
+
+    text = (tmp_path / "AGENTS.md").read_text()
+    assert text.startswith(content), f"{why}: the adopter's bytes must be a prefix"
+    assert signed_begins(text) == 1, f"{why}: exactly one block, appended after the prose"
+    assert "AGENT_INTEGRATION.md" in text, why
+    assert tmp_path / "AGENTS.md" in result.appended_files, why
+    assert tmp_path / "AGENTS.md" not in result.skipped_files, why
 
 
 def test_a_binary_entry_file_is_skipped_with_the_reason_not_appended_to(tmp_path: Path) -> None:
@@ -982,14 +1065,14 @@ def test_the_generated_entry_files_carry_the_block_they_would_append(tmp_path: P
     `AGENTS.md` is the same text its own generated `CLAUDE.md` carries — which
     is also what makes a re-run a byte-for-byte replace rather than a second
     append."""
-    from aef.cli.adopt import MD_MARKERS, render_aef_block
+    from aef.cli.adopt import render_aef_block
 
     run_adopt(tmp_path)
     block = render_aef_block(tmp_path.name, "none")
     for name in ("CLAUDE.md", "AGENTS.md", ".github/copilot-instructions.md"):
         text = (tmp_path / name).read_text()
         assert block in text, name
-        assert text.count(MD_MARKERS[0]) == 1, f"{name} has more than one block"
+        assert signed_begins(text) == 1, f"{name} has more than one block"
 
 
 def test_the_generated_shim_runs_the_graph_aef_migrate_generates(tmp_path: Path) -> None:
@@ -1034,3 +1117,573 @@ def test_the_generated_shim_runs_the_graph_aef_migrate_generates(tmp_path: Path)
     run_via_aef = namespace["run_via_aef"]
     final = run_via_aef("an ordinary task")  # type: ignore[operator]
     assert final.plan is not None and final.plan.status == "done"
+
+
+# ---------------------------------------------------------------------------
+# ADR 0172 — the bytes, the signature, one discovery, and the nightly cycle.
+# ---------------------------------------------------------------------------
+
+
+_CRLF_AGENTS = (
+    b"# House rules\r\n"
+    b"\r\n"
+    b"Our agents read this file.\r\n"
+    b"Rule one: be careful.\r\n"
+    b"Rule two: never guess.\r\n"
+)
+
+
+def test_a_crlf_entry_file_is_not_rewritten_line_by_line(tmp_path: Path) -> None:
+    """R1, as a test, and it is the whole of ADR 0153's argument.
+
+    `Path.read_text()` translates `\\r\\n` to `\\n`; the marker logic was
+    byte-exact on the TRANSLATED text; `Path.write_text()` wrote it back with
+    `os.linesep`. So on a CRLF `AGENTS.md` every line of the adopter's file
+    was rewritten while the CLI printed "your bytes outside it are unchanged".
+
+    Reproduced on a scratch repo before the fix — `git diff --stat` said
+    `41 insertions(+), 5 deletions(-)` and every original line was a `-` — and
+    after it says `36 insertions(+)` with the original bytes at offset 0.
+    """
+    (tmp_path / "AGENTS.md").write_bytes(_CRLF_AGENTS)
+
+    result = run_adopt(tmp_path)
+
+    after = (tmp_path / "AGENTS.md").read_bytes()
+    assert after.startswith(_CRLF_AGENTS), "the adopter's CRLF lines were rewritten"
+    assert after.find(_CRLF_AGENTS) == 0
+    assert tmp_path / "AGENTS.md" in result.appended_files
+    # ...and the block adopt added is CRLF too, or the file is now mixed.
+    added = after[len(_CRLF_AGENTS) :]
+    assert added.count(b"\n") == added.count(b"\r\n"), "the added block is not in the file's ending"
+    assert signed_begins(after.decode()) == 1
+
+
+@pytest.mark.parametrize(
+    "original,newline,why",
+    [
+        (b"# mine\nrule one\n", b"\n", "LF"),
+        (b"# mine\r\nrule one\r\n", b"\r\n", "CRLF"),
+        (b"# mine\r\nrule one\r\nrule two\r\nodd one out\n", b"\r\n", "mixed, CRLF dominant"),
+        (b"# mine\nrule one\nrule two\r\n", b"\n", "mixed, LF dominant"),
+        (b"# mine\nno trailing newline", b"\n", "no trailing newline, LF"),
+        (b"# mine\r\nno trailing newline", b"\r\n", "no trailing newline, CRLF"),
+    ],
+)
+def test_the_block_takes_the_files_own_line_ending_and_every_byte_before_it_survives(
+    tmp_path: Path, original: bytes, newline: bytes, why: str
+) -> None:
+    """The CRLF twin of every byte-preservation assertion, plus the two shapes
+    the LF-only fixtures never covered: a mixed file (the majority ending
+    wins, and the minority lines are pasted back verbatim rather than
+    normalised) and a file with no trailing newline."""
+    (tmp_path / "AGENTS.md").write_bytes(original)
+
+    run_adopt(tmp_path)
+
+    after = (tmp_path / "AGENTS.md").read_bytes()
+    assert after.startswith(original), f"{why}: the adopter's bytes are not a prefix"
+    assert after.find(original) == 0, why
+    added = after[len(original) :]
+    if newline == b"\r\n":
+        assert added.count(b"\n") == added.count(b"\r\n"), why
+    else:
+        assert b"\r\n" not in added, why
+
+
+def test_appending_to_a_crlf_file_is_insertions_only_and_git_agrees(tmp_path: Path) -> None:
+    """The reproduction's own instrument. A string comparison can be argued
+    with; `git diff --numstat` is what an adopter will actually look at, and
+    before the fix it read `41  5` on this file."""
+    import subprocess
+
+    def run(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", "-C", str(tmp_path), *args], capture_output=True, text=True, check=False
+        )
+
+    (tmp_path / "AGENTS.md").write_bytes(_CRLF_AGENTS)
+    (tmp_path / ".gitignore").write_bytes(b"node_modules/\r\n")
+    run("init", "-q")
+    run("config", "core.autocrlf", "false")
+    run("add", "-A")
+    run("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init")
+
+    run_adopt(tmp_path)
+
+    numstat = run("diff", "--numstat", "--", "AGENTS.md", ".gitignore").stdout
+    assert numstat.strip(), numstat
+    for line in numstat.strip().splitlines():
+        added, removed, name = line.split("\t")
+        assert removed == "0", f"{name}: {removed} line(s) of the adopter's file were removed"
+        assert int(added) > 0, name
+
+
+def test_the_never_destroy_rule_is_checked_in_code_before_anything_is_written() -> None:
+    """ADR 0153 argued that appending is not overwriting because "every
+    pre-existing byte survives verbatim". On a CRLF file that was false, and
+    nothing in the code would have noticed. This is the same claim as an
+    executable check: the prefix and the suffix of the original must both
+    still be there, at the same ends, or the write is refused."""
+    from aef.cli.adopt import _verify_preserved
+
+    prefix, suffix = b"# mine\r\n", b"\r\ntail\r\n"
+    assert _verify_preserved(prefix, suffix, prefix + b"BLOCK" + suffix)
+    assert not _verify_preserved(prefix, suffix, b"# mine\nBLOCK" + suffix), "LF-ised prefix"
+    assert not _verify_preserved(prefix, suffix, prefix + b"BLOCK"), "the suffix was dropped"
+    assert not _verify_preserved(prefix, suffix, b"BLOCK" + suffix), "the prefix was dropped"
+    # and a result too short to contain both, even though it starts and ends right
+    assert not _verify_preserved(b"aa", b"aa", b"aaa")
+
+
+def test_adopt_never_reads_or_writes_a_file_through_a_newline_translating_api() -> None:
+    """`Path.read_text()` translates line endings on the way in and
+    `Path.write_text()` writes `os.linesep` on the way out. Both are wrong for
+    a tool whose contract is that the adopter's bytes are untouched, and the
+    second is the mirror of R1 on Windows: every file this scaffold generates
+    would be CRLF there while its own tests compare against LF.
+
+    An AST scan rather than a review note, for the same reason
+    `tests/test_vendor_isolation.py` is one."""
+    import ast
+
+    import aef.cli.adopt as module
+
+    assert module.__file__ is not None
+    tree = ast.parse(Path(module.__file__).read_text())
+    offenders = [
+        f"line {node.lineno}: .{node.func.attr}()"
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {"read_text", "write_text"}
+    ]
+    assert offenders == [], f"aef/cli/adopt.py translates newlines: {offenders}"
+
+
+def test_a_pre_signature_block_is_upgraded_once_in_place_and_the_adopter_is_told(
+    tmp_path: Path,
+) -> None:
+    """The decision ADR 0172 had to make: a block written before the marker
+    carried a signature is adopt's, and it is MIGRATED once rather than
+    refused — because treating it as prose would leave the stale block in
+    place and append a second one, and two contradicting copies of the
+    contract in the file the repo's agents read is the worse failure.
+
+    It is recognised only by its first line, which is a line
+    `render_aef_block_body` emits — so a quotation is never mistaken for one
+    — and the upgrade is announced in the checklist."""
+    legacy = (
+        "# My rules\n\n"
+        "<!-- aef:begin -->\n"
+        "## AEF scaffold (old) — generated section\n"
+        "an ANCIENT aef block\n"
+        "<!-- aef:end -->\n\n"
+        "Line after.\n"
+    )
+    (tmp_path / "AGENTS.md").write_text(legacy)
+
+    result = run_adopt(tmp_path)
+
+    text = (tmp_path / "AGENTS.md").read_text()
+    assert text.startswith("# My rules\n\n"), "the adopter's bytes moved"
+    assert text.endswith("\n\nLine after.\n"), "content after the block must survive"
+    assert "an ANCIENT aef block" not in text, "the stale block survived"
+    assert signed_begins(text) == 1, text
+    assert tmp_path / "AGENTS.md" in result.upgraded_blocks
+    told = [item for item in result.checklist if "pre-signature" in item]
+    assert told, result.checklist
+    assert "AGENTS.md" in told[0], told[0]
+    assert "pre-signature" in (tmp_path / "AEF_MIGRATION_CHECKLIST.md").read_text()
+
+    # ...and ONCE: the second run finds a signed block and replaces between it.
+    again = run_adopt(tmp_path)
+    assert again.upgraded_blocks == []
+    assert [item for item in again.checklist if "pre-signature" in item] == []
+
+
+def test_an_m2_format_entry_file_is_still_recognised_as_adopts_own_output(tmp_path: Path) -> None:
+    """The transition property, and it is about a COUNT rather than a block.
+
+    `_is_adopt_generated` is what stops adopt counting the `AGENTS.md` it
+    wrote as the adopter's prompt surface. Keyed on the signed marker alone it
+    would answer "not ours" for one run on every repo already adopted under
+    the ADR 0153 format, and the detection line — which ADR 0153 asserts is
+    identical on both runs — would gain a signal and then lose it."""
+    from aef.cli.adopt import _is_adopt_generated
+
+    m2 = (
+        "# somerepo — agent instructions (aef-core)\n\n"
+        "<!-- aef:begin -->\n"
+        "## AEF scaffold (somerepo) — generated section\n\nbody\n"
+        "<!-- aef:end -->\n"
+    )
+    (tmp_path / "AGENTS.md").write_text(m2)
+    assert _is_adopt_generated(tmp_path / "AGENTS.md"), "an M2-format block stopped being ours"
+
+    # ...and the adopter's own file that merely QUOTES the markers is still theirs.
+    (tmp_path / "other.md").write_text(
+        "# somerepo — agent instructions (aef-core)\n\n"
+        "adopt writes <!-- aef:begin --> ... <!-- aef:end --> around its section.\n"
+    )
+    assert not _is_adopt_generated(tmp_path / "other.md")
+
+
+def test_the_signature_is_over_the_block_body_so_a_rerun_reproduces_it() -> None:
+    """What makes a signed marker idempotent rather than a nonce: it is a
+    function of the block it opens, so rendering the same block twice writes
+    the same marker byte for byte, and `aef adopt` reports
+    `already carries the current aef block` rather than rewriting."""
+    body = "## AEF scaffold (x) — generated section\n\nbody text"
+    marker = signed_begin(MD_MARKERS[0], body)
+    assert marker == signed_begin(MD_MARKERS[0], body)
+    assert marker != signed_begin(MD_MARKERS[0], body + "!")
+    assert marker == f"<!-- aef:begin sha256={hashlib.sha256(body.encode()).hexdigest()[:16]} -->"
+    assert signed_begin(GITIGNORE_MARKERS[0], body).startswith("# aef:begin sha256=")
+
+
+def _nested_prompt_repo(root: Path) -> None:
+    agents = root / ".claude" / "agents"
+    (agents / "sub").mkdir(parents=True)
+    for name in ("alpha", "beta"):
+        (agents / f"{name}.md").write_text(f"---\nname: {name}\n---\n{name}.\n")
+    (agents / "sub" / "gamma.md").write_text("---\nname: gamma\n---\ngamma.\n")
+
+
+def test_adopt_and_migrate_agree_on_the_number_of_prompt_agents(tmp_path: Path) -> None:
+    """R4. `aef migrate`'s discovery is RECURSIVE, and that was measured
+    against the Claude Code CLI (ADR 0152) — a flat glob migrates some of an
+    adopter's agents and silently leaves the organised ones behind. Adopt
+    globbed one level, so on a repo with one nested persona adopt said `2` in
+    the detection line, the checklist AND the appended block while migrate
+    wrote 3 graphs.
+
+    Fixed by importing migrate's discovery rather than reimplementing it:
+    one discovery, one number."""
+    from aef.cli.adopt import detect_prompt_surface
+    from aef.cli.migrate import discover_prompt_agents
+
+    _nested_prompt_repo(tmp_path)
+
+    assert detect_prompt_surface(tmp_path).agents == len(discover_prompt_agents(tmp_path)) == 3
+
+    result = run_adopt(tmp_path)
+    assert "3 agents" in result.detection(), result.detection()
+    assert [i for i in result.checklist if "3 prompt agents" in i], result.checklist
+    assert "3 under `.claude/agents/`" in (tmp_path / "AGENTS.md").read_text()
+
+
+def test_adopt_still_does_not_count_its_own_skill_after_reusing_migrates_discovery(
+    tmp_path: Path,
+) -> None:
+    """The exclusion that has to survive the shared discovery: `aef adopt`
+    writes `.claude/skills/new-model-check/SKILL.md` itself, and counting it
+    would make the numbers differ between run 1 and run 2.
+
+    `aef migrate`'s own skills count does NOT apply this exclusion — measured
+    5 from adopt against 6 from migrate on the same tree after adoption. That
+    is migrate's to mirror; it is reported in ADR 0172 rather than fixed here,
+    because this worker does not own `aef/cli/migrate.py`."""
+    from aef.cli.adopt import _ADOPT_SKILL_PATH, detect_prompt_surface
+    from aef.cli.migrate import discover_skills
+
+    _nested_prompt_repo(tmp_path)
+    for name in ("one", "two"):
+        (tmp_path / ".claude" / "skills" / name).mkdir(parents=True)
+        (tmp_path / ".claude" / "skills" / name / "SKILL.md").write_text(f"# {name}\n")
+
+    run_adopt(tmp_path)
+
+    assert detect_prompt_surface(tmp_path).skills == 2, "adopt counted its own skill"
+    assert _ADOPT_SKILL_PATH in discover_skills(tmp_path), "the skill adopt writes"
+    assert len(discover_skills(tmp_path)) == 3, "migrate counts adopt's own — reported, not fixed"
+
+
+def test_the_generated_config_names_the_shadow_containment_default(tmp_path: Path) -> None:
+    """`shadow.containment` exists, defaults to `auto`, and `auto` REFUSES
+    rather than downgrading when there is no runtime or no image — a default
+    an adopter cannot discover from the config they were handed is a default
+    they meet as a refusal instead."""
+    from aef.config.loader import load_agent_config
+    from aef.config.schema import CONTAINMENT_MODES
+
+    run_adopt(tmp_path)
+    text = (tmp_path / "aef.yaml").read_text()
+
+    assert "# shadow:" in text, text
+    assert "#   containment: auto" in text, text
+    for mode in CONTAINMENT_MODES:
+        assert mode in text, mode
+    assert "ADR 0161" in text
+    # commented out, so the template still loads and still means `auto`
+    assert load_agent_config(tmp_path / "aef.yaml").shadow.containment == "auto"
+
+
+# --- R3/S1: the nightly workflow ------------------------------------------
+
+
+def _monitor_workflow(root: Path) -> dict[str, object]:
+    import yaml
+
+    parsed = yaml.safe_load((root / ".github/workflows/loop-monitor.yml").read_text())
+    assert isinstance(parsed, dict)
+    return parsed
+
+
+def _steps(document: dict[str, object]) -> list[dict[str, object]]:
+    jobs = document["jobs"]
+    assert isinstance(jobs, dict)
+    return list(jobs["monitor"]["steps"])
+
+
+@pytest.mark.parametrize("workflow", ["loop-monitor.yml", "loop-gate.yml"])
+def test_the_emitted_workflows_scope_the_loop_state_cache_to_the_run(
+    tmp_path: Path, workflow: str
+) -> None:
+    """S1. `actions/cache` skips its post-job SAVE on an exact key hit, so a
+    constant `key: loop-state-${{ github.repository }}` means run 1 populates
+    the cache and no run after it ever writes one: the ledger, `cycles.jsonl`
+    and the archive reset to run 1's contents every night, and ADR 0165's
+    `SCHEDULED CYCLE PRODUCING NOTHING` warning — which needs three
+    consecutive journalled cycles — could never see two.
+
+    Not executed: this is YAML for a scheduler this suite cannot run, so what
+    is asserted is that the key varies per run and that a prefix restore-key
+    loads the previous run's state."""
+    import yaml
+
+    _adopt(tmp_path)
+    document = yaml.safe_load((tmp_path / ".github/workflows" / workflow).read_text())
+    job = next(iter(document["jobs"].values()))
+    caches = [step for step in job["steps"] if "actions/cache" in str(step.get("uses", ""))]
+    assert caches, workflow
+    for step in caches:
+        key = step["with"]["key"]
+        assert "${{ github.run_id }}" in key, f"{workflow}: constant cache key {key!r} never saves"
+        restore = step["with"]["restore-keys"]
+        assert "loop-state-${{ github.repository }}-" in restore, workflow
+        assert "${{ github.run_id }}" not in restore, "a run-scoped restore key restores nothing"
+
+
+def test_the_nightly_cycle_never_defaults_to_the_placeholder_that_raises(tmp_path: Path) -> None:
+    """R3(a). `aef migrate` writes `agents/migrated/graph.py` — whose
+    `build_graph()` raises `NotImplementedError` — in every repo with no
+    wrappable call site, which is every prompt-file repo. A workflow whose
+    `AEF_MODULE` defaults to it names a module that EXISTS and cannot build.
+
+    Where adopt can know the answer it names it: the first prompt agent's
+    module, derived from migrate's own discovery and sanitiser."""
+    from aef.cli.adopt_loop import PLACEHOLDER_MODULE
+
+    _nested_prompt_repo(tmp_path)
+    _adopt(tmp_path)
+
+    cycle = [s for s in _steps(_monitor_workflow(tmp_path)) if s.get("name") == "Daily cycle"][0]
+    module = cycle["env"]["AEF_MODULE"]
+    assert module != PLACEHOLDER_MODULE, "the nightly cycle names the placeholder that raises"
+    assert module == "agents.migrated.alpha.graph", module
+    assert cycle["env"]["AEF_ENTRYPOINT"] == f"{module}:build_graph"
+
+
+def test_a_repo_with_no_prompt_agents_still_gets_the_guard_rather_than_a_silent_placeholder(
+    tmp_path: Path,
+) -> None:
+    """Adopt cannot invent a module for a repo whose agents it cannot see. It
+    keeps the placeholder as the *editable* value and relies on the guard step
+    to fail the job by name until the owner replaces it — which is the
+    difference between a cron job that says what is wrong and one that is
+    green having done nothing."""
+    from aef.cli.adopt_loop import PLACEHOLDER_MODULE
+
+    _adopt(tmp_path)
+    steps = _steps(_monitor_workflow(tmp_path))
+    cycle = [s for s in steps if s.get("name") == "Daily cycle"][0]
+    assert cycle["env"]["AEF_MODULE"] == PLACEHOLDER_MODULE
+    guard = [s for s in steps if str(s.get("name", "")).startswith("The graph")]
+    assert guard, [s.get("name") for s in steps]
+    assert steps.index(guard[0]) < steps.index(cycle), "the guard must run BEFORE the cycle"
+    assert PLACEHOLDER_MODULE in guard[0]["run"], "the guard does not know the placeholder"
+
+
+def _guard_script(root: Path) -> tuple[str, str]:
+    """The rendered guard step's python body and its `AEF_MODULE`, extracted
+    from the YAML the adopter would commit — not from a Python string this
+    test happens to have."""
+    import re as _re
+
+    guard = [
+        s for s in _steps(_monitor_workflow(root)) if str(s.get("name", "")).startswith("The graph")
+    ][0]
+    body = _re.search(r"python - <<'PY'\n(.*?)\n\s*PY", str(guard["run"]), _re.S)
+    assert body is not None, guard["run"]
+    import textwrap
+
+    return textwrap.dedent(body.group(1)), str(guard["env"]["AEF_MODULE"])
+
+
+def test_the_rendered_cycle_reads_as_a_healthy_rejection_and_the_guard_is_what_stops_it(  # type: ignore[no-untyped-def]
+    tmp_path: Path, capsys
+) -> None:
+    """R3(b), executed rather than argued.
+
+    The rendered workflow fails the job only on `status >= 2`. A module whose
+    `build_graph()` raises reaches `main()`'s catch-all, which returns 1 —
+    `EXIT_REJECTED`, an ordinary candidate rejection — so the nightly job is
+    GREEN on a repo whose graph cannot be built, every night, with no journal
+    entry. Reproduced: `aef loop cycle ... --module agents.migrated.graph`
+    exited 1 with `error: aef migrate found no wrappable call site in this
+    repo`.
+
+    The exit constants are read from `aef.harness.loop` AT TEST TIME, so this
+    stays correct whether or not a distinct `EXIT_ERROR` has landed: if one
+    exists and the CLI returns it, the workflow's own rule already fails; if
+    not, the guard step is what fails the job, and it is asserted either way.
+    """
+    import importlib
+    import os
+    import subprocess
+    import sys
+
+    from aef.cli.main import main
+    from aef.harness import loop as loop_module
+
+    _nested_prompt_repo(tmp_path)
+    _adopt(tmp_path)
+    graph = tmp_path / "agents" / "migrated" / "alpha" / "graph.py"
+    graph.parent.mkdir(parents=True)
+    for package in (tmp_path / "agents", tmp_path / "agents/migrated", graph.parent):
+        (package / "__init__.py").write_text("")
+    graph.write_text(
+        "def build_graph():\n"
+        "    raise NotImplementedError('aef migrate found no wrappable call site in this repo')\n"
+    )
+    subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True, capture_output=True)
+    memory = tmp_path / "memory.jsonl"
+    memory.write_text(
+        '{"kind": "failure", "run_id": "r1", "verbal_feedback": "it ignored the deadline"}\n'
+    )
+
+    argv = [
+        "loop",
+        "cycle",
+        "--repo",
+        str(tmp_path),
+        "--state",
+        # Outside the repo: G1a made every --state subcommand refuse an in-repo
+        # state dir (ADR 0167), and this test met that refusal before its own.
+        str(tmp_path.parent / f"{tmp_path.name}-state"),
+        "--workdir",
+        str(tmp_path / "work"),
+        "--module",
+        "agents.migrated.alpha.graph",
+        "--entrypoint",
+        "agents.migrated.alpha.graph:build_graph",
+        "--corpus",
+        str(tmp_path / "corpus"),
+        "--config",
+        str(tmp_path / "aef.yaml"),
+        "--memory",
+        str(memory),
+        "--cassette-miss",
+        "fail",
+        "--build-command",
+        "true",
+    ]
+
+    def _forget_agents_package() -> None:
+        # This repo has an `agents/` package of its own and other tests import
+        # it, so a cached module would win over the adopted repo's. Purge
+        # before AND after, or this test passes or fails on run order.
+        for name in [m for m in list(sys.modules) if m.split(".")[0] == "agents"]:
+            del sys.modules[name]
+
+    here = os.getcwd()
+    _forget_agents_package()
+    sys.path.insert(0, str(tmp_path))
+    importlib.invalidate_caches()
+    try:
+        os.chdir(tmp_path)
+        code = main(argv)
+    finally:
+        os.chdir(here)
+        sys.path.remove(str(tmp_path))
+        _forget_agents_package()
+        importlib.invalidate_caches()
+
+    # The exit code must be the one the RAISING MODULE produced, not some
+    # other refusal that happens to share it — a test that cannot tell those
+    # apart pins nothing.
+    stderr = capsys.readouterr().err
+    assert "no wrappable call site" in stderr, stderr
+
+    error_code = getattr(loop_module, "EXIT_ERROR", None)
+    fails_the_job = code >= loop_module.EXIT_HALTED
+    if error_code is not None and code == error_code:
+        assert fails_the_job, "EXIT_ERROR must be a code the workflow's `status >= 2` rule fails on"
+    else:
+        assert code == loop_module.EXIT_REJECTED, code
+        assert not fails_the_job, "this test's premise — 1 reads as a healthy rejection — is gone"
+
+    # ...and the guard, run exactly as the runner would, refuses first.
+    script, module = _guard_script(tmp_path)
+    guarded = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        env={**os.environ, "AEF_MODULE": module, "PYTHONPATH": str(tmp_path)},
+        capture_output=True,
+        text=True,
+    )
+    assert guarded.returncode != 0, "the guard let a graph that cannot build through"
+    assert "does not build" in guarded.stderr, guarded.stderr
+    # R3(c): the CAUSE, not migrate's call-site sentence.
+    assert "NotImplementedError" in guarded.stderr, guarded.stderr
+    assert "AEF_MODULE" in guarded.stderr, guarded.stderr
+
+
+def test_the_guard_passes_once_the_named_module_actually_builds(tmp_path: Path) -> None:
+    """A guard that cannot pass is a guard nobody keeps. Same repo, a
+    `build_graph()` that returns instead of raising."""
+    import os
+    import subprocess
+    import sys
+
+    _nested_prompt_repo(tmp_path)
+    _adopt(tmp_path)
+    graph = tmp_path / "agents" / "migrated" / "alpha" / "graph.py"
+    graph.parent.mkdir(parents=True)
+    for package in (tmp_path / "agents", tmp_path / "agents/migrated", graph.parent):
+        (package / "__init__.py").write_text("")
+    graph.write_text("def build_graph():\n    return object()\n")
+
+    script, module = _guard_script(tmp_path)
+    guarded = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        env={**os.environ, "AEF_MODULE": module, "PYTHONPATH": str(tmp_path)},
+        capture_output=True,
+        text=True,
+    )
+    assert guarded.returncode == 0, guarded.stderr
+
+
+def test_the_cycle_summary_says_what_the_exit_code_MEANS(tmp_path: Path) -> None:
+    """R3(c). A nightly job whose summary is `(exit 1)` has told the reader a
+    number. `escalated`, `nothing to propose`, `rejected` and `the cycle
+    raised` are four different nights.
+
+    Every branch is asserted, not just the interesting ones: a mutation that
+    emptied the exit-0 arm survived the first version of this test, because
+    the arm nobody asserts is the arm the workflow is green on."""
+    import re as _re
+
+    _adopt(tmp_path)
+    cycle = [s for s in _steps(_monitor_workflow(tmp_path)) if s.get("name") == "Daily cycle"][0]
+    run = str(cycle["run"])
+    arms = dict(_re.findall(r'\n\s+(\d|\*)\)\s+meaning="([^"]*)"', run))
+    assert set(arms) == {"0", "1", "2", "*"}, arms
+    assert all(text.strip() for text in arms.values()), arms
+    assert "escalated" in arms["0"] and "nothing to propose" in arms["0"], arms["0"]
+    assert "REJECTED" in arms["1"], arms["1"]
+    assert "HALTED" in arms["2"], arms["2"]
+    assert "raised" in arms["*"], "an exception must not read as a verdict"
+    assert "GITHUB_STEP_SUMMARY" in run

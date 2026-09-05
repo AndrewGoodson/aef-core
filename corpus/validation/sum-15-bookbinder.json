@@ -2,24 +2,29 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "Marisa Venn"
-    },
-    {
-      "op": "contains",
-      "path": "working_memory.summary",
-      "value": "bookbinder"
-    },
-    {
-      "op": "contains",
-      "path": "working_memory.summary",
-      "value": "apprentice"
+      "value": "(?i)Marisa\\ Venn"
     },
     {
       "op": "regex",
       "path": "working_memory.summary",
-      "value": "^\\s*\\S+(?:\\s+\\S+){0,29}\\s*$"
+      "value": "(?i)bookbinder"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)apprentice"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 30
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
     }
   ],
   "expected": "must_pass",

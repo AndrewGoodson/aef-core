@@ -505,6 +505,7 @@ resuming is your decision.
 def render_loop_gate_workflow(repo_name: str) -> str:
     ref = "${{ inputs.head }}"
     repo = "${{ github.repository }}"
+    run_id = "${{ github.run_id }}"
     return f"""# Evaluate one self-rewiring candidate in {repo_name}.
 #
 # NO pull_request and NO pull_request_target, deliberately. `pull_request`
@@ -555,10 +556,17 @@ jobs:
 
       # Outside the checkout: state inside the tree is swept into candidate
       # diffs by `git add -A`, and the driver refuses it.
+      #
+      # Run-scoped key, prefix restore. A constant key is an EXACT hit on every
+      # run after the first, and `actions/cache` skips the post-job save on an
+      # exact hit — so the ledger this gate appends to would be discarded at
+      # the end of every run but the first (aef-core ADR 0172).
       - uses: actions/cache@v4
         with:
           path: ~/.aef-loop-state
-          key: loop-state-{repo}
+          key: loop-state-{repo}-{run_id}
+          restore-keys: |
+            loop-state-{repo}-
 
       - name: Gate
         run: |
@@ -581,19 +589,41 @@ jobs:
 """
 
 
-def render_loop_monitor_workflow(repo_name: str) -> str:
+#: The module `aef migrate` writes when it finds NO wrappable call site — the
+#: placeholder whose `build_graph()` raises `NotImplementedError`. Every
+#: prompt-file repo gets one, so a workflow defaulting `AEF_MODULE` to it names
+#: a module that exists and cannot build (ADR 0172).
+PLACEHOLDER_MODULE = _module_path(DEFAULT_MIGRATED_OUT)
+
+
+def render_loop_monitor_workflow(repo_name: str, prompt_module: str | None = None) -> str:
     repo = "${{ github.repository }}"
     # One expression, not two interpolations joined by literal `||`. Written
     # as `${{ a }} || b` the whole thing is a non-empty STRING, which an
     # Actions `if:` treats as true — so the "weekly" digest fired on every
     # hourly cron.
+    run_id = "${{ github.run_id }}"
     weekly = (
         "${{ github.event.schedule == '0 9 * * 1' || github.event_name == 'workflow_dispatch' }}"
     )
     daily = (
         "${{ github.event.schedule == '0 3 * * *' || github.event_name == 'workflow_dispatch' }}"
     )
-    module = _module_path(DEFAULT_MIGRATED_OUT)
+    # NEVER the placeholder on a prompt-file repo. `aef migrate` writes
+    # `agents/migrated/graph.py` — whose `build_graph()` raises — in EVERY repo
+    # with no wrappable call site, which is every prompt-file repo. The module
+    # therefore exists, the cycle's exception becomes exit 1, and the rule
+    # below reads 1 as a healthy rejection: green every night, nothing
+    # proposed, no journal (ADR 0172). When adopt knows the first prompt
+    # agent's module it names that instead; either way the guard step below
+    # fails the job until the named module actually builds.
+    module = prompt_module or PLACEHOLDER_MODULE
+    module_note = (
+        "the first of this repo's prompt agents, as `aef migrate` will name it.\n"
+        "          # It does not exist until you have RUN `aef migrate --dir .`"
+        if prompt_module
+        else "the graph the loop improves"
+    )
     return f"""# Post-merge monitoring, the daily cycle, and the weekly digest for {repo_name}.
 # Same trigger rule as loop-gate.yml — see that file, and aef-core ADR 0057.
 #
@@ -627,10 +657,19 @@ jobs:
           pip install aef-core
           [ -f pyproject.toml ] && pip install -e . || true
 
+      # The key MUST vary per run. `actions/cache` skips its post-job save on
+      # an EXACT key hit, so a constant key means run 1 populates the cache and
+      # nothing afterwards ever saves: the ledger, `cycles.jsonl` and the
+      # archive would reset to run 1's contents every night, and the staleness
+      # warning ADR 0165 added could never see three consecutive quiet cycles
+      # because it never sees two. `restore-keys` is the prefix that loads the
+      # most recent previous run's state (aef-core ADR 0172).
       - uses: actions/cache@v4
         with:
           path: ~/.aef-loop-state
-          key: loop-state-{repo}
+          key: loop-state-{repo}-{run_id}
+          restore-keys: |
+            loop-state-{repo}-
 
       # Rollback-by-default: an ambiguous window reverts rather than waiting
       # for more data. Exit 2 means a change every gate passed still
@@ -649,6 +688,57 @@ jobs:
       # login, so `live` here would either fail for want of a credential or
       # spend one you did not mean to spend. Score prompt candidates live from
       # a machine that has the login, not from this job.
+      # The graph the cycle is about to improve must BUILD, and the job must
+      # fail when it does not. Without this step the nightly run is green on
+      # the one shape every prompt-file repo has: `aef migrate` writes
+      # `{PLACEHOLDER_MODULE}` whenever it finds no wrappable call site,
+      # its `build_graph()` raises, `aef loop cycle`'s exception is reported as
+      # exit 1 — EXIT_REJECTED, an ordinary candidate rejection — and the rule
+      # at the end of the cycle step only fails on exit >= 2. Measured: the
+      # cycle exited 1 with `error: aef migrate found no wrappable call site in
+      # this repo` and would have left the job green (aef-core ADR 0172).
+      - name: The graph the cycle improves must build
+        if: {daily}
+        run: |
+          python - <<'PY'
+          import importlib, os, sys, traceback
+
+          module = os.environ.get("AEF_MODULE", "").strip()
+          fix = (
+              "Set AEF_MODULE (and AEF_ENTRYPOINT) in .github/workflows/loop-monitor.yml "
+              "to a graph module that exists and builds. `aef migrate --dir .` prints the "
+              "path it wrote for each of your agents; one graph per agent means one module "
+              "per agent, so pick the one you want improved."
+          )
+          if not module or module == "{PLACEHOLDER_MODULE}":
+              cause = f"AEF_MODULE is {{module!r}}"
+              if module:
+                  cause += (
+                      " — the placeholder `aef migrate` writes when it finds no wrappable "
+                      "call site. Its build_graph() raises NotImplementedError."
+                  )
+          else:
+              try:
+                  importlib.import_module(module).build_graph()
+                  cause = ""
+              except Exception as exc:
+                  traceback.print_exc()
+                  cause = f"AEF_MODULE={{module}} does not build: {{type(exc).__name__}}: {{exc}}"
+          if cause:
+              # The ACTUAL cause on the run page, in words. The cycle's own log
+              # would have shown migrate's call-site sentence instead, which
+              # describes why the placeholder exists, not why tonight failed.
+              summary = os.environ.get("GITHUB_STEP_SUMMARY")
+              if summary:
+                  with open(summary, "a") as handle:
+                      handle.write(
+                          f"## Loop cycle NOT RUN — {repo_name}\\n\\n{{cause}}\\n\\n{{fix}}\\n"
+                      )
+              sys.exit(f"{{cause}}\\n{{fix}}")
+          PY
+        env:
+          AEF_MODULE: {module}
+
       - name: Daily cycle
         if: {daily}
         run: |
@@ -666,8 +756,14 @@ jobs:
           # In WORDS, not only as an exit code: `no admissible failure memory`
           # and `escalated` both exit 0, and a nightly job that is green
           # either way tells nobody which one happened.
+          case "$status" in
+            0) meaning="escalated, or nothing to propose — read the verdict line" ;;
+            1) meaning="REJECTED by a gate — the system working, not a broken job" ;;
+            2) meaning="HALTED — do not retry, a person must look" ;;
+            *) meaning="the cycle raised: this is an ERROR, not a verdict" ;;
+          esac
           {{
-            echo "## Loop cycle — {repo_name} (exit $status)"
+            echo "## Loop cycle — {repo_name} (exit $status: $meaning)"
             echo '```'
             cat "$RUNNER_TEMP/cycle.log"
             echo '```'
@@ -676,9 +772,10 @@ jobs:
           # HALT, and that must fail loudly enough to reach a person.
           if [ "$status" -ge 2 ]; then exit 1; fi
         env:
-          # EDIT THESE THREE. `AEF_MODULE` is the graph the loop improves —
+          # EDIT THESE THREE. `AEF_MODULE` is {module_note} —
           # `aef migrate` prints the path it wrote; one graph per prompt agent
           # means one module per agent, so pick the one you want improved.
+          # The step above fails the job until this names a module that builds.
           # Without `--entrypoint`, G2 and G3 cannot execute your corpus and
           # refuse, leaving four of six gates judging every candidate.
           # `--build-command` is your green bar, not ours.

@@ -64,7 +64,7 @@ def test_bootstrap_fills_a_corpus_from_one_command(tmp_path: Path, capsys) -> No
     assert all(s.expected is Expected.UNSPECIFIED for s in scenarios)
     assert {s.id for s in scenarios} == {"bootstrap-1", "bootstrap-2", "beyond-the-budget"}
 
-    assert "1 of 3 recorded run(s) FAILED." in out
+    assert "1 of 3 recorded run(s) FAILED: 1 raised or ended with a failed plan" in out
     assert "beyond-the-budget" in out
     # Ready to paste, with the objective and working memory filled in.
     assert "--scenario-id beyond-the-budget-tripwire" in out
@@ -439,7 +439,7 @@ def test_bootstrap_memory_is_the_file_the_cycle_reads(tmp_path: Path, monkeypatc
     )
     out = capsys.readouterr().out
     assert code == 0, out
-    assert "1 of 3 recorded run(s) FAILED." in out
+    assert "1 of 3 recorded run(s) FAILED: 1 raised or ended with a failed plan" in out
 
     evidence = MemoryEvidence.from_store(FileMemoryStore(path=memory))
     assert [r.run_id for r in evidence.records] == ["beyond-the-budget"]

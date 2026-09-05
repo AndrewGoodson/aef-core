@@ -197,7 +197,12 @@ def test_the_obligation_is_met_when_nothing_reachable_imports_a_vendor_sdk(
     `services.require_model_provider()` and imports no SDK at all."""
     obligation = _obligation(_check(tmp_path, ROUTED), "model calls visible")
     assert obligation.met
-    assert "none imports a model SDK" in obligation.detail
+    # Wording updated deliberately by ADR 0167: the green branch now says HOW
+    # MANY graphs it scanned, because "all clear" over an unstated number of
+    # files is the claim that let one file out of nine pass for the other
+    # eight (ADR 0168).
+    assert "1 graph scanned" in obligation.detail
+    assert "none reaches a model SDK the harness cannot see" in obligation.detail
 
 
 def test_a_vendor_import_two_modules_deep_is_still_found(tmp_path: Path) -> None:
@@ -685,3 +690,382 @@ def test_the_generated_docstring_is_a_contract_between_migrate_and_preflight(
     assert refusals, "preflight parsed no refusal out of migrate's own generated docstring"
     assert "src.agent" in refusals, refusals
     assert "system" in refusals["src.agent"], refusals["src.agent"]
+
+
+# --------------------------------------------------------------------------
+# The OTHER shape of "routed to reflect": a factory node, not a node function
+# (ADR 0167)
+#
+# `aef migrate` generates a prompt agent as `make_prompt_agent_node(...,
+# route="reflect")` — the closure lives in `aef/reasoning/prompt_agent.py` and
+# the generated module contains no three-argument node function at all. The
+# detector looked only for the function shape, so obligation 2 was
+# PERMANENTLY RED on every graph migrate writes for a prompt-file repo while
+# the graph routed correctly. Reproduced on the pilot clone:
+#
+#   $ aef loop doctor --repo <pilot> --state <s> --corpus <pilot>/corpus \
+#         --agent-path agents/migrated/marlin_accela/graph.py
+#     [--] reflect node routed to  a reflect node exists but nothing routes to it
+#   EXIT=1
+#   trace of that same graph, stub provider: ['prompt_agent', 'reflect', 'consolidate']
+# --------------------------------------------------------------------------
+
+FACTORY_ROUTED = """from aef.kernel import END, Edge, Graph
+from aef.reasoning.nodes import make_consolidate_node, make_reflect_node
+from aef.reasoning.prompt_agent import make_prompt_agent_node
+
+
+def build_graph():
+    return Graph(
+        id="a", version="0.1.0",
+        nodes={
+            "prompt_agent": make_prompt_agent_node(
+                agent_file=".claude/agents/a.md", agent_name="a", route="reflect"
+            ),
+            "reflect": make_reflect_node(route="consolidate"),
+            "consolidate": make_consolidate_node(route=END),
+        },
+        edges=[Edge(from_node="prompt_agent", to_node="reflect")],
+        entry_node="prompt_agent",
+    )
+"""
+
+
+def test_a_factory_node_built_with_route_reflect_counts_as_routed(tmp_path: Path) -> None:
+    obligation = _obligation(_check(tmp_path, FACTORY_ROUTED), "reflect node routed to")
+    assert obligation.met, obligation.detail
+    assert "make_prompt_agent_node" in obligation.detail
+
+
+def test_the_same_graph_routed_to_END_instead_is_still_unmet(tmp_path: Path) -> None:
+    """The mutation, as a test: this is the change that makes the loop go
+    silent rather than break (ADR 0139/0143), so the detector must fail on it
+    or it is detecting the import rather than the route."""
+    source = FACTORY_ROUTED.replace('route="reflect"', "route=END")
+    assert not _obligation(_check(tmp_path, source), "reflect node routed to").met
+
+
+def test_a_factory_route_to_a_custom_reflect_id_is_honoured(tmp_path: Path) -> None:
+    source = FACTORY_ROUTED.replace(
+        'make_reflect_node(route="consolidate")', 'make_reflect_node(node_id="think", route="c")'
+    ).replace('route="reflect"', 'route="think"')
+    assert _obligation(_check(tmp_path, source), "reflect node routed to").met
+
+
+def test_make_reflect_node_routing_to_itself_does_not_count(tmp_path: Path) -> None:
+    """A self-loop is not something ARRIVING at reflect. Without this
+    exclusion the detector would go green on a graph whose only mention of
+    the route is the reflect node's own construction."""
+    source = FACTORY_ROUTED.replace(
+        '                agent_file=".claude/agents/a.md", agent_name="a", route="reflect"\n',
+        '                agent_file=".claude/agents/a.md", agent_name="a", route=END\n',
+    ).replace('make_reflect_node(route="consolidate")', 'make_reflect_node(route="reflect")')
+    assert not _obligation(_check(tmp_path, source), "reflect node routed to").met
+
+
+def test_a_route_keyword_on_someone_elses_function_is_not_evidence(tmp_path: Path) -> None:
+    """The set of factories is read from `from aef.reasoning... import
+    make_*_node`. A local helper that happens to take `route=` says nothing
+    about how the graph is wired, and vouching for it would make the
+    obligation trivially satisfiable."""
+    source = FACTORY_ROUTED.replace(
+        "from aef.reasoning.prompt_agent import make_prompt_agent_node",
+        "from mine import make_prompt_agent_node",
+    )
+    assert not _obligation(_check(tmp_path, source), "reflect node routed to").met
+
+
+def test_the_real_migrate_output_passes_the_real_preflight(tmp_path: Path) -> None:
+    """C↔D: the REAL `run_migrate` on a prompt-file fixture, read back through
+    the REAL preflight. The defect this closes lived exactly in the join —
+    both modules were individually correct and individually tested, and
+    nothing ran one's output through the other."""
+    from aef.cli.migrate import run_migrate
+    from aef.harness.preflight import _reflect_is_routed_to
+
+    agents = tmp_path / ".claude" / "agents"
+    agents.mkdir(parents=True)
+    (agents / "accela-agent.md").write_text(
+        "---\nname: marlin-accela\ndescription: the accela persona\n---\n\nNever invent creds.\n",
+        encoding="utf-8",
+    )
+    result = run_migrate(tmp_path)
+    assert result.prompt_written, "migrate wrote no prompt-agent graph; the fixture is wrong"
+
+    generated = result.prompt_agents[0].out_relative
+    assert (tmp_path / generated).is_file(), generated
+
+    routed, why = _reflect_is_routed_to(tmp_path / generated)
+    assert routed, f"{generated} routes to reflect at run time but preflight says: {why}"
+
+
+# --------------------------------------------------------------------------
+# Obligation 5 knows WHICH tree the baseline is of (ADR 0167)
+#
+# Reproduced on the pilot clone, migrated with `--agent-root .claude/agents`:
+# `aef loop bless --agent-root .claude/agents` wrote an `entry.json` whose
+# keys were [base_sha, file_digests, gate_report, graph_id, head_sha, notes,
+# recorded_at, rolled_back_from, version] — no agent_root anywhere — and the
+# next `aef loop cycle` at the DEFAULT root was rejected with
+# `cumulative drift: 1.000 exceeds the budget of 0.500`, because G5's two
+# sides described disjoint trees. Two such rejections halt the loop.
+# --------------------------------------------------------------------------
+
+
+def _committed_repo_at(tmp_path: Path, agent_path: str, source: str) -> Path:
+    """`_committed_repo`, with the agent somewhere other than `agents/`."""
+    repo = tmp_path / "repo"
+    target = repo / agent_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(source)
+
+    def run(*a: str) -> None:
+        subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True)
+
+    run("init", "-q", "-b", "main")
+    run("config", "user.email", "t@example.com")
+    run("config", "user.name", "t")
+    run("add", "-A")
+    run("commit", "-qm", "init")
+    return repo
+
+
+def test_bless_records_which_zone_a_tree_it_archived(tmp_path: Path) -> None:
+    repo = _committed_repo(tmp_path, ROUTED)
+    entry = bless(
+        repo_root=repo,
+        state_root=tmp_path / "state",
+        agent_path="agents/graph.py",
+        graph_id="g",
+        at=NOW,
+    )
+    assert entry.agent_root == "agents"
+    # ...and it survives the round trip through the file, which is what the
+    # next command reads.
+    stored = archive.load_entry(tmp_path / "state" / "archive", "g", entry.version)
+    assert stored.agent_root == "agents"
+
+
+def test_a_baseline_blessed_under_another_root_is_reported_unmet_by_name(tmp_path: Path) -> None:
+    repo = _committed_repo_at(tmp_path, ".claude/agents/graph.py", ROUTED)
+    bless(
+        repo_root=repo,
+        state_root=tmp_path / "state",
+        agent_path=".claude/agents/graph.py",
+        agent_root=".claude/agents",
+        graph_id="g",
+        at=NOW,
+    )
+
+    result = preflight(
+        repo_root=repo,
+        state_root=tmp_path / "state",
+        corpus_root=tmp_path / "corpus",
+        agent_path=".claude/agents/graph.py",
+        agent_root="agents",  # the default — what a later invocation would use
+        graph_id="g",
+        halt_channel_configured=False,
+        observations=tmp_path / "obs.jsonl",
+    )
+    obligation = _obligation(result, "blessed baseline")
+    assert not obligation.met, "a baseline of another tree is not a baseline of this one"
+    assert ".claude/agents" in obligation.detail
+    assert "drift" in obligation.detail
+    assert "--agent-root '.claude/agents'" in obligation.fix
+
+
+def test_a_baseline_under_the_same_root_is_met(tmp_path: Path) -> None:
+    repo = _committed_repo(tmp_path, ROUTED)
+    bless(
+        repo_root=repo,
+        state_root=tmp_path / "state",
+        agent_path="agents/graph.py",
+        graph_id="g",
+        at=NOW,
+    )
+    result = preflight(
+        repo_root=repo,
+        state_root=tmp_path / "state",
+        corpus_root=tmp_path / "corpus",
+        agent_path="agents/graph.py",
+        agent_root="agents",
+        graph_id="g",
+        halt_channel_configured=False,
+        observations=tmp_path / "obs.jsonl",
+    )
+    assert _obligation(result, "blessed baseline").met
+
+
+def test_a_baseline_that_predates_the_field_is_not_retroactively_failed(tmp_path: Path) -> None:
+    """`agent_root` defaults to "" for entries written before ADR 0167. That
+    is "not recorded", not "the repo root": failing every pre-existing
+    baseline would be a control firing on the ordinary case, which trains the
+    reader to skip the line."""
+    archive.record(
+        tmp_path / "state" / "archive",
+        "g",
+        files={"agents/graph.py": b"x = 1\n"},
+        base_sha="0" * 40,
+        head_sha="0" * 40,
+        recorded_at=NOW,
+    )
+    result = preflight(
+        repo_root=_repo(tmp_path, ROUTED),
+        state_root=tmp_path / "state",
+        corpus_root=tmp_path / "corpus",
+        agent_path="agents/graph.py",
+        agent_root=".claude/agents",
+        graph_id="g",
+        halt_channel_configured=False,
+        observations=tmp_path / "obs.jsonl",
+    )
+    obligation = _obligation(result, "blessed baseline")
+    assert obligation.met
+    assert "root not recorded" in obligation.detail
+
+
+def test_the_bless_fix_carries_the_agent_root_when_it_is_not_the_default(tmp_path: Path) -> None:
+    """The reproduced `doctor` output printed a fix line with no
+    `--agent-root`, so following it blessed the OTHER tree."""
+    fix = _obligation(
+        preflight(
+            repo_root=_repo(tmp_path, ROUTED),
+            state_root=tmp_path / "state",
+            corpus_root=tmp_path / "corpus",
+            agent_path=".claude/agents/graph.py",
+            agent_root=".claude/agents",
+            graph_id="g",
+            halt_channel_configured=False,
+            observations=tmp_path / "obs.jsonl",
+        ),
+        "blessed baseline",
+    ).fix
+    assert "--agent-root .claude/agents" in fix
+
+
+# --------------------------------------------------------------------------
+# Obligation 6 over EVERY graph, not the one the CLI guessed (ADR 0167/0168)
+#
+# It scanned the single `agent_path`, defaulted by `cmd_doctor` and
+# `_warn_unmet_obligations`. On a prompt-file repo the default names
+# `agents/migrated/graph.py` — the call-site stub whose `build_graph()` raises
+# `NotImplementedError` and which reaches no model at all — so obligation 6
+# passed on it while the generated graphs that DO call a model were never
+# opened. Reproduced with a model SDK import planted in one of them:
+#
+#   graphs on disk: ['agents/migrated/graph.py',
+#                    'agents/migrated/marlin_accela/graph.py', ...]
+#   obligation 6 on the DEFAULT --agent-path: visible=True
+#     1 reachable module(s), none imports a model SDK
+#   obligation 6 on agents/migrated/marlin_accela/graph.py: visible=False
+#     src/client.py:1 imports anthropic — the harness cannot see it
+#
+# The same false pass ADR 0168 fixed in `aef doctor`, in the other diagnostic,
+# closed with 0168's OWN discovery function rather than a second answer.
+# --------------------------------------------------------------------------
+
+
+def _migrated_prompt_repo(tmp_path: Path) -> Path:
+    """The REAL `aef migrate` on a prompt-file repo, plus a module that builds
+    its own client for one generated graph to reach."""
+    from aef.cli.migrate import run_migrate
+
+    root = tmp_path / "pilot"
+    agents = root / ".claude" / "agents"
+    agents.mkdir(parents=True)
+    for name in ("accela", "azure"):
+        (agents / f"{name}.md").write_text(
+            f"---\nname: marlin-{name}\ndescription: d\n---\n\nbody\n", encoding="utf-8"
+        )
+    (root / "src").mkdir()
+    (root / "src" / "__init__.py").write_text("")
+    (root / "src" / "client.py").write_text("import anthropic\n\nC = anthropic.Anthropic\n")
+
+    result = run_migrate(root)
+    assert result.prompt_agents, "migrate wrote no prompt-agent graph; the fixture is wrong"
+    target = root / result.prompt_agents[0].out_relative
+    target.write_text(target.read_text() + "\nfrom src.client import C  # noqa: E402,F401\n")
+    return root
+
+
+def _obligation_six(root: Path, tmp_path: Path, **kw: object):
+    defaults: dict[str, object] = {
+        "repo_root": root,
+        "state_root": tmp_path / "state",
+        "corpus_root": tmp_path / "corpus",
+        "agent_path": "agents/migrated/graph.py",
+        "graph_id": "g",
+        "halt_channel_configured": False,
+        "observations": tmp_path / "obs.jsonl",
+    }
+    defaults.update(kw)
+    return _obligation(preflight(**defaults), "model calls visible")  # type: ignore[arg-type]
+
+
+def test_scanning_only_the_defaulted_path_passes_on_the_stub(tmp_path: Path) -> None:
+    """The reproduction, pinned. Not a bug to fix here — this is the LIBRARY
+    default, and a caller that names a path gets an answer about that path.
+    What was wrong is that the CLI took this branch when it had guessed."""
+    root = _migrated_prompt_repo(tmp_path)
+    assert _obligation_six(root, tmp_path).met
+
+
+def test_scanning_every_graph_finds_the_invisible_model_call(tmp_path: Path) -> None:
+    root = _migrated_prompt_repo(tmp_path)
+    obligation = _obligation_six(root, tmp_path, scan_all_graphs=True)
+    assert not obligation.met, obligation.detail
+    assert "marlin_accela" in obligation.detail, obligation.detail
+    assert "imports anthropic" in obligation.detail
+    assert obligation.fix.strip()
+
+
+def test_a_clean_prompt_file_repo_reports_how_many_graphs_it_scanned(tmp_path: Path) -> None:
+    """The green branch has to name the number, or "all clear" is a claim
+    about an unknown number of files."""
+    from aef.cli.migrate import run_migrate
+    from aef.harness.zones import discover_graph_files
+
+    root = tmp_path / "clean"
+    agents = root / ".claude" / "agents"
+    agents.mkdir(parents=True)
+    for name in ("accela", "azure"):
+        (agents / f"{name}.md").write_text(
+            f"---\nname: marlin-{name}\ndescription: d\n---\n\nbody\n", encoding="utf-8"
+        )
+    run_migrate(root)
+
+    obligation = _obligation_six(root, tmp_path, scan_all_graphs=True)
+    assert obligation.met, obligation.detail
+    assert f"{len(discover_graph_files(root))} graphs scanned" in obligation.detail
+
+
+def test_the_cli_scans_every_graph_when_agent_path_was_left_at_its_default(
+    tmp_path: Path,
+) -> None:
+    """End to end: the defect was that the CLI defaulted the path and preflight
+    then answered about the guess. Runs the real `aef loop doctor`."""
+    from aef.cli.main import main
+
+    root = _migrated_prompt_repo(tmp_path)
+    import io
+    from contextlib import redirect_stdout
+
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        code = main(
+            [
+                "loop",
+                "doctor",
+                "--repo",
+                str(root),
+                "--state",
+                str(tmp_path / "state"),
+                "--corpus",
+                str(tmp_path / "corpus"),
+            ]
+        )
+    out = buffer.getvalue()
+    assert code == 1
+    line = next(ln for ln in out.splitlines() if "model calls visible" in ln)
+    assert "[--]" in line, line
+    assert "marlin_accela" in line, line

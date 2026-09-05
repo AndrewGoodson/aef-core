@@ -6,6 +6,7 @@ repo's setup: Python version, presence of CLAUDE.md, and validity of every
 from __future__ import annotations
 
 import ast
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -235,7 +236,12 @@ def run_doctor(
                 text = entry_file.read_text()
             except (OSError, UnicodeDecodeError):
                 continue
-            points_at_the_guide = "<!-- aef:begin -->" in text or "AGENT_INTEGRATION.md" in text
+            # A block adopt wrote carries a signed begin marker since ADR 0172
+            # (`<!-- aef:begin sha256=… -->`); the bare form is an adopter's prose.
+            points_at_the_guide = (
+                re.search(r"<!-- aef:begin sha256=[0-9a-f]{16} -->", text) is not None
+                or "AGENT_INTEGRATION.md" in text
+            )
             checks.append(
                 DoctorCheck(
                     f"entry_file_points_at_the_guide:{name}",

@@ -241,3 +241,30 @@ def test_isolated_suite_scores_checks_too(tmp_path, answer: str, expected_score:
     )
     assert results["s"].failure is None
     assert results["s"].score == expected_score
+
+
+# --- what a producer of failure MEMORY needs from a report (ADR 0174) --------
+
+
+def test_the_report_carries_the_failed_checks_themselves() -> None:
+    """`failures` is prose naming `check.value`, which is right for a report an
+    owner reads and is exactly what a producer of failure memory must not copy:
+    a lesson carrying the check's own answer is teaching to the test. So the
+    structured checks travel alongside the prose rather than being parsed back
+    out of it."""
+    state = AEFState(run_id="r", agent_id="a", objective="o", working_memory={"answer": "43"})
+    held = TaskCheck(path="working_memory.answer", op="exists")
+    broke = TaskCheck(path="working_memory.answer", op="equals", value="42")
+    report = evaluate_checks((held, broke), state)
+
+    assert report.passed == 1
+    assert report.failed == (broke,)
+    assert len(report.failures) == len(report.failed)
+
+
+def test_resolve_reports_a_missing_path_without_raising() -> None:
+    from aef.harness.checks import resolve
+
+    state = AEFState(run_id="r", agent_id="a", objective="o", working_memory={"answer": "43"})
+    assert resolve(state, "working_memory.answer") == (True, "43")
+    assert resolve(state, "working_memory.nowhere") == (False, None)

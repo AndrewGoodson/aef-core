@@ -33,6 +33,16 @@ everything already passes cannot demonstrate an improvement: every gate that
 reads it has nothing to hold a candidate to. That is a finding about the
 inputs, not a success, and it is printed as one.
 
+**And "failed" means what the failure-memory producer means by it** (ADR 0174).
+The count was `classify`'s alone — did the run raise, or end with a failed plan
+— while the owner's `checks` sat in the same inputs file, unread by the report.
+S3b reproduced the consequence: eight inputs, three of them content negatives
+the owner's own checks caught, and `0 of 8 recorded run(s) failed. A corpus
+where everything passes cannot demonstrate an improvement` printed underneath
+them. The two observations stay distinguishable in the line — a crash and a
+wrong answer need different fixes — but they are one count, and it is the same
+count `check_failure_record` writes memory from.
+
 **Fresh services per input.** The gates re-execute each scenario in
 isolation, with its own `InMemoryMemoryStore` (`harvest._reexecution_services`).
 A bootstrap that shared one store across inputs would record traces whose
@@ -61,6 +71,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from aef.harness.check_memory import write_check_failure_record
 from aef.harness.checks import CheckError, TaskCheck
 from aef.harness.corpus import Expected, Scenario, Source, Split
 from aef.harness.outcome import classify
@@ -288,6 +299,31 @@ class BootstrapOutcome:
     # about the graph and is reported as one. Bootstrap authors none of these
     # records either way (ADR 0060).
     memory_records: int | None = None
+    # Runs that answered cleanly and failed one of the OWNER's checks, each of
+    # which left one `kind="failure"` record (ADR 0174).
+    #
+    # Kept apart from `failed` because they are different observations —
+    # `classify` answers "did this run raise or end with a failed plan", a
+    # check answers "was the answer right" — and reporting one as the other
+    # would tell an owner their run crashed when it merely got the task wrong.
+    # But BOTH are failures of the run, and `failure_count` below is the number
+    # the report leads with, because the alternative is what S3b reproduced:
+    # eight inputs, three content negatives the owner's own checks caught, and
+    # `0 of 8 recorded run(s) failed. A corpus where everything passes cannot
+    # demonstrate an improvement` printed underneath them.
+    check_failed: tuple[str, ...] = ()
+
+    @property
+    def failure_ids(self) -> tuple[str, ...]:
+        """Every recorded run that failed, either way, in recording order.
+
+        A union rather than a sum: a run whose plan ended `failed` without
+        populating `state.errors` is counted by `classify` AND can carry a
+        failed check, and counting it twice would report more failures than
+        there were runs.
+        """
+        both = set(self.failed) | set(self.check_failed)
+        return tuple(sid for sid in self.recorded if sid in both)
 
     @property
     def lines(self) -> tuple[str, ...]:
@@ -295,7 +331,16 @@ class BootstrapOutcome:
             f"recorded {len(self.recorded)} scenario(s) in the {Split.TRAIN.value} split"
         ]
         for sid in self.recorded:
-            out.append(f"  {'FAILED' if sid in self.failed else 'passed'}  {sid}")
+            if sid in self.failed:
+                label = "FAILED"
+            elif sid in self.check_failed:
+                # Distinct from FAILED on purpose: the run did what it was
+                # asked and answered wrong, which is a different thing for an
+                # owner to look at than a crash.
+                label = "WRONG "
+            else:
+                label = "passed"
+            out.append(f"  {label}  {sid}")
         for sid, message in self.errored:
             out.append(f"  ERRORED (nothing recorded)  {sid}: {message}")
         total = len(self.recorded)
@@ -311,13 +356,23 @@ class BootstrapOutcome:
                 "before producing a trace, so there is no run to pin; a scenario with an "
                 "empty trace pins nothing and would pass every gate vacuously."
             )
-        elif self.failed:
-            out.append(f"{len(self.failed)} of {total} recorded run(s) FAILED.")
+        elif self.failure_ids:
+            # ONE definition of failure, and it is the one the memory producer
+            # uses. Split into its two halves on the same line, because "N
+            # raised" and "N answered wrong" call for different fixes and a
+            # single number hides which one an owner is looking at.
             out.append(
-                "  Bootstrap labels nothing: only an owner can say a task SHOULD have "
-                "failed (ADR 0060). Consider marking one of these a tripwire — "
-                f"{', '.join(self.failed)}"
+                f"{len(self.failure_ids)} of {total} recorded run(s) FAILED: "
+                f"{len(self.failed)} raised or ended with a failed plan, "
+                f"{len(self.check_failed)} failed an owner check — the task metric, "
+                f"which fails without an error (ADR 0113)."
             )
+            if self.failed:
+                out.append(
+                    "  Bootstrap labels nothing: only an owner can say a task SHOULD have "
+                    "failed (ADR 0060). Consider marking one of these a tripwire — "
+                    f"{', '.join(self.failed)}"
+                )
         else:
             out.append(
                 f"0 of {total} recorded run(s) failed. A corpus where everything passes "
@@ -362,11 +417,18 @@ class BootstrapOutcome:
         if self.memory_records is None or not self.recorded:
             return ()
         if self.memory_records:
-            return (
+            lines = [
                 f"  {self.memory_records} memory record(s) written to the durable store — "
                 f"what the graph's own reflect node observed, nothing bootstrap decided. "
-                f"`aef loop cycle --memory <the same file>` proposes from these.",
-            )
+                f"`aef loop cycle --memory <the same file>` proposes from these."
+            ]
+            if self.check_failed:
+                lines.append(
+                    f"  {len(self.check_failed)} of them is/are a check-derived FAILURE record: "
+                    f"the owner's check, evaluated against what the run produced (ADR 0174). "
+                    f"A signature recurring in two distinct runs becomes a lesson (ADR 0110)."
+                )
+            return tuple(lines)
         return (
             "  no memory records: this graph wrote none, so `aef loop cycle --memory` will "
             "say `no admissible failure memory` and propose nothing. Route a node to a "
@@ -444,6 +506,7 @@ def bootstrap(
     errored: list[tuple[str, str]] = []
     model_calls = 0
     mirrored = 0
+    check_failed: list[str] = []
 
     for item in inputs:
         state = AEFState(
@@ -455,12 +518,16 @@ def bootstrap(
         # Fresh scratch per input, sink shared: isolation for what this run
         # READS, durability for what it WROTE. See `RunScopedMemory`.
         memory = RunScopedMemory(scratch=InMemoryMemoryStore(), sink=memory_sink)
+        # Built once and reused below: the check-derived failure record runs
+        # the SAME `Critic`/`Judge` this run's reflect node ran, not a second
+        # pair built for the occasion (ADR 0091).
+        services = services_factory(memory)
         try:
             result = record_to_corpus(
                 corpus_root,
                 graph,
                 state,
-                services_factory(memory),
+                services,
                 scenario_id=item.id,
                 split=Split.TRAIN,
                 recorded_at=now,
@@ -493,10 +560,38 @@ def bootstrap(
 
         recorded.append(result.scenario.id)
         model_calls += len(result.scenario.model_calls)
+        final = _final_state(result.scenario)
+        # A failed owner CHECK is a failure signal the reflect node cannot
+        # see: it is the task metric, evaluated here, after the run (ADR
+        # 0113), and `failure_signals` reads only `state.errors` and
+        # `state.tool_results`. Without this an agent that ANSWERS — every
+        # migrated prompt-file agent — writes `kind="success"` on the run that
+        # failed the owner's check, and `aef loop cycle` says `no admissible
+        # failure memory` forever (ADR 0157, ADR 0155, closed by ADR 0174).
+        #
+        # This is still not bootstrap authoring memory. The check is the
+        # owner's, declared in the inputs file before the run; the observed
+        # value is the run's; and `check_failure_record` writes nothing when
+        # the checks hold or when the run raised on its own. Compare the
+        # `expected` key three lines of REFUSED_KEYS above: a label saying a
+        # task SHOULD have failed is a judgement bootstrap may not make, and
+        # `BootstrapInput` already draws the distinction in its docstring.
+        if write_check_failure_record(
+            memory=memory,
+            checks=item.checks,
+            final_state=final,
+            critic=services.require_critic(),
+            judge=services.require_judge(),
+            run_id=item.id,
+            agent_id=agent_id,
+            created_at=now,
+            graph_version=graph.version,
+        ):
+            check_failed.append(item.id)
         mirrored += len(memory.mirrored)
         # The same `classify` the gates read and `record_run` checks
         # MUST_FAIL against, so "failed" here means what it means to G2.
-        outcome = classify(_final_state(result.scenario), result.scenario.trace, terminated=True)
+        outcome = classify(final, result.scenario.trace, terminated=True)
         if not outcome.passed:
             failed.append(result.scenario.id)
 
@@ -506,4 +601,5 @@ def bootstrap(
         errored=tuple(errored),
         model_calls=model_calls,
         memory_records=None if memory_sink is None else mirrored,
+        check_failed=tuple(check_failed),
     )

@@ -2,24 +2,29 @@
   "budget_ms": 60000.0,
   "checks": [
     {
-      "op": "contains",
+      "op": "regex",
       "path": "working_memory.summary",
-      "value": "otters"
-    },
-    {
-      "op": "contains",
-      "path": "working_memory.summary",
-      "value": "Cobb weir"
-    },
-    {
-      "op": "contains",
-      "path": "working_memory.summary",
-      "value": "camera"
+      "value": "(?i)otters"
     },
     {
       "op": "regex",
       "path": "working_memory.summary",
-      "value": "^\\s*\\S+(?:\\s+\\S+){0,29}\\s*$"
+      "value": "(?i)Cobb\\ weir"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)camera"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 30
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
     }
   ],
   "expected": "must_pass",

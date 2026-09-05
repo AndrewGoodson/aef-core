@@ -421,3 +421,16 @@ def test_a_plain_entry_file_still_gets_the_rerun_adopt_fix(tmp_path: Path) -> No
     assert not check.ok
     assert "re-run `aef adopt --dir .`" in check.detail
     assert "SYMLINK" not in check.detail
+
+
+def test_this_repos_own_workflows_scope_the_loop_state_cache_to_the_run() -> None:
+    """The rendered adopter workflows got a run-scoped cache key in ADR 0172;
+    this repo's own two carried the same constant key that froze state after
+    night one."""
+    from pathlib import Path
+
+    for name in ("loop-gate.yml", "loop-monitor.yml"):
+        text = (Path(__file__).resolve().parents[2] / ".github" / "workflows" / name).read_text()
+        assert "key: loop-state-${{ github.repository }}-${{ github.run_id }}" in text, name
+        assert "restore-keys:" in text, name
+        assert "key: loop-state-${{ github.repository }}\n" not in text, name

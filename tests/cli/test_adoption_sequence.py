@@ -613,7 +613,7 @@ def test_an_adopted_repo_gates_a_candidate_end_to_end(
     )
     assert boot.returncode == 0, boot.stderr
     assert "recorded 4 scenario(s) in the train split" in boot.stdout
-    assert "2 of 4 recorded run(s) FAILED." in boot.stdout
+    assert "2 of 4 recorded run(s) FAILED: 2 raised or ended with a failed plan" in boot.stdout
     memory = [json.loads(line) for line in (state / "memory.jsonl").read_text().splitlines()]
     assert [r for r in memory if r["kind"] == "failure"], memory
 

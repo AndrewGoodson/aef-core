@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from aef.harness.archive import ArchiveError
 from aef.harness.checks import TaskCheck
 from aef.harness.corpus import (
     CorpusError,
@@ -33,6 +34,7 @@ from aef.harness.corpus import (
 )
 from aef.harness.git import GitRepo
 from aef.harness.loop import (
+    EXIT_ERROR,
     EXIT_HALTED,
     EXIT_OK,
     EXIT_REJECTED,
@@ -41,7 +43,10 @@ from aef.harness.loop import (
     KeptBranchCheckedOutError,
     LoopConfig,
     LoopPaths,
+    LoopRun,
+    LoopStateInsideRepoError,
     PolicyConfigError,
+    _check_state_is_outside_the_repo,
     default_digest_window,
 )
 from aef.harness.loop import digest as loop_digest
@@ -103,7 +108,7 @@ def _proposer(args: argparse.Namespace) -> tuple[str, ModelProvider | None, str 
 def _config(args: argparse.Namespace) -> LoopConfig:
     corpus_dir = Path(args.corpus) if getattr(args, "corpus", None) else None
     proposer, proposer_provider, proposer_model = _proposer(args)
-    return LoopConfig(
+    config = LoopConfig(
         proposer=proposer,
         proposer_provider=proposer_provider,
         proposer_model=proposer_model,
@@ -129,6 +134,22 @@ def _config(args: argparse.Namespace) -> LoopConfig:
         # "fail" unless the owner asked for live scoring by name (ADR 0123).
         cassette_miss=getattr(args, "cassette_miss", "fail"),
     )
+    # Every `aef loop` subcommand that takes BOTH --repo and --state passes
+    # through here — the nine `_common()` wires — and until ADR 0167 only five
+    # of them refused a state directory inside the repository, because the
+    # refusal lived in `harness.loop._preflight` and `bless`, `digest`,
+    # `harvest` and `doctor` do not call it. Reproduced: `aef loop bless
+    # --state <repo>/state` printed "blessed ... as baseline v1" and left
+    # `archive/` and `ledger.jsonl` INSIDE the repo, where `git add -A` sweeps
+    # the audit trail into the candidate diff being judged — the exact failure
+    # `_check_state_is_outside_the_repo` exists to prevent, reached from a
+    # command that never asked it.
+    #
+    # The same function, imported rather than re-implemented: two copies of
+    # one predicate is the ADR 0091 shape, and this pair would drift the first
+    # time the rule gained a case.
+    _check_state_is_outside_the_repo(config)
+    return config
 
 
 def _warn_unmet_obligations(args: argparse.Namespace, config: LoopConfig) -> None:
@@ -162,6 +183,10 @@ def _warn_unmet_obligations(args: argparse.Namespace, config: LoopConfig) -> Non
         state_root=config.paths.root,
         corpus_root=corpus_root,
         agent_path=getattr(args, "agent_path", None) or DEFAULT_AGENT_PATH,
+        agent_root=getattr(args, "agent_root", DEFAULT_AGENT_ROOT),
+        # Obligation 6 over EVERY graph when the path is this package's guess
+        # rather than the owner's answer (ADR 0167/0168).
+        scan_all_graphs=_agent_path_is_defaulted(args),
         graph_id=args.graph_id,
         halt_channel_configured=bool(getattr(_halt_notifier(), "configured", False)),
         observations=config.paths.observations,
@@ -788,7 +813,7 @@ def _halt_notifier() -> object:
 EXIT_USAGE = 2
 
 
-def _require_memory_flag(args: argparse.Namespace) -> int | None:
+def _require_memory_flag(args: argparse.Namespace, command: str = "cycle") -> int | None:
     """One of `--memory` / `--no-memory`, or refuse. `None` means proceed.
 
     This is the `--state` / `--no-loop-state` pattern from ADR 0141, applied
@@ -803,36 +828,153 @@ def _require_memory_flag(args: argparse.Namespace) -> int | None:
     parser-level control that a handler-level caller walked straight past, and
     `harness.loop.cycle()` is importable by anything. A guard that only binds
     when the argument vector is the thing being checked is not a guard.
+
+    **`command` is a parameter because ADR 0165 fixed one of two commands.**
+    `aef loop run` reads the same flag through the same `FileMemoryStore(...)
+    if args.memory else None` expression and had no guard at all: five
+    `loop run --turns 2` invocations without `--memory` each exited 0 having
+    proposed nothing, and `loop monitor` reported `cycles run: 0 (last never)`
+    with no warning — the "unstarted versus dead" ambiguity 0165 §2 says it
+    removed, one subcommand over (reproduced, ADR 0167).
+    `tests/cli/test_loop_turn_commands.py` now derives the list of
+    turn-running subcommands from this module's AST, so a third twin cannot
+    be added without the test naming it.
     """
     if getattr(args, "memory", None) or getattr(args, "no_memory", False):
         return None
     print(
-        "error: a cycle without memory cannot propose — with no recorded failures the "
-        "proposer has nothing to ground in, so the cycle prints 'no memory store "
-        "configured: nothing to learn from, no candidate' and exits 0, which reads as "
-        "success (ADR 0139). Pass --memory <file> — the SAME file `aef loop bootstrap "
-        "--memory` and the reflect node write — or pass --no-memory to say you mean "
-        "that. Neither was given, and silence used to mean --no-memory: this repo's own "
-        "scheduled cycle was a no-op every night (ADR 0165).",
+        f"error: a {command} without memory cannot propose — with no recorded failures the "
+        f"proposer has nothing to ground in, so the {command} prints 'no memory store "
+        f"configured: nothing to learn from, no candidate' and exits 0, which reads as "
+        f"success (ADR 0139). Pass --memory <file> — the SAME file `aef loop bootstrap "
+        f"--memory` and the reflect node write — or pass --no-memory to say you mean "
+        f"that. Neither was given, and silence used to mean --no-memory: this repo's own "
+        f"scheduled cycle was a no-op every night (ADR 0165), and `aef loop run` was the "
+        f"same command with no guard at all (ADR 0167).",
         file=sys.stderr,
     )
     return EXIT_USAGE
+
+
+def _agent_path_is_defaulted(args: argparse.Namespace) -> bool:
+    """Was `--agent-path` left at `DEFAULT_AGENT_PATH`?
+
+    When it was, the path is this package's guess about a repo it has not
+    looked at, and a diagnostic that reports on one file out of nine is how
+    ADR 0168's false pass happened — obligation 6 answered about the call-site
+    stub while eight generated graphs went unopened. An owner who types the
+    default explicitly gets the wider scan too: it is a superset, and the
+    named path is still scanned inside it.
+    """
+    return str(getattr(args, "agent_path", DEFAULT_AGENT_PATH)) == DEFAULT_AGENT_PATH
+
+
+def _require_agent_path_under_root(args: argparse.Namespace, command: str) -> int | None:
+    """`--agent-path` must name a file inside `--agent-root`. `None` = proceed.
+
+    `DEFAULT_AGENT_PATH` lives under `DEFAULT_AGENT_ROOT`. Widen the root —
+    `--agent-root .claude/agents`, which is exactly what `aef migrate` tells a
+    prompt-file repo to do (ADR 0152) — and leave `--agent-path` at its
+    default, and the two describe different trees: the default path is then
+    **Zone C** under the root in force, so the loop may not propose changes to
+    it, `bless` would not archive it, and every obligation `doctor` reports is
+    about a file the loop cannot touch.
+
+    Reproduced (ADR 0167): with the root widened and the path left alone,
+    `loop doctor` reported six obligations about `agents/migrated/graph.py`
+    and printed a `bless` fix line that drops `--agent-root` entirely, and
+    `loop cycle` exited **0** with "the proposer produced nothing from the
+    available evidence". Neither said the two flags disagreed.
+
+    Only checked when the root is non-default. Under the default root this
+    would be a new refusal on invocations no finding here reproduced a problem
+    with, and strengthening a control is an owner's decision rather than a fix
+    wave's side effect (ADR 0141's rule, applied to itself).
+    """
+    from aef.harness.zones import Zone, inspect_path
+
+    root = getattr(args, "agent_root", DEFAULT_AGENT_ROOT)
+    path = getattr(args, "agent_path", None)
+    if not path or root == DEFAULT_AGENT_ROOT:
+        return None
+    verdict = inspect_path(path, ZonePolicy(agent_root=root))
+    if verdict.zone is Zone.A:
+        return None
+
+    repo = Path(getattr(args, "repo", "."))
+    try:
+        found = sorted(
+            p.relative_to(repo).as_posix() for p in (repo / root).glob("migrated/*/graph.py")
+        )
+    except (OSError, ValueError):  # pragma: no cover - a glob over a missing dir yields nothing
+        found = []
+    suggestion = (
+        "one of " + ", ".join(found[:3]) + ("..." if len(found) > 3 else "")
+        if found
+        else f"{root}/migrated/<agent>/graph.py — the per-agent path `aef migrate` printed"
+    )
+    left_at_default = (
+        " It was left at its default, and that default names a file under the DEFAULT "
+        f"root {DEFAULT_AGENT_ROOT!r}."
+        if path == DEFAULT_AGENT_PATH
+        else ""
+    )
+    print(
+        f"error: `loop {command}` was given --agent-root {root!r} and --agent-path "
+        f"{path!r}, and {path!r} is not inside {root!r}.{left_at_default} {verdict.reason}. "
+        f"Zone A is the only tree the loop may propose changes to and the only tree "
+        f"`aef loop bless` archives, so proceeding would report obligations about — or "
+        f"bless — a file this loop cannot touch. Pass --agent-path naming a graph under "
+        f"{root!r}: {suggestion}.",
+        file=sys.stderr,
+    )
+    return EXIT_USAGE
+
+
+def _journal_turn(
+    state_root: Path, *, at: datetime, proposed: bool, verdict: str, command: str
+) -> None:
+    """One line in `<state>/cycles.jsonl`, from whichever command ran a turn.
+
+    Takes the state ROOT rather than a `LoopConfig`, because the failures most
+    worth journalling include the ones where `_config` itself raised.
+    """
+    from aef.harness.monitoring import record_cycle_attempt
+
+    record_cycle_attempt(state_root, at=at, proposed=proposed, verdict=verdict, command=command)
 
 
 def cmd_cycle(args: argparse.Namespace) -> int:
     from aef.cli.run import load_graph_module
     from aef.harness.loop import cycle as loop_cycle
     from aef.harness.memory_store import FileMemoryStore
-    from aef.harness.monitoring import record_cycle_attempt
 
     refusal = _require_memory_flag(args)
     if refusal is not None:
         return refusal
+    refusal = _require_agent_path_under_root(args, "cycle")
+    if refusal is not None:
+        return refusal
 
-    config = _config(args)
-    _warn_unmet_obligations(args, config)
-    graph = load_graph_module(args.module) if args.module else None
+    # Journalled in a `finally`, whatever happened — including the paths that
+    # raise. `record_cycle_attempt` used to sit AFTER this `try`, so a turn
+    # that died on a halt or a config error returned without journalling
+    # anything: a nightly cycle failing the same way every night left a
+    # `cycles.jsonl` byte-identical to one nobody had ever run, which is the
+    # exact ambiguity the journal exists to remove (reproduced, ADR 0167).
+    #
+    # `_config` and `load_graph_module` are INSIDE the try, because that is
+    # where a bad `--config`, an unreadable corpus and the import error from
+    # `agents.migrated.graph`'s `NotImplementedError` placeholder all live —
+    # the failures a scheduled loop is most likely to repeat every night.
+    proposed = False
+    journal = True
+    verdict = "the cycle did not complete and recorded no verdict"
+    state_root = Path(args.state)
     try:
+        config = _config(args)
+        _warn_unmet_obligations(args, config)
+        graph = load_graph_module(args.module) if args.module else None
         run = loop_cycle(
             config,
             now=datetime.now(UTC),
@@ -851,52 +993,103 @@ def cmd_cycle(args: argparse.Namespace) -> int:
             memory=FileMemoryStore(path=Path(args.memory)) if args.memory else None,
             agent_path=args.agent_path,
         )
+    except LoopStateInsideRepoError as exc:
+        # The one failure that must NOT be journalled: the journal lives under
+        # `--state`, so writing it would create the very directory just
+        # refused. Caught before the generic handler for that reason alone.
+        print(f"error: {exc}", file=sys.stderr)
+        journal = False
+        return EXIT_ERROR
     except (PolicyConfigError, CorpusGraphMismatchError) as exc:
         print(f"error: {exc}", file=sys.stderr)
+        verdict = f"error ({type(exc).__name__}): {exc}"
         return EXIT_REJECTED
     except LoopHaltedError as exc:
         print(f"HALTED: {exc}")
+        verdict = f"HALTED ({type(exc).__name__}): {exc}"
         return EXIT_HALTED
+    except Exception as exc:
+        # Named, journalled, and reported as **EXIT_ERROR**, not as a
+        # rejection. `main()`'s catch-all returns 1 for any exception and 1 is
+        # also "this candidate is no good", so a nightly workflow whose rule is
+        # `status >= 2` read a broken config, a missing corpus, an import
+        # error and the `agents.migrated.graph` placeholder's
+        # `NotImplementedError` as a healthy rejection and stayed green — for
+        # as many nights as it took someone to look (reproduced, ADR 0167).
+        print(f"error ({type(exc).__name__}): {exc}", file=sys.stderr)
+        verdict = f"error ({type(exc).__name__}): {exc}"
+        return EXIT_ERROR
+    else:
+        for line in run.lines:
+            print(f"  {line}")
 
-    for line in run.lines:
-        print(f"  {line}")
-
-    # One line saying what this turn actually produced, in words, because
-    # "  no memory store configured..." three lines up in a CI log is not a
-    # verdict anyone reads. This is the line the workflow tees into
-    # $GITHUB_STEP_SUMMARY.
-    verdict = (
-        f"proposed {run.proposed} — {run.decision or 'no decision recorded'}"
-        if run.proposed is not None
-        else (run.lines[-1] if run.lines else "nothing to report")
-    )
-    if not getattr(args, "memory", None):
-        verdict = f"{verdict} (--no-memory was passed: this cycle could not propose)"
-    print(f"cycle verdict: {verdict}")
-
-    # Journalled whatever happened, including the nothing. `cycle` writes a
-    # ledger entry only when it proposes, so a loop that produces nothing
-    # leaves a ledger indistinguishable from a loop nobody has ever run —
-    # which is precisely how a nightly no-op stayed invisible (ADR 0165).
-    record_cycle_attempt(
-        config.paths.root,
-        at=datetime.now(UTC),
-        proposed=run.proposed is not None,
-        verdict=verdict,
-    )
-    return run.exit_code
+        # One line saying what this turn actually produced, in words, because
+        # "  no memory store configured..." three lines up in a CI log is not
+        # a verdict anyone reads. This is the line the workflow tees into
+        # $GITHUB_STEP_SUMMARY.
+        proposed = run.proposed is not None
+        verdict = (
+            f"proposed {run.proposed} — {run.decision or 'no decision recorded'}"
+            if run.proposed is not None
+            else (run.lines[-1] if run.lines else "nothing to report")
+        )
+        if not getattr(args, "memory", None):
+            verdict = f"{verdict} (--no-memory was passed: this cycle could not propose)"
+        print(f"cycle verdict: {verdict}")
+        return run.exit_code
+    finally:
+        # Journalled whatever happened, including the nothing. `cycle` writes
+        # a ledger entry only when it proposes, so a loop that produces
+        # nothing leaves a ledger indistinguishable from a loop nobody has
+        # ever run — which is precisely how a nightly no-op stayed invisible
+        # (ADR 0165), and how a nightly halt stayed invisible after it
+        # (ADR 0167).
+        if journal:
+            _journal_turn(
+                state_root,
+                at=datetime.now(UTC),
+                proposed=proposed,
+                verdict=verdict,
+                command="cycle",
+            )
 
 
 def cmd_run(args: argparse.Namespace) -> int:
     """autoresearch's loop inside the gates (ADR 0114): N turns or a
-    wall-clock budget, keep on a LOCAL branch, never main."""
+    wall-clock budget, keep on a LOCAL branch, never main.
+
+    Same two controls as `cycle`, for the same reason and one wave later.
+    This command read `FileMemoryStore(...) if args.memory else None` with no
+    guard and journalled nothing at all, so five `loop run --turns 2`
+    invocations without `--memory` each exited 0 having done nothing and left
+    `loop monitor` saying `cycles run: 0 (last never)` with no warning
+    (reproduced, ADR 0167). ADR 0165 fixed one of the two commands that run a
+    turn; this is the other.
+
+    **One journal entry per TURN, not per invocation.** The staleness alarm
+    counts consecutive attempts that proposed nothing, and each turn is a
+    separate chance to propose: ten quiet turns recorded as one attempt would
+    need thirty turns to reach a threshold meant to fire after three.
+    """
     from aef.cli.run import load_graph_module
     from aef.harness.loop import run_loop
     from aef.harness.memory_store import FileMemoryStore
 
-    config = _config(args)
-    graph = load_graph_module(args.module) if args.module else None
+    refusal = _require_memory_flag(args, "run")
+    if refusal is not None:
+        return refusal
+    refusal = _require_agent_path_under_root(args, "run")
+    if refusal is not None:
+        return refusal
+
+    # Inside the try for the same reason as `cmd_cycle`: a bad `--config`, an
+    # unreadable corpus and the `agents.migrated.graph` placeholder's
+    # `NotImplementedError` are the failures a scheduled loop repeats, and
+    # every one of them happens here (ADR 0167).
+    state_root = Path(args.state)
     try:
+        config = _config(args)
+        graph = load_graph_module(args.module) if args.module else None
         run = run_loop(
             config,
             now=datetime.now(UTC),
@@ -913,14 +1106,26 @@ def cmd_run(args: argparse.Namespace) -> int:
             seed=args.seed,
             persist_lineage=not args.no_lineage,
         )
+    except LoopStateInsideRepoError as exc:
+        # Not journalled: the journal lives under `--state`, so writing it
+        # would create the directory just refused.
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
     except (PolicyConfigError, KeptBranchCheckedOutError, CorpusGraphMismatchError) as exc:
         # Named refusals, printed as one line rather than a traceback: each
         # names an operator action (stand somewhere else; pass --graph-id).
         print(f"error: {exc}", file=sys.stderr)
+        _journal_run_failure(state_root, exc)
         return EXIT_REJECTED
     except LoopHaltedError as exc:
         print(f"HALTED: {exc}")
+        _journal_run_failure(state_root, exc, halted=True)
         return EXIT_HALTED
+    except Exception as exc:
+        # EXIT_ERROR, not `main()`'s catch-all 1 — see `cmd_cycle`.
+        print(f"error ({type(exc).__name__}): {exc}", file=sys.stderr)
+        _journal_run_failure(state_root, exc)
+        return EXIT_ERROR
     for line in run.lines:
         print(f"  {line}")
     print(
@@ -938,7 +1143,60 @@ def cmd_run(args: argparse.Namespace) -> int:
         f"{run.distinct_gated_trees} distinct gated tree(s); "
         f"sampling {'on' if args.sample_parents else 'off'}"
     )
+    _journal_run_turns(state_root, run, chose_no_memory=not getattr(args, "memory", None))
     return EXIT_HALTED if "halted" in run.stopped_because else EXIT_OK
+
+
+def _journal_run_failure(state_root: Path, exc: BaseException, *, halted: bool = False) -> None:
+    """A `run` that never reached a turn still ran, and the journal must say
+    so — otherwise a nightly `loop run` dying on the same halt every night
+    leaves the monitor unable to tell it from a loop nobody has started."""
+    prefix = "HALTED" if halted else "error"
+    _journal_turn(
+        state_root,
+        at=datetime.now(UTC),
+        proposed=False,
+        verdict=f"{prefix} ({type(exc).__name__}): {exc}",
+        command="run",
+    )
+
+
+def _journal_run_turns(state_root: Path, run: LoopRun, *, chose_no_memory: bool) -> None:
+    """One entry per turn, all stamped at the moment the run finished.
+
+    A single timestamp for the whole run is the honest one: the entries are
+    written together, at the end, and nothing in `assess_cycle_staleness`
+    reads anything finer than the last attempt's age. What it does read is
+    the ORDER and the COUNT, and both are per turn.
+    """
+    turns = run.turns
+    at = datetime.now(UTC)
+    suffix = " (--no-memory was passed: this run could not propose)" if chose_no_memory else ""
+    if not turns:
+        # A run whose budget expired, or that stopped before turn 1, still
+        # occupied a scheduled slot and produced nothing.
+        _journal_turn(
+            state_root,
+            at=at,
+            proposed=False,
+            verdict=f"no turn ran — {run.stopped_because}" + suffix,
+            command="run",
+        )
+        return
+    for turn in turns:
+        if turn.proposed is None:
+            verdict = f"turn {turn.turn}: no candidate — {run.stopped_because}"
+        else:
+            outcome = "kept" if turn.kept else ("duplicate" if turn.duplicate else "reverted")
+            decision = turn.disposition.value if turn.disposition else "no decision recorded"
+            verdict = f"turn {turn.turn}: proposed {turn.proposed} — {decision} ({outcome})"
+        _journal_turn(
+            state_root,
+            at=at,
+            proposed=turn.proposed is not None,
+            verdict=verdict + suffix,
+            command="run",
+        )
 
 
 def cmd_skills(args: argparse.Namespace) -> int:
@@ -981,6 +1239,9 @@ def cmd_skills(args: argparse.Namespace) -> int:
 def cmd_bless(args: argparse.Namespace) -> int:
     from aef.harness.preflight import BlessError, bless
 
+    refusal = _require_agent_path_under_root(args, "bless")
+    if refusal is not None:
+        return refusal
     config = _config(args)
     try:
         config.paths.kill_switch.check()
@@ -995,6 +1256,12 @@ def cmd_bless(args: argparse.Namespace) -> int:
             repo_root=Path(args.repo),
             state_root=config.paths.root,
             agent_path=args.agent_path,
+            # Recorded INTO the archive entry from here on. A baseline is the
+            # whole Zone A tree, so which tree it is is part of what was
+            # blessed — and until ADR 0167 nothing wrote it down, so a
+            # baseline blessed under `--agent-root .claude/agents` and a
+            # later cycle at the default root compared two different trees
+            # and charged the first candidate 1.000 drift (reproduced).
             agent_root=args.agent_root,
             graph_id=args.graph_id,
             at=datetime.now(UTC),
@@ -1003,6 +1270,15 @@ def cmd_bless(args: argparse.Namespace) -> int:
     except BlessError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_REJECTED
+    except ArchiveError as exc:
+        # `archive.versions`/`record` refuse a `--graph-id` that is not one
+        # safe path segment (ADR 0168). Only `BlessError` was caught here, so
+        # a hand-typed `--graph-id ../x` reached `main()`'s catch-all and was
+        # reported as exit 1 — the code that means "the candidate was
+        # rejected, the system is working". It is a configuration error: name
+        # it, and exit 3 so the nightly rule fails the job (ADR 0167).
+        print(f"error (invalid --graph-id): {exc}", file=sys.stderr)
+        return EXIT_ERROR
     print(f"blessed {args.agent_path} as baseline v{entry.version} for graph {args.graph_id!r}")
     print("  G5 now has a reference point to measure drift against.")
     return EXIT_OK
@@ -1011,16 +1287,32 @@ def cmd_bless(args: argparse.Namespace) -> int:
 def cmd_doctor(args: argparse.Namespace) -> int:
     from aef.harness.preflight import preflight
 
+    refusal = _require_agent_path_under_root(args, "doctor")
+    if refusal is not None:
+        return refusal
     config = _config(args)
-    result = preflight(
-        repo_root=Path(args.repo),
-        state_root=config.paths.root,
-        corpus_root=Path(args.corpus),
-        agent_path=args.agent_path,
-        graph_id=args.graph_id,
-        halt_channel_configured=bool(getattr(_halt_notifier(), "configured", False)),
-        observations=Path(args.observations) if args.observations else config.paths.observations,
-    )
+    try:
+        result = preflight(
+            repo_root=Path(args.repo),
+            state_root=config.paths.root,
+            corpus_root=Path(args.corpus),
+            agent_path=args.agent_path,
+            agent_root=args.agent_root,
+            scan_all_graphs=_agent_path_is_defaulted(args),
+            graph_id=args.graph_id,
+            halt_channel_configured=bool(getattr(_halt_notifier(), "configured", False)),
+            observations=Path(args.observations)
+            if args.observations
+            else config.paths.observations,
+        )
+    except ArchiveError as exc:
+        # Obligation 5 reads `archive.versions`, which refuses a `--graph-id`
+        # that is not one safe path segment (ADR 0168). Nothing here caught
+        # it, so the refusal reached `main()`'s catch-all and was reported as
+        # exit 1 — the code that means "the candidate was rejected, the system
+        # is working". Named here, exit 3 (ADR 0167).
+        print(f"error (invalid --graph-id): {exc}", file=sys.stderr)
+        return EXIT_ERROR
     print(result.render())
     return EXIT_OK if result.ready else EXIT_REJECTED
 
@@ -1163,7 +1455,14 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     p_status.set_defaults(handler=cmd_status)
 
     p_record = loop_subs.add_parser("record", help="promote a real run into a corpus scenario")
-    p_record.add_argument("module", help="importable module exposing build_graph()")
+    p_record.add_argument(
+        "module",
+        help="importable module exposing build_graph(), OR a path to the graph "
+        "file. The file form is the one to use under a widened --agent-root: "
+        "`aef migrate --agent-root .claude/agents` writes "
+        "`.claude/agents/migrated/<name>/graph.py`, and no dotted spelling of that "
+        "path is importable — a leading dot means relative import (ADR 0168).",
+    )
     p_record.add_argument("--corpus", required=True)
     p_record.add_argument("--scenario-id", required=True)
     p_record.add_argument("--objective", required=True)
@@ -1250,7 +1549,14 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p_bootstrap.add_argument("module", help="importable module exposing build_graph()")
+    p_bootstrap.add_argument(
+        "module",
+        help="importable module exposing build_graph(), OR a path to the graph "
+        "file. The file form is the one to use under a widened --agent-root: "
+        "`aef migrate --agent-root .claude/agents` writes "
+        "`.claude/agents/migrated/<name>/graph.py`, and no dotted spelling of that "
+        "path is importable — a leading dot means relative import (ADR 0168).",
+    )
     p_bootstrap.add_argument("--corpus", required=True)
     p_bootstrap.add_argument(
         "--inputs", required=True, help="JSON file of inputs; see the description above"
@@ -1354,7 +1660,14 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "harvest", help="promote recorded production runs into corpus scenarios"
     )
     _common(p_harvest)
-    p_harvest.add_argument("module", help="importable module exposing build_graph()")
+    p_harvest.add_argument(
+        "module",
+        help="importable module exposing build_graph(), OR a path to the graph "
+        "file. The file form is the one to use under a widened --agent-root: "
+        "`aef migrate --agent-root .claude/agents` writes "
+        "`.claude/agents/migrated/<name>/graph.py`, and no dotted spelling of that "
+        "path is importable — a leading dot means relative import (ADR 0168).",
+    )
     p_harvest.add_argument("--runs", required=True, help="dir of runs from `aef run --record-runs`")
     p_harvest.add_argument("--corpus", required=True)
     p_harvest.add_argument(
@@ -1380,7 +1693,13 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     _common(p_cycle)
     p_cycle.add_argument("--base", default="main")
     p_cycle.add_argument("--workdir", required=True)
-    p_cycle.add_argument("--module", default=None, help="module exposing build_graph()")
+    p_cycle.add_argument(
+        "--module",
+        default=None,
+        help="module exposing build_graph(), OR a path to the graph file — the "
+        "form to use under a widened --agent-root, whose `.claude/agents/...` path "
+        "has no importable dotted spelling (ADR 0168).",
+    )
     p_cycle.add_argument("--runs", default=None, help="dir from `aef run --record-runs`")
     p_cycle.add_argument("--corpus", default=None)
     p_cycle.add_argument(
@@ -1434,13 +1753,34 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
     _common(p_run)
     p_run.add_argument("--base", default="main")
     p_run.add_argument("--workdir", required=True)
-    p_run.add_argument("--module", default=None, help="module exposing build_graph()")
+    p_run.add_argument(
+        "--module",
+        default=None,
+        help="module exposing build_graph(), OR a path to the graph file — the "
+        "form to use under a widened --agent-root, whose `.claude/agents/...` path "
+        "has no importable dotted spelling (ADR 0168).",
+    )
     p_run.add_argument("--runs", default=None, help="dir from `aef run --record-runs`")
     p_run.add_argument("--corpus", default=None)
     p_run.add_argument("--config", default=None, help="aef.yaml path, read from the base ref")
     p_run.add_argument("--entrypoint", default=None, help="module:factory; G2/G3 refuse without it")
     _cassette_miss(p_run)
-    p_run.add_argument("--memory", default=None, help="durable memory store the proposer reads")
+    p_run.add_argument(
+        "--memory",
+        default=None,
+        help="durable memory store the proposer reads — the SAME file `aef loop bootstrap "
+        "--memory` and `aef run --memory` write. Without it no turn can propose, so one of "
+        "--memory and --no-memory MUST be given (ADR 0167).",
+    )
+    p_run.add_argument(
+        "--no-memory",
+        action="store_true",
+        help="assert that this run is deliberately running with no failure memory. An "
+        "assertion, not a default: omitting --memory used to mean this silently, and "
+        "`aef loop run` then exited 0 having proposed nothing, with the state directory "
+        "left empty and `aef loop monitor` reporting `cycles run: 0 (last never)` — "
+        "indistinguishable from a loop nobody had started (ADR 0167).",
+    )
     p_run.add_argument("--agent-path", default=DEFAULT_AGENT_PATH)
     p_run.add_argument("--turns", type=int, default=10)
     p_run.add_argument("--budget-minutes", type=float, default=60.0)

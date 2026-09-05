@@ -274,3 +274,38 @@ will be evidence of an honest no-op.
 
 Nothing is claimed here about whether the nightly cycle will ever propose
 anything, because nothing in this change makes it more likely to.
+
+
+## Erratum (ADR 0167, fix wave G1a)
+
+Two claims in this ADR were narrower than they read, and both were reproduced
+as false by running a command.
+
+**"cannot be distinguished, therefore fixed" held for one of the two commands
+that run a turn.** §2 argues, correctly, that a loop which has run 180 nights
+producing nothing leaves a ledger byte-identical to one nobody has started,
+and concludes that `cmd_cycle` must journal every attempt. `aef loop run` runs
+turns too — through `run_loop`, which calls the same `cycle()` — reads
+`--memory` through the same `FileMemoryStore(...) if args.memory else None`
+expression ninety lines below, had **no memory guard at all**, and journalled
+**nothing**. Five `aef loop run --turns 2` invocations without `--memory` each
+exited 0 having proposed nothing, left the state directory non-existent, and
+left `aef loop monitor` reporting `cycles run: 0 (last never)` with no
+warning — the exact ambiguity this ADR says it removed, one subcommand over.
+Reproduced and fixed in ADR 0167, along with a test that DERIVES the list of
+turn-running subcommands from the CLI's AST, so the next twin fails a test
+rather than a reproduction.
+
+**"journals every attempt" meant every attempt that returned normally.**
+`record_cycle_attempt` was called after `cmd_cycle`'s `try`, so the
+`LoopHaltedError`, `PolicyConfigError` and `CorpusGraphMismatchError` branches
+returned before reaching it. With the kill switch engaged, `aef loop cycle`
+printed `HALTED:`, exited 2, and `cycles.jsonl` **did not exist** — so a
+nightly cycle dying the same way every night left the journal as empty as one
+nobody had run, on precisely the paths where the failure is loudest. The call
+now lives in a `finally`, and each branch names its exception in the verdict.
+
+Neither correction changes M3 (the workflow assertion) or the staleness
+threshold. Everything this ADR says about `cmd_cycle`'s normal return, about
+why the journal cannot be the ledger, and about not warning on an unstarted
+loop, stands unchanged and is what ADR 0167 extended.

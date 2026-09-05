@@ -1,0 +1,347 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Hessle Low Mill"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Hessle High Mill"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)(refus|reject|unsuccessful|turned down|declin|denied)"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 30
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-32-hessle-mills",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-32-hessle-mills in at most 30 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-32-hessle-mills",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 30,
+      "must_mention": [
+        "Hessle Low Mill"
+      ],
+      "text": "Grants have been awarded to Hessle Low Mill and refused to Hessle High Mill. Hessle Low Mill, the tower mill by the beck, receives 74,000 pounds for its cap and sails. Hessle High Mill, the smock mill on the ridge, was judged too far gone to justify the works proposed and its trustees have been asked to submit a revised scheme. Both mills are listed."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "43763ad6233eaed7f2e20aed8b5335726693233765c886568e3fcda2b6bb5126",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Hessle Low Mill.\n\nPassage:\nGrants have been awarded to Hessle Low Mill and refused to Hessle High Mill. Hessle Low Mill, the tower mill by the beck, receives 74,000 pounds for its cap and sails. Hessle High Mill, the smock mill on the ridge, was judged too far gone to justify the works proposed and its trustees have been asked to submit a revised scheme. Both mills are listed.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "content": "Hessle Low Mill, a listed tower mill, wins £74,000 for cap and sails, while Hessle High Mill's application was refused as too dilapidated, pending a revised scheme.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "output_tokens": 65,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code on claude-opus-5[1m] (ADR 0171). S3b content-negative candidate: two similarly-named mills with opposite outcomes (ADR 0171)",
+  "recorded_at": "2026-09-05T03:21:01.316330+00:00",
+  "source": "record",
+  "split": "validation",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-32-hessle-mills:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-05T03:21:01.323100+00:00",
+        "run_id": "sum-32-hessle-mills",
+        "trace_id": "sum-32-hessle-mills"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-32-hessle-mills in at most 30 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-32-hessle-mills",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Hessle Low Mill"
+          ],
+          "text": "Grants have been awarded to Hessle Low Mill and refused to Hessle High Mill. Hessle Low Mill, the tower mill by the beck, receives 74,000 pounds for its cap and sails. Hessle High Mill, the smock mill on the ridge, was judged too far gone to justify the works proposed and its trustees have been asked to submit a revised scheme. Both mills are listed."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-32-hessle-mills:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-05T03:21:01.323181+00:00",
+        "run_id": "sum-32-hessle-mills",
+        "trace_id": "sum-32-hessle-mills"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-32-hessle-mills in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 67,
+            "trace_id": "sum-32-hessle-mills",
+            "ts": "2026-09-05T03:21:01.323181Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Hessle Low Mill, a listed tower mill, wins £74,000 for cap and sails, while Hessle High Mill's application was refused as too dilapidated, pending a revised scheme."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-32-hessle-mills in at most 30 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-32-hessle-mills",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Hessle Low Mill"
+          ],
+          "text": "Grants have been awarded to Hessle Low Mill and refused to Hessle High Mill. Hessle Low Mill, the tower mill by the beck, receives 74,000 pounds for its cap and sails. Hessle High Mill, the smock mill on the ridge, was judged too far gone to justify the works proposed and its trustees have been asked to submit a revised scheme. Both mills are listed."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-32-hessle-mills:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-05T03:21:03.962013+00:00",
+        "run_id": "sum-32-hessle-mills",
+        "trace_id": "sum-32-hessle-mills"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-32-hessle-mills in at most 30 words",
+        "plan": {
+          "goal": "summarise sum-32-hessle-mills in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 67,
+            "trace_id": "sum-32-hessle-mills",
+            "ts": "2026-09-05T03:21:01.323181Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-32-hessle-mills",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Hessle Low Mill"
+          ],
+          "summary": "Hessle Low Mill, a listed tower mill, wins £74,000 for cap and sails, while Hessle High Mill's application was refused as too dilapidated, pending a revised scheme.",
+          "text": "Grants have been awarded to Hessle Low Mill and refused to Hessle High Mill. Hessle Low Mill, the tower mill by the beck, receives 74,000 pounds for its cap and sails. Hessle High Mill, the smock mill on the ridge, was judged too far gone to justify the works proposed and its trustees have been asked to submit a revised scheme. Both mills are listed."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-32-hessle-mills:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-05T03:21:03.962281+00:00",
+        "run_id": "sum-32-hessle-mills",
+        "trace_id": "sum-32-hessle-mills"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-32-hessle-mills in at most 30 words",
+        "plan": {
+          "goal": "summarise sum-32-hessle-mills in at most 30 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 67,
+            "trace_id": "sum-32-hessle-mills",
+            "ts": "2026-09-05T03:21:01.323181Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-32-hessle-mills",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 30,
+          "must_mention": [
+            "Hessle Low Mill"
+          ],
+          "summary": "Hessle Low Mill, a listed tower mill, wins £74,000 for cap and sails, while Hessle High Mill's application was refused as too dilapidated, pending a revised scheme.",
+          "text": "Grants have been awarded to Hessle Low Mill and refused to Hessle High Mill. Hessle Low Mill, the tower mill by the beck, receives 74,000 pounds for its cap and sails. Hessle High Mill, the smock mill on the ridge, was judged too far gone to justify the works proposed and its trustees have been asked to submit a revised scheme. Both mills are listed."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

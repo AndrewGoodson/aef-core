@@ -8,6 +8,7 @@ in the target repo.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from importlib import resources
@@ -21,7 +22,11 @@ from aef.cli.adopt_loop import (
     render_loop_md,
     render_loop_monitor_workflow,
 )
-from aef.cli.migrate import DEFAULT_MIGRATED_OUT
+from aef.cli.migrate import (
+    DEFAULT_MIGRATED_OUT,
+    discover_prompt_agents,
+    discover_skills,
+)
 from aef.harness.zones import DEFAULT_AGENT_ROOT
 
 _IGNORED_DIR_NAMES = frozenset(
@@ -63,8 +68,57 @@ _ADOPT_SKILL_PATH = ".claude/skills/new-model-check/SKILL.md"
 # The marker pair. `<!-- ... -->` in markdown-ish files (`.md`, `.mdc`), `#`
 # in `.gitignore`, because a marker the file's own syntax does not tolerate is
 # a marker that breaks the file it is protecting.
+#
+# These are the BARE forms — the strings this scaffold's own documentation
+# teaches an adopter, and therefore strings an adopter's prose can contain.
+# What `aef adopt` actually writes is the SIGNED begin marker below, and only
+# a signed pair is treated as adopt's (ADR 0172). A balanced bare pair in the
+# adopter's own text used to make adopt delete everything between it while the
+# report said "your bytes outside it are unchanged".
 MD_MARKERS = ("<!-- aef:begin -->", "<!-- aef:end -->")
 GITIGNORE_MARKERS = ("# aef:begin", "# aef:end")
+
+# Hex characters of the sha256 kept in the begin marker. 16 is 64 bits: long
+# enough that no prose contains one by accident (which is what the signature
+# is FOR — authorship, not integrity), short enough to stay on one line.
+_SIGNATURE_HEX = 16
+_SIGNATURE_RE_BODY = rf" sha256=[0-9a-f]{{{_SIGNATURE_HEX}}}"
+
+
+def _split_begin(begin: str) -> tuple[str, str]:
+    """`<!-- aef:begin -->` -> `('<!-- aef:begin', ' -->')`; `# aef:begin` ->
+    `('# aef:begin', '')`. The signature is inserted between the two halves so
+    the marker stays syntactically legal in the file it lives in."""
+    return (begin[:-4], " -->") if begin.endswith(" -->") else (begin, "")
+
+
+def signed_begin(begin: str, body: str) -> str:
+    """The begin marker `aef adopt` writes: the bare marker plus a sha256 of
+    the block body it opens.
+
+    `<!-- aef:begin sha256=1a2b3c4d5e6f7081 -->`
+
+    This is the whole of how `apply_block` tells a pair IT wrote from a pair
+    the adopter merely quoted. The digest is over the body, so re-rendering
+    the same block reproduces the same marker byte-for-byte (idempotency), and
+    a changed block gets a changed marker.
+    """
+    stem, tail = _split_begin(begin)
+    digest = hashlib.sha256(body.encode("utf-8")).hexdigest()[:_SIGNATURE_HEX]
+    return f"{stem} sha256={digest}{tail}"
+
+
+def _signed_begin_re(begin: str) -> re.Pattern[str]:
+    stem, tail = _split_begin(begin)
+    return re.compile(re.escape(stem) + _SIGNATURE_RE_BODY + re.escape(tail))
+
+
+# What the FIRST non-blank line of a pre-signature (ADR 0153 "M2") block body
+# looks like. Used only to decide whether a bare marker pair is an old block
+# of adopt's — to be upgraded once, in place — or the adopter's prose, which
+# is left alone. Both strings are things `render_aef_block_body` /
+# `render_gitignore_block` actually emit, so this cannot drift into a guess.
+_LEGACY_BODY_HEADS = ("## AEF scaffold (", "__pycache__/")
 
 # `agents/migrated/graph.py` -> `agents/migrated/<agent>/graph.py`, the shape
 # `aef migrate` writes one-graph-per-prompt-agent into (`<agent>` is the agent
@@ -82,7 +136,7 @@ def _read_all(paths: list[Path]) -> str:
     parts: list[str] = []
     for path in paths:
         try:
-            parts.append(path.read_text(errors="ignore"))
+            parts.append(path.read_bytes().decode("utf-8", errors="ignore"))
         except OSError:
             continue
     return "\n".join(parts)
@@ -157,10 +211,20 @@ def _is_adopt_generated(path: Path) -> bool:
     a file once.
     """
     try:
-        text = path.read_text()
+        text = path.read_bytes().decode("utf-8")
     except (OSError, UnicodeDecodeError):
         return False
-    if MD_MARKERS[0] not in text:
+    # A SIGNED marker, or a pre-signature block of adopt's — never a bare
+    # marker on its own, because a file quoting `<!-- aef:begin -->` in its
+    # prose is the adopter's and counting it as adopt's output would drop
+    # their own entry file out of the prompt-surface count.
+    #
+    # The legacy arm is what keeps ADR 0153's "the detection line is identical
+    # on both runs" true ACROSS the signature change: without it, a repo
+    # already adopted under the M2 marker format would have adopt's own entry
+    # files stop looking like adopt's for exactly one run, and the detection
+    # line would gain two signals and then lose them again.
+    if not carries_adopt_block(text, MD_MARKERS):
         return False
     heading = next(
         (line for line in text.splitlines() if line.startswith("# ")),
@@ -177,27 +241,19 @@ def detect_prompt_surface(repo_root: Path) -> PromptSurface:
     Files `aef adopt` itself writes are excluded — the `/new-model-check`
     skill by path, and the entry files by their marker block — so running
     adopt twice reports the same numbers both times.
-    """
-    agents_dir = repo_root / ".claude" / "agents"
-    agents = (
-        len([p for p in sorted(agents_dir.glob("*.md")) if p.is_file()])
-        if agents_dir.is_dir()
-        else 0
-    )
 
-    skills_dir = repo_root / ".claude" / "skills"
-    ours = repo_root / _ADOPT_SKILL_PATH
-    skills = (
-        len(
-            [
-                p
-                for p in sorted(skills_dir.glob("*/SKILL.md"))
-                if p.is_file() and p.resolve() != ours.resolve()
-            ]
-        )
-        if skills_dir.is_dir()
-        else 0
-    )
+    **The agents and skills are discovered by `aef migrate`'s own functions**,
+    not by a second glob here (ADR 0172). They disagreed: `migrate` recurses
+    (`.claude/agents/**/*.md`, measured against the Claude Code CLI in ADR
+    0152) and adopt globbed one level, so a repo with a single nested persona
+    had adopt say `8 agents` in the detection line, the checklist AND the
+    appended block while `aef migrate` wrote 9 graphs. One discovery, one
+    number — the exclusion of adopt's own output is applied on top.
+    """
+    agents = len(discover_prompt_agents(repo_root))
+
+    ours = (repo_root / _ADOPT_SKILL_PATH).resolve()
+    skills = len([p for p in discover_skills(repo_root) if (repo_root / p).resolve() != ours])
 
     agents_md = repo_root / "AGENTS.md"
     copilot = repo_root / ".github" / "copilot-instructions.md"
@@ -215,6 +271,20 @@ def detect_prompt_surface(repo_root: Path) -> PromptSurface:
         has_copilot_instructions=copilot.is_file() and not _is_adopt_generated(copilot),
         cursor_rules=len(cursor),
     )
+
+
+def first_prompt_module(repo_root: Path) -> str | None:
+    """The dotted module `aef migrate` will write for this repo's FIRST prompt
+    agent, or `None` when there are none.
+
+    Derived from migrate's own discovery, sanitiser and output path — adopt
+    computes no agent-name-to-module rule of its own, because two rules is how
+    a generated workflow ends up naming a module nothing writes (ADR 0091).
+    """
+    sites = discover_prompt_agents(repo_root)
+    if not sites:
+        return None
+    return sites[0].out_relative.removesuffix(".py").replace("/", ".")
 
 
 def describe_detection(framework: Framework, surface: PromptSurface) -> str:
@@ -387,7 +457,7 @@ and adopt will update it in place.
 
 def _wrap_in_markers(body: str, markers: tuple[str, str]) -> str:
     begin, end = markers
-    return f"{begin}\n{body}\n{end}"
+    return f"{signed_begin(begin, body)}\n{body}\n{end}"
 
 
 def render_aef_block(
@@ -400,13 +470,53 @@ def render_aef_block(
     return _wrap_in_markers(render_aef_block_body(repo_name, framework, surface), markers)
 
 
+def _legacy_block_span(text: str, markers: tuple[str, str]) -> tuple[int, int] | None | str:
+    """Where a **pre-signature** block of adopt's own lives in `text`.
+
+    Returns the `(start, stop)` slice to replace, `None` when there is no such
+    block, or the string `"ambiguous"` when more than one bare pair looks like
+    one — which is refused rather than guessed at.
+
+    A bare pair is adopt's only when the first non-blank line of its body is a
+    line `render_aef_block_body`/`render_gitignore_block` emits. That is the
+    discriminator R2 needed: this scaffold's own kit teaches adopters the
+    literal marker strings, so a balanced bare pair is far more often a
+    quotation than a block, and the quotation never carries the heading.
+    """
+    begin, end = markers
+    found: list[tuple[int, int]] = []
+    at = text.find(begin)
+    while at != -1:
+        closing = text.find(end, at + len(begin))
+        if closing == -1:
+            break
+        body = text[at + len(begin) : closing]
+        head = next((line for line in body.splitlines() if line.strip()), "")
+        if head.strip().startswith(_LEGACY_BODY_HEADS):
+            found.append((at, closing + len(end)))
+        at = text.find(begin, closing + len(end))
+    if not found:
+        return None
+    if len(found) > 1:
+        return "ambiguous"
+    return found[0]
+
+
 def apply_block(text: str, block: str, markers: tuple[str, str]) -> str | None:
     """Append `block` to `text`, or replace the block already there.
 
     Returns the new text, or **None** when the file carries markers this
-    cannot safely resolve (an end with no begin, a begin with no end, or two
-    begins) — the caller then skips the file and says why. Guessing where
-    someone else's block ends is how a never-overwrite tool overwrites.
+    cannot safely resolve — the caller then skips the file and says why.
+    Guessing where someone else's block ends is how a never-overwrite tool
+    overwrites.
+
+    **Only a pair whose begin marker carries a signature is adopt's**
+    (ADR 0172). `<!-- aef:begin -->` written by anyone else — in a sentence,
+    inside backticks, in a code fence teaching an adopter what the markers are
+    — is inert prose, and a *balanced* bare pair used to be the one shape that
+    silently destroyed the text between it. The three refusals are therefore
+    about the SIGNED marker: two signed begins, a signed begin with no end,
+    and a bare pair that could be one of two pre-signature blocks.
 
     The bytes outside the marker pair are never touched: on a replace they are
     the literal slices either side of it, and on a first append the file's
@@ -414,21 +524,148 @@ def apply_block(text: str, block: str, markers: tuple[str, str]) -> str | None:
     the markers is the separator that puts the block on its own line, and it
     is added once — a second run finds the markers and replaces between them.
     """
-    begin, end = markers
-    first = text.find(begin)
-    if first == -1:
-        if end in text:
+    resolved = resolve_block_span(text, markers)
+    if resolved is None:
+        return None
+    _, start, stop = resolved
+    return _assemble(text, block, start, stop, "\n")
+
+
+def _assemble(text: str, block: str, start: int, stop: int, newline: str) -> str:
+    """`text` with `[start:stop]` replaced by `block`, in `newline` endings.
+
+    `text[:start]` and `text[stop:]` are pasted back **verbatim** — never
+    re-rendered — so a file with mixed endings keeps every line exactly as its
+    author left it, and only the bytes adopt is adding take the file's
+    dominant ending.
+    """
+    rendered = block.replace("\n", newline) if newline != "\n" else block
+    separator = ""
+    if start == len(text) and text != "":
+        if not text.endswith(newline):
+            separator = newline * 2
+        elif not text.endswith(newline * 2):
+            separator = newline
+    trailer = newline if start == len(text) else ""
+    return text[:start] + separator + rendered + trailer + text[stop:]
+
+
+# What `resolve_block_span` decided. `replace` and `migrate` both rewrite an
+# existing span; they are distinguished because a `migrate` is worth telling
+# the adopter about once, and a `replace` is the ordinary case.
+BlockAction = str  # "append" | "replace" | "migrate"
+
+
+def resolve_block_span(text: str, markers: tuple[str, str]) -> tuple[BlockAction, int, int] | None:
+    """Which slice of `text` the block occupies, or `None` to refuse.
+
+    `(action, start, stop)` — everything in `text[:start]` and `text[stop:]`
+    survives verbatim, and that is the property `_verify_preserved` asserts in
+    code before anything is written. On an append, `start == stop == len(text)`
+    and the whole file is the prefix.
+    """
+    _, end = markers
+    signed = list(_signed_begin_re(markers[0]).finditer(text))
+    if len(signed) > 1:
+        return None
+    if signed:
+        opening = signed[0]
+        closing = text.find(end, opening.end())
+        if closing == -1:
             return None
-        if text == "":
-            return block + "\n"
-        separator = "\n\n" if not text.endswith("\n") else ("" if text.endswith("\n\n") else "\n")
-        return text + separator + block + "\n"
-    if text.find(begin, first + len(begin)) != -1:
+        return ("replace", opening.start(), closing + len(end))
+
+    legacy = _legacy_block_span(text, markers)
+    if legacy == "ambiguous":
         return None
-    closing = text.find(end, first + len(begin))
-    if closing == -1:
+    if isinstance(legacy, tuple):
+        return ("migrate", legacy[0], legacy[1])
+    return ("append", len(text), len(text))
+
+
+def carries_adopt_block(text: str, markers: tuple[str, str]) -> bool:
+    """Does this file already carry a block `aef adopt` wrote — signed, or in
+    the pre-signature format?
+
+    Not `markers[0] in text`: that reads an adopter's *quotation* of the
+    marker as a block, which in `.gitignore`'s case would append the bytecode
+    patterns to a file that already covers them (ADR 0142's no-nagging rule).
+    """
+    if _signed_begin_re(markers[0]).search(text):
+        return True
+    return _legacy_block_span(text, markers) is not None
+
+
+def dominant_newline(data: bytes) -> bytes:
+    """The line ending this file is written in: `b"\\r\\n"` or `b"\\n"`.
+
+    Counted, not guessed, because a mixed file has to get *an* answer and the
+    majority ending is the one that keeps the diff smallest. A file with no
+    newline at all gets `b"\\n"` — nothing is being preserved either way, and
+    LF is what every generated file here uses.
+
+    This exists because `Path.read_text()` translates `\\r\\n` to `\\n` and
+    `Path.write_text()` writes `os.linesep` back. Adopt's marker logic was
+    byte-exact on the *translated* text, so on a CRLF `AGENTS.md` every line
+    of the adopter's file was rewritten — `git diff --stat` said
+    `41 insertions(+), 5 deletions(-)` while the CLI printed "your bytes
+    outside it are unchanged" (ADR 0172).
+    """
+    crlf = data.count(b"\r\n")
+    return b"\r\n" if crlf and crlf * 2 >= data.count(b"\n") else b"\n"
+
+
+def _verify_preserved(prefix: bytes, suffix: bytes, result: bytes) -> bool:
+    """The never-destroy rule, executable.
+
+    ADR 0153 argued that appending inside markers is not overwriting because
+    "every pre-existing byte survives verbatim". That was an argument in a
+    document; on a CRLF file it was false. This is the same claim as an
+    assertion that runs before every write: the bytes before the block and the
+    bytes after it are still there, at the same ends of the file, and together
+    they account for every byte of the original that is not the old block.
+    """
+    return (
+        result.startswith(prefix)
+        and result.endswith(suffix)
+        and len(result) >= len(prefix) + len(suffix)
+    )
+
+
+@dataclass(frozen=True)
+class BlockWrite:
+    """What `apply_block_bytes` decided, for a caller that has to report it."""
+
+    data: bytes
+    action: BlockAction
+
+
+def apply_block_bytes(data: bytes, block: str, markers: tuple[str, str]) -> BlockWrite | None:
+    """`apply_block`, on bytes, in the file's own line ending.
+
+    Three things happen here that the text version cannot do:
+
+    1. the file is decoded **without newline translation**, so `\\r\\n` is
+       still `\\r\\n` when the marker search runs and when the result is
+       written back;
+    2. the block is rendered in the file's dominant line ending, so the added
+       lines match the ones around them;
+    3. the result is checked against the original bytes before it is returned
+       — a violation returns `None` (refuse) rather than a written file.
+
+    Raises `UnicodeDecodeError` on a file that is not UTF-8 text; the caller
+    already skips those and says so.
+    """
+    text = data.decode("utf-8")
+    resolved = resolve_block_span(text, markers)
+    if resolved is None:
         return None
-    return text[:first] + block + text[closing + len(end) :]
+    action, start, stop = resolved
+    newline = dominant_newline(data).decode("ascii")
+    out = _assemble(text, block, start, stop, newline).encode("utf-8")
+    if not _verify_preserved(text[:start].encode("utf-8"), text[stop:].encode("utf-8"), out):
+        return None
+    return BlockWrite(data=out, action=action)
 
 
 def render_claude_md(
@@ -653,6 +890,32 @@ def gitignore_gaps(text: str) -> tuple[str, ...]:
     return (
         f"Add `__pycache__/` and `*.py[cod]` to your existing `.gitignore` — `aef adopt` "
         f"could not append them for you and neither pattern is in it. {_DRIFT_COST}",
+    )
+
+
+def legacy_block_upgraded_note(paths: tuple[str, ...]) -> str:
+    """The printed notice for a block written before the marker signature.
+
+    A checklist item, past tense, exactly like `gitignore_appended_note()` —
+    it reports what the tool did so the adopter can go and look, and it
+    reaches `AEF_MIGRATION_CHECKLIST.md` on disk as well as the terminal.
+
+    Migrating is the alternative to refusing, and this is why: the only other
+    option was to treat an unsigned pair as prose, which would leave the old
+    block in place and append a second one — two contradicting copies of the
+    contract in the file the repo's agents read. The upgrade is done ONCE
+    (the replacement is signed), it is announced, and it is reversible by
+    deleting the block. It is applied only where the block's first line is
+    one `aef adopt` itself emits, so a quotation is never mistaken for a
+    block.
+    """
+    named = ", ".join(f"`{p}`" for p in paths)
+    return (
+        f"`aef adopt` upgraded a pre-signature `aef:begin`/`aef:end` block in {named} to the "
+        f"signed form (`aef:begin sha256=...`). Only a SIGNED pair is adopt's now: a bare pair "
+        f"in your own prose — this kit teaches the marker strings, so quoting them is ordinary "
+        f"— is left alone instead of having everything between it replaced (aef-core ADR 0172). "
+        f"Nothing outside the block moved; check the diff if you want to see that."
     )
 
 
@@ -893,6 +1156,15 @@ tools:
 policies:
   require_hitl_above_risk: 0.0
   forbid: []
+
+# How a SHADOW run of a loop candidate is contained (aef-core ADR 0161).
+# Commented out because `auto` is already the default — uncomment only to say
+# something different, and note that `auto` REFUSES rather than downgrading
+# when no container runtime or no image is available. `image` has no default:
+# it must carry your own `aef` and its dependencies.
+# shadow:
+#   containment: auto  # auto | fallback | off — ADR 0161
+#   image: null        # required by `auto`; `fallback`/`off` are owner choices
 
 objectives: "TODO: describe this agent's objective in one or two sentences."
 
@@ -1310,6 +1582,11 @@ class AdoptResult:
     # collapsing it into either is how the report stops describing what
     # happened.
     appended_files: list[Path] = field(default_factory=list)
+    # The subset of `appended_files` whose block was written before the marker
+    # signature existed and was upgraded in place (ADR 0172). Reported to the
+    # adopter as a checklist note, because it is the one case where adopt
+    # rewrote a block it can only *infer* it wrote.
+    upgraded_blocks: list[Path] = field(default_factory=list)
     # Why each skip happened. `already exists` stays the default so callers
     # that never look up a reason print what they always printed.
     skip_reasons: dict[Path, str] = field(default_factory=dict)
@@ -1334,12 +1611,47 @@ def render_new_model_check_skill() -> str:
     return (
         resources.files("aef.cli")
         .joinpath("templates/skills/new-model-check/SKILL.md")
-        .read_text(encoding="utf-8")
+        .read_bytes()
+        .decode("utf-8")
     )
+
+
+#: The five entry files ADR 0153 allows a block in, and the marker pair each
+#: one uses. Named once so the pre-pass below cannot drift from the writes.
+_BLOCK_FILES: tuple[tuple[str, tuple[str, str]], ...] = (
+    ("CLAUDE.md", MD_MARKERS),
+    ("AGENTS.md", MD_MARKERS),
+    (".github/copilot-instructions.md", MD_MARKERS),
+    (".cursor/rules/aef.mdc", MD_MARKERS),
+    (".gitignore", GITIGNORE_MARKERS),
+)
+
+
+def _entry_files_with_legacy_blocks(target_dir: Path) -> tuple[str, ...]:
+    """Which entry files carry a PRE-SIGNATURE block, read before anything is
+    written. A pre-pass rather than a running tally because the checklist is
+    rendered before three of the five files are touched, and a notice that
+    depends on write order is a notice that is sometimes wrong."""
+    found: list[str] = []
+    for name, markers in _BLOCK_FILES:
+        path = target_dir / name
+        if not path.is_file() or path.is_symlink():
+            continue
+        try:
+            text = path.read_bytes().decode("utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if _signed_begin_re(markers[0]).search(text):
+            continue
+        if isinstance(_legacy_block_span(text, markers), tuple):
+            found.append(name)
+    return tuple(found)
 
 
 def run_adopt(target_dir: Path) -> AdoptResult:
     target_dir = target_dir.resolve()
+    # BEFORE any write: the first thing adopt does is upgrade CLAUDE.md's block.
+    legacy_blocks = _entry_files_with_legacy_blocks(target_dir)
     surface = detect_prompt_surface(target_dir)
     framework = detect_framework(target_dir)
     repo_name = target_dir.name
@@ -1347,6 +1659,7 @@ def run_adopt(target_dir: Path) -> AdoptResult:
     written: list[Path] = []
     skipped: list[Path] = []
     appended: list[Path] = []
+    migrated: list[Path] = []
     reasons: dict[Path, str] = {}
 
     def _skip(path: Path, reason: str) -> None:
@@ -1387,32 +1700,41 @@ def run_adopt(target_dir: Path) -> AdoptResult:
             return
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)  # for .github/, .cursor/rules/
-            path.write_text(content)
+            # `write_bytes`, not `write_text`: `write_text` writes `os.linesep`,
+            # so every generated file in this scaffold would be CRLF on Windows
+            # and its own byte-preservation tests would compare LF against it.
+            path.write_bytes(content.encode("utf-8"))
             written.append(path)
             return
         if block is None:
             _skip(path, "already exists")
             return
         try:
-            existing = path.read_text()
-        except (OSError, UnicodeDecodeError) as exc:
-            # Not text, or not readable. Appending to bytes we cannot read is
-            # how a scaffold corrupts an adopter's file; the skip says so.
+            existing = path.read_bytes()
+        except OSError as exc:
             _skip(path, f"exists but is not readable as text ({type(exc).__name__})")
             return
-        updated = apply_block(existing, block, markers)
-        if updated is None:
+        try:
+            outcome = apply_block_bytes(existing, block, markers)
+        except UnicodeDecodeError as exc:
+            # Not text. Appending to bytes we cannot read is how a scaffold
+            # corrupts an adopter's file; the skip says so.
+            _skip(path, f"exists but is not readable as text ({type(exc).__name__})")
+            return
+        if outcome is None:
             _skip(
                 path,
                 f"carries an unbalanced or duplicated {markers[0]} / {markers[1]} pair — "
                 f"refusing to guess which bytes are the block",
             )
             return
-        if updated == existing:
+        if outcome.data == existing:
             _skip(path, "already carries the current aef block")
             return
-        path.write_text(updated)
+        path.write_bytes(outcome.data)
         appended.append(path)
+        if outcome.action == "migrate":
+            migrated.append(path)
 
     entry_block = render_aef_block(repo_name, framework, surface)
     claude_md = render_claude_md(framework, repo_name, surface)
@@ -1429,7 +1751,7 @@ def run_adopt(target_dir: Path) -> AdoptResult:
     existing_gitignore = ""
     if gitignore.is_file() and not gitignore.is_symlink():
         try:
-            existing_gitignore = gitignore.read_text()
+            existing_gitignore = gitignore.read_bytes().decode("utf-8")
         except (OSError, UnicodeDecodeError):
             existing_gitignore = ""
     covered = gitignore_covers_bytecode(existing_gitignore)
@@ -1444,13 +1766,15 @@ def run_adopt(target_dir: Path) -> AdoptResult:
         # replaceable rather than duplicated.
         block=(
             None
-            if covered and GITIGNORE_MARKERS[0] not in existing_gitignore
+            if covered and not carries_adopt_block(existing_gitignore, GITIGNORE_MARKERS)
             else render_gitignore_block()
         ),
         markers=GITIGNORE_MARKERS,
     )
 
     checklist = render_migration_checklist(framework, surface)
+    if legacy_blocks:
+        checklist.append(legacy_block_upgraded_note(legacy_blocks))
     if gitignore in appended:
         checklist.append(gitignore_appended_note())
     elif gitignore in skipped and not covered:
@@ -1503,7 +1827,16 @@ def run_adopt(target_dir: Path) -> AdoptResult:
     _write_if_absent("agents/README.md", render_agents_zone_readme(repo_name))
     _write_if_absent("corpus/README.md", render_corpus_readme(repo_name))
     _write_if_absent(".github/workflows/loop-gate.yml", render_loop_gate_workflow(repo_name))
-    _write_if_absent(".github/workflows/loop-monitor.yml", render_loop_monitor_workflow(repo_name))
+    # The nightly cycle's `AEF_MODULE` must never default to the placeholder
+    # `aef migrate` writes when it finds no call site — on a prompt-file repo
+    # that module exists, raises, and the cycle's exit 1 reads as a healthy
+    # rejection (ADR 0172). Where there are prompt agents, name the first
+    # one's module: it is derived from migrate's own discovery and sanitiser,
+    # so the workflow and `aef migrate` cannot disagree about it.
+    _write_if_absent(
+        ".github/workflows/loop-monitor.yml",
+        render_loop_monitor_workflow(repo_name, prompt_module=first_prompt_module(target_dir)),
+    )
 
     # Per-model-release re-audit (docs/adr/0111). Without it an adopted
     # repo's prompts and call sites are checked against exactly one model:
@@ -1516,6 +1849,7 @@ def run_adopt(target_dir: Path) -> AdoptResult:
         skipped_files=skipped,
         checklist=checklist,
         appended_files=appended,
+        upgraded_blocks=migrated,
         skip_reasons=reasons,
         prompt_surface=surface,
     )

@@ -29,7 +29,8 @@ from aef.harness.evaluation import CohortVerdict, ScoreSet
 from aef.harness.git import GitRepo
 from aef.harness.isolated_suite import run_corpus_isolated
 from aef.harness.outcome import Outcome
-from aef.harness.proposer import ControlCohortGenerator, ProposalError
+from aef.harness.proposer import ControlCohortGenerator, Proposal, ProposalError
+from aef.harness.prose_cohort import ProseControlCohortGenerator, prose_cohort_targets
 from aef.harness.sandbox import SandboxPolicy
 from aef.harness.workspace import build_candidate_workspace
 from aef.harness.zones import ZonePolicy
@@ -218,44 +219,39 @@ class CohortBuilder:
         return verdict, candidate, plan.describe()
 
     def _control_workspaces(self, diff: CandidateDiff, workroot: Path) -> list[tuple[str, Path]]:
-        """One workspace per random mutation of a file the candidate touched."""
-        targets = [e.path for e in diff.entries if not e.is_deletion and e.path.endswith(".py")]
-        if not targets:
-            raise SuiteError(
-                "the candidate changed no Python file, so there is nothing to mutate for a "
-                "control cohort and G3 has no null hypothesis to test against"
-            )
+        """One workspace per control mutation of a file the candidate touched.
 
-        source_path = targets[0]
-        # The INCUMBENT's source, not the candidate's. The null hypothesis is
-        # "would a random change to the incumbent have done as well as this
-        # reasoned change to the incumbent" — so the cohort must start where
-        # the candidate started. Mutating the candidate instead asks whether
-        # random *further* changes match it, which is a different question
-        # with a much higher answer: perturbing an already-improved variant
-        # frequently keeps the improvement, so the threshold rises to meet
-        # the candidate and nothing can ever beat it. Found by running the
-        # pipeline against a candidate that should plainly have passed.
-        if not self.repo.path_exists_at(diff.base_sha, source_path):
-            raise SuiteError(
-                f"{source_path!r} does not exist at the base ref, so there is no incumbent "
-                f"version to mutate. A cohort drawn from the candidate itself tests the "
-                f"wrong hypothesis; a new file needs a different control design."
-            )
-        source = self.repo.show(diff.base_sha, source_path)
-        try:
-            controls = ControlCohortGenerator(seed=self.seed).generate(
-                path=source_path, source=source, size=self.cohort_size
-            )
-        except ProposalError as exc:
-            raise SuiteError(f"cannot build a control cohort: {exc}") from exc
+        Two kinds of candidate, two null hypotheses, and the same rule behind
+        both: the cohort mutates what the candidate mutated, in the way the
+        candidate mutated it.
+
+        - a **Python** candidate is controlled by random numeric-constant
+          mutations (`ControlCohortGenerator`, ADR 0054);
+        - a **prompt** candidate is controlled by length-matched placebo
+          bullets (`ProseControlCohortGenerator`, ADR 0170). Before that
+          existed, a `.md` candidate reached this method, found no `.py`
+          entry, and G3 refused for want of a null — so a prompt candidate
+          could be rejected and never accepted (ADR 0157 defect 2).
+
+        Python wins when a candidate touched both, unchanged: the numeric
+        cohort is the older and better-measured of the two.
+
+        **The materialisation loop stays here, in one place, for both kinds.**
+        It was tempting to give the prose branch its own — it is five lines —
+        and `test_controls_are_built_from_the_incumbent_not_the_candidate`
+        exists precisely because ADR 0074's fix for this loop had been applied
+        to one code path and not the other. A second copy is a second place
+        for that to happen again.
+        """
+        live = [e.path for e in diff.entries if not e.is_deletion]
+        source_path, controls = self._controls(diff, live)
 
         # Controls are materialised from the INCUMBENT, not from the candidate
         # workspace. Overlaying the candidate diff and then replacing only
         # `targets[0]` left every control carrying the candidate's changes to
         # files 1..n — so on a two-file candidate all five controls scored
         # identically to the candidate, p95 rose to meet it, and G3 could
-        # never pass. This is the same failure the comment above records for
+        # never pass. This is the same failure the comment below records for
         # the single-file case; the fix had been applied to one file only
         # (ADR 0074).
         made: list[tuple[str, Path]] = []
@@ -264,6 +260,64 @@ class CohortBuilder:
             (workspace / source_path).write_text(control.proposed)
             made.append((control.id, workspace))
         return made
+
+    def _controls(self, diff: CandidateDiff, live: list[str]) -> tuple[str, tuple[Proposal, ...]]:
+        """`(path, cohort)` — which file the controls mutate, and how."""
+        targets = [p for p in live if p.endswith(".py")]
+        if targets:
+            return targets[0], self._numeric_controls(diff, targets[0])
+        prose = prose_cohort_targets(live)
+        if prose:
+            return prose[0], self._prose_controls(diff, prose[0])
+        raise SuiteError(
+            "the candidate changed no Python file and no prompt file, so there is nothing "
+            "to mutate for a control cohort and G3 has no null hypothesis to test against"
+        )
+
+    def _incumbent_source(self, diff: CandidateDiff, source_path: str) -> str:
+        """The INCUMBENT's source, not the candidate's. The null hypothesis is
+        "would a random change to the incumbent have done as well as this
+        reasoned change to the incumbent" — so the cohort must start where the
+        candidate started. Mutating the candidate instead asks whether random
+        *further* changes match it, which is a different question with a much
+        higher answer: perturbing an already-improved variant frequently keeps
+        the improvement, so the threshold rises to meet the candidate and
+        nothing can ever beat it. Found by running the pipeline against a
+        candidate that should plainly have passed.
+        """
+        if not self.repo.path_exists_at(diff.base_sha, source_path):
+            raise SuiteError(
+                f"{source_path!r} does not exist at the base ref, so there is no incumbent "
+                f"version to mutate. A cohort drawn from the candidate itself tests the "
+                f"wrong hypothesis; a new file needs a different control design."
+            )
+        return self.repo.show(diff.base_sha, source_path)
+
+    def _numeric_controls(self, diff: CandidateDiff, source_path: str) -> tuple[Proposal, ...]:
+        """Random numeric-constant mutations of the incumbent (ADR 0054)."""
+        source = self._incumbent_source(diff, source_path)
+        try:
+            return ControlCohortGenerator(seed=self.seed).generate(
+                path=source_path, source=source, size=self.cohort_size
+            )
+        except ProposalError as exc:
+            raise SuiteError(f"cannot build a control cohort: {exc}") from exc
+
+    def _prose_controls(self, diff: CandidateDiff, source_path: str) -> tuple[Proposal, ...]:
+        """Length-matched placebo bullets (ADR 0170).
+
+        Same two refusals as the numeric branch: a file with no incumbent
+        version is refused, and anything the generator cannot build a real
+        null for becomes a `SuiteError` — so G3 refuses, never passes.
+        """
+        source = self._incumbent_source(diff, source_path)
+        candidate = self.repo.show(diff.head_sha, source_path)
+        try:
+            return ProseControlCohortGenerator(seed=self.seed).generate(
+                path=source_path, source=source, candidate=candidate, size=self.cohort_size
+            )
+        except ProposalError as exc:
+            raise SuiteError(f"cannot build a control cohort: {exc}") from exc
 
 
 def _materialise_base(repo: GitRepo, diff: CandidateDiff, dest: Path) -> Path:

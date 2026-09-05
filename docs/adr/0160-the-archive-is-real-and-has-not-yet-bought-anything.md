@@ -308,7 +308,8 @@ buys nothing there, that is the run that should delete it; this one cannot.
 
 - The four clauses are on artifacts. `sample_parents` stays **off**.
 - Rubric dimension 6: **5 → 6**, +1 for the offline half, prepended as one
-  row citing this ADR. The remaining four points need a measurement in
+  row citing this ADR (the heading is recomputed from the rows by
+  `tests/test_rubric_arithmetic.py`, not carried by hand). The remaining four points need a measurement in
   which something is kept.
 - `aef loop run --build-command` exists, because the alternative is that
   every `run` candidate is judged by whether this repo's whole test suite

@@ -21,6 +21,16 @@ outage, an unparseable reply, a reply that reaches for `subprocess` — each
 is a reason in the rationale of the rule-based proposal that replaces it,
 so a reader of the ledger can see the model was asked and what it did.
 
+**And when the fallback proposes nothing, the spend is still reported.** The
+rationale was the *only* place the rejection was written down, so on a repo
+where the fallback has nothing to say — a prompt file, where the rule-based
+proposer edits numeric constants and a `.md` has none — one live call was
+spent, the reply was discarded, and `aef loop cycle` printed a sentence about
+markdown that never mentioned the model (ADR 0170 defect 3, reported as ADR
+0157 defect 5). `ProposerSpend` below is where that now lives: it is mutable,
+deliberately, because a model call is an event in time and not a function of
+the inputs — nothing about the *proposal* is derived from it.
+
 **No gate changes.** Everything validated here is validated again by the
 gates on the candidate branch; this is the proposer declining to spend N+2
 corpus passes on a candidate G0 would reject in milliseconds, not a second
@@ -90,6 +100,41 @@ class LLMProposalRejected(ProposalError):
     keeps propagating."""
 
 
+@dataclass
+class ProposerSpend:
+    """What asking the model cost, and what came of it.
+
+    Mutable and shared with the proposer that owns it — the one piece of state
+    in this module, and it holds no influence over any proposal: nothing reads
+    it back, the gates never see it, and clearing it changes no candidate. It
+    exists so that a call the loop *spent* cannot vanish from the record when
+    the thing that spent it produced nothing.
+
+    `calls` counts **attempts**, incremented before the provider returns,
+    because a request that errors after it was sent has still been spent. It
+    is a floor on the true cost, never an under-report.
+    """
+
+    calls: int = 0
+    rejections: tuple[str, ...] = ()
+
+    def record_attempt(self) -> None:
+        self.calls += 1
+
+    def record_rejection(self, exc: BaseException) -> None:
+        self.rejections = (*self.rejections, f"{type(exc).__name__}: {exc}")
+
+    def note(self) -> str:
+        """One line for the cycle summary and the journal, or "" when the
+        model was never asked. Only the FIRST rejection is rendered: a cycle
+        asks once, and a list would invite reading a retry loop into it."""
+        if not self.calls:
+            return ""
+        plural = "" if self.calls == 1 else "s"
+        why = f"; rejected — {self.rejections[0]}" if self.rejections else ""
+        return f"llm proposer spent {self.calls} live model call{plural}{why}"
+
+
 @dataclass(frozen=True)
 class _Reply:
     prose: str
@@ -141,6 +186,9 @@ class LLMProposer:
     import_allowlist: frozenset[str] = DEFAULT_IMPORT_ALLOWLIST
     max_changed_lines: int = DEFAULT_MAX_CHANGED_LINES
     max_tokens: int = DEFAULT_MAX_TOKENS
+    # Per-proposer, not per-call: one `cycle` builds one proposer and asks it
+    # once, so this accumulates that turn's spend and nothing else.
+    spend: ProposerSpend = field(default_factory=ProposerSpend)
 
     def propose_from_memory(
         self,
@@ -168,6 +216,10 @@ class LLMProposer:
                 ),
             )
         except (LLMProposalRejected, ModelProviderError) as exc:
+            # Recorded HERE, not only in the rationale below: when the
+            # fallback also proposes nothing there is no rationale to carry
+            # it, and the call disappeared (ADR 0170 defect 3).
+            self.spend.record_rejection(exc)
             reason = f"[llm proposer fell back to rule-based: {exc}]"
             return tuple(
                 replace(p, rationale=f"{p.rationale} {reason}")
@@ -246,6 +298,10 @@ class LLMProposer:
             f"Current source:\n```python {path}\n{source}```\n\n"
             f"Propose the change."
         )
+        # Counted before the provider answers: a request that errors after it
+        # left has still been spent, and the number this loop reports must be
+        # a floor on the real cost rather than a count of successes.
+        self.spend.record_attempt()
         result = self.provider.complete(
             CompletionRequest(
                 messages=(

@@ -98,6 +98,22 @@ OBSERVATIONS_FILENAME = "observations.jsonl"
 EXIT_OK = 0
 EXIT_REJECTED = 1
 EXIT_HALTED = 2
+# The command could not do its job — an unexpected exception, or a
+# configuration error that stops the turn before it starts.
+#
+# Distinct from `EXIT_REJECTED` because `aef/cli/main.py`'s catch-all returns
+# **1** for any exception, and 1 is also "this candidate is no good, the system
+# is working". The rendered nightly workflow fails the job on `status >= 2`,
+# so a bad config, a missing corpus, an import error, a provider that is down,
+# or the `agents.migrated.graph` placeholder whose `build_graph()` raises
+# `NotImplementedError` all read as a healthy rejection and the job stays
+# green — and, since the exception escaped before the attempt was journalled,
+# `cycles.jsonl` gained nothing and the staleness alarm could never fire for
+# those nights either (reproduced, ADR 0167).
+#
+# 3 rather than reusing 2: a halt and a crash call for different actions
+# (release the kill switch versus fix the invocation), and `>= 2` catches both.
+EXIT_ERROR = 3
 
 
 @dataclass(frozen=True)
@@ -1241,6 +1257,11 @@ class CycleRun:
     exit_code: int = EXIT_OK
     score: float | None = None  # G3 candidate mean, when the behavioural gates ran
     incumbent_score: float | None = None
+    # Live model calls this turn's PROPOSER spent, whether or not it produced
+    # anything. Zero for every proposer that asks no model. It is not a gate
+    # cost and not a scoring cost — those are the corpus passes — it is the
+    # cost of asking for a candidate (ADR 0170).
+    proposer_calls: int = 0
 
 
 def cycle(
@@ -1313,17 +1334,28 @@ def cycle(
         path=agent_path,
         source=source,
     )
+    spend = _proposer_spend(proposer)
     if not proposals:
         # WHY it produced nothing, when the proposer can say. "produced
         # nothing from the available evidence" is true of a two-record store
         # below the recurrence threshold, of a lesson already in the prompt,
         # and of a proposer pointed at a file it cannot edit — three different
         # operator actions behind one sentence (ADR 0157).
+        #
+        # The spend note is appended to THIS line rather than added as its
+        # own, because `cmd_cycle` journals `lines[-1]` as the verdict when
+        # nothing was proposed (ADR 0165) — so a call spent on a discarded
+        # reply reaches `cycles.jsonl` instead of only the terminal.
         lines.append(
             "the proposer produced nothing from the available evidence"
             + _no_proposal_reason(proposer, evidence, agent_path, source)
+            + (f" [{spend}]" if spend else "")
         )
-        return CycleRun(harvested=harvested, lines=tuple(lines))
+        return CycleRun(
+            harvested=harvested,
+            lines=tuple(lines),
+            proposer_calls=_proposer_calls(proposer),
+        )
 
     proposal = proposals[0]  # at most one candidate per cycle, deliberately
     branch = f"loop/{proposal.id}"
@@ -1334,6 +1366,8 @@ def cycle(
     )
     if "[llm proposer fell back" in proposal.rationale:
         lines.append(proposal.rationale[proposal.rationale.index("[llm proposer fell back") :])
+    if spend:
+        lines.append(spend)
 
     run = gate(config, branch, now=now, workdir=workdir, proposal=proposal)
     lines.append(f"gated: {run.decision.disposition.value} — {run.decision.reason}")
@@ -1346,7 +1380,26 @@ def cycle(
         exit_code=run.exit_code,
         score=run.candidate_score,
         incumbent_score=run.incumbent_score,
+        proposer_calls=_proposer_calls(proposer),
     )
+
+
+def _proposer_spend(proposer: Any) -> str:
+    """What the proposer spent this turn, in one line, or "".
+
+    Read with `getattr` for the same reason `no_proposal_reason` is (ADR
+    0157): the two proposers that make no model call have nothing to report
+    and must not be made to grow a field to say so.
+    """
+    spend = getattr(proposer, "spend", None)
+    note = getattr(spend, "note", None)
+    return str(note()) if callable(note) else ""
+
+
+def _proposer_calls(proposer: Any) -> int:
+    spend = getattr(proposer, "spend", None)
+    calls = getattr(spend, "calls", 0)
+    return int(calls) if isinstance(calls, int) else 0
 
 
 def _no_proposal_reason(proposer: Any, evidence: Any, agent_path: str, source: str) -> str:

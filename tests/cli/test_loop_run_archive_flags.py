@@ -54,6 +54,11 @@ def _argv(repo: Path, tmp_path: Path, *extra: str) -> list[str]:
         "--turns",
         "1",
         *extra,
+        # ADR 0167: `run` now requires one of --memory / --no-memory, for the
+        # same reason `cycle` does — silence used to mean "no memory" and a
+        # loop that cannot propose exited 0. These tests are about the archive
+        # flags, so they say --no-memory unless they are handing it a store.
+        *(() if "--memory" in extra else ("--no-memory",)),
     ]
 
 

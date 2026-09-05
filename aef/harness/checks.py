@@ -322,6 +322,13 @@ class CheckReport:
     passed: int
     total: int
     failures: tuple[str, ...]  # one line per failed check, for the report
+    # The checks behind those lines, in the same order. `failures` is prose
+    # that names `check.value`, which is fine for a report an owner reads and
+    # is exactly what a producer of failure MEMORY must not copy (ADR 0174):
+    # a lesson carrying the check's own answer is teaching to the test. So the
+    # structured form is carried alongside the prose rather than parsed back
+    # out of it. Defaulted, so every existing construction still type-checks.
+    failed: tuple[TaskCheck, ...] = ()
 
     @property
     def fraction(self) -> float:
@@ -351,9 +358,25 @@ def _resolve(state: AEFState, path: str) -> Any:
     return node
 
 
+def resolve(final_state: AEFState, path: str) -> tuple[bool, Any]:
+    """`(the path resolved, the value)` — the public form of the walk
+    `evaluate_checks` uses.
+
+    Exists so a caller that needs the OBSERVED value without the owner's
+    expected one (`check_memory`, ADR 0174) reads it through the same walk the
+    scorer does. A second implementation of a dotted-path lookup is ADR 0091's
+    drift shape, and this one has already grown two behaviours worth sharing:
+    a list segment is an index, and a missing segment resolves rather than
+    raising.
+    """
+    value = _resolve(final_state, path)
+    return (False, None) if value is _MISSING else (True, value)
+
+
 def evaluate_checks(checks: Sequence[TaskCheck], final_state: AEFState) -> CheckReport:
     passed = 0
     failures: list[str] = []
+    failed: list[TaskCheck] = []
     for check in checks:
         actual = _resolve(final_state, check.path)
         ok = _holds(check, actual)
@@ -362,7 +385,10 @@ def evaluate_checks(checks: Sequence[TaskCheck], final_state: AEFState) -> Check
         else:
             shown = "<missing>" if actual is _MISSING else repr(actual)
             failures.append(f"{check.path} {check.op} {check.value!r}: got {shown}")
-    return CheckReport(passed=passed, total=len(checks), failures=tuple(failures))
+            failed.append(check)
+    return CheckReport(
+        passed=passed, total=len(checks), failures=tuple(failures), failed=tuple(failed)
+    )
 
 
 def _holds(check: TaskCheck, actual: Any) -> bool:

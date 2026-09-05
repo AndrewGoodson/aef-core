@@ -3264,6 +3264,626 @@ the mutation dropped.
 clean (132 files), `ruff check .` and `ruff format --check aef tests examples`
 clean. Zero live model calls.
 
+
+## Fix wave G1a — the unfixed twin, and the tree the baseline was of (ADR 0167)
+
+Ten findings from two seam hunts over M1 (0152), M3 (0154) and J0F (0165),
+plus three handed over by G1b. **Every one was reproduced by running a command
+on the parent commit before anything was edited**, and the real output is in
+the ADR with its exit code.
+
+**The one worth the wave.** ADR 0165 found this repo's nightly `aef loop
+cycle` exiting 0 having done nothing, argued at length that "a loop that has
+run 180 nights producing nothing leaves a ledger byte-identical to one nobody
+has started", and fixed it. It fixed one of the two commands that run a turn.
+`aef loop run` read the same flag through the same
+`FileMemoryStore(...) if args.memory else None` expression ninety lines below,
+had **no guard at all**, and journalled **nothing**:
+
+```
+$ aef loop run --repo <r> --state <s> --workdir <w> --turns 2 --budget-minutes 1
+    turn 1: no memory store configured: nothing to learn from, no candidate
+    stopped: turn 1 produced no candidate
+EXIT=0                       # five times
+
+--- contents of the state dir ---
+   (state dir does not exist)
+
+$ aef loop monitor --repo <r> --state <s>
+    cycles run: 0 (last never)
+    last PROPOSED: never
+```
+
+Exactly the ambiguity 0165 §2 says it removed, one subcommand over. So the
+regression test does not name the two commands: it **derives** them from
+`aef/cli/loop.py`'s AST — every `cmd_*` importing `cycle` or `run_loop`,
+mapped to its subcommand through its own `set_defaults` — and asserts the
+derived set equals the set it can invoke. A planted third turn-runner (M7) is
+caught by that assertion, so the class is closed rather than this instance.
+`run` journals **one attempt per TURN**: the alarm counts consecutive quiet
+attempts against a threshold of three, and ten quiet turns as one entry would
+need thirty turns to fire.
+
+And 0165's journal stopped at the happy path. `record_cycle_attempt` sat after
+`cmd_cycle`'s `try`, so with the kill switch engaged the command printed
+`HALTED:`, exited 2, and `cycles.jsonl` **did not exist**. It is in a
+`finally` now, each branch naming its exception.
+
+**The permanent red.** Preflight obligation 2 was unmeetable on every graph
+`aef migrate` writes for a prompt agent — `loop doctor` printed
+`a reflect node exists but nothing routes to it` and exit 1 while executing
+that same module gave the trace `['prompt_agent', 'reflect', 'consolidate']`.
+The detector wanted a three-argument node function; M1's generated module has
+none, only `make_prompt_agent_node(route="reflect")`. Both shapes count now,
+and `test_the_real_migrate_output_passes_the_real_preflight` runs the real
+migrate into the real preflight — the C↔D join where the defect lived.
+
+**The baseline that was of another tree.** `bless --agent-root .claude/agents`
+wrote an `entry.json` with no `agent_root` anywhere, and the next cycle at the
+default root was rejected with `cumulative drift: 1.000` — G5 unioning two
+disjoint key sets, two rejections from a halt. `ArchiveEntry.agent_root` is
+additive and `""` is deliberately NOT a mismatch, so no pre-existing baseline
+is retroactively failed. And `--agent-root` non-default with `--agent-path`
+left at `DEFAULT_AGENT_PATH` — Zone C under the widened root — is refused by
+`bless`/`cycle`/`run`/`doctor`, naming both paths and the per-agent path
+migrate actually wrote.
+
+**Two exit codes that meant the same thing.** `main.py`'s catch-all returns 1
+for any exception and `EXIT_REJECTED` is also 1, so the rendered nightly
+workflow's `status >= 2` rule stayed green on a bad config, an import error,
+or the `agents.migrated.graph` placeholder whose `build_graph()` raises
+`NotImplementedError` — and the exception escaped before the journal, so
+neither alarm could see those nights. `EXIT_ERROR = 3`, journalled with the
+exception's name, `main.py` untouched, and the workflow's rule READ from
+`adopt_loop.py` rather than assumed.
+
+**Two more, from the enumerating shape.** Four of the nine subcommands taking
+`--repo` and `--state` accepted a state directory inside the repo that `cycle`
+refuses — `bless` printed `blessed ... as baseline v1` and left `archive/` and
+`ledger.jsonl` in the working tree. And the digest reported S5's containment
+fallback (no Docker, or `containment: off`) to the owner every Monday as
+`**A proposal reached for the harness**`.
+
+**The state-dir test caught a defect this wave introduced.** Its second
+assertion is that nothing is *created* — and the first version of the journal
+fix wrote `cycles.jsonl` into the very directory it had just refused. Putting
+the check in `_config`, which runs before the try block, is what makes the
+ordering right.
+
+**Handed over by G1b and folded in.** Obligation 6 checked ONE path and passed
+on the call-site stub that makes no model call while eight generated graphs
+went unopened — the same false pass 0168 fixed in `aef doctor`, closed here
+with 0168's own `discover_graph_files` rather than a second answer.
+`ArchiveError` from a hand-typed `--graph-id ../x` came back as exit 1, i.e.
+as a rejection (reproduced as exit 1, **not** as the traceback the report
+predicted — `main()`'s catch-all swallows it, which is the whole problem). And
+the loop's five `--module` help strings still said "importable module" after
+0168 made the file-path form work, which is the form a widened `--agent-root`
+needs; the help and the behaviour are now asserted together.
+
+Sixteen mutations, sixteen caught, every restore verified byte-identical by
+SHA-256, plus the real generated module regenerated and edited to `route=END`.
+
+**Still open, stated rather than implied.** Nothing retroactively repairs a
+baseline already blessed without a root, and whether any exists in the wild is
+not measured. One of `cmd_cycle`'s three named exception paths is reproduced
+end to end at the CLI; the other two are reachable through the CLI only behind
+a blessed baseline inside its drift budget and a corpus recorded from the
+matching graph, so they are exercised by injecting at the `aef.harness.loop.
+cycle` collaborator boundary — never by mocking `cmd_cycle`. Nothing here
+makes any scheduled loop more likely to propose anything; what changes is that
+a loop producing nothing now says so from both of the commands that could.
+
+Green bar: `pytest -q` 2396 passed, 6 skipped · `mypy aef examples` clean ·
+`ruff check .` clean · `ruff format --check` clean · **0 model calls.**
+
+---
+
+## S3b — a corpus that can tell two judges apart (ADR 0171)
+
+**Branch:** `upgrade/s3b-content-negatives`, off `2a201f1` (D2's ReDoS fix).
+**Rubric claim:** dimension 3, +1. Total before: 69.
+**Model:** `claude-opus-5[1m]`, the harness session's default, for both the
+recordings and the judge — the recording config passes `model: ""` so no
+`--model` reaches the CLI, and `run_i14.py` is invoked without one.
+
+**Reproduce (RUN, before any change).** `aef loop score
+agents.summary.graph:build_graph --corpus corpus --splits train,validation
+--json`: train 0.9792, validation 0.9167, and `attribution` naming exactly
+three failures — `sum-07 contains 'volunteers'` against "Volunteers restored
+Ashcombe…", `sum-14 contains 'swimming'` against "Swimming will be
+permitted…", `sum-16 contains 'landslip'` against "Landslip after heavy
+rain…". All three summaries mention the term. These were the corpus's only
+negatives, and ADR 0159 had already measured what that means: the split is
+15/18 pass, so a judge answering "pass" to everything scores 15/18, the LLM
+judge scored exactly 15/18, and the AUC was 0.322.
+
+**Expectation, pre-registered before any judge call** (`prereg-v2.txt`):
+dimension 3 moves 6 → 7 only if (1) the corpus ends with ≥ 6 scenarios whose
+recorded answer fails an owner check, ≥ 2 in validation, (2) the LLM judge's
+AUC on the enriched validation split is ≥ 0.70, and (3) the position delta
+stays ≤ 0.20. Stated in advance because it changes how a 0.5 should be read:
+`LLMJudge` is asked for a "quality" score and nothing tells it to count words,
+so an AUC near 0.5 would have been evidence that the judge does not measure
+what the owner's checks measure — a more useful finding than ADR 0159's, and
+still +0.
+
+**Measurement.**
+
+*Hygiene.* The three case defects became `regex` with an inline `(?i)` — the
+transformation `run_i14.py`'s own `_case_insensitive` oracle already applied,
+made permanent, because `checks.py` has no case-insensitive op and `aef/` was
+not this worker's. train 0.9792 → 1.0000, validation 0.9167 → 1.0000,
+`attribution` empty: **20/20 pass and no negatives at all**, exactly as ADR
+0159 predicted. The 20 word caps then moved to `max_words` + `min_words: 1`;
+both of ADR 0166's objections are discharged rather than dodged (`min_words:
+1` restores the predicate exactly; the 0.75 → 0.80 move it was protecting no
+longer exists), and `loop score --json` before and after is identical byte for
+byte. The scale did move — a score is `k/5` now, not `k/4` — and that is fine:
+checks are the owner's data, the cassettes are untouched, and
+`test_rubric_arithmetic` reads the rubric rather than the corpus.
+
+*The unplanned find.* The new test asserting "no case-sensitive `contains` on
+a summary" went red on **57 more checks in 20 files** — `Kestrel`, `otters`,
+`copper`, `planning`, `1874` — every one passing today only because the model
+happened not to open a sentence with it. All 57 corrected; score identical
+before and after.
+
+*Negatives.* 19 scenarios recorded live — `sum-21`…`sum-28` via `aef loop
+bootstrap` (train only, by rule), `sum-29`…`sum-39` via `aef loop record
+--split validation`, **checks written before every run**. **7 fail an owner
+check**, 3 in train and 4 in validation. All 7 fail `max_words`, by one to
+three words. Every content trap — negation, superseded figure, similar names,
+a dropped unit, conditionality, direction-of-change — was handled correctly,
+and the three apparent content failures were my checks written too narrowly
+(`not overloaded` vs "no overloading"; `divers` vs "diverted"; `3.1 million`
+vs "£3.1m"), each widened before anything was called a negative. On this task,
+at this cap range, this agent's one reproducible failure is length.
+
+*The A/B, re-run on the enriched validation split, 34 calls, same script.*
+Rule-based 4/17 and constant-fail. **LLM 16/17, against a 13/17 constant
+baseline, AUC 1.000** — every owner-fail state 0.275–0.635, every owner-pass
+state 0.850–0.910, margin 0.215, and the failures ordered by the size of the
+overrun (1 word → 0.635, 2 → 0.375/0.325, 3 → 0.275). Agreement by threshold
+13/16/16/16/17 across 0.25–0.75, so the headline does not rest on one cut.
+Position delta max **0.17**, and the maximum is the one-word overrun, the
+single state the judge gets wrong at 0.5 — least stable where least certain.
+The second oracle now rewrites nothing and reports identical numbers, because
+the defect it existed to route around is gone from the data.
+
+**Verdict: +1, dimension 3 6 → 7, total 69 → 70.** All three pre-registered
+conditions fired. Not +2: J0's third gap for this row — a self-preference
+control — is untouched and is S6's, and AUC 1.000 is perfect separation of
+**one failure family with n = 4**, so what is shown is that this judge detects
+word-cap overruns, not that it detects failure. The row's "Remaining" says so.
+
+**Reported, not fixed.** `answering_model`'s rule 3 misattributed one call of
+34 to `claude-haiku-4-5-20251001` — ADR 0159's defect 1, reproducing at the
+same rate. `aef loop bootstrap` printed "0 of 8 recorded run(s) failed" on a
+batch that produced three content negatives, because its failure notion is the
+outcome class and none of the runs raised; the message it then prints is the
+one about a corpus where everything passes demonstrating nothing, which is
+misleading at exactly the moment an adopter is judging their inputs.
+`tests/harness/test_cassette_replay.py` had the corpus's size pinned as
+`n == 12 and n == 6` inside a test about live calls; fixed here, since it is a
+test file and it blocked the bar.
+
+**Green bar.** `pytest -q` 2251 passed / 5 skipped (from 2178); `mypy aef
+examples` clean on 132 files; `ruff check .` clean; `ruff format --check` 257
+files formatted. 5 mutations against the new test, 5 caught, every restore
+proved by sha256. 54 live calls of 70.
+
+
+## M4c — the gates could not judge a prompt (ADR 0170)
+
+ADR 0157 shipped a proposer that writes a prompt candidate and stated its own
+limit: **the gates could reject one and never accept one.** Three defects, all
+reproduced offline by running before anything was changed, **zero live model
+calls**.
+
+**D1 — two gates, one scratch directory.** `g1_builds.py:49` and
+`g2_outcome.py:111` both named `ctx.workdir / "workspace"`;
+`trust._prepare_empty_destination` refuses a non-empty destination. Every
+candidate that reached G2 without a precomputed cohort — which was every prompt
+candidate, since the cohort could not be built for one — was rejected by a gate
+that never judged it:
+
+```
+G1 pass  1 build command(s) succeeded against the merged workspace
+G2 fail  gate raised TrustBoundaryError: scratch destination …/work/workspace
+         must be empty. A gate that could not judge has not cleared this candidate.
+```
+
+Not prose-specific: two gates and a directory name. ADR 0148 met this message
+and reasonably read it as a red herring. Fixed with a directory per gate —
+**not** by having G2 reuse G1's tree, because G1 has just run build commands in
+its copy and the emptiness rule is what guarantees a gate runs against base-ref
++ Zone A overlay and nothing else. The regression test asserts the property,
+not the name: a build command that writes `artefact.txt` leaves it in
+`workspace-G1` and not in `workspace-G2`.
+
+**D2 — no null hypothesis for prose.** `ControlCohortGenerator` mutates
+module-level numeric constants; a `.md` has none, so `CohortBuilder` raised and
+G3 refused. This is **ADR 0139's requirement 2 arriving from a third
+direction** — 0139 measured it on the proposer, ADR 0148 re-measured it as the
+cohort's, and here it is the cohort's again and finally answered.
+`ProseControlCohortGenerator` builds the real null: N placebo bullets in the
+same section at the same insertion point, **matched to the treatment's token
+count**, drawn from a task-neutral vocabulary, seeded from `cohort_seed` and
+the candidate's SHA-256 so the threshold can be re-derived. A member is the
+candidate with the bullet's *text* substituted, so the only variable between
+the arms is the words.
+
+Three alternatives argued and rejected: another graph's lesson (it *was*
+reasoned about, so it is not what "changes that were not reasoned about"
+score); the word-shuffle (it preserves every content word, and ADR 0157 showed
+the active ingredient is a literal token — that is the leak shape, not a
+control); deleting the bullet (the incumbent, zero variance, p95 collapses onto
+it and "beats the cohort" degenerates into "beats the incumbent").
+`ProseCohortLeakError` refuses any placebo sharing a content word with the
+treatment — the mutation the brief named kills 13 tests.
+
+**Stated rather than discovered**: the placebo controls for a bullet's
+presence, shape, position and length, **not for the plausibility of its
+content**. A plausible-but-wrong null needs a model, and `gates/base.py`
+requires every gate to be deterministic — so that stronger control is forbidden
+by the gate contract, not merely unbuilt.
+
+**D3 (0157's defect 5) — a spent call nobody counted.** `--proposer llm`
+against a `.md` spends one call, the reply fails `ast.parse`, the rule-based
+fallback has no constant to edit, and the rejection vanished with the rationale
+it lived in. Not in the summary, not in the ledger (a cycle that proposes
+nothing writes none), not in `cycles.jsonl`. `ProposerSpend` counts **attempts**
+— incremented before the provider returns, because a request that errors after
+it left has still been spent — and the note is appended to the line
+`cmd_cycle` journals, so it reaches `cycles.jsonl` with `aef/cli/` untouched.
+
+**Both verdicts, offline.** `tests/harness/test_prose_gate_path.py` runs the
+real six-gate pipeline on a prompt-file repo with cassettes:
+
+```
+G3 pass  candidate mean 1 beats the control cohort's p95 of 0.5
+         → escalate — every gate passed, but Tier-1 auto-merge is not enabled
+```
+
+and, on a fixture identical except that the **placebos** also produce the
+verdict line:
+
+```
+G3 fail  candidate does not beat the p95 of the random control cohort — this is
+         the null hypothesis, not an improvement
+         → reject
+```
+
+The second is the one that matters: a test demanding acceptance can be met by
+weakening G3, and this one can only be met by G3 still binding. **No threshold,
+no accept/reject rule, no `PolicyEngine`, and no existing test changed** — the
+one existing test that a refactor would have broken was kept green by keeping
+the materialisation loop in one place instead, which is what it exists to
+enforce.
+
+**Mutations: 11 perturbed, 11 killed**, each restored from a shasum-verified
+byte backup with the final hash asserted equal to the pre-edit hash.
+
+**Green bar.** `pytest -q` **2236 passed, 5 skipped**; collected **2205 → 2241
+(+36, none removed)**. `mypy aef examples` clean, 133 files. `ruff check .`
+clean. `ruff format --check aef tests examples` clean, 259 files.
+
+**No rubric score moves.** What would earn a dimension-2 point is an accept
+verdict on a prompt candidate scored **live**, against S2's noise floor (0.7639
+± 0.1666) — M5's and M6's evidence, not this worker's. The fixtures here are
+plumbing proofs and their own docstring says so.
+
+## Fix wave H1 — the bytes, the marker, and the nightly green tick (ADR 0172)
+
+Five findings of the second seam hunt, all in `aef adopt` and the workflow it
+renders. Four reproduced by RUNNING a command before anything was changed; the
+fifth is a property of a string in YAML for a scheduler this branch cannot run,
+and is labelled that way rather than dressed up as a measurement.
+
+**R1 — ADR 0153's whole argument held for LF only.** That ADR's justification
+for appending inside markers is one sentence: *every pre-existing byte survives
+verbatim*. `Path.read_text()` translates `\r\n` to `\n`; `apply_block` was
+byte-exact on the TRANSLATED text; `Path.write_text()` wrote it back with
+`os.linesep`. On a CRLF `AGENTS.md`:
+
+```
+$ aef adopt --dir r1
+appended aef block to .../r1/AGENTS.md (your bytes outside it are unchanged)
+$ git -C r1 diff --stat -- AGENTS.md
+ 1 file changed, 41 insertions(+), 5 deletions(-)
+-# House rules^M
+-Our agents read this file.^M          # every original line, as a deletion
+```
+
+Five deletions and a report saying nothing outside the block moved. The mirror
+is on Windows, where `write_text` would make every file this scaffold *writes*
+CRLF while its own tests compare against LF. Fixed by reading and writing
+bytes, rendering only the ADDED bytes in the file's dominant line ending, and
+pasting the outside slices back verbatim — so a **mixed** file keeps every line
+exactly as its author left it. The claim is now executable:
+`_verify_preserved(prefix, suffix, result)` runs before every write and the
+write is refused if it fails. After: `36 insertions(+)`, zero deletions,
+original bytes at offset 0.
+
+**R2 — a balanced marker pair in the adopter's own prose made adopt delete the
+text between it.** `apply_block` took the first `<!-- aef:begin -->` and the
+next `<!-- aef:end -->` anywhere in the file. This kit teaches those exact
+strings in four generated documents, so an adopter quoting them is the ordinary
+case. A `CLAUDE.md` quoting both with two house rules between them:
+
+```
+$ grep -c "RULE 7" r2/CLAUDE.md     # before: 1
+$ aef adopt --dir r2
+appended aef block to .../r2/CLAUDE.md (your bytes outside it are unchanged)
+$ grep -c "RULE 7" r2/CLAUDE.md     # after: 0
+```
+
+ADR 0153's three refusals cover the *unbalanced* shapes. The balanced pair
+adopt did not author was the missing fourth, and the only destructive one. The
+begin marker now carries a signature — `<!-- aef:begin sha256=1a2b3c4d5e6f7081 -->`,
+16 hex over the block body — and **only a signed pair is adopt's**; every other
+`aef:begin`/`aef:end` is inert prose. A pre-signature block is upgraded ONCE
+with a printed checklist notice, recognised only when its first body line is
+one adopt itself emits: treating it as prose would leave the stale block and
+append a second, and two contradicting copies of the contract in the file the
+repo's agents read is the worse failure.
+
+**R3 — the rendered nightly workflow read every exception as a healthy
+rejection.** `aef migrate` writes the placeholder `agents/migrated/graph.py`
+whenever it finds no wrappable call site — every prompt-file repo, which is
+every repo in the survey — and its `build_graph()` raises. The workflow's
+`AEF_MODULE` defaulted to it, so the module the job names exists and cannot
+build:
+
+```
+$ aef loop cycle ... --module agents.migrated.graph ...
+error: aef migrate found no wrappable call site in this repo.
+EXIT=1
+```
+
+1 is `EXIT_REJECTED`; the step fails only on `status >= 2`. Green job, nothing
+proposed, and nothing in `cycles.jsonl` for ADR 0165's staleness warning to
+count. **ADR 0153's "the job fails visibly" was false**, and both errata are
+appended there. Fixed twice over: the workflow names the first migrated
+prompt-agent module (derived from migrate's own discovery and sanitiser, never
+the placeholder), and a guard step before the cycle imports the module, calls
+`build_graph()`, and fails the job with the actual exception in
+`$GITHUB_STEP_SUMMARY` — not migrate's call-site sentence, which explains why
+the placeholder exists and not why tonight failed. The guard was extracted from
+the rendered YAML and EXECUTED in three states: missing module (exit 1),
+placeholder named by name (exit 1), real graph after `aef migrate` (exit 0).
+The exit-code test reads `aef/harness/loop.py`'s constants at test time, so it
+is sharp whether or not G1a's distinct `EXIT_ERROR` has landed.
+
+**R4 — adopt counted prompt agents flat while migrate recurses.** ADR 0152
+measured `rglob` against the Claude Code CLI. `detect_prompt_surface` globbed
+one level. One nested persona:
+
+```
+detected framework: prompt_files (7 agents, 5 skills)     # and in the checklist,
+                                                          # and in the appended block
+$ aef migrate --dir r4 && ls r4/agents/migrated/ | wc -l   # 8 graphs + placeholder
+```
+
+Adopt imports `discover_prompt_agents`/`discover_skills` from migrate now, with
+its own-output exclusion applied on top. One discovery, one number.
+
+**S1 (reasoned, NOT executed) — the nightly cycle's state was frozen after run
+1.** `actions/cache` skips its post-job save on an exact key hit, and
+`key: loop-state-${{ github.repository }}` contains nothing that varies. Both
+rendered workflows now use a run-scoped key with a prefix `restore-keys`.
+
+Also: `render_aef_yaml` finally mentions `shadow.containment` — the mode
+defaults to `auto`, and `auto` *refuses* rather than downgrading, which is a
+default an adopter should not have to meet as an error message.
+
+**Reported, NOT fixed** (neither file is this worker's):
+
+1. `discover_skills` counts the `SKILL.md` that `aef adopt` itself writes — 5
+   from adopt against 6 from migrate on the same tree. `aef/cli/migrate.py`;
+   the exclusion adopt applies should be mirrored there.
+2. This repo's own `.github/workflows/loop-monitor.yml` **and**
+   `loop-gate.yml` carry the same constant `loop-state-${{ github.repository }}`
+   cache key S1 fixes in the rendered ones. G1a owns those files.
+
+**Mutations:** 11 planted, 11 caught, every restore sha256-verified and every
+patch asserting its anchor first. M10 (the cycle summary loses its exit-code
+meanings) **survived the first pass**, because the test asserted every arm
+except exit 0 — the arm the nightly job is actually green on. The test now
+parses all four arms out of the rendered shell `case` and requires each to be
+non-empty and correct.
+
+**Green bar:** 2291 passed / 5 skipped (2269 → 2296 collected, +27),
+`mypy aef examples` clean over 132 files, `ruff check .` clean,
+`ruff format --check aef tests examples` clean. Zero live model calls.
+
+## M4b — a failed check is what the run did (ADR 0174)
+
+The wire M4 and S1 hit from opposite sides on the same night, and which ADR
+0157's "Undone" says nobody owned. Model: `claude-opus-5[1m]`. **3 live calls**
+(budget 8). **No rubric dimension moves.**
+
+### Both reproductions, RUN, before anything changed
+
+M4's, on a copy of the marlin clone, offline (a stub provider replaying the
+answers M4's live bootstrap recorded — byte-identical replies, zero quota):
+
+```
+recorded 2 scenario(s) in the train split
+  passed  accela-preconditions
+  passed  accela-missing-credentials
+0 of 2 recorded run(s) failed. A corpus where everything passes cannot
+demonstrate an improvement …
+
+accela-preconditions       -> success | no failure signals: 0 error(s) recorded, 0 tool call(s), none failed
+accela-missing-credentials -> success | no failure signals: 0 error(s) recorded, 0 tool call(s), none failed
+```
+
+— while the scorer, from the same cassette, says
+`0.0000 accela-missing-credentials / check failed: working_memory.prompt_agent
+contains 'VERDICT:'` — and the cycle says
+`no admissible failure memory: no candidate this cycle`.
+
+S1's, the six summary validation scenarios through the real
+`retrieve → draft → reflect → consolidate` graph with one durable store:
+
+```
+memory: 6 success record(s), 0 failure record(s)   (six unique signatures)
+CONSOLIDATED: 0 knowledge entr(ies)
+```
+
+**and two of those six FAIL an owner check** (`sum-14` wants `swimming` and got
+`Swimming`; `sum-16` wants `landslip` and got `Landslip`). One cause:
+`make_reflect_node` writes `kind="failure"` only from `state.errors` /
+`state.tool_results`, and a check is the task metric the harness evaluates
+afterwards (ADR 0113).
+
+### The producer
+
+`aef/harness/check_memory.py`. When a run raised nothing and an owner check
+failed, it runs the **real** `Critic`/`Judge` over that state with the check
+failures as evidence and writes one `kind="failure"` record in
+`make_reflect_node`'s own content shape.
+
+**Design (a) — a LOCAL derived state — and (b) rejected by measurement.**
+Injecting the failures into the run's real `state.errors` instead:
+
+```
+  as run:    task_completion=0.7500  checks=3/4
+  injected:  task_completion=0.0000  checks=3/4
+  classify().passed  as run=True  injected=False
+```
+
+`score_scenario` stops counting the check fraction the moment errors exist, so
+the score falls to zero *because* the checks failed — a metric that changes
+when you measure it — and `classify` reports a wrong answer as a crash.
+
+**The signature drops the expected value** (`check:<path>:<op>`), and that is
+load-bearing twice. Recurrence, measured:
+
+| corpus | shipped (`path:op`) | value-keyed |
+|---|---|---|
+| summary validation split (S1's) | **1 entry** | **0** |
+| marlin pilot (M4's) | **1 entry** | 1 |
+
+and leakage: the signature is a prompt surface (`render_retrieved_context`'s
+`[label]`, the proposer's `<!-- aef sig=… -->`).
+
+**Teaching to the test.** The rendering never reads `check.value`:
+
+```
+check failed: working_memory.prompt_agent does not contain a required substring
+the owner declared; observed 406 words, 2836 chars: '**No. The Accela connector…'
+```
+
+where ADR 0157's bullet said ``contains 'VERDICT:'``. Uniform across all six
+ops — a `max_words` failure gives the observed word count and never the cap.
+**What it still leaks, named rather than claimed away:** the state path, the
+operator (for an `equals` check on a binary field that leaks the answer
+completely), the observed value, and the pass/fail counts. The defensible claim
+is only that a lesson can no longer be satisfied by pasting a string out of it.
+
+### The falsification, stated first, did not fire
+
+`BootstrapInput`'s own docstring already distinguishes `expected` — *"a
+judgement about what the run turned out to do"*, refused by name — from
+`checks` — *"a specification of the task written before the run"*. The check is
+the owner's and predates the run; the observed value is the run's. ADR 0145's
+"a graph with no reflect node leaves an empty sink" is narrowed **in writing,
+with a test**; ADR 0060 is untouched, and with no checks declared bootstrap
+still authors nothing at all.
+
+One call site (`bootstrap`); two refusals with reasons already in the code —
+`score`/`run_scenario` by its own invariant that a gate run must not mutate the
+evidence a later proposal is built from, and `run --record-runs`/`harvest`
+because a production run carries no owner check and `RecordedRun` has no field
+for one.
+
+### End to end
+
+```
+0 of 2 recorded run(s) raised, and 1 FAILED AN OWNER CHECK …
+  1 of them is/are a check-derived FAILURE record …
+CONSOLIDATED 1 entr(ies)
+  failure:check:working_memory.prompt_agent:contains | runs=2
+    ['accela-missing-credentials', 'accela-pinellas']
+
+  proposed cycle-20260905T032809-prompt … (proposer=rule_based_prompt)
+  G0 pass · G1 pass · G4 pass · G5 pass (drift 0.007/0.500) · G2 fail (TrustBoundaryError)
+```
+
+G2's failure there is ADR 0157's defect 1 — **fixed on `main` by M4c (ADR
+0170) mid-increment**. Re-run on the merged code, the gates build a prose
+control cohort and execute **21 scenarios** (`1 candidate + 1 incumbent + 5
+random control(s)`), and G2 rejects for a different reason: `3
+previously-passing scenario(s) no longer pass`. Confirmed at zero live cost —
+incumbent `3 cassette hit(s), 0 miss(es)` mean 0.3333, candidate `0 hits, 3
+misses` mean 0.0000. That is precisely the artifact UPGRADE_LOOP's own rule
+names ("never let a cassette miss score a changed prompt as 0 and call that a
+rejection"); the correct invocation is `--cassette-miss live`, 21 live
+executions, beyond the 5 calls left in budget — so **no live gate verdict is
+claimed**. `grep -c VERDICT memory.jsonl → 0`.
+
+**Live, 3 calls**: preflight (`is_error False`, `input_tokens 2`,
+`claude-opus-5[1m]`) plus two bootstrap recordings against
+`model_provider.impl: claude_code` — two real objectives, two runs failing one
+check, one entry, the same candidate, the same gate verdicts. **Nothing
+synthesised**, which retires ADR 0157's `make_evidence.py`.
+
+**S1's side**: the same six scenarios now give 2 failure records under one
+signature → 1 entry → the lesson appears in the next run's draft prompt, where
+every bullet previously read *"no failure signals"*.
+
+**Re-run on S3b's corpus** (ADR 0171, merged from `main` mid-increment): 17
+summary validation scenarios, **four content negatives**, and before the
+producer `17 success record(s), 0 failure record(s)` — seventeen unique
+signatures, `CONSOLIDATED: 0 knowledge entr(ies)`. With it: 4 failure records
+under one signature `failure:check:working_memory.summary:max_words`, **1 entry
+across 4 distinct runs**. Two unflattering observations recorded with it: on
+this corpus the cap is *in the objective* ("summarise … in at most 28 words"),
+so redacting `max_words`' value buys nothing here even though the record's own
+text is clean; and the lesson is **retrieved and does not reach the model** —
+chunk 14 of 24, score 0.125, while `render_retrieved_context(max_items=5)`
+shows five `no failure signals` successes.
+
+**`aef loop bootstrap` now counts a wrong answer as a failure.** S3b
+reproduced the old line — eight inputs, three content negatives, `0 of 8
+recorded run(s) failed. A corpus where everything passes cannot demonstrate an
+improvement`. One count now, same definition the producer uses, split into its
+halves: `2 of 3 recorded run(s) FAILED: 1 raised or ended with a failed plan, 1
+failed an owner check`, with per-scenario `FAILED` / `WRONG` / `passed`.
+
+### Mutations, green bar, and what is not claimed
+
+6 mutations, 6 kills, every restore sha256-verified against a pre-edit hash
+(never `git checkout --`). The headline one: drop the producer from
+`bootstrap`, re-run the whole pilot → `no admissible failure memory: no
+candidate this cycle`.
+
+`pytest -q`: **2482 passed, 6 skipped**; collected 2438 → **2488 (+50, none
+removed)** after two `origin/main` merges (2262 → 2305 on the pre-merge base).
+`mypy aef examples` clean (134 files), `ruff check .` clean, `ruff format
+--check` clean (270 files). S1's golden is green.
+
+**No rubric change.** No task score was measured; the artifact is a capability
+that was absent and is now present. S1's four arms are runnable as a real
+comparison for the first time, and what they need is a corpus whose failures
+recur — **S3b is building it tonight**. Re-running (a)/(b)/(c)/(d) against that
+corpus is the measurement that could move dimension 2, not this increment.
+
+**Defects found outside this worker's files.** `knowledge_boost = 0.0` hides
+the only lesson there is, and now has a counter-example: over S3b's split the
+single check-derived entry ranks **14 of 24** at the default and **3 of 24** at
+0.5, so it survives `render_retrieved_context`'s top-5 only when boosted — ADR
+0110 swept 0/0.5/1/3 and found no change, on a corpus that could not produce
+seventeen near-identical successes crowding one lesson. Also: `aef loop cycle` silently drops
+all evidence without `--graph-id` (`2 record(s) dropped as another graph's
+scenario`) though the graph id is in the corpus it already loaded; ADR 0157's
+G2/G3 defects reproduce unchanged; `loop score` wants `module:factory` where
+`loop bootstrap` wants `module`; and a copied corpus's stale `manifest.json`
+makes the next cycle refuse with `corpus shrank`, with no command to reconcile
+it.
 ## S4 / J2 — the archive is real and persistent, and has not yet bought anything (ADR 0160)
 
 Worker S4 of `UPGRADE_LOOP.md` (= BEYOND_90's J2), on `claude-opus-5`
@@ -3359,8 +3979,8 @@ which sampling still buys nothing; this one cannot be that run.
 7 mutations, 7 caught, every restore sha256-verified. Rig, raw `results.jsonl`,
 `--dry-run` output, report and preflight committed under `docs/research/j2/`.
 
-**Rubric: dim 6 5 → 6**, heading 69 → 70; `tests/test_rubric_arithmetic.py`
-recomputes it.
+**Rubric: dim 6 5 → 6**; `tests/test_rubric_arithmetic.py` recomputes the
+heading, which lands at 71 after this row merged alongside S3b's dim-3 row.
 
 **Reported, not fixed** (outside this worker's files): `aef loop run` prints
 no cassette hit/miss count, so "scored live" and "replayed" are
