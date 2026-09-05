@@ -41,7 +41,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.aef-loop-state
-          key: loop-state-${{ github.repository }}
+          # Run-scoped: actions/cache skips the post-job save on an exact hit,
+          # so a constant key froze this state after the first run (ADR 0172).
+          key: loop-state-${{ github.repository }}-${{ github.run_id }}
+          restore-keys: |
+            loop-state-${{ github.repository }}-
 
       # Rollback-by-default: an ambiguous window reverts rather than waiting
       # for more data. Exit 2 means the loop halted — a change every gate

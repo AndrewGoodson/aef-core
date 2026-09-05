@@ -1569,7 +1569,9 @@ def test_the_rendered_cycle_reads_as_a_healthy_rejection_and_the_guard_is_what_s
         "--repo",
         str(tmp_path),
         "--state",
-        str(tmp_path / "state"),
+        # Outside the repo: G1a made every --state subcommand refuse an in-repo
+        # state dir (ADR 0167), and this test met that refusal before its own.
+        str(tmp_path.parent / f"{tmp_path.name}-state"),
         "--workdir",
         str(tmp_path / "work"),
         "--module",
