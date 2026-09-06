@@ -475,9 +475,7 @@ def probe(workroot: Path) -> None:
                     "--corpus",
                     "corpus",
                     "--splits",
-                    "train",
-                    "--splits",
-                    "validation",
+                    "train,validation",
                     "--json",
                 ],
                 cwd=repo_dir,
@@ -569,11 +567,7 @@ def report(out: Path) -> None:
             + f" {reached:>14d} {sum(r['calls_total'] for r in rows):>5d}"
         )
 
-    stones = [
-        (r["arm"], r["seed"], s)
-        for r in summaries
-        for s in r["lineage"]["stepping_stones"]
-    ]
+    stones = [(r["arm"], r["seed"], s) for r in summaries for s in r["lineage"]["stepping_stones"]]
     print(f"\nKEPT MEMBERS DESCENDING FROM A REJECTED ONE: {len(stones)}")
     for arm, seed, stone in stones:
         print(
@@ -598,9 +592,11 @@ def dry_run(seeds: int, turns: int) -> None:
     print("J2c — a staircase the proposer can climb. DRY RUN; nothing spends a call.\n")
     print(f"agent        : {AGENT_PATH}  entrypoint {ENTRYPOINT}")
     print(f"graph id     : {GRAPH_ID}")
-    print(f"corpus       : {CORPUS_DIR.relative_to(REPO_ROOT)} "
-          f"({len(SCENARIOS)} scenarios, this worker's own copy)")
-    print(f"proposer     : rule_based (offline, deterministic, 0 calls)")
+    print(
+        f"corpus       : {CORPUS_DIR.relative_to(REPO_ROOT)} "
+        f"({len(SCENARIOS)} scenarios, this worker's own copy)"
+    )
+    print("proposer     : rule_based (offline, deterministic, 0 calls)")
     print(f"arms         : {', '.join(ARMS)} — identical but for `sample_parents`")
     print(f"seeds        : 0..{seeds - 1}, every one reported")
     print(f"turns per arm: {turns}")
@@ -624,6 +620,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--arms", action="store_true")
     parser.add_argument("--report", action="store_true")
     parser.add_argument("--verify", action="store_true")
+    parser.add_argument("--arm", choices=ARMS, default=None, help="one arm; default both")
+    parser.add_argument("--seed-start", type=int, default=0)
     parser.add_argument("--seeds", type=int, default=8)
     parser.add_argument("--turns", type=int, default=6)
     parser.add_argument("--budget-seconds", type=float, default=1800.0)
@@ -642,8 +640,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.dry_run:
         dry_run(args.seeds, args.turns)
     elif args.arms:
-        for arm in ARMS:
-            for seed in range(args.seeds):
+        for arm in ARMS if args.arm is None else (args.arm,):
+            for seed in range(args.seed_start, args.seed_start + args.seeds):
                 started = time.monotonic()
                 result = run_arm(
                     arm,

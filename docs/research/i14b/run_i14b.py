@@ -360,10 +360,11 @@ def write_hardset() -> None:
         f"{'case':38s} {'fam':19s} {'own':4s} {'chk':7s} {'words/cap':>10s}",
     )
     for case in cases:
+        checks = f"{case['inherited_checks_passed']}/{case['inherited_checks_total']}"
         print(
             f"{case['case_id']:38s} {case['family']:19s} "
             f"{'PASS' if case['owner_pass'] else 'FAIL':4s} "
-            f"{str(case['inherited_checks_passed']) + '/' + str(case['inherited_checks_total']):7s} "
+            f"{checks:7s} "
             f"{str(case['words']) + '/' + str(case['cap']):>10s}"
         )
     owner_fail = sum(1 for c in cases if not c["owner_pass"])
@@ -531,7 +532,9 @@ def guard_demo() -> int:
         result = f"SelfRankingError: {exc}"
     spent = len(provider.drain())
     made += spent
-    out["cases"].append({"when": "empty model (this repo's default)", "calls": spent, "result": result})
+    out["cases"].append(
+        {"when": "empty model (this repo's default)", "calls": spent, "result": result}
+    )
     print(f"empty model     calls={spent}  {result[:120]}")
 
     with CHOICES.open("a", encoding="utf-8") as handle:
@@ -591,8 +594,10 @@ def report() -> None:
     }
 
     print("I14b — a fair test for the judge (ADR 0202)\n")
-    print(f"hard set: {n} cases, {sum(1 for c in cases if not c['owner_pass'])} owner-fail, "
-          f"{len(EDITS)} matched pairs, {len({c['family'] for c in cases})} failure families")
+    print(
+        f"hard set: {n} cases, {sum(1 for c in cases if not c['owner_pass'])} owner-fail, "
+        f"{len(EDITS)} matched pairs, {len({c['family'] for c in cases})} failure families"
+    )
     print(f"every case within its cap: {all(c['words'] <= c['cap'] for c in cases)}\n")
 
     print("TRIVIAL BASELINES on this set (agreement with the owner's labels)")
@@ -604,8 +609,10 @@ def report() -> None:
     print(f"  answer 'fail' to everything          {fail_all}/{n}")
     print(f"  word count against the cap only      {wordcount}/{n}")
     print(f"  the corpus's own inherited checks    {inherited}/{n}")
-    print(f"  rule-based judge (no model call)     {_agreement(rule, cases, 0.5)}/{n}"
-          f"   scores {min(rule.values()):.3f}-{max(rule.values()):.3f}\n")
+    print(
+        f"  rule-based judge (no model call)     {_agreement(rule, cases, 0.5)}/{n}"
+        f"   scores {min(rule.values()):.3f}-{max(rule.values()):.3f}\n"
+    )
 
     print("THE ARMS")
     header = f"  {'arm':12s} {'agree':>7s} {'AUC':>7s} {'paired':>8s} {'maxdelta':>9s}  scores"
@@ -643,8 +650,12 @@ def report() -> None:
         if not rows:
             continue
         print(f"\nAGREEMENT BY THRESHOLD — llm-{judge_name}")
-        print("  " + "  ".join(f"{t:.2f}:{_agreement(rows, cases, t)}/{n}" for t in
-                               (0.25, 0.4, 0.5, 0.6, 0.75)))
+        print(
+            "  "
+            + "  ".join(
+                f"{t:.2f}:{_agreement(rows, cases, t)}/{n}" for t in (0.25, 0.4, 0.5, 0.6, 0.75)
+            )
+        )
 
     print("\nPER CASE")
     print(f"  {'case':38s} {'own':4s} {'chk':5s} {'rule':>6s} {'opus':>7s} {'sonnet':>7s}")
@@ -665,9 +676,7 @@ def report() -> None:
         gap = [grades["opus"][c] - grades["sonnet"][c] for c in shared]
         own = [grades["opus"][c] - grades["sonnet"][c] for c in shared if by_id[c]["owner_pass"]]
         print("\nSELF-PREFERENCE ON THE GRADING PATH")
-        print(
-            f"  mean(opus - sonnet) over {len(shared)} shared cases: {sum(gap) / len(gap):+.4f}"
-        )
+        print(f"  mean(opus - sonnet) over {len(shared)} shared cases: {sum(gap) / len(gap):+.4f}")
         if own:
             print(
                 f"  ... over the {len(own)} cases the Opus judge itself wrote (owner-pass): "
@@ -683,8 +692,10 @@ def report() -> None:
             row = json.loads(line)
             if row.get("row_key") == "guard-demo":
                 for entry in row["cases"]:
-                    print(f"  guard, {entry['when']:34s} calls={entry['calls']}  "
-                          f"{str(entry['result'])[:60]}")
+                    print(
+                        f"  guard, {entry['when']:34s} calls={entry['calls']}  "
+                        f"{str(entry['result'])[:60]}"
+                    )
                 continue
             rows_by_judge.setdefault(str(row["judge"]), []).append(row)
         for judge_name, rows in sorted(rows_by_judge.items()):
@@ -695,13 +706,17 @@ def report() -> None:
                 f"position-inconsistent {inconsistent}/{len(rows)}"
             )
             for row in rows:
-                print(f"      {row['scenario_id']:26s} {row['family']:19s} "
-                      f"winner={row['winner']}  verdicts={row['verdicts']}")
+                print(
+                    f"      {row['scenario_id']:26s} {row['family']:19s} "
+                    f"winner={row['winner']}  verdicts={row['verdicts']}"
+                )
 
     if answering:
         print("\nWHAT ANSWERED")
         for judge_name, counts in sorted(answering.items()):
-            print(f"  llm-{judge_name}: " + ", ".join(f"{k} x{v}" for k, v in sorted(counts.items())))
+            print(
+                f"  llm-{judge_name}: " + ", ".join(f"{k} x{v}" for k, v in sorted(counts.items()))
+            )
 
 
 def dry_run() -> None:
@@ -717,11 +732,13 @@ def dry_run() -> None:
     print(f"  {len(cases) * 2:>3d}  llm-sonnet grading, same")
     print(f"  {len(EDITS) * 2:>3d}  llm-opus   choosing, 2 orders per pair")
     print(f"  {len(EDITS) * 2:>3d}  llm-sonnet choosing, same")
-    print("    1  the guard demo on this repo's own `model: \"\"` default")
+    print('    1  the guard demo on this repo\'s own `model: ""` default')
     print(f"  {len(cases) * 4 + len(EDITS) * 4 + 1:>3d}  TOTAL, plus 2 quota preflights\n")
     for case in cases:
-        print(f"  {case['case_id']:38s} {'PASS' if case['owner_pass'] else 'FAIL'}  "
-              f"{case['words']:>2d}/{case['cap']:<2d} words  {case['family']}")
+        print(
+            f"  {case['case_id']:38s} {'PASS' if case['owner_pass'] else 'FAIL'}  "
+            f"{case['words']:>2d}/{case['cap']:<2d} words  {case['family']}"
+        )
         print(f"      {case['summary']}")
 
 

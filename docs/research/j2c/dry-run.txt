@@ -1,0 +1,19 @@
+J2c — a staircase the proposer can climb. DRY RUN; nothing spends a call.
+
+agent        : agents/ladder/graph.py  entrypoint agents.ladder.graph:build_graph
+graph id     : ladder_agent
+corpus       : docs/research/j2c/corpus (9 scenarios, this worker's own copy)
+proposer     : rule_based (offline, deterministic, 0 calls)
+arms         : greedy, sampling — identical but for `sample_parents`
+seeds        : 0..9, every one reported
+turns per arm: 6
+build command: python -c import agents.ladder.graph as g; g.build_graph()
+
+calls: 0. The ladder corpus records no model calls, the rule-based
+proposer makes none, and the counter's cap is 0 so the arms cannot
+silently start spending.
+
+THE STATISTIC: stepping_stone_keeps — kept members whose parent the
+gates REJECTED. ADR 0198 measured 0 of 5 on a rig whose second rung
+the proposer could not reach. This rig's second rung is on the axis
+the proposer walks.

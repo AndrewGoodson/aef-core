@@ -1,0 +1,14 @@
+BATCH_SIZE -> task metric on the ladder corpus (train + validation)
+
+  BATCH_SIZE 1   mean 0.1111   ladder-easy-1=1  ladder-easy-2=0  ladder-hard-5=0  ladder-mid-3=0  ladder-tripwire-train=0  ladder-tripwire-val=0  ladder-val-easy=0  ladder-val-hard-5=0  ladder-val-mid=0
+  BATCH_SIZE 2   mean 0.3333   ladder-easy-1=1  ladder-easy-2=1  ladder-hard-5=0  ladder-mid-3=0  ladder-tripwire-train=0  ladder-tripwire-val=0  ladder-val-easy=1  ladder-val-hard-5=0  ladder-val-mid=0
+  BATCH_SIZE 3   mean 0.5556   ladder-easy-1=1  ladder-easy-2=1  ladder-hard-5=0  ladder-mid-3=1  ladder-tripwire-train=0  ladder-tripwire-val=0  ladder-val-easy=1  ladder-val-hard-5=0  ladder-val-mid=1   <- the blessed baseline
+  BATCH_SIZE 4   mean 0.5556   ladder-easy-1=1  ladder-easy-2=1  ladder-hard-5=0  ladder-mid-3=1  ladder-tripwire-train=0  ladder-tripwire-val=0  ladder-val-easy=1  ladder-val-hard-5=0  ladder-val-mid=1   <- a step that gains nothing: EXACTLY the baseline
+  BATCH_SIZE 5   mean 0.7778   ladder-easy-1=1  ladder-easy-2=1  ladder-hard-5=1  ladder-mid-3=1  ladder-tripwire-train=0  ladder-tripwire-val=0  ladder-val-easy=1  ladder-val-hard-5=1  ladder-val-mid=1   <- the rung above it: `hard-5` completes
+  BATCH_SIZE 6   mean 0.0000   ladder-easy-1=0  ladder-easy-2=0  ladder-hard-5=0  ladder-mid-3=0  ladder-tripwire-train=0  ladder-tripwire-val=0  ladder-val-easy=0  ladder-val-hard-5=0  ladder-val-mid=0   <- over the 5-slot transport frame: everything fails
+  BATCH_SIZE 7   mean 0.0000   ladder-easy-1=0  ladder-easy-2=0  ladder-hard-5=0  ladder-mid-3=0  ladder-tripwire-train=0  ladder-tripwire-val=0  ladder-val-easy=0  ladder-val-hard-5=0  ladder-val-mid=0
+
+The proposer's own step is +25%, at least +1 (`coerce_value`), so from 3 it
+proposes 4 and from 4 it proposes 5. Greedy proposes from the kept baseline,
+which stays at 3, so greedy proposes 4 forever and stops on the duplicate.
+The rung at 5 is reachable ONLY from the rejected 4.
