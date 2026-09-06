@@ -7133,13 +7133,23 @@ summary containing "rather than the". `leak_check.py` now subtracts the
 producer's own vocabulary and prints both counts. Zero windows of any run's own
 output in 105 live lesson blocks.
 
-**Defect found in a document, reported and not fixed:**
-`docs/research/self-learning-rubric.md` carries **two** `## Current` headings
-with different totals — the live one (updated here to 81) and a stale
-`74 / 100` immediately below it. `tests/test_rubric_arithmetic.py` only ever
-reads the first, so the contradiction is invisible to the suite. Left for
-whoever owns the merge; touching it from three branches at once is how it got
-there.
+**Defect found in a document, and the arithmetic the merge needs.** This
+branch left `main` at 78 and found `docs/research/self-learning-rubric.md`
+carrying **two** `## Current` headings with different totals — the live one and
+a stale `74 / 100` immediately below it, invisible to
+`tests/test_rubric_arithmetic.py`, which only ever reads the first. It was not
+fixed here, because touching a three-branch document from a fourth branch is
+how it got there; `main` has since fixed it (`74089ca`) and P1's dimension-1
+row took the live total to **83**.
+
+So the heading on this branch reads **81** — 78 plus this row's `+3` — and
+**81 is not the number to merge**. Dimension 2 moves 14 → 17 wherever it lands;
+against `main`'s 83 the recomputed heading is **86**, and
+`tests/test_rubric_arithmetic.py` will say so from the rows. Nothing else in
+this increment touches a file `main` moved: the corpus, `docs/research/i12e/`
+and `measure.py` are untouched between `c9ab35c` and `main`, which is the
+merge-order rule (ADR 0184/0191) holding for once by arrangement rather than
+by luck.
 
 120 live calls of a 140 budget, all `claude-opus-5[1m]`; every offline step —
 the screen, the seed, the static sweep, 21 dry arms, the leak scan, the
