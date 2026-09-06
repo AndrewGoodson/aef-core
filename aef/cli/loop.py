@@ -1711,6 +1711,31 @@ def cmd_run(args: argparse.Namespace) -> int:
     # every one of them happens here (ADR 0167).
     state_root = Path(args.state)
     try:
+        # BEFORE `_config`, which freezes the evidence id into `LoopConfig` —
+        # the same call, in the same position, that `cmd_cycle` has made since
+        # ADR 0176. **`cmd_run` never made it**, and until ADR 0200 nothing
+        # noticed, because the only thing that would notice is a `loop run`
+        # against a corpus whose graph id is not the literal `"default"` —
+        # which is every migrated prompt-agent repo, and which nothing in this
+        # program had run unattended.
+        #
+        # Found BY the unattended night (ADR 0200, part C) and reproduced side
+        # by side on one repo, one corpus and one memory file:
+        #
+        #     cycle> --graph-id not given; the evidence graph id is derived as
+        #            'price-freshness-reviewer' … proposed cycle-…-prompt
+        #     run>   2 memory record(s) excluded as belonging to a graph other
+        #            than 'default'
+        #     run>   no admissible failure memory … no candidate this cycle
+        #     run>   stopped: turn 1 produced no candidate
+        #
+        # `aef loop run` — the multi-turn driver, the one a night uses — could
+        # not propose at all on an adopting repo. ADR 0165's shape exactly: one
+        # of the two turn-running commands fixed, the other left, and the
+        # difference invisible because the broken one exits 0.
+        resolution = resolve_graph_id_from_corpus(args)
+        if resolution.note is not None:
+            print(f"  {resolution.note}")
         config = _config(args)
         # The ONE loader, like the other five (ADR 0176 F3, completed by ADR
         # 0182). This was `cli.run.load_graph_module`, which took a dotted
@@ -1745,6 +1770,15 @@ def cmd_run(args: argparse.Namespace) -> int:
         # Not journalled: the journal lives under `--state`, so writing it
         # would create the directory just refused.
         print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    except GraphIdError as exc:
+        # EXIT_ERROR, beside `cmd_cycle`'s identical clause and for ADR 0188's
+        # reason: an ambiguous or unknown graph id is a fault in the
+        # INVOCATION, and reporting it as 1 makes a misconfigured job
+        # indistinguishable from a healthy rejection to the workflow's own
+        # case statement.
+        print(f"error: {exc}", file=sys.stderr)
+        _journal_run_failure(state_root, exc)
         return EXIT_ERROR
     except (PolicyConfigError, KeptBranchCheckedOutError, CorpusGraphMismatchError) as exc:
         # Named refusals, printed as one line rather than a traceback: each

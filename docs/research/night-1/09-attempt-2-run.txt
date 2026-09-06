@@ -1,0 +1,11 @@
+  kept branch loop/kept at ccad2eb6b0de (from master)
+  lineage: resumed 0 member(s) from /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/p1/state/lineage/default.jsonl
+  turn 1: ledger verified: 5 entr(ies)
+  turn 1: promoted 0 run(s) to the train split
+  turn 1:   5 already in the corpus: 013c9044-4485-4625-ac7c-972260613e8f, 028299cf-31e8-4141-a152-1901cd8d0d6c, 7961a9cf-8ade-4ec1-83c9-2cb22f026426, ddfe4cc1-47a7-43f0-92a2-fcee28a8fd35, fd9c9064-0031-42ec-bc48-ef6a739eae32
+  turn 1: audit slice 2026-09-06: 1 of 5 train scenario(s) held back — 013c9044-4485-4625-ac7c-972260613e8f
+  turn 1: 2 memory record(s) excluded as belonging to a graph other than 'default'
+  turn 1: no admissible failure memory: all 2 record(s) came from scenarios of another graph, not 'default': no candidate this cycle
+  stopped: turn 1 produced no candidate
+kept 0, reverted 0, loop/kept@ccad2eb6b0de — review and merge by hand; Tier-1 auto-merge is off
+archive: 1 member(s) (0 resumed from earlier run(s)), 0 distinct kept tree(s), 0 distinct gated tree(s); sampling off

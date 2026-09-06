@@ -1,0 +1,5 @@
+  loop/cycle-20260905T104502-prompt
+  loop/cycle-20260906T110934-prompt
+  loop/cycle-20260906T110935-prompt
+  loop/kept
+* master

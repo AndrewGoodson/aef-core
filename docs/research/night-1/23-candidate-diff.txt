@@ -1,0 +1,12 @@
+diff --git a/.claude/agents/price-freshness-reviewer.md b/.claude/agents/price-freshness-reviewer.md
+index 7e3700352..5002f7c70 100644
+--- a/.claude/agents/price-freshness-reviewer.md
++++ b/.claude/agents/price-freshness-reviewer.md
+@@ -64,3 +64,7 @@ VERDICT: FRESH|STALE|EXCLUDE — <compound> @ <vendor-domain>, as of <YYYY-MM-DD
+ 
+ Use `EXCLUDE` only for rule 3 (the plausibility cap). Age alone is never
+ `EXCLUDE`; age is `STALE`, and `STALE` is displayed.
++
++## Lessons (aef)
++
++- <!-- aef sig=failure:check:working_memory.prompt_agent:regex runs=2 --> 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.prompt_agent does not match the pattern the owner declared; observed 368 words, 2138 chars

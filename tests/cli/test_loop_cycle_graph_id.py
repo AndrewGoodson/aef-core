@@ -457,3 +457,75 @@ def test_the_two_fields_are_two_and_collapsing_them_orphans_the_baseline(tmp_pat
     )
     assert split.graph_id == "default", "the archive key"
     assert split.evidence_id == "demo_agent", "the Graph.id the proposer admits records under"
+
+
+# ---------------------------------------------------------------------------
+# The OTHER turn-running command (ADR 0200, found by the unattended night)
+# ---------------------------------------------------------------------------
+
+
+def _run(repo: Path, tmp_path: Path, corpus: Path, memory: Path, *extra: str) -> int:
+    return main(
+        [
+            "loop",
+            "run",
+            "--repo",
+            str(repo),
+            "--state",
+            str(tmp_path / "state"),
+            "--workdir",
+            str(tmp_path / "work"),
+            "--corpus",
+            str(corpus),
+            "--memory",
+            str(memory),
+            "--proposer",
+            "rule_based_prompt",
+            "--agent-path",
+            PERSONA,
+            "--turns",
+            "1",
+            *extra,
+        ]
+    )
+
+
+def test_a_run_without_graph_id_no_longer_drops_the_evidence(  # type: ignore[no-untyped-def]
+    repo: Path, tmp_path: Path, capsys
+) -> None:
+    """The regression test above, for `run` instead of `cycle`.
+
+    ADR 0176 fixed one of the two commands that run a turn. `cmd_run` never
+    called `resolve_graph_id_from_corpus` at all, and nothing noticed for two
+    waves because the only thing that would notice is a `loop run` against a
+    corpus whose graph id is not the literal `"default"` — which is every
+    migrated prompt-agent repo, and which nothing had run unattended until
+    ADR 0200's night. It reported `no admissible failure memory … no candidate
+    this cycle` and exited 0, on the very same repo, corpus and memory file
+    where `cycle` proposed.
+
+    That is ADR 0165's shape, third occurrence: one of a pair fixed, the other
+    left, and the difference invisible because the broken one exits 0.
+    """
+    corpus, memory = tmp_path / "corpus", tmp_path / "memory.jsonl"
+    _bootstrap(tmp_path, corpus, memory)
+    capsys.readouterr()
+
+    _run(repo, tmp_path, corpus, memory)
+    out = capsys.readouterr().out
+
+    assert "belonging to a graph other than 'default'" not in out, out
+    assert "no admissible failure memory" not in out, out
+    assert "derived as 'demo_agent'" in out, out
+    assert "turn 1: proposed cycle-" in out, out
+
+
+def test_both_turn_commands_settle_the_evidence_id_the_same_way() -> None:
+    """One resolver, called by both — pinned so a third command cannot be
+    added with the question left unasked."""
+    import inspect
+
+    from aef.cli.loop import cmd_cycle, cmd_run
+
+    for handler in (cmd_cycle, cmd_run):
+        assert "resolve_graph_id_from_corpus(args)" in inspect.getsource(handler), handler.__name__

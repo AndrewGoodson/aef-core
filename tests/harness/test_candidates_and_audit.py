@@ -366,8 +366,57 @@ def test_held_back_scenarios_become_inadmissible_evidence() -> None:
     assert set(evidence.excluded) == {f"m-{sid}" for sid in held.ids}
 
 
-def test_the_held_back_scenarios_are_not_gated(repo: GitRepo, tmp_path: Path) -> None:
-    """They are subtracted from what G2/G3 score, or they are not held out."""
+def test_the_held_back_scenarios_are_not_gated(
+    repo: GitRepo, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """They are subtracted from what G2/G3 score, or they are not held out.
+
+    Asserted on the scenarios `_scenarios_for_graph` is HANDED, because that
+    is the last point before the cohort is built and the only place a
+    subtraction can be seen without spending seven corpus passes.
+    """
+    import aef.harness.loop as loop_module
+    from aef.harness.candidate import inspect_candidate
+    from aef.harness.loop import _gates_with_evidence
+
+    corpus = _corpus(10)
+    held = audit_slice(corpus, at=NOW, size=2)
+    config = LoopConfig(
+        repo=repo,
+        paths=LoopPaths(root=tmp_path / "state"),
+        base_ref="main",
+        corpus=corpus,
+        graph_id="g",
+        audit_slice_size=2,
+        entrypoint="agents.demo.graph:build_graph",
+    )
+    _git(repo.root, "checkout", "-qb", "cand")
+    (repo.root / "agents" / "demo" / "graph.py").write_text("RETRY_BUDGET = 4\n")
+    _git(repo.root, "commit", "-aqm", "c")
+    verdict = inspect_candidate(repo, "main", "cand", config.zone_policy)
+
+    seen: list[tuple[str, ...]] = []
+    real = loop_module._scenarios_for_graph
+
+    def spy(cfg, scenarios):  # type: ignore[no-untyped-def]
+        seen.append(tuple(s.id for s in scenarios))
+        return real(cfg, scenarios)
+
+    monkeypatch.setattr(loop_module, "_scenarios_for_graph", spy)
+    _, note = _gates_with_evidence(config, verdict, tmp_path / "wd", NOW)
+
+    assert seen, "the gates never got as far as choosing scenarios"
+    assert not set(seen[0]) & set(held.ids), seen[0]
+    assert len(seen[0]) == 8
+    assert "held back for the audit" in note, note
+
+
+def test_with_the_slice_off_every_gated_scenario_still_reaches_the_gates(
+    repo: GitRepo, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The control. The default subtracts nothing, so every measurement taken
+    before ADR 0200 was taken on the same set it would be taken on now."""
+    import aef.harness.loop as loop_module
     from aef.harness.candidate import inspect_candidate
     from aef.harness.loop import _gates_with_evidence
 
@@ -378,19 +427,25 @@ def test_the_held_back_scenarios_are_not_gated(repo: GitRepo, tmp_path: Path) ->
         base_ref="main",
         corpus=corpus,
         graph_id="g",
-        audit_slice_size=2,
-        entrypoint=None,
+        entrypoint="agents.demo.graph:build_graph",
     )
     _git(repo.root, "checkout", "-qb", "cand")
     (repo.root / "agents" / "demo" / "graph.py").write_text("RETRY_BUDGET = 4\n")
     _git(repo.root, "commit", "-aqm", "c")
     verdict = inspect_candidate(repo, "main", "cand", config.zone_policy)
 
+    seen: list[tuple[str, ...]] = []
+    real = loop_module._scenarios_for_graph
+
+    def spy(cfg, scenarios):  # type: ignore[no-untyped-def]
+        seen.append(tuple(s.id for s in scenarios))
+        return real(cfg, scenarios)
+
+    monkeypatch.setattr(loop_module, "_scenarios_for_graph", spy)
     _, note = _gates_with_evidence(config, verdict, tmp_path / "wd", NOW)
 
-    # No entrypoint, so G2/G3 refuse before any scenario runs — which is the
-    # point: the note is where the subtraction is legible either way.
-    assert "no entrypoint configured" in note
+    assert len(seen[0]) == 10
+    assert "held back for the audit" not in note, note
 
 
 def test_the_holdout_split_is_never_what_the_slice_draws_from() -> None:

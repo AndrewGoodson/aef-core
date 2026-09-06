@@ -1,0 +1,4 @@
+kill switch : clear
+ledger      : 11 entries, chain verified
+archive     : 1 version(s)
+open windows: 0 merge(s) not yet settled or rolled back

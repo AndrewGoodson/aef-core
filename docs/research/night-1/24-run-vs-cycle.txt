@@ -1,0 +1,73 @@
+F-P1-1, reproduced side by side. One repo, one corpus, one memory file, one
+persona, the same flags; the only difference is the subcommand. Copies of the
+pilot repo and of the loop state, `--cassette-miss fail` throughout, so this
+reproduction cost ZERO live model calls.
+
+=============================================================================
+BEFORE THE FIX
+=============================================================================
+
+$ aef loop cycle --repo <R> --state <S> --workdir <W>/wd-cycle \
+    --module agents/migrated/price_freshness_reviewer/graph.py:build_graph \
+    --entrypoint agents/migrated/price_freshness_reviewer/graph.py:build_graph \
+    --corpus <R>/corpus --proposer rule_based_prompt \
+    --agent-root .claude/agents \
+    --agent-path .claude/agents/price-freshness-reviewer.md \
+    --memory <S>/memory.jsonl --config aef.yaml --build-command "true"
+
+  --graph-id not given; the evidence graph id is derived as
+    'price-freshness-reviewer' from the 5 scenario(s) in <R>/corpus, which
+    record one graph. The archive key is unchanged ('default'), so a blessed
+    baseline stays where it was blessed (ADR 0182)
+  preflight: 2 of 6 obligation(s) unmet (corpus + tripwire, halt channel).
+  ledger verified: 5 entr(ies)
+  proposed cycle-20260906T110446-prompt on local branch
+    loop/cycle-20260906T110446-prompt (never pushed; proposer=rule_based_prompt)
+  gated: reject — G2 rejected it: 5 previously-passing scenario(s) no longer
+    pass (zero tolerance)
+cycle verdict: proposed cycle-20260906T110446-prompt — … REJECT …
+  [evidence graph id derived from --corpus: 'price-freshness-reviewer']
+
+
+$ aef loop run   --repo <R> --state <S> --workdir <W>/wd-run   \
+    …identical flags… --turns 1 --kept-branch loop/kept-repro
+
+  kept branch loop/kept-repro at ccad2eb6b0de (from master)
+  lineage: resumed 0 member(s) from <S>/lineage/default.jsonl
+  turn 1: ledger verified: 8 entr(ies)
+  turn 1: 2 memory record(s) excluded as belonging to a graph other than
+    'default'
+  turn 1: no admissible failure memory: all 2 record(s) came from scenarios
+    of another graph, not 'default': no candidate this cycle
+  stopped: turn 1 produced no candidate
+kept 0, reverted 0, loop/kept-repro@ccad2eb6b0de — review and merge by hand
+archive: 1 member(s) … 0 distinct kept tree(s), 0 distinct gated tree(s)
+
+EXIT 0. A multi-turn driver that could not propose, reporting success.
+
+=============================================================================
+AFTER THE FIX (`cmd_run` calls `resolve_graph_id_from_corpus`, as `cmd_cycle`
+has since ADR 0176)
+=============================================================================
+
+$ aef loop run   --repo <R> --state <S> --workdir <W>/wd-run2  \
+    …identical flags… --turns 1 --kept-branch loop/kept-repro2
+
+  --graph-id not given; the evidence graph id is derived as
+    'price-freshness-reviewer' from the 5 scenario(s) in <R>/corpus, which
+    record one graph. The archive key is unchanged ('default'), so a blessed
+    baseline stays where it was blessed (ADR 0182)
+  kept branch loop/kept-repro2 at ccad2eb6b0de (from master)
+  lineage: resumed 0 member(s) from <S>/lineage/default.jsonl
+  turn 1: ledger verified: 8 entr(ies)
+  turn 1: proposed cycle-20260906T110649-prompt on local branch
+    loop/cycle-20260906T110649-prompt (never pushed; proposer=rule_based_prompt)
+  turn 1: gated: reject — G2 rejected it: 5 previously-passing scenario(s) no
+    longer pass (zero tolerance)
+  turn 1: reverted (reject), archived as a stepping stone (score 0.0)
+  stopped: turn budget of 1 exhausted
+kept 0, reverted 1, loop/kept-repro2@ccad2eb6b0de
+archive: 2 member(s) … 0 distinct kept tree(s), 1 distinct gated tree(s)
+
+The candidate is still rejected — by a gate, which is the system working.
+What changed is that there is now a candidate to reject.
