@@ -1,0 +1,973 @@
+{
+  "answered_by": {
+    "claude-opus-5[1m]": 21
+  },
+  "arm": "d",
+  "calls": 21,
+  "draft_prompt_sha256": "7d3eb9aeb6a18084e241a78ccb5fa80cf174c7fb4baaf365c81b5a0d39e3893b",
+  "draft_prompts": {
+    "sum-13-cider-press": "Summarise the passage below in at most 35 words.\nThe summary must mention each of these terms, spelled exactly as given: Dunmere cider press, oak, apples.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 228 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nThe Dunmere cider press, a hand-turned screw press built from oak beams in the 1850s, has been rebuilt and will press apples again this autumn for the first time in forty years. Volunteers replaced the rotten base beam with seasoned oak from a fallen tree on the estate and re-cut the screw thread by hand. Anyone with surplus apples can bring them on the two pressing days and take juice home in exchange. The press sits in a barn beside the estate's walled garden.",
+    "sum-14-quarry-lake": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Ketley quarry lake, swimming, lifeguards.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 228 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nSwimming will be allowed at Ketley quarry lake this summer for the first time, with lifeguards on duty between ten and six from June to September. The lake, which flooded when the quarry closed, is cold and deep, and the council has roped off a shallow area near the beach for swimmers and set a buoyed course for those who want to swim further. Entry is free but swimmers must register once at the kiosk. Parking on the quarry road will be limited to sixty cars.",
+    "sum-15-bookbinder": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Marisa Venn, bookbinder, apprentice.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 228 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nMarisa Venn, the last working bookbinder in the county, has taken on an apprentice for the first time in her thirty-year career. The apprentice will spend two years learning to sew text blocks, pare leather and tool lettering by hand before being allowed to take customer work. Venn's shop repairs family bibles and rebinds worn library books, and she says demand has risen as people bring in books that cannot be replaced. The apprenticeship is funded partly by a heritage crafts grant.",
+    "sum-16-cliff-path": "Summarise the passage below in at most 35 words.\nThe summary must mention each of these terms, spelled exactly as given: Gannet Head, coast path, landslip.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 228 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nA section of the coast path at Gannet Head has been closed after a landslip took away about twenty metres of the cliff edge following a week of heavy rain. Walkers are being diverted inland along a farm track that adds roughly a mile to the route. The national trail authority will survey the cliff once the ground has dried and expects to build a new path further from the edge rather than repair the old line. The nearby car park and cafe remain open.",
+    "sum-17-clockmaker": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Holloway town clock, pendulum, 1911.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 228 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nThe Holloway town clock, which has stood over the market hall since 1911, has been stopped for the first time in decades while its pendulum is repaired. The clock lost about a minute a day after a bearing wore through, and the clockmaker found the pendulum rod had also bent slightly. Both parts will be made new to the original drawings, which the town still holds. The chimes will be silent for about six weeks. The clock's four faces are being cleaned while the mechanism is out.",
+    "sum-18-heron-rookery": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Wimble Carr, herons, nests.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 228 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nThe heronry at Wimble Carr held forty-one nests this spring, the highest count since records began there in 1962. The herons nest high in a stand of old alders at the edge of the marsh and are counted each April by a warden with a telescope from the far bank. Last year's mild winter is thought to have helped, along with a ban on shooting over the marsh that came into force three years ago. The site is closed to visitors during the nesting season.",
+    "sum-29-brindle-viaduct": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Brindle Viaduct, strengthening.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 228 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nThe first assessment of Brindle Viaduct put the strengthening work at eighteen months and 2.4 million pounds. The revised scheme published in August is nine months and 3.1 million pounds: fewer closures, more night working, and a steel deck rather than the concrete originally specified. The line will shut for four weekends in total, the first in October, and a replacement bus will run from Brindle Halt.",
+    "sum-30-ganister-tarn": "Summarise the passage below in at most 28 words.\nThe summary must mention each of these terms, spelled exactly as given: Ganister Tarn.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 228 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nThe upper path at Ganister Tarn has not been closed, despite a notice circulating online that says it has. What closed on 1 September is the short link between the north car park and the boathouse, for bank stabilisation. The upper path is open, though the surface above the scree is loose after the wet summer and the ranger service advises boots. The link is due to reopen before Christmas.",
+    "sum-31-quernmore-kiln": "Summarise the passage below in at most 26 words.\nThe summary must mention each of these terms, spelled exactly as given: Quernmore, kiln.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 228 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nThe bottle kiln at Quernmore has been surveyed ahead of repair. Its brick shell leans 340 millimetres out of plumb at the crown, and the survey recommends grouting the crown ring and rebuilding the top two metres. The trust has 55,000 pounds of the 190,000 pounds needed and has applied for the rest. Firing has not taken place since 1962 and no firing is proposed.",
+    "sum-32-hessle-mills": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Hessle Low Mill.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 228 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nGrants have been awarded to Hessle Low Mill and refused to Hessle High Mill. Hessle Low Mill, the tower mill by the beck, receives 74,000 pounds for its cap and sails. Hessle High Mill, the smock mill on the ridge, was judged too far gone to justify the works proposed and its trustees have been asked to submit a revised scheme. Both mills are listed.",
+    "sum-33-cotterdale-bus": "Summarise the passage below in at most 25 words.\nThe summary must mention each of these terms, spelled exactly as given: Cotterdale, Saturdays.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 28 words, 152 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nThe 831 bus between Cotterdale and Hawes will run on Saturdays only from November, instead of Tuesdays and Saturdays. The Tuesday journey carried an average of three passengers and the county council has withdrawn its subsidy for it. The Saturday service keeps its four return journeys and the 09:15 departure is unchanged. A demand-responsive minibus will be trialled on Tuesdays from January.",
+    "sum-34-alder-carr": "Summarise the passage below in at most 30 words.\nThe summary must mention each of these terms, spelled exactly as given: Alder Carr, willow tit.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 28 words, 152 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nThe 2026 breeding-bird survey at Alder Carr counted 46 pairs of willow tit, up from 31 in 2023 and the highest since the survey began in 2011. Reed bunting fell to 12 pairs. The wet woodland on the reserve was extended by four hectares in the winter, and the survey team put the increase down to that work and to a mild spring.",
+    "sum-35-priory-gatehouse": "Summarise the passage below in at most 28 words.\nThe summary must mention each of these terms, spelled exactly as given: Priory gatehouse.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 28 words, 152 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nScaffolding goes up at the Priory gatehouse in February for a twelve-week programme of stone replacement, repointing and the renewal of the lead roof over the gate lodge. The gatehouse stays open to visitors throughout except for two weeks in April, when the roof is off. The adjoining stretch of precinct wall is not part of this contract and will be assessed separately in the autumn.",
+    "sum-36-larkfield-quarry": "Summarise the passage below in at most 38 words.\nThe summary must mention each of these terms, spelled exactly as given: Larkfield quarry.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 28 words, 152 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nPermission for the Larkfield quarry extension was granted on Tuesday, subject to conditions. Extraction may not begin until a bat survey has been completed and the access road has been widened at the Pitt Lane junction; lorry movements are capped at 48 a day and none may pass before 07:00. The operator expects the survey in the spring. Objectors had asked for refusal on noise grounds.",
+    "sum-37-ryhope-pool": "Summarise the passage below in at most 36 words.\nThe summary must mention each of these terms, spelled exactly as given: Ryhope pool.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 37 words, 248 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nRyhope pool was due to reopen on 3 June. It reopened on 19 August, after the new plant room flooded during commissioning and a second circulation pump had to be ordered from Italy. The pool now opens at 06:30 on weekdays, half an hour earlier than before, and the diving boards remain out of use pending a separate inspection.",
+    "sum-38-bewick-refusals": "Summarise the passage below in at most 36 words.\nThe summary must mention each of these terms, spelled exactly as given: Bewick.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 37 words, 248 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nThe proportion of licences refused at Bewick fell from 9 per cent to 6 per cent last year. Because the number of applications almost doubled, the number of refusals rose, from 41 to 58. The committee heard 14 appeals, of which 9 succeeded. Officers attribute the growth in applications to the new late-night levy exemption.",
+    "sum-39-coldbeck-society": "Summarise the passage below in at most 38 words.\nThe summary must mention each of these terms, spelled exactly as given: Coldbeck Co-operative Society.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 37 words, 248 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nThe Coldbeck Co-operative Society has bought the former auction mart at Stang Bridge, not the mill site at Coldbeck Foot that it had been negotiating for since 2023. The mart will house a food store and eleven flats. The Coldbeck Foot mill remains on the market and its owner says talks with another buyer are at an early stage.",
+    "sum-46-thwaite-lane-bridge": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Thwaite Lane.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 37 words, 248 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nA seven-and-a-half-tonne weight limit came into force on the Thwaite Lane bridge on Monday, after an inspection found cracking in the eastern abutment. The county council says a full assessment will take six weeks and the limit may then be lifted. Buses now run through Sowerby, adding eleven minutes.",
+    "sum-47-eller-beck-hatchery": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Eller Beck.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 31 words, 198 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nThe trout hatchery on Eller Beck will not stock the river this year, after a screening test found a parasite in two holding tanks. The fishery board says the tanks have been emptied and disinfected and that stocking should resume next season. Angling clubs upstream are unaffected.",
+    "sum-48-marsden-gate-quarry": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Marsden Gate.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 39 words, 234 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nBlasting at Marsden Gate quarry has been suspended since a house on Fold Lane complained of cracked plaster in August. The operator says its own monitors recorded vibration well inside the permitted limit. Crushing and haulage continue, with lorry movements unchanged at sixty a day.",
+    "sum-49-birkrigg-allotments": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Birkrigg.\n\nLessons from this agent's earlier runs (most relevant first):\n- [failure:check:working_memory.summary:regex] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 38 words, 253 chars\n- [failure:check:working_memory.summary:regex>check:working_memory.summary:max_words] 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars\n- [failure:check:working_memory.summary:max_words] 1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n- [success] no failure signals: 0 error(s) recorded, 0 tool call(s), none failed\n\nPassage:\nTwenty-two of the ninety plots at the Birkrigg allotments will become a community orchard, a decision taken by the association's committee in September. The council, which owns the land, says the change needs no planning permission. Eleven people on the waiting list have been offered the southern terrace instead."
+  },
+  "dry_run": false,
+  "entry_before": {
+    "sum-13-cider-press": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 0,
+        "occurrences": 7,
+        "runs_since_last_seen": 11
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.5,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 0,
+        "occurrences": 4,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 0,
+        "occurrences": 6,
+        "runs_since_last_seen": 4
+      }
+    },
+    "sum-14-quarry-lake": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 1,
+        "occurrences": 7,
+        "runs_since_last_seen": 12
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.5,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 1,
+        "occurrences": 4,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 1,
+        "occurrences": 6,
+        "runs_since_last_seen": 4
+      }
+    },
+    "sum-15-bookbinder": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 2,
+        "occurrences": 7,
+        "runs_since_last_seen": 13
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.5,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 2,
+        "occurrences": 4,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 2,
+        "occurrences": 6,
+        "runs_since_last_seen": 4
+      }
+    },
+    "sum-16-cliff-path": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 3,
+        "occurrences": 7,
+        "runs_since_last_seen": 14
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.5,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 3,
+        "occurrences": 4,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 3,
+        "occurrences": 6,
+        "runs_since_last_seen": 4
+      }
+    },
+    "sum-17-clockmaker": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 4,
+        "occurrences": 7,
+        "runs_since_last_seen": 15
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.5,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 4,
+        "occurrences": 4,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 4,
+        "occurrences": 6,
+        "runs_since_last_seen": 4
+      }
+    },
+    "sum-18-heron-rookery": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 5,
+        "occurrences": 7,
+        "runs_since_last_seen": 16
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.5,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 5,
+        "occurrences": 4,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 5,
+        "occurrences": 6,
+        "runs_since_last_seen": 4
+      }
+    },
+    "sum-29-brindle-viaduct": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 6,
+        "occurrences": 7,
+        "runs_since_last_seen": 17
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.5,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 6,
+        "occurrences": 4,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 6,
+        "occurrences": 6,
+        "runs_since_last_seen": 4
+      }
+    },
+    "sum-30-ganister-tarn": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 7,
+        "occurrences": 7,
+        "runs_since_last_seen": 17
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.5,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 7,
+        "occurrences": 4,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 7,
+        "occurrences": 6,
+        "runs_since_last_seen": 4
+      }
+    },
+    "sum-31-quernmore-kiln": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 8,
+        "occurrences": 7,
+        "runs_since_last_seen": 17
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.5,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 8,
+        "occurrences": 4,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 8,
+        "occurrences": 6,
+        "runs_since_last_seen": 4
+      }
+    },
+    "sum-32-hessle-mills": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 9,
+        "occurrences": 7,
+        "runs_since_last_seen": 17
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.5,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 9,
+        "occurrences": 4,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 0,
+        "helpful": 9,
+        "occurrences": 6,
+        "runs_since_last_seen": 4
+      }
+    },
+    "sum-33-cotterdale-bus": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 1,
+        "helpful": 9,
+        "occurrences": 7,
+        "runs_since_last_seen": 18
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.5556,
+        "harmful": 1,
+        "harmful_elsewhere": 0,
+        "helpful": 9,
+        "occurrences": 5,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 1,
+        "helpful": 9,
+        "occurrences": 6,
+        "runs_since_last_seen": 5
+      }
+    },
+    "sum-34-alder-carr": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 1,
+        "helpful": 10,
+        "occurrences": 7,
+        "runs_since_last_seen": 18
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.5556,
+        "harmful": 1,
+        "harmful_elsewhere": 0,
+        "helpful": 10,
+        "occurrences": 5,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 1,
+        "helpful": 10,
+        "occurrences": 6,
+        "runs_since_last_seen": 5
+      }
+    },
+    "sum-35-priory-gatehouse": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 1,
+        "helpful": 11,
+        "occurrences": 7,
+        "runs_since_last_seen": 18
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.5556,
+        "harmful": 1,
+        "harmful_elsewhere": 0,
+        "helpful": 11,
+        "occurrences": 5,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 1,
+        "helpful": 11,
+        "occurrences": 6,
+        "runs_since_last_seen": 5
+      }
+    },
+    "sum-36-larkfield-quarry": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 1,
+        "helpful": 12,
+        "occurrences": 7,
+        "runs_since_last_seen": 18
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.5556,
+        "harmful": 1,
+        "harmful_elsewhere": 0,
+        "helpful": 12,
+        "occurrences": 5,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 1,
+        "helpful": 12,
+        "occurrences": 6,
+        "runs_since_last_seen": 5
+      }
+    },
+    "sum-37-ryhope-pool": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 2,
+        "helpful": 12,
+        "occurrences": 7,
+        "runs_since_last_seen": 19
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.6,
+        "harmful": 2,
+        "harmful_elsewhere": 0,
+        "helpful": 12,
+        "occurrences": 6,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 2,
+        "helpful": 12,
+        "occurrences": 6,
+        "runs_since_last_seen": 6
+      }
+    },
+    "sum-38-bewick-refusals": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 2,
+        "helpful": 13,
+        "occurrences": 7,
+        "runs_since_last_seen": 19
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.6,
+        "harmful": 2,
+        "harmful_elsewhere": 0,
+        "helpful": 13,
+        "occurrences": 6,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 2,
+        "helpful": 13,
+        "occurrences": 6,
+        "runs_since_last_seen": 6
+      }
+    },
+    "sum-39-coldbeck-society": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 2,
+        "helpful": 14,
+        "occurrences": 7,
+        "runs_since_last_seen": 19
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.6,
+        "harmful": 2,
+        "harmful_elsewhere": 0,
+        "helpful": 14,
+        "occurrences": 6,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 2,
+        "helpful": 14,
+        "occurrences": 6,
+        "runs_since_last_seen": 6
+      }
+    },
+    "sum-46-thwaite-lane-bridge": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 2,
+        "helpful": 15,
+        "occurrences": 7,
+        "runs_since_last_seen": 19
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.6,
+        "harmful": 2,
+        "harmful_elsewhere": 0,
+        "helpful": 15,
+        "occurrences": 6,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 2,
+        "helpful": 15,
+        "occurrences": 6,
+        "runs_since_last_seen": 6
+      }
+    },
+    "sum-47-eller-beck-hatchery": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 3,
+        "helpful": 15,
+        "occurrences": 7,
+        "runs_since_last_seen": 20
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.6364,
+        "harmful": 3,
+        "harmful_elsewhere": 0,
+        "helpful": 15,
+        "occurrences": 7,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 3,
+        "helpful": 15,
+        "occurrences": 6,
+        "runs_since_last_seen": 7
+      }
+    },
+    "sum-48-marsden-gate-quarry": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 4,
+        "helpful": 15,
+        "occurrences": 7,
+        "runs_since_last_seen": 21
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.6667,
+        "harmful": 4,
+        "harmful_elsewhere": 0,
+        "helpful": 15,
+        "occurrences": 8,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 4,
+        "helpful": 15,
+        "occurrences": 6,
+        "runs_since_last_seen": 8
+      }
+    },
+    "sum-49-birkrigg-allotments": {
+      "failure:check:working_memory.summary:max_words": {
+        "confidence": 0.6364,
+        "harmful": 0,
+        "harmful_elsewhere": 5,
+        "helpful": 15,
+        "occurrences": 7,
+        "runs_since_last_seen": 22
+      },
+      "failure:check:working_memory.summary:regex": {
+        "confidence": 0.6923,
+        "harmful": 5,
+        "harmful_elsewhere": 0,
+        "helpful": 15,
+        "occurrences": 9,
+        "runs_since_last_seen": 0
+      },
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": {
+        "confidence": 0.6,
+        "harmful": 0,
+        "harmful_elsewhere": 5,
+        "helpful": 15,
+        "occurrences": 6,
+        "runs_since_last_seen": 9
+      }
+    }
+  },
+  "entry_rank": {
+    "sum-13-cider-press": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-14-quarry-lake": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-15-bookbinder": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-16-cliff-path": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-17-clockmaker": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-18-heron-rookery": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-29-brindle-viaduct": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-30-ganister-tarn": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-31-quernmore-kiln": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-32-hessle-mills": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-33-cotterdale-bus": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-34-alder-carr": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-35-priory-gatehouse": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-36-larkfield-quarry": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-37-ryhope-pool": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-38-bewick-refusals": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-39-coldbeck-society": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-46-thwaite-lane-bridge": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-47-eller-beck-hatchery": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-48-marsden-gate-quarry": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    },
+    "sum-49-birkrigg-allotments": {
+      "failure:check:working_memory.summary:max_words": 2,
+      "failure:check:working_memory.summary:regex": 0,
+      "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words": 1
+    }
+  },
+  "failures": {},
+  "knowledge_boost": 16.0,
+  "knowledge_entries": [
+    {
+      "harmful": 5,
+      "harmful_elsewhere": 0,
+      "helpful": 16,
+      "kind": "failure",
+      "occurrences": 9,
+      "runs_since_last_seen": 0,
+      "signature": "failure:check:working_memory.summary:regex"
+    },
+    {
+      "harmful": 0,
+      "harmful_elsewhere": 5,
+      "helpful": 16,
+      "kind": "failure",
+      "occurrences": 6,
+      "runs_since_last_seen": 10,
+      "signature": "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words"
+    },
+    {
+      "harmful": 0,
+      "harmful_elsewhere": 5,
+      "helpful": 16,
+      "kind": "failure",
+      "occurrences": 7,
+      "runs_since_last_seen": 23,
+      "signature": "failure:check:working_memory.summary:max_words"
+    }
+  ],
+  "lessons_in_prompt": {
+    "sum-13-cider-press": true,
+    "sum-14-quarry-lake": true,
+    "sum-15-bookbinder": true,
+    "sum-16-cliff-path": true,
+    "sum-17-clockmaker": true,
+    "sum-18-heron-rookery": true,
+    "sum-29-brindle-viaduct": true,
+    "sum-30-ganister-tarn": true,
+    "sum-31-quernmore-kiln": true,
+    "sum-32-hessle-mills": true,
+    "sum-33-cotterdale-bus": true,
+    "sum-34-alder-carr": true,
+    "sum-35-priory-gatehouse": true,
+    "sum-36-larkfield-quarry": true,
+    "sum-37-ryhope-pool": true,
+    "sum-38-bewick-refusals": true,
+    "sum-39-coldbeck-society": true,
+    "sum-46-thwaite-lane-bridge": true,
+    "sum-47-eller-beck-hatchery": true,
+    "sum-48-marsden-gate-quarry": true,
+    "sum-49-birkrigg-allotments": true
+  },
+  "lessons_rendered": {
+    "sum-13-cider-press": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-14-quarry-lake": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-15-bookbinder": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-16-cliff-path": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-17-clockmaker": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-18-heron-rookery": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-29-brindle-viaduct": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-30-ganister-tarn": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-31-quernmore-kiln": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-32-hessle-mills": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-33-cotterdale-bus": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-34-alder-carr": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-35-priory-gatehouse": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-36-larkfield-quarry": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-37-ryhope-pool": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-38-bewick-refusals": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-39-coldbeck-society": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-46-thwaite-lane-bridge": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-47-eller-beck-hatchery": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-48-marsden-gate-quarry": [
+      "both",
+      "cap",
+      "ruleA"
+    ],
+    "sum-49-birkrigg-allotments": [
+      "both",
+      "cap",
+      "ruleA"
+    ]
+  },
+  "mean": 0.9452,
+  "mean_negatives": 0.93,
+  "mean_positives": 0.9591,
+  "model_arg": "(session default; --model omitted)",
+  "negatives": {
+    "sum-13-cider-press": 1.0,
+    "sum-14-quarry-lake": 1.0,
+    "sum-16-cliff-path": 1.0,
+    "sum-17-clockmaker": 1.0,
+    "sum-30-ganister-tarn": 1.0,
+    "sum-33-cotterdale-bus": 1.0,
+    "sum-35-priory-gatehouse": 1.0,
+    "sum-36-larkfield-quarry": 0.8,
+    "sum-46-thwaite-lane-bridge": 0.75,
+    "sum-47-eller-beck-hatchery": 0.75
+  },
+  "order": [
+    "sum-13-cider-press",
+    "sum-14-quarry-lake",
+    "sum-15-bookbinder",
+    "sum-16-cliff-path",
+    "sum-17-clockmaker",
+    "sum-18-heron-rookery",
+    "sum-29-brindle-viaduct",
+    "sum-30-ganister-tarn",
+    "sum-31-quernmore-kiln",
+    "sum-32-hessle-mills",
+    "sum-33-cotterdale-bus",
+    "sum-34-alder-carr",
+    "sum-35-priory-gatehouse",
+    "sum-36-larkfield-quarry",
+    "sum-37-ryhope-pool",
+    "sum-38-bewick-refusals",
+    "sum-39-coldbeck-society",
+    "sum-46-thwaite-lane-bridge",
+    "sum-47-eller-beck-hatchery",
+    "sum-48-marsden-gate-quarry",
+    "sum-49-birkrigg-allotments"
+  ],
+  "per_scenario": {
+    "sum-13-cider-press": 1.0,
+    "sum-14-quarry-lake": 1.0,
+    "sum-15-bookbinder": 1.0,
+    "sum-16-cliff-path": 1.0,
+    "sum-17-clockmaker": 1.0,
+    "sum-18-heron-rookery": 1.0,
+    "sum-29-brindle-viaduct": 1.0,
+    "sum-30-ganister-tarn": 1.0,
+    "sum-31-quernmore-kiln": 1.0,
+    "sum-32-hessle-mills": 0.8,
+    "sum-33-cotterdale-bus": 1.0,
+    "sum-34-alder-carr": 1.0,
+    "sum-35-priory-gatehouse": 1.0,
+    "sum-36-larkfield-quarry": 0.8,
+    "sum-37-ryhope-pool": 1.0,
+    "sum-38-bewick-refusals": 1.0,
+    "sum-39-coldbeck-society": 1.0,
+    "sum-46-thwaite-lane-bridge": 0.75,
+    "sum-47-eller-beck-hatchery": 0.75,
+    "sum-48-marsden-gate-quarry": 0.75,
+    "sum-49-birkrigg-allotments": 1.0
+  },
+  "recorded_failures": {
+    "sum-13-cider-press": [],
+    "sum-14-quarry-lake": [],
+    "sum-15-bookbinder": [],
+    "sum-16-cliff-path": [],
+    "sum-17-clockmaker": [],
+    "sum-18-heron-rookery": [],
+    "sum-29-brindle-viaduct": [],
+    "sum-30-ganister-tarn": [],
+    "sum-31-quernmore-kiln": [],
+    "sum-32-hessle-mills": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-33-cotterdale-bus": [],
+    "sum-34-alder-carr": [],
+    "sum-35-priory-gatehouse": [],
+    "sum-36-larkfield-quarry": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-37-ryhope-pool": [],
+    "sum-38-bewick-refusals": [],
+    "sum-39-coldbeck-society": [],
+    "sum-46-thwaite-lane-bridge": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-47-eller-beck-hatchery": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-48-marsden-gate-quarry": [
+      "check:working_memory.summary:regex"
+    ],
+    "sum-49-birkrigg-allotments": []
+  },
+  "repeat": 0,
+  "secs": 120.8,
+  "seeded_entries": [
+    "failure:check:working_memory.summary:regex",
+    "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words",
+    "failure:check:working_memory.summary:max_words"
+  ],
+  "summaries": {
+    "sum-13-cider-press": "The Dunmere cider press, an 1850s oak screw press, has been restored by volunteers with seasoned oak and a hand-cut thread, and will press apples again this autumn after forty years.",
+    "sum-14-quarry-lake": "Swimming will be permitted at Ketley quarry lake this summer for the first time, with lifeguards on duty 10\u20136, June\u2013September. A roped shallow area and buoyed course exist; entry is free after registering, parking limited to sixty cars.",
+    "sum-15-bookbinder": "Marisa Venn, the county's last bookbinder, has taken her first apprentice in thirty years \u2014 a two-year, grant-funded training in hand sewing, leather paring and tooling amid rising repair demand.",
+    "sum-16-cliff-path": "A landslip after heavy rain took twenty metres of cliff at Gannet Head, closing the coast path. Walkers detour inland by farm track; a new path will be built further inland.",
+    "sum-17-clockmaker": "The Holloway town clock, above the market hall since 1911, has stopped for repairs after a worn bearing and bent pendulum rod caused time loss. Replacements follow original drawings; chimes silent six weeks, faces cleaned.",
+    "sum-18-heron-rookery": "Wimble Carr's heronry recorded forty-one nests this spring, its highest since 1962; herons nest in old alders, aided by a mild winter and a shooting ban.",
+    "sum-29-brindle-viaduct": "Brindle Viaduct strengthening was rescheduled from eighteen months and \u00a32.4m to nine months and \u00a33.1m, using a steel deck, night working, four weekend closures, and replacement buses.",
+    "sum-30-ganister-tarn": "Ganister Tarn's upper path remains open despite online claims; only the north car park\u2013boathouse link closed 1 September for bank work, reopening before Christmas. Boots advised.",
+    "sum-31-quernmore-kiln": "Quernmore's bottle kiln leans 340mm at the crown; repairs need \u00a3190,000, of which the trust holds \u00a355,000. Unfired since 1962, with no firing planned.",
+    "sum-32-hessle-mills": "Hessle Low Mill, a listed tower mill, won 74,000 pounds for cap and sails; the listed High Mill smock mill was refused and must submit a revised scheme.",
+    "sum-33-cotterdale-bus": "From November the 831 Cotterdale\u2013Hawes bus runs Saturdays only, losing its Tuesday subsidy; four return journeys remain, with a demand-responsive minibus trialled from January.",
+    "sum-34-alder-carr": "Alder Carr's 2026 survey recorded a record 46 willow tit pairs, up from 31 in 2023, while reed bunting fell to 12; new wet woodland and mild spring credited.",
+    "sum-35-priory-gatehouse": "A twelve-week stonework, repointing and lead roof programme begins at the Priory gatehouse in February; the gatehouse stays open except two April weeks. Precinct wall excluded.",
+    "sum-36-larkfield-quarry": "The Larkfield quarry extension won conditional approval Tuesday: extraction awaits a bat survey, expected in spring, and a widened Pitt Lane junction, with lorries capped at 48 daily and none before 07:00. Objectors' noise complaints were rejected.",
+    "sum-37-ryhope-pool": "Ryhope pool reopened on 19 August rather than 3 June, after flooding in the new plant room and a replacement pump from Italy. Weekday opening is now 06:30, and diving boards stay closed pending inspection.",
+    "sum-38-bewick-refusals": "Bewick's licence refusal rate fell from 9 to 6 per cent last year, but refusals rose from 41 to 58 as applications nearly doubled. Nine of 14 appeals succeeded; officers cite the new late-night levy exemption.",
+    "sum-39-coldbeck-society": "Coldbeck Co-operative Society bought the former Stang Bridge auction mart, not the Coldbeck Foot mill it had sought since 2023, and will add a food store and eleven flats. The mill stays on sale.",
+    "sum-46-thwaite-lane-bridge": "A 7.5-tonne limit began Monday on Thwaite Lane bridge after cracking appeared in its eastern abutment. A six-week council assessment may lift it; buses now divert via Sowerby, adding eleven minutes.",
+    "sum-47-eller-beck-hatchery": "The hatchery on Eller Beck will not stock the river this year after a parasite was found in two holding tanks. The tanks have been emptied and disinfected, stocking should resume next season, and upstream angling clubs are unaffected.",
+    "sum-48-marsden-gate-quarry": "Blasting at Marsden Gate quarry has been paused since an August complaint about cracked plaster at a Fold Lane house; the operator's monitors showed vibration within permitted limits. Crushing and haulage continue, lorry movements steady at sixty daily.",
+    "sum-49-birkrigg-allotments": "Birkrigg allotments will convert twenty-two of ninety plots into a community orchard, decided by the association's committee in September. The council, the landowner, says no planning permission is required, and eleven waiting-list applicants were offered the southern terrace instead."
+  }
+}

@@ -70,7 +70,7 @@
       "result": {
         "cache_creation_input_tokens": 878,
         "cache_read_input_tokens": 0,
-        "content": "Orrell Baths will retain its Victorian tiling after conservation officers rejected the original refurbishment design, closing the pool from February to November. The extra work adds nine weeks and roughly £90,000, which the trust hopes a public appeal will fund; gym and cafe remain open.",
+        "content": "Orrell Baths will retain its Victorian tiling after conservation officers rejected the original refurbishment design, closing the pool from February to November. The extra work adds nine weeks and roughly \u00a390,000, which the trust hopes a public appeal will fund; gym and cafe remain open.",
         "input_tokens": 2,
         "model": "claude-opus-5[1m]",
         "model_attribution": "usage_match",
@@ -79,7 +79,7 @@
       }
     }
   ],
-  "notes": "one attributed forward-looking claim (Rule A, ADR 0201); synthetic passage",
+  "notes": "synthetic passage; recorded live via claude_code on claude-opus-5[1m] (ADR 0201). One attributed forward-looking claim, and the owner's Rule A: an attributed claim stays attributed",
   "recorded_at": "2026-09-06T10:43:18.582562+00:00",
   "source": "record",
   "split": "train",
@@ -171,7 +171,7 @@
         "scores": {},
         "tool_results": [],
         "working_memory": {
-          "summary": "Orrell Baths will retain its Victorian tiling after conservation officers rejected the original refurbishment design, closing the pool from February to November. The extra work adds nine weeks and roughly £90,000, which the trust hopes a public appeal will fund; gym and cafe remain open."
+          "summary": "Orrell Baths will retain its Victorian tiling after conservation officers rejected the original refurbishment design, closing the pool from February to November. The extra work adds nine weeks and roughly \u00a390,000, which the trust hopes a public appeal will fund; gym and cafe remain open."
         }
       },
       "input_state": {
@@ -262,7 +262,7 @@
           "must_mention": [
             "Orrell Baths"
           ],
-          "summary": "Orrell Baths will retain its Victorian tiling after conservation officers rejected the original refurbishment design, closing the pool from February to November. The extra work adds nine weeks and roughly £90,000, which the trust hopes a public appeal will fund; gym and cafe remain open.",
+          "summary": "Orrell Baths will retain its Victorian tiling after conservation officers rejected the original refurbishment design, closing the pool from February to November. The extra work adds nine weeks and roughly \u00a390,000, which the trust hopes a public appeal will fund; gym and cafe remain open.",
           "text": "Orrell Baths will keep its Victorian tiling under the refurbishment agreed last week, after conservation officers objected to the first design. The pool will close from February to November. The trust running the building says the extra tiling work adds nine weeks and about ninety thousand pounds, which it hopes to raise from a public appeal. The gym and the cafe stay open throughout."
         }
       },
@@ -331,7 +331,7 @@
           "must_mention": [
             "Orrell Baths"
           ],
-          "summary": "Orrell Baths will retain its Victorian tiling after conservation officers rejected the original refurbishment design, closing the pool from February to November. The extra work adds nine weeks and roughly £90,000, which the trust hopes a public appeal will fund; gym and cafe remain open.",
+          "summary": "Orrell Baths will retain its Victorian tiling after conservation officers rejected the original refurbishment design, closing the pool from February to November. The extra work adds nine weeks and roughly \u00a390,000, which the trust hopes a public appeal will fund; gym and cafe remain open.",
           "text": "Orrell Baths will keep its Victorian tiling under the refurbishment agreed last week, after conservation officers objected to the first design. The pool will close from February to November. The trust running the building says the extra tiling work adds nine weeks and about ninety thousand pounds, which it hopes to raise from a public appeal. The gym and the cafe stay open throughout."
         }
       },

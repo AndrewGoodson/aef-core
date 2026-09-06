@@ -79,7 +79,7 @@
       }
     }
   ],
-  "notes": "one attributed forward-looking claim (Rule A, ADR 0201); synthetic passage",
+  "notes": "synthetic passage; recorded live via claude_code on claude-opus-5[1m] (ADR 0201). One attributed forward-looking claim, and the owner's Rule A: an attributed claim stays attributed",
   "recorded_at": "2026-09-06T10:45:20.048179+00:00",
   "source": "record",
   "split": "train",

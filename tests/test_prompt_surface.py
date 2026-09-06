@@ -292,9 +292,10 @@ def test_the_corpus_readme_records_which_model_wrote_what() -> None:
             )
         )
         agg[models] += 1
-    # Was 20 / 19 until ADR 0186; the holdout pair is the declared exception.
+    # Was 20 / 19 until ADR 0186 and 37 until ADR 0201 recorded fourteen more;
+    # the holdout pair is the declared exception and stays at two.
     assert agg[("claude-fable-5-1",)] == 2, agg
-    assert agg[("claude-opus-5[1m]",)] == 37, agg
+    assert agg[("claude-opus-5[1m]",)] == 51, agg
 
 
 @pytest.mark.parametrize(

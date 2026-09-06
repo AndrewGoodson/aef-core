@@ -172,7 +172,11 @@ class Scenario:
         return out
 
 
-_ATTRIBUTED = "one attributed forward-looking claim (Rule A, ADR 0201); synthetic passage"
+_ATTRIBUTED = (
+    "synthetic passage; recorded live via claude_code on claude-opus-5[1m] "
+    "(ADR 0201). One attributed forward-looking claim, and the owner's Rule A: "
+    "an attributed claim stays attributed"
+)
 
 SCENARIOS: list[Scenario] = [
     Scenario(

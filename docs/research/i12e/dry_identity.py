@@ -42,9 +42,7 @@ PY = sys.executable
 
 # A 1.0 grid, so "the smallest value that engages every lesson everywhere" is
 # a value this sweep can actually name rather than the nearest one it tried.
-CONFIGS = [("a", "0.0"), ("b", "0.0"), ("c", "0.0")] + [
-    ("d", f"{b}.0") for b in range(1, 19)
-]
+CONFIGS = [("a", "0.0"), ("b", "0.0"), ("c", "0.0")] + [("d", f"{b}.0") for b in range(1, 19)]
 
 
 def main() -> None:
@@ -78,7 +76,8 @@ def main() -> None:
         rendered = d["lessons_rendered"]
         n = len(rendered)
         counts = {
-            name: sum(1 for v in rendered.values() if name in v) for name in ("cap", "ruleA", "both")
+            name: sum(1 for v in rendered.values() if name in v)
+            for name in ("cap", "ruleA", "both")
         }
         all_three = sum(1 for v in rendered.values() if len(v) == 3)
         print(

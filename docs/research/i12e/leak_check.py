@@ -1,29 +1,14 @@
-"""ADR 0180's excerpt property, checked end to end on the LIVE arms.
+"""P2 — ADR 0180's excerpt property, asked of the LIVE prompts of every arm.
 
-`seed.py::assert_no_excerpt` proves the property where it is defined — inside
-a record's content. This asks the question one layer out, on the arms that
-actually ran: **did any run's own summary reach a later run's prompt?**
+`docs/research/i12d/leak_check.py` (ADR 0193) with one character changed: the
+glob reads arms a, b and d rather than a, b and c, because arm (c) sends arm
+(b)'s prompts byte for byte and has no JSON of its own.
 
-That is the shape ADR 0162 measured the harm of. A lesson bullet carrying a
-38-word example summary made two at-cap runs LONGER (23 -> 28 words against a
-cap of 25; 38 -> 41 against 38) and broke the very check the lesson describes.
-S1b's arm (c) put such a bullet in ten of seventeen prompts. If the fix holds,
-the count here is zero for every arm.
-
-Windows are 12 characters, the width the shipped regression test uses. Every
-summary is checked against every LATER prompt in the same arm, not just the one
-whose record produced the lesson, because a leak through consolidation would
-surface anywhere downstream.
-
-**Only the rendered LESSON BLOCK of the later prompt is scanned, and the first
-version of this script scanned the whole prompt — which was wrong and said so
-loudly.** Whole-prompt scanning reported 28 leaked windows in arm (a), the arm
-with no retrieve node at all: the hits were ordinary English shared between a
-summary and the next scenario's PASSAGE (`' for the first time '`, nine
-overlapping windows of one idiom). A detector that fires on an arm with no
-channel is measuring the language, not the channel. The lesson block is the
-only path by which a prior run's output can reach a later prompt, so it is the
-only thing scanned.
+The property: no 12-character window of any run's own summary may appear in a
+LATER run's rendered lesson block. It scans the lesson block only — the first
+version scanned whole prompts and fired 28 times on the arm that has no
+retrieve node at all, because the passage is in the prompt too (corrected in
+ADR 0184). The lesson block is the only path an earlier output can travel.
 
 Usage:
   <venv>/bin/python leak_check.py [results-dir]
@@ -41,11 +26,48 @@ WINDOW = 12
 # committed JSON without importing the package it is measuring.
 HEADER = "Lessons from this agent's earlier runs (most relevant first):"
 
+# The HARNESS's own fixed vocabulary - `RuleBasedCritic`'s template and
+# `check_memory._OP_PROSE` - spelled out for the same reason. A window that
+# occurs inside one of these is text the producer wrote, not text a run wrote,
+# and a scanner that counts it is measuring English rather than provenance.
+#
+# This is not a loosened control; it is a false positive found by running it.
+# On this corpus the raw scan reported four hits, all of the SAME window,
+# "er than the " - which is inside "is longer than the owner's maximum",
+# present in every word-cap lesson bullet - against a summary that happened to
+# contain "rather than the". The discriminator is reproducible offline: the
+# same window is in arm (d) repeat 0's lesson blocks, where that repeat's
+# `sum-39` summary does not contain it at all. Both counts are printed, so a
+# reader can apply either.
+TEMPLATE_PHRASES = (
+    "error(s) recorded",
+    "tool call(s) failed",
+    "no failure signals",
+    "check failed: working_memory.summary",
+    "does not contain a required substring the owner declared",
+    "does not equal the value the owner declared",
+    "does not match the pattern the owner declared",
+    "was never recorded",
+    "is longer than the owner's maximum",
+    "is shorter than the owner's minimum",
+    "observed",
+    "words,",
+    "chars",
+)
+
 
 def windows(text: str, width: int = WINDOW) -> set[str]:
     if len(text) < width:
         return set()
     return {text[i : i + width] for i in range(len(text) - width + 1)}
+
+
+def template_windows() -> set[str]:
+    """Every 12-character window of the harness's own fixed phrasing."""
+    out: set[str] = set()
+    for phrase in TEMPLATE_PHRASES:
+        out |= windows(phrase)
+    return out
 
 
 def lesson_block(prompt: str) -> str:
@@ -63,14 +85,20 @@ def lesson_block(prompt: str) -> str:
 
 def main() -> None:
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent / "results"
-    print("| arm | repeat | later prompts carrying a lesson block | leaked windows |")
-    print("|---|---|---|---|")
+    template = template_windows()
+    print(
+        "| arm | repeat | later prompts carrying a lesson block | raw hits | "
+        "hits from a RUN's own output |"
+    )
+    print("|---|---|---|---|---|")
     total = 0
-    for path in sorted(root.glob("[abc]_r*.json")):
+    total_raw = 0
+    for path in sorted(root.glob("[abd]_r*.json")):
         d = json.loads(path.read_text())
         order = d["order"]
         with_block = sum(1 for i in order if lesson_block(d["draft_prompts"].get(i, "")))
         leaked = 0
+        raw = 0
         for i, earlier in enumerate(order):
             summary = d["summaries"].get(earlier, "")
             if not summary:
@@ -80,15 +108,25 @@ def main() -> None:
                 if not block:
                     continue
                 hits = windows(summary) & windows(block)
-                if hits:
-                    leaked += len(hits)
+                raw += len(hits)
+                real = hits - template
+                if real:
+                    leaked += len(real)
                     print(
                         f"    LEAK {d['arm']}r{d['repeat']} {earlier} -> {later}: "
-                        f"{len(hits)} e.g. {sorted(hits)[0]!r}"
+                        f"{len(real)} e.g. {sorted(real)[0]!r}"
+                    )
+                elif hits:
+                    print(
+                        f"    (template collision, not a leak) {d['arm']}r{d['repeat']} "
+                        f"{earlier} -> {later}: {sorted(hits)[0]!r}"
                     )
         total += leaked
-        print(f"| ({d['arm']}) | {d['repeat']} | {with_block}/{len(order)} | **{leaked}** |")
-    print(f"\ntotal leaked windows across every arm and repeat: {total}")
+        total_raw += raw
+        print(
+            f"| ({d['arm']}) | {d['repeat']} | {with_block}/{len(order)} | {raw} | **{leaked}** |"
+        )
+    print(f"\nraw window hits: {total_raw}   hits from a run's own output: {total}")
 
 
 if __name__ == "__main__":

@@ -92,6 +92,7 @@ ADR_0163 = "docs/adr/0163-the-pilot-on-the-clone-and-the-path-that-was-never-ope
 ADR_0175 = "docs/adr/0175-the-arms-were-real-this-time-and-the-layer-still-did-not-pay.md"
 ADR_0180 = "docs/adr/0180-the-good-column-and-the-quotation.md"
 ADR_0193 = "docs/adr/0193-the-arms-re-run-on-the-corpus-that-exists.md"
+ADR_0201 = "docs/adr/0201-the-second-lesson-and-the-knob-that-is-a-switch.md"
 ADR_0184 = "docs/adr/0184-the-lesson-was-fresh-and-the-layer-paid.md"
 ADR_0186 = "docs/adr/0186-one-model-across-the-corpus-and-what-it-cost.md"
 ADR_0198 = (
@@ -271,6 +272,90 @@ MEASUREMENTS: tuple[Measurement, ...] = (
             "load came back empty (`KeyError: 'a'`). The re-runner caught a "
             "measurement that could not re-derive itself one increment after it "
             "was built, which is the whole claim of ADR 0196.",
+        ),
+    ),
+    Measurement(
+        id="i12e-seed",
+        title="P2 step 0 — the three lessons ADR 0201's arms started from",
+        adr=ADR_0201,
+        argv=("docs/research/i12e/seed.py", "--verify"),
+        rows=(
+            Row(
+                "train scenarios",
+                r"train scenarios: (\d+)   live calls",
+                r"train scenarios: (\d+)   live calls",
+            ),
+            Row(
+                "failure records",
+                r"memory: (\d+) failure record\(s\)",
+                r"memory: (\d+) failure record\(s\)",
+            ),
+            Row(
+                "records the excerpt property covers",
+                r"any of the (\d+) record\(s\) derived from it",
+                r"any of the (\d+) record\(s\) derived from it",
+            ),
+            Row(
+                "consolidated entries",
+                r"CONSOLIDATED: (\d+) knowledge entr",
+                r"CONSOLIDATED: (\d+) knowledge entr",
+            ),
+            Row(
+                "Rule A entry recurrence (distinct runs)",
+                r"\| \*\*ruleA\*\* \| (\d+) \|",
+                r"summary:regex  kind=failure runs=(\d+)",
+            ),
+            Row(
+                "word-cap entry recurrence (distinct runs)",
+                r"\| \*\*cap\*\* \| (\d+) \|",
+                # Anchored: the JOINED signature also ends `…summary:max_words`,
+                # and an unanchored pattern reads its count instead.
+                r"^\s+failure:check:working_memory\.summary:max_words  kind=failure runs=(\d+)",
+            ),
+        ),
+        speed="slow",
+    ),
+    Measurement(
+        id="i12e-arms",
+        title="P2 — the four arms on a store where lessons compete, ADR 0201's table",
+        adr=ADR_0201,
+        argv=("docs/research/i12e/aggregate.py", "--verify"),
+        rows=(
+            Row(
+                "(b) raw records, mean of 2 repeats",
+                r"\| \(b\) raw records \| 2 \| \*\*([0-9.]+)\*\*",
+                r"\| \(b\) raw records \| 2 \| \*\*([0-9.]+)\*\*",
+            ),
+            Row(
+                "(d) + knowledge @ 16.0, mean of 2 repeats",
+                r"\| \(d\) \+ knowledge @ 16\.0 \| 2 \| \*\*([0-9.]+)\*\*",
+                r"\| \(d\) \+ knowledge @ 16\.0 \| 2 \| \*\*([0-9.]+)\*\*",
+            ),
+            Row(
+                "(d) − (b) on the mean",
+                r"\(d\) − \(b\) on the mean\s+= \+?([0-9.]+)",
+                r"\(d\) − \(b\) on the mean\s+= \+?([0-9.]+)",
+            ),
+            Row(
+                "the bar (larger repeat spread)",
+                r"larger repeat spread \(BAR\)\s+=\s+([0-9.]+)",
+                r"larger repeat spread \(BAR\)\s+=\s+([0-9.]+)",
+            ),
+            Row(
+                "(d) − (b) on the negatives",
+                r"\(d\) − \(b\) on the negatives\s+= \+?([0-9.]+)",
+                r"\(d\) − \(b\) on the negatives\s+= \+?([0-9.]+)",
+            ),
+            Row(
+                "knowledge entries seeded",
+                r"knowledge entries seeded\s+=\s+(\d+)",
+                r"knowledge entries seeded\s+=\s+(\d+)",
+            ),
+            Row(
+                "word-cap failures in arm (d) repeat 0",
+                r"\| \(d\) \+ knowledge @ 16\.0 \| 0 \| \*\*(\d+)\*\*",
+                r"\| \(d\) \+ knowledge @ 16\.0 \| 0 \| (\d+) \|",
+            ),
         ),
     ),
     Measurement(
