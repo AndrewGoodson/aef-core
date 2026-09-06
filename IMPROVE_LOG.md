@@ -7039,3 +7039,112 @@ skip. 3 mutations, 3 caught after that.
 Two stale docstrings retracted: `CodexProvider` no longer says its parsing is
 a hypothesis, and its `isolation` property no longer says the adapter has
 never been run. **Dimension 8: 4 → 5.**
+
+## P1 — the night nobody watched, several candidates a turn, and the set the loop may not choose
+
+ADR **0200**. `TO_95_LOOP.md`'s first increment, against ADR 0188's dimension
+1 (13/20) and its three clauses, quoted: *"it has never closed unattended"*,
+*"one candidate per turn"*, *"the 2-scenario holdout is read by no automated
+comparison"*. 54 live calls of a ≤120 budget.
+
+**Reproduced first, both mechanisms, before anything changed.** A
+three-constant fixture: the rule-based proposer offers **three** distinct
+trees, `cycle` creates **one** branch, and two candidates are discarded
+without ever being measured. The line was `proposals[0]` with a comment
+calling it deliberate, and the docstring above it argued cost — which is an
+argument for a number and a knob, not for a hard-coded 1. And the holdout: the
+only readers in the entire repository are one flag and one refusal, named in
+no workflow, over two scenarios.
+
+**A. `--candidates N`, default 1.** N candidates is N INDEPENDENT gate passes
+— each on its own branch, in its own workdir (that second one is ADR 0122's
+`TrustBoundaryError` defect one level down: G1 refuses a non-empty workspace,
+so a shared workdir would reject candidate 2 before any behavioural gate ran)
+— and the turn keeps the best of those that PASSED. The score only ORDERS
+what the gates already accepted: a 0.99 they rejected loses to a 0.6 they
+took, and a test pins it. A `CANDIDATES` ledger entry records every candidate
+tried, alongside the `PROPOSED`/`GATED`/`REJECTED` entries each one earns on
+its own; `run_loop` learns the losers' trees so the next turn cannot spend
+cohort+2 corpus passes re-gating a diff this run already refused.
+
+**What N costs, measured on the night's own clock rather than reasoned about:
+7 corpus passes, 28 scenario executions, 24 live model calls and 131 s per
+candidate.** Linear, and unshareable — the control cohort is generated from
+the file the candidate changed, so two candidates need two cohorts even when
+they touch one file. That linearity is the entire argument for the default
+staying 1.
+
+**B. The holdout stays the owner's.** The decision is argued both ways in the
+ADR. Against spending it on a cadence: n=2 here and **n=0 on the pilot**
+(harvest promotes to train only, so an adopter's holdout is empty until they
+build one); a cadence conditioned on the loop's own keeps correlates the read
+with its successes; and each scheduled read turns it into a second validation
+split, slowly, with nobody deciding to. What reads instead is `--audit-slice
+N` — N train scenarios drawn by `audit_slice(corpus, at, size)`, **whose
+guarantee is the absence of any other parameter**. A signature test pins that,
+and the mutation that adds a `score` argument fails it. The slice rotates
+daily, is subtracted from the gated set AND from the proposer's evidence (by
+relabelling to `validation`, so the refusal that already exists does the work
+rather than a second copy of it), and is read afterwards as an **advisory**
+comparison recorded with `advisory: true` — because a set the loop is selected
+against is not held out.
+
+The cost is stated and computed rather than glossed: on 2026-09-09 the same
+function draws the very run the pilot's lesson recurs across, the lesson drops
+below the recurrence threshold, and that night's turn proposes nothing.
+Holding evidence back sometimes removes the evidence.
+
+**C. The night.** Scheduled for an instant it did not choose, fired, and left.
+262 s, 2 of 3 turns, 48 live calls, exit 0. It proposed from harvested
+production evidence, was rejected both times by G2, stopped on its own
+repeated-tree rule, kept nothing, moved neither `master` nor `loop/kept`, and
+left a ledger, a lineage, a journal, a digest and a status a person read cold:
+`docs/research/night-1/MORNING-REPORT.md`. Both failed starts are reported
+there rather than tidied away — attempt 1 died at exit 127 because `timeout(1)`
+does not exist on macOS (my harness), attempt 2 ran the loop and the loop
+produced nothing, which is the finding.
+
+**F-P1-1 (HIGH, fixed).** `aef loop cycle` has derived the evidence graph id
+from the corpus it already loaded since ADR 0176. **`cmd_run` never called
+`resolve_graph_id_from_corpus` at all.** So the multi-turn driver — the one a
+night uses — kept the archive-key default `"default"`, `MemoryEvidence`
+dropped every record belonging to the pilot's own scenarios, and it printed
+`no admissible failure memory … no candidate this cycle` **at exit 0**. On any
+adopting repo whose graph id is not literally `default`, which is every
+migrated prompt-agent repo, `aef loop run` could not propose. ADR 0165's shape
+for the third time — a pair of commands, one fixed, the other left, invisible
+because the broken one exits 0 — and it survived two waves of fixes to its
+twin. Reproduced side by side at zero live cost, fixed, with a regression test
+and a pin that both turn-running commands settle the question the same way.
+
+**F-P1-3, the measurement.** One day of calendar drift flipped a
+**byte-identical** candidate from ADR 0192's `G2 pass` to `G2 fail — 4
+previously-passing scenario(s) no longer pass`. G2 compares a LIVE candidate
+against a CASSETTE-replayed incumbent (the incumbent persona is byte-identical
+to the recording, so it hits: 0 misses, 0.15 s), and the pilot's owner checks
+pin absolute day counts the model computes from **its own** date, which
+`fixed_clock` does not reach. On a corpus with calendar-dependent checks that
+comparison decays one day per day. Three options priced in the morning report;
+none chosen here, because it is an owner's decision and the tempting one
+(score the incumbent live too) doubles every gate's live cost and makes the
+incumbent noisy.
+
+**F-P1-2, reported not fixed** (another worker's file): `aef loop doctor` says
+`halt channel none — set AEF_HALT_WEBHOOK` on the same repository where `aef
+loop digest` says `configured: yes — /bin/sh (4 argument(s))`. `doctor` takes
+no `--config`, so it cannot read ADR 0195's `halt_channel:` block even in
+principle, and the surface an owner is told to run for the fix is the one
+giving the wrong answer.
+
+`test_the_cycle_proposes_at_most_one_candidate` was `assert "proposals[0]" in
+inspect.getsource(cycle)` and is replaced by a behavioural test. **It would
+have passed unchanged**, because the literal survives in a comment about the
+day it was true — a source-text assertion cannot tell a mechanism from a
+memory of one.
+
+12 mutations, 12 caught, every restore shasum-verified. **Dimension 1: 13 →
+18**, heading 78 → 83. Not 20: nothing was kept, so the audit has never fired
+on a passing candidate; `--candidates 2` was configured and the prompt
+proposer offers one lesson by construction, so no second candidate existed;
+and two turns in four minutes is not ~100 runs a night — the gap is the
+proposer's repertoire, not the driver.

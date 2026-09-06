@@ -1,0 +1,11 @@
+the proposer OFFERS 3 candidate(s) this turn:
+  - repro-0: grounded in recorded failures — the run failed: budget exhausted (1); the ru
+  - repro-1: grounded in recorded failures — the run failed: budget exhausted (1); the ru
+  - repro-2: grounded in recorded failures — the run failed: budget exhausted (1); the ru
+
+the turn GATED 1 candidate(s): ['loop/cycle-20260301T120000-0']
+discarded without ever being measured: 2
+  cycle> ledger verified: 0 entr(ies)
+  cycle> proposed cycle-20260301T120000-0 on local branch loop/cycle-20260301T120000-0 (never pushed; proposer=rule_based)
+  cycle> gated: reject — stub
+candidate branches created: ['loop/cycle-20260301T120000-0']

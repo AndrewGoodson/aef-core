@@ -1,0 +1,7 @@
+lineage for 'default' — 3 member(s) — /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/p1/state/lineage/default.jsonl
+  ref           parent          score  verdict    kids  sampleable
+  ccad2eb6b0de  -                   -  kept          3  yes
+  2f3ae97a32cf  ccad2eb6b0de   0.0000  reject        0  yes
+  0d3dd29d1a68  ccad2eb6b0de   0.0000  reject        0  yes
+  1 kept, 2 rejected; 3 sampleable as a parent
+  no kept member descends from a rejected one

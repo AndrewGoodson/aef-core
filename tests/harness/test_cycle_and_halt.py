@@ -14,6 +14,7 @@ from aef.harness import ledger
 from aef.harness.git import GitRepo
 from aef.harness.loop import CycleRun, LoopConfig, LoopPaths, cycle
 from aef.harness.monitoring import Digest, HaltNotifier, LoopHaltedError
+from aef.services.memory.base import MemoryRecord
 from aef.services.memory.in_memory import InMemoryMemoryStore
 
 NOW = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
@@ -119,13 +120,57 @@ def test_the_cycle_never_pushes(repo: GitRepo, tmp_path: Path) -> None:
     assert '"push"' not in source and "'push'" not in source
 
 
-def test_the_cycle_proposes_at_most_one_candidate(repo: GitRepo, tmp_path: Path) -> None:
-    import inspect
+def test_the_cycle_proposes_one_candidate_by_default(repo: GitRepo, tmp_path: Path) -> None:
+    """The DEFAULT is still one candidate, and it is asserted by running.
 
+    This used to read `assert "proposals[0]" in inspect.getsource(cycle)`. A
+    source-text pin cannot tell "the cycle takes one proposal" from "the
+    literal `proposals[0]` appears in a comment about the day it did", and
+    after ADR 0200 both were true of the same file. So it asserts the
+    behaviour: one gate pass, one candidate branch, one attempt recorded —
+    with a proposer that offered three.
+    """
     import aef.harness.loop as loop_module
+    from aef.harness.proposer import MemoryEvidence, RuleBasedProposer
 
-    source = inspect.getsource(loop_module.cycle)
-    assert "proposals[0]" in source, "the cycle must take one proposal, not iterate"
+    source = "RETRY_BUDGET = 3\nQUALITY_THRESHOLD = 4\nTIMEOUT_S = 8\n"
+    (repo.root / "agents" / "demo" / "graph.py").write_text(source)
+    _git(repo.root, "commit", "-aqm", "three constants")
+
+    store = InMemoryMemoryStore()
+    for i in range(2):
+        store.write(
+            MemoryRecord(
+                id=f"rec-{i}",
+                kind="failure",
+                run_id=f"run-{i}",
+                content={"verbal_feedback": f"budget exhausted ({i})"},
+            )
+        )
+    offered = RuleBasedProposer().propose_from_memory(
+        MemoryEvidence.from_store(store),
+        proposal_id="probe",
+        path="agents/demo/graph.py",
+        source=source,
+    )
+    assert len(offered) == 3, "the fixture must offer more than one, or this proves nothing"
+
+    gated: list[str] = []
+    real = loop_module.gate
+    loop_module.gate = lambda config, branch, **kw: (  # type: ignore[assignment]
+        gated.append(branch),
+        real(config, branch, **kw),
+    )[1]
+    try:
+        run = _cycle(
+            _config(repo, tmp_path), tmp_path, memory=store, agent_path="agents/demo/graph.py"
+        )
+    finally:
+        loop_module.gate = real
+
+    assert len(gated) == 1, f"one gate pass by default, got {len(gated)}"
+    assert len(run.attempts) == 1
+    assert run.proposed == run.attempts[0].proposal_id
 
 
 # --------------------------------------------------------------------------

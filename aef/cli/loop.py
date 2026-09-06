@@ -431,6 +431,11 @@ def _config(args: argparse.Namespace) -> LoopConfig:
         tier1_enabled=False,
         # "fail" unless the owner asked for live scoring by name (ADR 0123).
         cassette_miss=getattr(args, "cassette_miss", "fail"),
+        # 1 unless the owner asked for more by name (ADR 0200). `getattr` with
+        # the dataclass's own default, so the six subcommands that define no
+        # such flag build exactly the configuration they built before.
+        candidates_per_turn=int(getattr(args, "candidates", 1) or 1),
+        audit_slice_size=int(getattr(args, "audit_slice", 0) or 0),
     )
     # Every `aef loop` subcommand that takes BOTH --repo and --state passes
     # through here — the nine `_common()` wires — and until ADR 0167 only five
@@ -1630,6 +1635,14 @@ def cmd_cycle(args: argparse.Namespace) -> int:
             if run.proposed is not None
             else (run.lines[-1] if run.lines else "nothing to report")
         )
+        if len(run.attempts) > 1:
+            # In the VERDICT, not only in the lines above it: a turn that
+            # gated three candidates and kept one spent three times the corpus
+            # passes, and a journal that records only the winner reads exactly
+            # like a turn that tried once (ADR 0200).
+            verdict = f"{verdict} [best of {len(run.attempts)} gated candidate(s)]"
+        if run.audit is not None:
+            verdict = f"{verdict} [{run.audit.line()}]"
         if not getattr(args, "memory", None):
             verdict = f"{verdict} (--no-memory was passed: this cycle could not propose)"
         if derived is not None:
@@ -1698,6 +1711,31 @@ def cmd_run(args: argparse.Namespace) -> int:
     # every one of them happens here (ADR 0167).
     state_root = Path(args.state)
     try:
+        # BEFORE `_config`, which freezes the evidence id into `LoopConfig` —
+        # the same call, in the same position, that `cmd_cycle` has made since
+        # ADR 0176. **`cmd_run` never made it**, and until ADR 0200 nothing
+        # noticed, because the only thing that would notice is a `loop run`
+        # against a corpus whose graph id is not the literal `"default"` —
+        # which is every migrated prompt-agent repo, and which nothing in this
+        # program had run unattended.
+        #
+        # Found BY the unattended night (ADR 0200, part C) and reproduced side
+        # by side on one repo, one corpus and one memory file:
+        #
+        #     cycle> --graph-id not given; the evidence graph id is derived as
+        #            'price-freshness-reviewer' … proposed cycle-…-prompt
+        #     run>   2 memory record(s) excluded as belonging to a graph other
+        #            than 'default'
+        #     run>   no admissible failure memory … no candidate this cycle
+        #     run>   stopped: turn 1 produced no candidate
+        #
+        # `aef loop run` — the multi-turn driver, the one a night uses — could
+        # not propose at all on an adopting repo. ADR 0165's shape exactly: one
+        # of the two turn-running commands fixed, the other left, and the
+        # difference invisible because the broken one exits 0.
+        resolution = resolve_graph_id_from_corpus(args)
+        if resolution.note is not None:
+            print(f"  {resolution.note}")
         config = _config(args)
         # The ONE loader, like the other five (ADR 0176 F3, completed by ADR
         # 0182). This was `cli.run.load_graph_module`, which took a dotted
@@ -1732,6 +1770,15 @@ def cmd_run(args: argparse.Namespace) -> int:
         # Not journalled: the journal lives under `--state`, so writing it
         # would create the directory just refused.
         print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    except GraphIdError as exc:
+        # EXIT_ERROR, beside `cmd_cycle`'s identical clause and for ADR 0188's
+        # reason: an ambiguous or unknown graph id is a fault in the
+        # INVOCATION, and reporting it as 1 makes a misconfigured job
+        # indistinguishable from a healthy rejection to the workflow's own
+        # case statement.
+        print(f"error: {exc}", file=sys.stderr)
+        _journal_run_failure(state_root, exc)
         return EXIT_ERROR
     except (PolicyConfigError, KeptBranchCheckedOutError, CorpusGraphMismatchError) as exc:
         # Named refusals, printed as one line rather than a traceback: each
@@ -2317,6 +2364,41 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
             "required with --proposer llm, no default so no model id is hardcoded here",
         )
 
+    def _turn_shape_flags(sub: argparse.ArgumentParser) -> None:
+        """How many candidates a turn tries, and how much it holds back (ADR 0200)."""
+        sub.add_argument(
+            "--candidates",
+            type=int,
+            default=1,
+            metavar="N",
+            help=(
+                "how many candidates one TURN may try (default 1 — what a turn always "
+                "did: the proposer offered several and the cycle took the first). Above "
+                "1, each candidate is materialised on its own branch and gated on its "
+                "OWN independent pass; the turn keeps the best that passed and the "
+                "ledger records every one. The gates never judge a set. COST IS LINEAR: "
+                "N x (cohort+2) corpus passes per turn, so N=2 doubles the most "
+                "expensive thing the loop does."
+            ),
+        )
+        sub.add_argument(
+            "--audit-slice",
+            type=int,
+            default=0,
+            metavar="N",
+            help=(
+                "hold N train scenarios back from this turn and read the kept candidate "
+                "against the incumbent on them afterwards (default 0 — off; ADR 0200). "
+                "Which N is a function of the corpus's own scenario ids and the calendar "
+                "date and nothing else, so the loop cannot choose the set that judges "
+                "it; they rotate daily. Held back from the GATES and from the "
+                "proposer's evidence, both. The read is ADVISORY — it is recorded and "
+                "printed and changes no disposition, because a set the loop is selected "
+                "against is not held out. This is NOT the owner's holdout, which stays "
+                "owner-only behind --i-am-spending-the-holdout."
+            ),
+        )
+
     def _cassette_miss(sub: argparse.ArgumentParser) -> None:
         sub.add_argument(
             "--cassette-miss",
@@ -2705,6 +2787,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "Defaults to pytest only — anything more is repo-specific.",
     )
     _proposer_flags(p_cycle)
+    _turn_shape_flags(p_cycle)
     p_cycle.set_defaults(handler=cmd_cycle)
 
     p_run = loop_subs.add_parser(
@@ -2791,6 +2874,7 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "Defaults to pytest only — anything more is repo-specific.",
     )
     _proposer_flags(p_run)
+    _turn_shape_flags(p_run)
     p_run.set_defaults(handler=cmd_run)
 
     p_bless = loop_subs.add_parser(

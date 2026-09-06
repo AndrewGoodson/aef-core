@@ -1,0 +1,26 @@
+M1  detected     candidates_per_turn ignored — the turn takes one, as it always did
+      1 failed, 1 passed in 0.32s
+M2  detected     the turn keeps the FIRST candidate rather than the best that passed
+      1 failed, 2 passed in 0.73s
+M3  detected     a candidate the gates REJECTED can be kept if it scored well
+      1 failed, 3 passed in 1.07s
+M4  detected     the ledger roster is dropped — only the winner is recorded
+      1 failed, 5 passed in 1.71s
+M5  detected     every candidate shares one workdir (ADR 0122's defect, reinstated)
+      1 failed, 1 passed in 0.44s
+M6  detected     audit_slice gains an input the loop controls
+      1 failed, 11 passed in 2.12s
+M7  detected     the held-back scenarios are gated after all
+      1 failed, 16 passed in 3.11s
+M8  detected     the held-back scenarios' records stay admissible evidence
+      1 failed, 15 passed in 2.15s
+M9  detected     the audit is read even when no candidate passed the gates
+      1 failed, 19 passed in 4.33s
+M10  detected     a losing candidate's rejected tree is forgotten
+      1 failed, 29 passed in 13.00s
+M11  detected     `loop run` stops deriving the evidence id from the corpus (the night's defect)
+      1 failed, 14 passed in 2.05s
+M12  detected     the nightly stops holding anything back
+      1 failed, 24 passed in 0.15s
+
+12/12 detected

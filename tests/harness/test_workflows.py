@@ -257,3 +257,39 @@ def test_this_repos_nightly_cycle_names_the_graph_file_it_may_edit() -> None:
         f"the nightly cycle points --agent-path at {named!r}, which is not a file in this "
         f"repo — the state ADR 0191's F6 reproduced, in the other direction"
     )
+
+
+def test_this_repos_nightly_reads_a_held_back_slice() -> None:
+    """ADR 0200's second clause, pinned where it has to hold.
+
+    The reviewer's sentence was that the holdout "is read by no automated
+    comparison — only by `--i-am-spending-the-holdout` by hand". The answer is
+    not to spend the holdout on a schedule; it is that a SCHEDULED run holds
+    scenarios back and reads them. If this flag falls off the nightly, that is
+    true again and nothing else would notice.
+    """
+    from pathlib import Path
+
+    text = (
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "loop-monitor.yml"
+    ).read_text()
+    cycle = text[text.index("aef loop cycle") :]
+    cycle = cycle[: cycle.index("tee")]
+
+    assert "--audit-slice" in cycle, cycle
+    assert "--candidates" in cycle, cycle
+
+
+@pytest.mark.parametrize("name", ["loop-gate.yml", "loop-monitor.yml", "ci.yml"])
+def test_no_scheduled_job_may_spend_the_owners_holdout(name: str) -> None:
+    """The decision ADR 0200 argues for, made unfalsifiable-by-drift.
+
+    The holdout is two scenarios and it is the owner's only independent read.
+    A job that spends it on a cadence converts it into a second validation
+    split — slowly, and with nobody deciding to.
+    """
+    from pathlib import Path
+
+    text = (Path(__file__).resolve().parents[2] / ".github" / "workflows" / name).read_text()
+
+    assert "--i-am-spending-the-holdout" not in text

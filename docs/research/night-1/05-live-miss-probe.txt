@@ -1,0 +1,3 @@
+task metric — agents/migrated/price_freshness_reviewer/graph.py:build_graph (price-freshness-reviewer) — repeat=1
+  model calls: 0 cassette hit(s), 5 miss(es), on_miss=live — LIVE
+  train       n=5   with_checks=5   mean=0.7333 stdev=0.3651 ci95=[0.4133, 1.0534] repeat_spread=0.000000

@@ -1,0 +1,24 @@
+== 1. who reads the holdout at all
+   Binary file aef/cli/__pycache__/adopt_loop.cpython-313.pyc matches
+   Binary file aef/cli/__pycache__/loop.cpython-313.pyc matches
+   aef/cli/loop.py:850:        allow_holdout=args.i_am_spending_the_holdout,
+   aef/cli/loop.py:1065:    if Split.HOLDOUT in splits and not args.i_am_spending_the_holdout:
+   aef/cli/loop.py:1067:            "refusing to score the holdout split without --i-am-spending-the-holdout",
+   aef/cli/loop.py:2441:        "--i-am-spending-the-holdout",
+   aef/cli/loop.py:2572:        help="comma-separated; holdout needs --i-am-spending-the-holdout",
+   aef/cli/loop.py:2582:    p_score.add_argument("--i-am-spending-the-holdout", action="store_true")
+   aef/cli/adopt_loop.py:985:`--i-am-spending-the-holdout`. The corpus never shrinks: a suite that can be
+
+== 2. every SCHEDULED surface, and whether it names the holdout
+   .github/workflows/ci.yml: holdout mentioned 0 time(s)
+   .github/workflows/loop-gate.yml: holdout mentioned 0 time(s)
+   .github/workflows/loop-monitor.yml: holdout mentioned 0 time(s)
+   aef/cli/adopt_loop.py rendered nightly: '--i-am-spending-the-holdout' appears 1 time(s) in anything it renders
+
+== 3. the refusal, run
+   refusing to score the holdout split without --i-am-spending-the-holdout
+   exit=1
+
+== 4. what the holdout contains
+   sum-19-tram-depot.json
+   sum-20-seed-bank.json

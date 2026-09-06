@@ -71,6 +71,17 @@ class EventKind(StrEnum):
     # that every Monday as "a proposal reached for the harness" is an alarm
     # firing on the normal case (ADR 0167).
     CONTAINMENT = "containment"
+    # The roster of a turn that tried more than one candidate, and which one
+    # it kept (ADR 0200). Each candidate ALSO has its own PROPOSED/GATED/
+    # REJECTED-or-ESCALATED entries — this adds the one fact those cannot
+    # carry, which is that they were alternatives to each other and how the
+    # choice between them was made. Not counted by the digest: it would
+    # double-count proposals that are already counted one by one.
+    CANDIDATES = "candidates"
+    # A held-out read of a candidate the gates already passed (ADR 0200).
+    # ADVISORY: it changes no disposition, and its entry says so, because a
+    # set the loop is selected against is not a set that is held out.
+    AUDIT = "audit"
 
 
 @dataclass(frozen=True)
