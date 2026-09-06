@@ -21,8 +21,6 @@ A self-graded number is exactly the failure the trust case warns about.
 
 ## Current — 2026-09-06, J0b's re-score (ADR 0188) over J0's base (ADR 0151), plus the above-95 and to-95 loops' increments — **83 / 100**
 
-## Current — 2026-09-05, J0b's re-score (ADR 0188) over J0's base (ADR 0151), plus the above-95 loop's increments — **74 / 100**
-
 *The base is J0's independent score (68, ADR 0151). Every row above J0's is a
 self-graded increment measured after it — each names its ADR and the artifact,
 and each is exactly the kind of row a future J0 should re-check. A heading that

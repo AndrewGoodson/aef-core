@@ -119,3 +119,11 @@ def test_every_scored_section_is_self_consistent(kind: str) -> None:
         # Current omits dimensions that have never moved; they carry.
         carried = {d: v for d, v in _current_scores().items() if d not in rows}
         assert sum(s for s, _ in rows.values()) + sum(s for s, _ in carried.values()) == stated
+
+
+def test_the_file_carries_exactly_one_current_heading() -> None:
+    """A merge left two `## Current` headings with different totals (83 and a
+    stale 74). `_sections` reads the first, so the arithmetic stayed green
+    while a reader scrolling one line further saw a different number — the
+    scoreboard defect this file exists to prevent, in the file itself."""
+    assert _text().count("## Current") == 1, "two headings mean two answers"
