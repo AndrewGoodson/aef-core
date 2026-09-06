@@ -15,7 +15,7 @@ on:
     # The exposure window is the monitoring window, so this is the thing that
     # bounds how long a bad change runs live (ADR 0056).
     - cron: "0 * * * *"
-    # Daily cycle — harvest, propose, gate. One candidate per turn.
+    # Daily cycle — harvest, propose, gate, and read the held-back slice.
     - cron: "0 3 * * *"
     # Weekly digest — Q-A4 owner default. Monday 09:00 UTC.
     - cron: "0 9 * * 1"
@@ -84,6 +84,21 @@ jobs:
       # graph is `agents/demo/graph.py`, which is also what `--graph-id
       # demo_agent` names. That state is now `EXIT_ERROR` rather than a quiet
       # exit 0, so this line going stale fails the job instead of hiding.
+      #
+      # `--candidates 2` and `--audit-slice 1` are ADR 0200, and each is a
+      # deliberate cost. `--candidates 2` means the turn builds and gates TWO
+      # candidates on two independent passes and keeps the better of the ones
+      # that passed — 2 x (cohort+2) = 14 corpus passes instead of 7, which is
+      # the whole reason it is not the library default. `--audit-slice 1`
+      # holds one train scenario back from the gates AND from the proposer's
+      # evidence, and reads the kept candidate against the incumbent on it
+      # afterwards; which scenario is a function of the corpus's ids and the
+      # date, so the loop cannot choose the set that judges it, and it rotates
+      # daily so no scenario quietly becomes a second validation split.
+      #
+      # The owner's `corpus/holdout` is NOT what this spends and no scheduled
+      # job may spend it: the flag that would is absent from every workflow in
+      # this repository, and a test asserts that by searching for it.
       - name: Daily cycle
         if: github.event.schedule == '0 3 * * *' || github.event_name == 'workflow_dispatch'
         run: |
@@ -95,6 +110,7 @@ jobs:
             --graph-id demo_agent \
             --agent-path agents/demo/graph.py \
             --runs ~/.aef-loop-state/runs --corpus corpus \
+            --candidates 2 --audit-slice 1 \
             --memory ~/.aef-loop-state/memory.jsonl \
             | tee -a "$GITHUB_STEP_SUMMARY"
           status=${PIPESTATUS[0]}

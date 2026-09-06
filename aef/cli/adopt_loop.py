@@ -803,9 +803,26 @@ jobs:
       # regressed, so the gates have a blind spot.
       - run: aef loop monitor --repo . --state ~/.aef-loop-state
 
-      # One turn of the loop: propose one candidate, gate it, escalate or
-      # reject. It creates a LOCAL branch and never pushes, which is why
-      # `contents: read` is enough. Nothing merges — Tier-1 is off.
+      # One turn of the loop: propose, gate, escalate or reject. It creates
+      # LOCAL branches and never pushes, which is why `contents: read` is
+      # enough. Nothing merges — Tier-1 is off.
+      #
+      # `--audit-slice 1` (aef-core ADR 0200) holds one train scenario back
+      # from BOTH the gates and the proposer's evidence, and afterwards reads
+      # the kept candidate against the incumbent on it. Which scenario is a
+      # function of your corpus's own ids and the calendar date, so the loop
+      # cannot choose the set that judges it, and it rotates daily. The read
+      # is advisory — it changes no verdict — and it is what stops a nightly
+      # run from only ever being judged by the set it was optimised on.
+      #
+      # It is NOT your holdout. `corpus/holdout` stays yours: nothing
+      # scheduled may spend it, and the flag that would spend it appears in no
+      # workflow this writes.
+      #
+      # `--candidates N` (default 1) is the other half of that ADR: N means N
+      # independent gate passes and N x (cohort+2) corpus passes, so raising
+      # it is a cost decision. It is left at the default here because a
+      # nightly job on a shared runner is exactly where the cost lands.
       #
       # `--memory` is the flag that decides whether this step does anything:
       # without it the cycle reports `no memory store configured` and exits 0,
@@ -878,6 +895,7 @@ jobs:
             --corpus corpus --config aef.yaml \\
             --memory ~/.aef-loop-state/memory.jsonl \\
             --cassette-miss fail \\
+            --audit-slice 1 \\
             --build-command "$AEF_BUILD_COMMAND" \\
             2>&1 | tee "$RUNNER_TEMP/cycle.log" || status=$?
           # In WORDS, not only as an exit code: `no admissible failure memory`

@@ -688,3 +688,73 @@ def test_a_lineage_member_whose_ref_is_gone_is_history_not_a_parent(
     assert "no longer resolves" in "\n".join(run2.lines)
     # ...and the tree it recorded still catches the duplicate.
     assert sum(t.duplicate for t in run2.turns) == 1
+
+
+# ---------------------------------------------------------------------------
+# A turn that tried several candidates (ADR 0200)
+# ---------------------------------------------------------------------------
+
+
+class _MultiCandidateCycle:
+    """A turn that gates two candidates and keeps one, like `cycle` with
+    `--candidates 2`. Turn 2 re-proposes the LOSER of turn 1."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def __call__(self, config: LoopConfig, *, now: datetime, workdir: Path, **_: Any) -> CycleRun:
+        from aef.harness.loop import CandidateAttempt
+
+        self.calls += 1
+        if self.calls == 1:
+            _materialise_candidate_branch(config, "loop/win", AGENT, "RETRY_BUDGET = 4\n")
+            _materialise_candidate_branch(config, "loop/lose", AGENT, "RETRY_BUDGET = 9\n")
+            return CycleRun(
+                proposed="win",
+                decision=Decision(disposition=Disposition.ESCALATE, reason="fake"),
+                lines=("2 candidates",),
+                exit_code=EXIT_OK,
+                score=0.8,
+                attempts=(
+                    CandidateAttempt("win", "loop/win", "escalate", 0.8, 0.1, True, EXIT_OK, "ok"),
+                    CandidateAttempt(
+                        "lose", "loop/lose", "reject", 0.2, 0.1, False, EXIT_REJECTED, "no"
+                    ),
+                ),
+            )
+        # Turn 2 re-proposes exactly the tree turn 1 already rejected.
+        _materialise_candidate_branch(config, "loop/again", AGENT, "RETRY_BUDGET = 9\n")
+        return CycleRun(
+            proposed="again",
+            decision=Decision(disposition=Disposition.REJECT, reason="fake"),
+            lines=("1 candidate",),
+            exit_code=EXIT_REJECTED,
+            score=0.2,
+            attempts=(
+                CandidateAttempt(
+                    "again", "loop/again", "reject", 0.2, 0.1, False, EXIT_REJECTED, "no"
+                ),
+            ),
+        )
+
+
+def test_a_losing_candidates_tree_is_remembered_as_rejected(repo: GitRepo, tmp_path: Path) -> None:
+    """A turn that gated three diffs and kept one has REJECTED the other two.
+
+    Without this the next turn can spend cohort+2 corpus passes re-gating a
+    tree this run already refused — the exact expense `rejected_trees` exists
+    to avoid, made reachable by ADR 0200's multi-candidate turn.
+    """
+    config = _config(repo, tmp_path)
+
+    run = run_loop(
+        config,
+        now=NOW,
+        workdir=tmp_path / "work",
+        cycle_fn=_MultiCandidateCycle(),
+        turns=2,
+        budget_seconds=3600.0,
+    )
+
+    assert run.kept_count == 1
+    assert "already rejected" in run.stopped_because, run.stopped_because

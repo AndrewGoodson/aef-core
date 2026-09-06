@@ -45,6 +45,7 @@ from aef.harness.corpus import (
     Corpus,
     CorpusManifest,
     Scenario,
+    Split,
     check_never_shrinks,
     load_manifest,
 )
@@ -72,6 +73,7 @@ from aef.harness.proposer import Proposal
 from aef.harness.review import Decision, Disposition, decide, render_report
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy, with_harness_login
 from aef.harness.suite import CohortBuilder
+from aef.harness.workspace import build_candidate_workspace
 from aef.harness.zones import DEFAULT_AGENT_PATH, DEFAULT_AGENT_ROOT, ZonePolicy
 from aef.observability.base import Tracer
 from aef.providers.base import ModelProvider
@@ -257,6 +259,28 @@ class LoopConfig:
     # the BASE REF — same read as every other rule a candidate is judged by,
     # so a candidate cannot silence its own halt by editing its branch.
     halt_channel: HaltChannel | None = None
+    # How many candidates one TURN may try (ADR 0200). Default 1, which is
+    # exactly what every turn did before this field existed: the proposer
+    # offered several and `cycle` took `proposals[0]`.
+    #
+    # N means N INDEPENDENT gate passes, never one pass judging a set. The
+    # gates' verdict logic is untouched: each candidate is materialised on its
+    # own branch, gated on its own, and recorded in the ledger on its own; the
+    # turn then keeps the best of those that PASSED. The cost is linear —
+    # N x (cohort_size + 2) corpus passes — which is why the default is 1 and
+    # raising it is an owner's decision with a number attached.
+    candidates_per_turn: int = 1
+    # How many scenarios are held back from this turn to judge it afterwards
+    # (ADR 0200). 0 — the default — is the behaviour that existed before:
+    # nothing is held back and nothing automated reads a held-out set.
+    #
+    # Above 0, `audit_slice` draws that many TRAIN scenarios from the corpus
+    # as it stood at the START of the turn, using the corpus's own scenario
+    # ids and the calendar date and NOTHING ELSE. They are removed from what
+    # G2/G3 score and their records are made inadmissible to the proposer, so
+    # the loop is neither judged on them during gating nor able to learn from
+    # them — and, critically, the loop cannot choose which ones they are.
+    audit_slice_size: int = 0
 
     @property
     def evidence_id(self) -> str:
@@ -272,6 +296,16 @@ class LoopConfig:
                 f"cohort_size {self.cohort_size} is below G3's minimum of "
                 f"{DEFAULT_MIN_COHORT_SIZE}; every candidate would be rejected for an "
                 f"undersized cohort. Raise it, or change G3's floor deliberately."
+            )
+        if self.candidates_per_turn < 1:
+            raise ValueError(
+                f"candidates_per_turn must be at least 1; got {self.candidates_per_turn}. "
+                f"Zero would make a turn that proposes nothing indistinguishable from a turn "
+                f"whose proposer had nothing to say."
+            )
+        if self.audit_slice_size < 0:
+            raise ValueError(
+                f"audit_slice_size must be 0 (off) or positive; got {self.audit_slice_size}"
             )
         if self.proposer not in PROPOSERS:
             raise ValueError(f"proposer must be one of {PROPOSERS}, got {self.proposer!r}")
@@ -830,6 +864,241 @@ def _scenarios_for_graph(
     )
 
 
+@dataclass(frozen=True)
+class AuditSlice:
+    """The scenarios that judge this turn, and how they were chosen.
+
+    ADR 0200. The reviewer's third clause was that the holdout "is read by no
+    automated comparison — only by `--i-am-spending-the-holdout` by hand", and
+    the decision recorded there is that it stays that way: the owner's holdout
+    is two scenarios, and a statistic over two is not a comparison. What an
+    automated read gets instead is a slice of the TRAIN split, **rotated by
+    the calendar**, held back from the gates for the turn that is judged by it.
+
+    The rule this exists to keep is one sentence: **the loop may never choose
+    which scenarios are in the set that judges it.** `pick` therefore takes
+    the corpus and a date and NOTHING ELSE — no score, no ledger, no memory,
+    no candidate, no proposer state. A test pins the signature, because the
+    guarantee is exactly the absence of those arguments.
+    """
+
+    ids: tuple[str, ...]
+    rotation_key: str
+    drawn_from: int
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.ids
+
+    def describe(self) -> str:
+        if self.is_empty:
+            return "audit slice: empty (nothing held back)"
+        return (
+            f"audit slice {self.rotation_key}: {len(self.ids)} of {self.drawn_from} train "
+            f"scenario(s) held back — {', '.join(self.ids)}"
+        )
+
+
+def audit_slice(corpus: Corpus | None, *, at: datetime, size: int) -> AuditSlice:
+    """Which scenarios are held back to judge the loop on `at`'s date.
+
+    Deterministic in `(the corpus's train ids, the date)`. Rotating means a
+    slice spent tonight is not the slice spent tomorrow, so no single group of
+    scenarios becomes a second validation split by being read every night; and
+    because the draw is an arithmetic function of the sorted ids and the day
+    number, nothing the loop computes can move it.
+
+    **What the loop CAN do, stated rather than glossed:** `harvest` promotes
+    production runs into the train split, so over many nights the loop grows
+    the POOL this draws from. It cannot grow tonight's pool — the corpus this
+    reads is the one loaded before the turn's harvest ran — and it cannot
+    choose which members of the pool are drawn on any night. That is a
+    narrower guarantee than the owner's holdout gives, and it is why the
+    holdout stays the owner's.
+    """
+    key = f"{at:%Y-%m-%d}"
+    if corpus is None or size < 1:
+        return AuditSlice(ids=(), rotation_key=key, drawn_from=0)
+    pool = sorted(s.id for s in corpus.scenarios if s.split is Split.TRAIN)
+    # Never hold back so much that G2/G3 lose their evidence: at most half the
+    # train split, and never the whole of it. A held-out set that empties the
+    # gated set does not test the loop, it disables it.
+    take = min(size, len(pool) // 2)
+    if take < 1:
+        return AuditSlice(ids=(), rotation_key=key, drawn_from=len(pool))
+    start = (at.date().toordinal() * take) % len(pool)
+    ids = tuple(pool[(start + i) % len(pool)] for i in range(take))
+    return AuditSlice(ids=ids, rotation_key=key, drawn_from=len(pool))
+
+
+def _audit_slice_for(config: LoopConfig, now: datetime) -> AuditSlice:
+    return audit_slice(config.corpus, at=now, size=config.audit_slice_size)
+
+
+def _corpus_with_audit_held_out(config: LoopConfig, held: AuditSlice) -> Corpus | None:
+    """The corpus the PROPOSER is allowed to learn from this turn.
+
+    The held-back scenarios are relabelled `validation`, which is the existing
+    machinery for "recorded, gated by the owner's rules, and not citable":
+    `MemoryEvidence.from_store` already refuses to cite a record whose
+    `run_id` is a validation or holdout scenario. Relabelling rather than
+    deleting matters — a scenario removed from the corpus handed to the
+    proposer would also stop `check_never_shrinks` from seeing it.
+    """
+    if config.corpus is None or held.is_empty:
+        return config.corpus
+    ids = set(held.ids)
+    return replace(
+        config.corpus,
+        scenarios=tuple(
+            replace(s, split=Split.VALIDATION) if s.id in ids else s
+            for s in config.corpus.scenarios
+        ),
+    )
+
+
+@dataclass(frozen=True)
+class AuditComparison:
+    """A held-out read of a candidate the gates already passed.
+
+    It does NOT gate. The moment this changed a keep/revert decision the loop
+    would be selected against the slice, and a set the loop is selected
+    against is not held out — the same argument that keeps the owner's holdout
+    owner-only, one level down. It is recorded, printed and surfaced, and a
+    regression here is the signal that the gates have a blind spot.
+    """
+
+    rotation_key: str
+    ids: tuple[str, ...]
+    candidate_mean: float | None
+    incumbent_mean: float | None
+    regressed: tuple[str, ...]
+    note: str
+
+    @property
+    def delta(self) -> float | None:
+        if self.candidate_mean is None or self.incumbent_mean is None:
+            return None
+        return self.candidate_mean - self.incumbent_mean
+
+    def line(self) -> str:
+        if self.candidate_mean is None or self.incumbent_mean is None:
+            return f"audit ({self.rotation_key}): not read — {self.note}"
+        delta = self.delta
+        verdict = "REGRESSED" if self.regressed else "held"
+        return (
+            f"audit ({self.rotation_key}) on {len(self.ids)} held-back scenario(s): "
+            f"candidate {self.candidate_mean:.4f} vs incumbent {self.incumbent_mean:.4f} "
+            f"(delta {delta:+.4f}) — {verdict}"
+            + (f"; regressed: {', '.join(self.regressed)}" if self.regressed else "")
+        )
+
+
+def _run_audit(
+    config: LoopConfig,
+    verdict: CandidateVerdict,
+    *,
+    held: AuditSlice,
+    workdir: Path,
+) -> AuditComparison:
+    """Score the candidate and the incumbent on the held-back slice.
+
+    Two corpus passes over `len(held.ids)` scenarios, and no control cohort:
+    this is not a second G3. G3 asks "did a reasoned change beat random
+    changes on the set it was gated on"; this asks the one question the gated
+    set cannot answer — "does it still hold on scenarios nothing in this turn
+    was allowed to see".
+    """
+    from aef.harness.suite import _materialise_base, run_variant
+
+    if config.entrypoint is None or config.corpus is None:
+        return AuditComparison(
+            rotation_key=held.rotation_key,
+            ids=held.ids,
+            candidate_mean=None,
+            incumbent_mean=None,
+            regressed=(),
+            note="no entrypoint configured, so nothing can execute the held-back scenarios",
+        )
+    scenarios = tuple(s for s in config.corpus.scenarios if s.id in set(held.ids))
+    if not scenarios:
+        return AuditComparison(
+            rotation_key=held.rotation_key,
+            ids=held.ids,
+            candidate_mean=None,
+            incumbent_mean=None,
+            regressed=(),
+            note="the held-back ids are not in the corpus this turn loaded",
+        )
+
+    policy_config = _policy_from_base_ref(config)
+    live_provider = _live_provider_from_base_ref(config)
+    sandbox = _worker_sandbox_policy(config, live_provider)
+    try:
+        candidate_ws = build_candidate_workspace(
+            config.repo, verdict.diff, workdir / "audit" / "candidate", config.zone_policy
+        )
+        candidate = run_variant(
+            candidate_ws,
+            scenarios,
+            label="audit-candidate",
+            entrypoint=config.entrypoint,
+            policy=sandbox,
+            policy_config=policy_config,
+            cassette_miss=config.cassette_miss,
+            live_provider=live_provider,
+        )
+        incumbent_ws = _materialise_base(config.repo, verdict.diff, workdir / "audit" / "incumbent")
+        incumbent = run_variant(
+            incumbent_ws,
+            scenarios,
+            label="audit-incumbent",
+            entrypoint=config.entrypoint,
+            policy=sandbox,
+            policy_config=policy_config,
+            cassette_miss=config.cassette_miss,
+            live_provider=live_provider,
+        )
+    except Exception as exc:  # noqa: BLE001 - a failed READ must not fail the turn
+        # The audit is a read, not a gate. A harness fault here (a workspace
+        # that will not materialise, a worker that dies) must be REPORTED as
+        # an unread audit rather than turned into a verdict on the candidate —
+        # the candidate has already been judged by six gates that did run.
+        return AuditComparison(
+            rotation_key=held.rotation_key,
+            ids=held.ids,
+            candidate_mean=None,
+            incumbent_mean=None,
+            regressed=(),
+            note=f"could not be read ({type(exc).__name__}: {exc})",
+        )
+
+    if not candidate.scores.n or not incumbent.scores.n:
+        return AuditComparison(
+            rotation_key=held.rotation_key,
+            ids=held.ids,
+            candidate_mean=None,
+            incumbent_mean=None,
+            regressed=(),
+            note="one of the two arms produced no score at all, so there is nothing to compare",
+        )
+    regressed = tuple(
+        sorted(
+            sid
+            for sid, before in incumbent.scores.per_scenario.items()
+            if candidate.scores.per_scenario.get(sid, 0.0) < before
+        )
+    )
+    return AuditComparison(
+        rotation_key=held.rotation_key,
+        ids=held.ids,
+        candidate_mean=candidate.scores.mean,
+        incumbent_mean=incumbent.scores.mean,
+        regressed=regressed,
+        note=f"2 corpus pass(es) over {len(scenarios)} held-back scenario(s)",
+    )
+
+
 def _gates_with_evidence(
     config: LoopConfig, verdict: CandidateVerdict, workdir: Path, now: datetime
 ) -> tuple[tuple[Gate, ...], str]:
@@ -870,9 +1139,21 @@ def _gates_with_evidence(
         return _behavioural_only(tuple(gates)), "no corpus: G2/G3 will refuse for lack of evidence"
 
     scenarios = tuple(s for s in config.corpus.scenarios if s.split in GATED_SPLITS)
+    # HELD BACK BEFORE THE GATES SEE THEM (ADR 0200). A scenario the candidate
+    # is scored on during gating is a scenario the loop is selected on, and a
+    # set the loop is selected on is not held out. `audit_slice_size` defaults
+    # to 0, so with no owner opt-in this subtracts nothing and every existing
+    # measurement stands.
+    held = _audit_slice_for(config, now)
+    held_note = ""
+    if not held.is_empty:
+        before = len(scenarios)
+        scenarios = tuple(s for s in scenarios if s.id not in set(held.ids))
+        held_note = f"; {before - len(scenarios)} held back for the audit ({held.rotation_key})"
     if not scenarios:
         return _behavioural_only(tuple(gates)), "no gated-split scenarios: G2/G3 will refuse"
     scenarios, graph_note = _scenarios_for_graph(config, scenarios)
+    graph_note += held_note
 
     policy_config = _policy_from_base_ref(config)
     # One read, two uses: the provider the worker may build, and whether its
@@ -1602,6 +1883,26 @@ def observations_payload(observations: tuple[Observation, ...]) -> list[dict[str
 
 
 @dataclass(frozen=True)
+class CandidateAttempt:
+    """One candidate this turn built and gated, winner or not (ADR 0200).
+
+    Every field is what the GATES concluded about that candidate on its own
+    pass. There is no aggregate verdict over a set anywhere in this record,
+    because there is no aggregate gate pass: N candidates means N independent
+    passes, and this is one row of the ledger's own account of them.
+    """
+
+    proposal_id: str
+    branch: str
+    disposition: str | None
+    score: float | None
+    incumbent_score: float | None
+    passed: bool
+    exit_code: int
+    reason: str
+
+
+@dataclass(frozen=True)
 class CycleRun:
     harvested: tuple[str, ...] = ()
     proposed: str | None = None
@@ -1615,6 +1916,19 @@ class CycleRun:
     # cost and not a scoring cost — those are the corpus passes — it is the
     # cost of asking for a candidate (ADR 0170).
     proposer_calls: int = 0
+    # Every candidate this turn tried, in the order it tried them, WINNER
+    # INCLUDED (ADR 0200). One entry when `candidates_per_turn` is 1, which is
+    # the default and is what a turn always did.
+    attempts: tuple[CandidateAttempt, ...] = ()
+    # The held-out read of the winner, when a slice was held back and the
+    # winner passed the gates. Advisory: it changes no disposition.
+    audit: AuditComparison | None = None
+
+    @property
+    def losers(self) -> tuple[CandidateAttempt, ...]:
+        """The candidates that were gated and not chosen — stepping stones the
+        turn produced and the caller must not mistake for un-gated ideas."""
+        return tuple(a for a in self.attempts if a.proposal_id != self.proposed)
 
 
 def cycle(
@@ -1635,9 +1949,13 @@ def cycle(
     at all — a job with `contents: read` can do it. Pushing is what needs
     write access, and the gate job must never have it (ADR 0057).
 
-    **At most one candidate per turn.** A loop that can emit many per cycle
-    can exhaust the rate budget in a single run, and every candidate costs
-    N+2 corpus passes to gate.
+    **`config.candidates_per_turn` candidates per turn, default 1.** A loop
+    that can emit many per cycle can exhaust the rate budget in a single run,
+    and every candidate costs cohort+2 corpus passes to gate — so the number
+    is an owner's decision with a measured price, not a default (ADR 0200).
+    Above 1, each candidate gets its own branch, its own workdir and its own
+    independent gate pass; the turn then keeps the best that passed, and the
+    ledger records every one of them.
     """
     # FIRST, for the reason ADR 0187's F-M8-1 records: `path_exists_at` cannot
     # tell an absent FILE from an absent REF, so the "no agent source at
@@ -1671,7 +1989,20 @@ def cycle(
     # `agents/demo/graph.py` in three `summary_agent` records (reproduced,
     # ADR 0191's F2). `evidence_id`, not `graph_id`, for ADR 0182's reason:
     # this is the `Graph.id` namespace, not the archive key.
-    evidence = MemoryEvidence.from_store(memory, config.corpus, graph_id=config.evidence_id)
+    # The audit slice is subtracted from the proposer's evidence too (ADR
+    # 0200), not only from what the gates score. A lesson learned from a
+    # scenario that is about to judge the candidate is that scenario reaching
+    # the proposer by proxy — the same leak `MemoryEvidence` already refuses
+    # for validation and holdout records, and it is refused here by the same
+    # mechanism rather than by a second one. Empty by default.
+    held_for_evidence = _audit_slice_for(config, now)
+    if not held_for_evidence.is_empty:
+        lines.append(held_for_evidence.describe())
+    evidence = MemoryEvidence.from_store(
+        memory,
+        _corpus_with_audit_held_out(config, held_for_evidence),
+        graph_id=config.evidence_id,
+    )
     if evidence.excluded:
         lines.append(
             f"{len(evidence.excluded)} memory record(s) excluded as validation/holdout-derived"
@@ -1768,31 +2099,196 @@ def cycle(
             proposer_calls=_proposer_calls(proposer),
         )
 
-    proposal = proposals[0]  # at most one candidate per cycle, deliberately
-    branch = f"loop/{proposal.id}"
-    _materialise_candidate_branch(config, branch, agent_path, proposal.proposed)
-    lines.append(
-        f"proposed {proposal.id} on local branch {branch} (never pushed; "
-        f"proposer={config.proposer})"
-    )
-    if "[llm proposer fell back" in proposal.rationale:
-        lines.append(proposal.rationale[proposal.rationale.index("[llm proposer fell back") :])
+    # HOW MANY of what the proposer offered this turn will actually be built
+    # and gated (ADR 0200). `proposals[0]` was here, with the comment "at most
+    # one candidate per cycle, deliberately" — and the rest were dropped
+    # unmeasured: on the fixture in `docs/research/night-1/01-repro-a.txt` the
+    # rule-based proposer offered THREE and the turn created ONE branch.
+    #
+    # The default is still 1, so nothing moves for a caller that has not asked
+    # for more. Above 1 the turn gates each candidate on its OWN pass and
+    # keeps the best that passed; the gates' verdict logic is untouched and
+    # never sees a set.
+    chosen = _candidates_for_this_turn(proposals, config.candidates_per_turn)
+    if len(chosen) > 1:
+        lines.append(
+            f"{len(chosen)} candidate(s) this turn (of {len(proposals)} offered); each is "
+            f"gated on its own pass, costing {config.cohort_size + 2} corpus pass(es) each"
+        )
     if spend:
         lines.append(spend)
 
-    run = gate(config, branch, now=now, workdir=workdir, proposal=proposal)
-    lines.append(f"gated: {run.decision.disposition.value} — {run.decision.reason}")
+    attempts: list[CandidateAttempt] = []
+    runs: list[GateRun] = []
+    halted = False
+    for index, proposal in enumerate(chosen, start=1):
+        branch = f"loop/{proposal.id}"
+        _materialise_candidate_branch(config, branch, agent_path, proposal.proposed)
+        prefix = f"candidate {index}/{len(chosen)}: " if len(chosen) > 1 else ""
+        lines.append(
+            f"{prefix}proposed {proposal.id} on local branch {branch} (never pushed; "
+            f"proposer={config.proposer})"
+        )
+        if "[llm proposer fell back" in proposal.rationale:
+            lines.append(proposal.rationale[proposal.rationale.index("[llm proposer fell back") :])
+        # A scratch dir PER CANDIDATE when there is more than one, for exactly
+        # the reason `run_loop` gives one per turn: G1 materialises into
+        # `workdir/workspace` and `trust._prepare_empty_destination` refuses a
+        # non-empty one, so a shared workdir would reject candidate 2 with a
+        # TrustBoundaryError before any behavioural gate ran (ADR 0122's
+        # defect, one level down). Unchanged at N=1 so no existing path moves.
+        one = config.candidates_per_turn == 1
+        candidate_workdir = workdir if one else workdir / f"cand-{index}"
+        run = gate(config, branch, now=now, workdir=candidate_workdir, proposal=proposal)
+        runs.append(run)
+        passed = run.decision.disposition in (Disposition.ESCALATE, Disposition.AUTO_MERGE)
+        attempts.append(
+            CandidateAttempt(
+                proposal_id=proposal.id,
+                branch=branch,
+                disposition=run.decision.disposition.value,
+                score=run.candidate_score,
+                incumbent_score=run.incumbent_score,
+                passed=passed and not run.halted,
+                exit_code=run.exit_code,
+                reason=run.decision.reason,
+            )
+        )
+        lines.append(f"{prefix}gated: {run.decision.disposition.value} — {run.decision.reason}")
+        if run.exit_code == EXIT_HALTED:
+            # A halt is the loop stopping, not a candidate to skip past. The
+            # remaining candidates are not built and not gated.
+            halted = True
+            if index < len(chosen):
+                lines.append(
+                    f"halted at candidate {index}/{len(chosen)}; the remaining "
+                    f"{len(chosen) - index} were not built"
+                )
+            break
+
+    best = _best_attempt(attempts)
+    winner, won = attempts[best], runs[best]
+    if len(attempts) > 1:
+        lines.append(
+            f"kept the best of {len(attempts)} gated candidate(s): {winner.proposal_id} "
+            f"({winner.disposition}, score {winner.score})"
+        )
+        ledger.append(
+            config.paths.ledger_dir,
+            kind=ledger.EventKind.CANDIDATES,
+            at=now,
+            proposal_id=winner.proposal_id,
+            summary=(
+                f"{len(attempts)} candidate(s) gated this turn; kept {winner.proposal_id} "
+                f"({winner.disposition})"
+            ),
+            detail={
+                "offered": len(proposals),
+                "gated": len(attempts),
+                "chosen": winner.proposal_id,
+                "corpus_passes_each": config.cohort_size + 2,
+                "candidates": [
+                    {
+                        "proposal_id": a.proposal_id,
+                        "branch": a.branch,
+                        "disposition": a.disposition,
+                        "score": a.score,
+                        "passed": a.passed,
+                        "reason": a.reason,
+                    }
+                    for a in attempts
+                ],
+            },
+        )
+
+    audit: AuditComparison | None = None
+    held = _audit_slice_for(config, now)
+    if not held.is_empty and winner.passed and not halted:
+        # Only a candidate the GATES passed is worth a held-out read: an audit
+        # of something already rejected spends the slice to confirm a verdict
+        # that has been reached.
+        audit = _run_audit(
+            config,
+            inspect_candidate(config.repo, config.base_ref, winner.branch, config.zone_policy),
+            held=held,
+            workdir=workdir,
+        )
+        lines.append(audit.line())
+        ledger.append(
+            config.paths.ledger_dir,
+            kind=ledger.EventKind.AUDIT,
+            at=now,
+            proposal_id=winner.proposal_id,
+            summary=audit.line(),
+            detail={
+                "rotation_key": audit.rotation_key,
+                "scenarios": list(audit.ids),
+                "candidate_mean": audit.candidate_mean,
+                "incumbent_mean": audit.incumbent_mean,
+                "regressed": list(audit.regressed),
+                "note": audit.note,
+                # Said in the entry itself, because a reader a month later
+                # must not have to infer it: this read did not gate.
+                "advisory": True,
+            },
+        )
+    elif not held.is_empty:
+        lines.append(
+            f"audit ({held.rotation_key}): not read — "
+            + ("the turn halted" if halted else "no candidate passed the gates")
+        )
 
     return CycleRun(
         harvested=harvested,
-        proposed=proposal.id,
-        decision=run.decision,
+        proposed=winner.proposal_id,
+        decision=won.decision,
         lines=tuple(lines),
-        exit_code=run.exit_code,
-        score=run.candidate_score,
-        incumbent_score=run.incumbent_score,
+        exit_code=won.exit_code,
+        score=won.candidate_score,
+        incumbent_score=won.incumbent_score,
         proposer_calls=_proposer_calls(proposer),
+        attempts=tuple(attempts),
+        audit=audit,
     )
+
+
+def _candidates_for_this_turn(proposals: tuple[Proposal, ...], wanted: int) -> tuple[Proposal, ...]:
+    """The first `wanted` DISTINCT proposals, in the proposer's own order.
+
+    Distinct by proposed content: two proposals that would produce the same
+    tree cost two full gate passes and can only reach the same verdict, and
+    `run_loop` already treats a repeated tree as the proposer having nothing
+    new to say.
+    """
+    seen: set[str] = set()
+    picked: list[Proposal] = []
+    for proposal in proposals:
+        if proposal.proposed in seen:
+            continue
+        seen.add(proposal.proposed)
+        picked.append(proposal)
+        if len(picked) == wanted:
+            break
+    return tuple(picked)
+
+
+def _best_attempt(attempts: list[CandidateAttempt]) -> int:
+    """Index of the candidate the turn keeps: the highest-scoring one that PASSED.
+
+    With nothing passing, the FIRST attempt — which is what a one-candidate
+    turn has always returned, so the N=1 path is unchanged by construction.
+    Ties break on order, so the choice is deterministic and re-derivable from
+    the ledger's own roster.
+    """
+    passed = [(i, a) for i, a in enumerate(attempts) if a.passed]
+    if not passed:
+        return 0
+    # `if ... is not None`, not `or`: a legitimate score of 0.0 is not
+    # "unscored", and `score or -1.0` would rank it below an unscored pass.
+    return max(
+        passed,
+        key=lambda pair: (pair[1].score if pair[1].score is not None else -1.0, -pair[0]),
+    )[0]
 
 
 def _proposer_spend(proposer: Any) -> str:
@@ -2370,6 +2866,14 @@ def run_loop(
         disposition = run.decision.disposition if run.decision else None
         passed = disposition in (Disposition.ESCALATE, Disposition.AUTO_MERGE)
         tree = _tree_of(config, candidate_branch)
+        # A turn that tried several candidates gated all of them, and the ones
+        # it did not keep were REJECTED by the gates on their own passes (ADR
+        # 0200). Their trees have to be remembered here or the next turn can
+        # spend cohort+2 corpus passes re-gating a diff this run already
+        # refused. The winner's own tree is recorded below, as it always was.
+        for loser in run.losers:
+            if not loser.passed:
+                rejected_trees.add(_tree_of(config, loser.branch))
         candidate_ref = config.repo.rev_parse(candidate_branch)
         # Kept members only. Since rejected candidates joined the archive
         # (ADR 0160), matching against every member would turn the loop's
