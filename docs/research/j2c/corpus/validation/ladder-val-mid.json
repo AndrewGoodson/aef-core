@@ -1,0 +1,109 @@
+{
+  "budget_ms": null,
+  "checks": [
+    {
+      "op": "equals",
+      "path": "scores.quality",
+      "value": 1.0
+    },
+    {
+      "op": "equals",
+      "path": "plan.status",
+      "value": "done"
+    }
+  ],
+  "expected": "must_pass",
+  "format_version": "1.0.0",
+  "graph_id": "ladder_agent",
+  "graph_version": "0.1.0",
+  "id": "ladder-val-mid",
+  "initial_state": {
+    "agent_id": "ladder_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "process 3 item(s) for ladder-val-mid",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "ladder-val-mid",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "items": 3
+    }
+  },
+  "model_calls": [],
+  "notes": "recorded from a real agents/ladder run (items=3); ADR 0203's staircase fixture. This corpus is J2c's own copy and is never the repository's `corpus/`.",
+  "recorded_at": "2026-09-06T12:00:00+00:00",
+  "source": "record",
+  "split": "validation",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": null,
+        "node_id": "work",
+        "now": "2026-09-06T10:54:10.002407+00:00",
+        "run_id": "ladder-val-mid",
+        "trace_id": "ladder-val-mid"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "process 3 item(s) for ladder-val-mid",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": null,
+            "node_id": "work",
+            "token_cost": 30,
+            "trace_id": "ladder-val-mid",
+            "ts": "2026-09-06T10:54:10.002407Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {
+          "quality": 1.0
+        },
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "ladder_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "process 3 item(s) for ladder-val-mid",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "ladder-val-mid",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "items": 3
+        }
+      },
+      "is_fallback": false,
+      "node_id": "work",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

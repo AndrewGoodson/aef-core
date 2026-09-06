@@ -1,0 +1,63 @@
+I14b — a fair test for the judge (ADR 0202)
+
+hard set: 12 cases, 6 owner-fail, 6 matched pairs, 6 failure families
+every case within its cap: True
+
+TRIVIAL BASELINES on this set (agreement with the owner's labels)
+  answer 'pass' to everything          6/12
+  answer 'fail' to everything          6/12
+  word count against the cap only      6/12
+  the corpus's own inherited checks    9/12
+  rule-based judge (no model call)     6/12   scores 0.000-0.000
+
+THE ARMS
+  arm            agree     AUC   paired  maxdelta  scores
+  llm-opus       12/12   1.000      6/6     0.100  0.065-0.885
+  llm-sonnet     11/12   1.000      6/6     0.550  0.100-0.910
+
+AGREEMENT BY THRESHOLD — llm-opus
+  0.25:11/12  0.40:12/12  0.50:12/12  0.60:12/12  0.75:12/12
+
+AGREEMENT BY THRESHOLD — llm-sonnet
+  0.25:8/12  0.40:10/12  0.50:11/12  0.60:11/12  0.75:11/12
+
+PER CASE
+  case                                   own  chk     rule    opus  sonnet
+  sum-21-ardvey-ferry:correct            PASS pass   0.000   0.885   0.660
+  sum-21-ardvey-ferry:corrupt            FAIL pass   0.000   0.150   0.100
+  sum-28-kellet-branch:correct           PASS pass   0.000   0.885   0.900
+  sum-28-kellet-branch:corrupt           FAIL FAIL   0.000   0.100   0.275
+  sum-29-brindle-viaduct:correct         PASS pass   0.000   0.885   0.910
+  sum-29-brindle-viaduct:corrupt         FAIL pass   0.000   0.175   0.325
+  sum-31-quernmore-kiln:correct          PASS pass   0.000   0.885   0.900
+  sum-31-quernmore-kiln:corrupt          FAIL FAIL   0.000   0.325   0.625
+  sum-32-hessle-mills:correct            PASS pass   0.000   0.880   0.910
+  sum-32-hessle-mills:corrupt            FAIL pass   0.000   0.065   0.125
+  sum-38-bewick-refusals:correct         PASS pass   0.000   0.885   0.875
+  sum-38-bewick-refusals:corrupt         FAIL FAIL   0.000   0.175   0.425
+
+SELF-PREFERENCE ON THE GRADING PATH
+  mean(opus - sonnet) over 12 shared cases: -0.0613
+  ... over the 6 cases the Opus judge itself wrote (owner-pass): +0.0250
+
+THE CHOOSING PATH — PairwiseRanker over the six matched pairs
+  guard, declared model                     calls=0  SelfRankingError: judge model 'claude-opus-5' wrote candidat
+  guard, empty model (this repo's default)  calls=1  SelfRankingError: judge model 'claude-opus-5[1m]' wrote cand
+  opus     chose the correct summary 6/6; position-inconsistent 0/6
+      sum-31-quernmore-kiln      wrong-unit          winner=correct  verdicts=['correct', 'correct']
+      sum-29-brindle-viaduct     superseded-figure   winner=correct  verdicts=['correct', 'correct']
+      sum-32-hessle-mills        swapped-entities    winner=correct  verdicts=['correct', 'correct']
+      sum-21-ardvey-ferry        fabricated-reason   winner=correct  verdicts=['correct', 'correct']
+      sum-38-bewick-refusals     dropped-condition   winner=correct  verdicts=['correct', 'correct']
+      sum-28-kellet-branch       unsupported-claim   winner=correct  verdicts=['correct', 'correct']
+  sonnet   chose the correct summary 6/6; position-inconsistent 0/6
+      sum-31-quernmore-kiln      wrong-unit          winner=correct  verdicts=['correct', 'correct']
+      sum-29-brindle-viaduct     superseded-figure   winner=correct  verdicts=['correct', 'correct']
+      sum-32-hessle-mills        swapped-entities    winner=correct  verdicts=['correct', 'correct']
+      sum-21-ardvey-ferry        fabricated-reason   winner=correct  verdicts=['correct', 'correct']
+      sum-38-bewick-refusals     dropped-condition   winner=correct  verdicts=['correct', 'correct']
+      sum-28-kellet-branch       unsupported-claim   winner=correct  verdicts=['correct', 'correct']
+
+WHAT ANSWERED
+  llm-opus: claude-opus-5[1m] x24
+  llm-sonnet: claude-sonnet-5 x24

@@ -1,0 +1,39 @@
+I14b — a fair test for the judge. DRY RUN; nothing here spends a call.
+
+hard set     : 12 cases from 6 passages, matched pairs
+owner-fail   : 6
+within cap   : 12/12
+families     : dropped-condition, fabricated-reason, superseded-figure, swapped-entities, unsupported-claim, wrong-unit
+
+calls:
+   24  llm-opus   grading, 2 position-swapped samples per case
+   24  llm-sonnet grading, same
+   12  llm-opus   choosing, 2 orders per pair
+   12  llm-sonnet choosing, same
+    1  the guard demo on this repo's own `model: ""` default
+   73  TOTAL, plus 2 quota preflights
+
+  sum-21-ardvey-ferry:correct            PASS  25/30 words  fabricated-reason
+      The inquiry into the Ardvey ferry grounding rejects the operator's claims, finding no overloading, repairs costing 415,000 pounds, and blaming an unapplied eleven-month-old chart correction.
+  sum-21-ardvey-ferry:corrupt            FAIL  27/30 words  fabricated-reason
+      The inquiry into the Ardvey ferry grounding rejects the operator's claims, finding no overloading, repairs costing 415,000 pounds, and blaming a steering gear failure reported twice before.
+  sum-28-kellet-branch:correct           PASS  16/20 words  unsupported-claim
+      Kellet branch passenger service reopening delayed indefinitely pending signalling commissioning; freight runs, station car park complete.
+  sum-28-kellet-branch:corrupt           FAIL  17/20 words  unsupported-claim
+      Kellet branch passenger service reopens in September once signalling commissioning finishes; freight runs, station car park complete.
+  sum-29-brindle-viaduct:correct         PASS  27/30 words  superseded-figure
+      Brindle Viaduct strengthening was rescheduled from eighteen months and £2.4m to nine months and £3.1m, using a steel deck, night working, and four weekend closures from October.
+  sum-29-brindle-viaduct:corrupt         FAIL  27/30 words  superseded-figure
+      Brindle Viaduct strengthening was rescheduled from eighteen months and £3.1m to nine months and £2.4m, using a steel deck, night working, and four weekend closures from October.
+  sum-31-quernmore-kiln:correct          PASS  25/26 words  wrong-unit
+      Quernmore's bottle kiln, leaning 340mm out of plumb, needs its crown grouted and top rebuilt; the trust has £55,000 of £190,000. No firing since 1962.
+  sum-31-quernmore-kiln:corrupt          FAIL  25/26 words  wrong-unit
+      Quernmore's bottle kiln, leaning 340cm out of plumb, needs its crown grouted and top rebuilt; the trust has £55,000 of £190,000. No firing since 1962.
+  sum-32-hessle-mills:correct            PASS  27/30 words  swapped-entities
+      Hessle Low Mill, a listed tower mill, wins £74,000 for cap and sails, while Hessle High Mill's application was refused as too dilapidated, pending a revised scheme.
+  sum-32-hessle-mills:corrupt            FAIL  27/30 words  swapped-entities
+      Hessle High Mill, a listed tower mill, wins £74,000 for cap and sails, while Hessle Low Mill's application was refused as too dilapidated, pending a revised scheme.
+  sum-38-bewick-refusals:correct         PASS  34/36 words  dropped-condition
+      Bewick's licence refusal rate dropped from 9 to 6 per cent, though refusals rose from 41 to 58 as applications nearly doubled. Nine of 14 appeals succeeded; officers credit the new late-night levy exemption.
+  sum-38-bewick-refusals:corrupt         FAIL  30/36 words  dropped-condition
+      Bewick's licence refusals rose from 41 to 58 last year, a marked increase on the previous year's total. Nine of 14 appeals succeeded; officers credit the new late-night levy exemption.
