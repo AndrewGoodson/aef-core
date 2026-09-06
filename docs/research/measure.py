@@ -98,6 +98,10 @@ ADR_0186 = "docs/adr/0186-one-model-across-the-corpus-and-what-it-cost.md"
 ADR_0198 = (
     "docs/adr/0198-the-tree-grew-from-the-rejections-and-none-of-it-was-better.md"
 )
+ADR_0202 = "docs/adr/0202-the-judge-on-a-set-a-word-count-cannot-grade.md"
+ADR_0203 = (
+    "docs/adr/0203-the-stepping-stone-paid-once-the-ladder-was-on-the-proposers-axis.md"
+)
 
 _WM_DROP_RE = (
     r"before \['api_key', 'keep_me', 'token'\]  ->  after \['keep_me'\]  \(count=(\d+)\)"
@@ -679,6 +683,100 @@ MEASUREMENTS: tuple[Measurement, ...] = (
                 "rule_based/sampling: turns before the repeated-tree stop",
                 r"\| rule_based \| sampling \| (\d+) \| 0 \| 3 \|",
                 r"\| rule_based \| sampling \| (\d+) \| 0 \| 3 \|",
+            ),
+        ),
+    ),
+    Measurement(
+        id="i14b-hardset",
+        title="P3 — the judge on a set a word count cannot grade",
+        adr=ADR_0202,
+        argv=("docs/research/i14b/run_i14b.py", "--report"),
+        rows=(
+            # The three statistics the rubric point rests on, all of the arm
+            # the repo actually ships. ADR 0159's lesson is that any ONE of
+            # them can be a constant function in disguise, so all three are
+            # pinned and a regression that flattened the judge would move at
+            # least two.
+            Row(
+                "llm-opus: agreement with the owner's labels",
+                r"\| `llm-opus` \(session default\) \| \*\*(\d+)\*\*/12",
+                r"llm-opus\s+(\d+)/12",
+            ),
+            Row(
+                "llm-opus: AUC over the 36 pass/fail pairs",
+                r"\| `llm-opus` \(session default\) \| \*\*12\*\*/12 \| \*\*([0-9.]+)\*\*",
+                r"llm-opus\s+12/12\s+([0-9.]+)",
+            ),
+            Row(
+                "llm-opus: matched pairs scored the right way round",
+                r"\| \*\*12\*\*/12 \| \*\*1\.000\*\* \| \*\*(\d+)\*\*/6",
+                r"llm-opus\s+12/12\s+1\.000\s+(\d+)/6",
+            ),
+            Row(
+                "llm-opus: max position delta",
+                r"\| \*\*12\*\*/12 \| \*\*1\.000\*\* \| \*\*6\*\*/6 \| \*\*([0-9.]+)\*\*",
+                r"llm-opus\s+12/12\s+1\.000\s+6/6\s+([0-9.]+)",
+            ),
+            Row(
+                "llm-sonnet: agreement (the disinterested judge)",
+                r"\| `llm-sonnet` \(disinterested\) \| \*\*(\d+)\*\*/12",
+                r"llm-sonnet\s+(\d+)/12",
+            ),
+            # And the baselines, because the judge's number means nothing
+            # without them. A change that made the set unbalanced, or let a
+            # word counter discriminate, moves these before it moves the arms.
+            Row(
+                "baseline: answer 'pass' to everything",
+                r'\| answer "pass" to everything \| \*\*(\d+)\*\*/12',
+                r"answer 'pass' to everything\s+(\d+)/12",
+            ),
+            Row(
+                "baseline: word count against the cap only",
+                r"\| word count against the cap only \| \*\*(\d+)\*\*/12",
+                r"word count against the cap only\s+(\d+)/12",
+            ),
+            Row(
+                "baseline: the corpus's own inherited regex checks",
+                r"inherited regex checks \| \*\*(\d+)\*\*/12",
+                r"the corpus's own inherited checks\s+(\d+)/12",
+            ),
+        ),
+    ),
+    Measurement(
+        id="j2c-staircase",
+        title="P4 — a staircase the proposer can climb",
+        adr=ADR_0203,
+        argv=("docs/research/j2c/run_j2c.py", "--verify"),
+        rows=(
+            # THE statistic, in both arms. ADR 0198 pinned the same one at 0;
+            # a regression that made a rejected member read as kept, or that
+            # stopped the sampler reaching one, moves these.
+            Row(
+                "greedy: kept from a rejected member",
+                r"\| greedy \| 10 \| 0 \| 0 \| \*\*(\d+)\*\*",
+                r"greedy\s+10\s+0\s+0\s+\*\*(\d+)\*\*",
+            ),
+            Row(
+                "sampling: kept from a rejected member",
+                r"\| sampling \| 10 \| 8 \| 8 \| \*\*(\d+)\*\*",
+                r"sampling\s+10\s+8\s+8\s+\*\*(\d+)\*\*",
+            ),
+            # The denominator and the rung, which are what make the number
+            # above readable: 8 of 8 attempts, all at BATCH_SIZE 5.
+            Row(
+                "sampling: candidates from a rejected member",
+                r"\| sampling \| 10 \| 8 \| (\d+) \|",
+                r"sampling\s+10\s+8\s+(\d+)\s",
+            ),
+            Row(
+                "sampling: runs that reached rung 5",
+                r"\| sampling \| 10 \| 8 \| 8 \| \*\*8\*\* \| (\d+) \|",
+                r"sampling\s+10\s+8\s+8\s+\*\*8\*\*\s+(\d+)\s",
+            ),
+            Row(
+                "greedy: runs that reached rung 5",
+                r"\| greedy \| 10 \| 0 \| 0 \| \*\*0\*\* \| (\d+) \|",
+                r"greedy\s+10\s+0\s+0\s+\*\*0\*\*\s+(\d+)\s",
             ),
         ),
     ),

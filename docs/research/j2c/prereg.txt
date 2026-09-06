@@ -1,0 +1,106 @@
+J2c — a problem worth climbing. PRE-REGISTRATION.
+Written 2026-09-06, AFTER the staircase probe (`staircase.txt`, published
+first, as ADR 0198 published its own) and BEFORE the seeded arms.
+Worker P4 of TO_95_LOOP.md. Rubric dimension 6 is 8/10.
+
+----------------------------------------------------------------------
+1. WHAT THE PROBE ALREADY SETTLED
+----------------------------------------------------------------------
+`staircase.txt`, measured through `aef loop score` on the committed ladder
+corpus, not argued from the agent's source:
+
+    BATCH_SIZE 1  0.1111      2  0.3333
+    BATCH_SIZE 3  0.5556      the blessed baseline
+    BATCH_SIZE 4  0.5556      EXACTLY the baseline — gains nothing
+    BATCH_SIZE 5  0.7778      both `hard-5` scenarios complete
+    BATCH_SIZE 6  0.0000      over the 5-slot transport frame
+    BATCH_SIZE 7  0.0000
+
+`RuleBasedProposer.propose` emits one proposal per constant in SOURCE ORDER
+and `cycle` takes `proposals[0]`; `BATCH_SIZE` is the first constant in
+`agents/ladder/graph.py`. `coerce_value` moves an integer by +25% or at
+least +1, so the proposal from 3 is 4 and the proposal from 4 is 5.
+
+Therefore, and this is the rig's whole premise:
+
+  * greedy proposes from the kept branch, which stays at BATCH_SIZE = 3, so
+    greedy proposes 4, has it rejected, proposes 4 again and stops on the
+    duplicate-rejected-tree rule. Greedy CANNOT reach 5, on any seed.
+  * the rung at 5 is reachable only by proposing FROM the rejected 4 — which
+    is what the archive holds rejects for and what `sample_parents` does.
+
+ADR 0198's rig had a stepping stone and a second step the proposer could not
+take. This one has both, and the probe says so before a single arm ran.
+
+----------------------------------------------------------------------
+2. THE TWO SOURCES OF CHANCE, NAMED BEFORE THEY CAN EXPLAIN A RESULT
+----------------------------------------------------------------------
+(a) **The null cohort can block the win.** From a parent at BATCH_SIZE = 4
+    the five-member cohort mutates one of the four module constants by a
+    factor in [0.5, 2.0), so a member can land on 5 and score exactly what
+    the candidate scores — and G3 rejects a candidate that does not BEAT the
+    p95. P(one member of five lands on 5) is roughly 0.16. That is the null
+    hypothesis doing its job, not a defect, and a run it blocks is reported
+    as blocked rather than dropped.
+
+(b) **The parent draw.** `_choose_parent` is weighted-random. At turn 2 the
+    root weighs 0.25 (score None -> 0.5, one child) and the rejected
+    BATCH_SIZE = 4 member weighs 0.6355 (score 0.5556, no children), so
+    P(the sampler draws the stone) is about 0.72 — and drawing the root
+    re-proposes the already-rejected 4, which STOPS the run.
+
+So one seed proves nothing in either direction. Every arm is therefore run
+over **seeds 0..9**, and every seed is reported, blocked or not.
+
+DISCLOSED: a single-seed run (seed 0, both arms, 6 turns) was made first to
+measure wall-clock cost — 13 s per run. It is not in `results.jsonl`; its
+result was that both arms stopped at turn 2 having proposed 4 twice, i.e.
+seed 0's sampler drew the root. Seed 0 is re-run in the sweep below and is
+expected to reproduce that, since the arms are deterministic given the seed.
+
+----------------------------------------------------------------------
+3. THE STATISTIC
+----------------------------------------------------------------------
+Unchanged from ADR 0198, so that three measurements are comparable:
+
+    stepping_stone_keeps — kept members whose parent the gates REJECTED,
+
+read from the persisted lineage through `archive.fold_lineage`, with its
+denominator (`descendants_of_a_rejected_member`) printed beside it, because
+0 of 0 and 0 of 5 are different findings.
+
+Reported per seed and per arm: turns, kept, reverted, distinct parents,
+descendants of a rejected member, stepping_stone_keeps, the RUNGS actually
+reached (`BATCH_SIZE` read off each candidate branch, not inferred), halts,
+and live calls — which must be 0, asserted by a counter whose cap is 0.
+
+----------------------------------------------------------------------
+4. FALSIFICATION — decided here
+----------------------------------------------------------------------
+Dimension 6 moves 8 -> 10 only if **at least one keeper descends from a
+rejected candidate** — `stepping_stone_keeps >= 1` in the sampling arm — AND
+greedy produces none, AND the kept candidate is the rung the probe predicted
+(BATCH_SIZE = 5, score 0.7778 against the incumbent's 0.5556). The third
+clause is there so a keep for some other reason cannot be counted as a
+climb.
+
+8 -> 9 if the probe proves a climbable staircase exists — it already does,
+and it is committed — and the arms still produce no such keeper across ten
+seeds.
+
++0 otherwise.
+
+AND, whichever fires: with three measurements now agreeing or disagreeing
+(ADR 0121, ADR 0160, ADR 0198, and this), the ADR states plainly whether
+`sample_parents` should be DELETED. ADR 0198 said the run that would delete
+it is "a rig with both halves in which sampling still buys nothing". This is
+that rig. If sampling buys nothing here, the ADR recommends deletion in as
+many words.
+
+----------------------------------------------------------------------
+5. BUDGET
+----------------------------------------------------------------------
+P4's cap is 30 live calls. Planned: **0**. The ladder corpus records no
+model calls, the rule-based proposer makes none, and
+`ClaudeCodeProvider.complete` is wrapped by a counter whose cap is 0, so the
+arms cannot silently start spending — the assertion, not the belief.

@@ -19,12 +19,32 @@ which on a content task is where the answer is (ADR 0126). Without them the
 judges were scoring a run they could not read.
 
 The numbers that used to be quoted in this docstring now live where they can
-be re-run: **`docs/research/i14/` — the script, the raw judgments and the
-report** (ADR 0159). Read it before citing an agreement figure. Its finding
-about this module is worth carrying here in one line: with the answer in
-evidence the LLM judge's scores rose from the blind run's 0.23–0.50 to
-0.82–0.90, but the summary corpus cannot show whether that made it a better
-judge, because its only negatives are check-authoring defects.
+be re-run: **`docs/research/i14/` and `docs/research/i14b/` — the scripts, the
+raw judgments and the reports** (ADRs 0159, 0171, 0202). Read them before
+citing an agreement figure.
+
+Three findings from them belong here, because each one changes what an
+agreement number is worth:
+
+- ADR 0159: with the answer in evidence the LLM judge's scores rose from the
+  blind run's 0.23–0.50 to 0.82–0.90 — but on a corpus that is 15/18 pass,
+  where answering "pass" to everything scores 15/18 and the judge scored
+  exactly that. **AUC 0.322.**
+- ADR 0171: on a corpus with seven true negatives, AUC 1.000 — of ONE failure
+  family, word-cap overruns, which `len(summary.split()) > cap` detects
+  without a model.
+- ADR 0202: on a set built so that a word count cannot grade it — twelve
+  matched cases, six content failures (wrong unit, superseded figure, swapped
+  entities, fabricated reason, dropped condition, unsupported claim), every
+  case WITHIN its cap so pass-everything, fail-everything and a word counter
+  all score 6/12 — this judge agrees with the owner's labels **12/12, AUC
+  1.000, and scores the correct summary above the corrupted one in 6 of 6
+  matched pairs**, with a maximum position delta of 0.100. The corpus's own
+  regex checks score 9/12 on the same set, so the judge is measured against
+  the non-model instrument it would replace and not only against chance.
+  Its negatives are AUTHORED, though: this agent does not produce them (ADR
+  0171 tried to record some and got none), so that is a judge measurement and
+  never an agent failure rate.
 
 **And a judge that ranks two model outputs against each other** —
 `PairwiseRanker` (ADR 0162). It is separate from `LLMJudge` because grading one
@@ -367,6 +387,19 @@ class PairwiseRanker:
     so in one field. That default is the measurement's, not a preference — and
     changing it should mean re-running `docs/research/j4/run_j4_selfpref.py`,
     not editing this line.
+
+    **On an act that CHOOSES rather than measures** (ADR 0202,
+    `docs/research/i14b/`, 24 judgments): asked to pick which of two summaries
+    of the same passage to keep — one correct, one carrying a single content
+    error — both `claude-opus-5[1m]` and `claude-sonnet-5` chose the correct
+    one on **6 of 6** pairs with **0 of 6** position inconsistencies, against
+    the grading path's one error and two position deltas above 0.5. Choosing
+    was the steadier instrument of the two on that set. The guard was
+    exercised on the same act and refuses both ways round: 0 calls when the
+    judge model is declared, 1 call when it is `""` and only the answer names
+    it. **Still nothing in `run_loop` calls this**; `cycle` takes
+    `proposals[0]`, and putting a judge there is a change to
+    `aef/harness/loop.py`, not to this file.
 
     The guard fires twice, because a model name is not always known before the
     call: once on the DECLARED judge model, and once on the model that actually

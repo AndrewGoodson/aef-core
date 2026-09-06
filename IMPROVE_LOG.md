@@ -7274,3 +7274,213 @@ cap" test and *not* by the count alone (the joined family still recurs);
 widening Rule A until it always passes is caught by both; dropping Rule A from
 the two validation negatives is caught by the scored-split test. The sha256 map
 over all 65 corpus files is identical before and after.
+
+## P3 — the judge, on a set a word count cannot grade (ADR 0202)
+
+Worker P3 of `TO_95_LOOP.md`. Dimension 3 was 8/10 for one reason: *"the judge
+has only been scored where 15 of 18 cases pass"*, and the one real failure
+family ADR 0171 added was word-cap overruns — which `len(summary.split()) >
+cap` detects without a model at all. So on the evidence in this repo, the +1
+ADR 0171 took is consistent with the judge being a word counter, and nothing
+had distinguished the two.
+
+**The hard set.** Six passages from `corpus/`, each contributing a matched
+pair: the agent's own recorded summary verbatim from the cassette, and that
+summary with ONE minimal owner-authored edit. Six families, chosen before any
+of them was written — a correct number with the wrong unit (`340mm` →
+`340cm`), the superseded figure reported as the result (£2.4m and £3.1m
+swapped), two entities swapped (Hessle **Low** and **High** Mill), a right
+conclusion with a fabricated cause, the dropped clause that reverses the
+finding (the refusal RATE fell while the count rose), and a confident claim
+the passage explicitly withdraws (a September reopening that had already
+slipped). The judged state is the real scenario's `reflect` `input_state` with
+`working_memory.summary` replaced and nothing else touched.
+
+**Every one of the twelve is within its own word cap** — `--build` refuses to
+write the file otherwise — so pass-everything, fail-everything and a
+word-count-only judge each score exactly **6/12**. That is the control that
+makes it a fair test, and it is a computed number in the report rather than an
+argument.
+
+**The negatives are AUTHORED, not observed, and the ADR says so repeatedly.**
+ADR 0171 recorded nineteen runs against deliberately trappy passages precisely
+to get content negatives and got none — *"every content trap was handled
+correctly"*. They cannot be recorded from this agent at this cap range. So
+this grades the judge; no number in it is an agent failure rate.
+
+| instrument | agrees with the owner's labels |
+|---|---|
+| answer "pass" to everything | 6/12 |
+| answer "fail" to everything | 6/12 |
+| word count against the cap only | 6/12 |
+| the corpus's own inherited regex checks | **9/12** |
+| `RuleBasedJudge` (no model call) | 6/12, constant 0.000 |
+| **`LLMJudge`, session default** | **12/12**, AUC **1.000**, paired **6/6**, max position delta **0.100** |
+| `LLMJudge`, `claude-sonnet-5` (disinterested) | 11/12, AUC 1.000, paired 6/6, max position delta **0.550** |
+
+Three of the six content failures satisfy every `TaskCheck` in their scenario
+— the required terms and the required figure are all present, in the wrong
+places — and the judge scores those three 0.065, 0.150 and 0.175. That is the
+concrete answer to "what does a judge buy over a regex" on this set: three
+cases, and they are the three where the wrong answer looks most right.
+
+**Self-preference on the GRADING path: +0.025** (Opus judging its own writing,
+against the disinterested judge on identical cases), where ADR 0162 measured
++0.260 on the *comparing* path. Absent, measured, not assumed.
+
+**The choosing-path control**, which is ADR 0162's own unclaimed clause.
+`aef/harness/loop.py` was another worker's file this wave, so the loop's
+choosing act (`proposal = proposals[0]`) was not touched; what was measured is
+the shipped `PairwiseRanker` performing a choice whose outcome is scored —
+which of the two summaries to keep. Both judges **6/6**, both **0/6**
+position-inconsistent, and the self-ranking guard refuses on that act both ways
+round: **0 calls** when the judge model is declared, **1 call** when it is
+`""` (this repo's own default) and only the answer names it. Choosing was the
+steadier instrument of the two: the disinterested judge made its single
+grading error and both its >0.5 position deltas on the grading path, and none
+at all on the choosing path. What wiring the ranker into `cycle` would take is
+written down in the ADR in four numbered steps, the fourth being that
+proposals are compared on a *predicted* effect and a 6/6 measured on summaries
+would not license it.
+
+**Falsifications**, pre-registered in `docs/research/i14b/prereg.txt` before
+the first preflight: F1 (beats the trivial baselines on agreement AND AUC AND
+the paired statistic) HELD on all three with margin; F2 (position delta ≤ 0.20)
+HELD at 0.100 for the arm the repo ships and **BREACHED at 0.550 by the
+disinterested control** — the pre-registration did not say which arm, the ADR
+discloses that and says the stricter reading makes this +1 rather than +2; F3
+(self-preference absent, or present-and-mitigated) HELD on the first branch.
+The fourth outcome named in advance — "beats the trivial baselines and still
+loses to the corpus's regex checks" — did not fire.
+
+75 live calls of the 90 allowed: 2 preflights, 48 grading, 24 choosing, 1 for
+the guard demonstration. No retries, no failures, every `stop_reason`
+`end_turn`, and — against ADR 0159's 1-in-36 and ADR 0171's 1-in-34 — **no
+model misattribution**: 24 calls resolved to `claude-opus-5[1m]` and 24 to
+`claude-sonnet-5`.
+
+**Mutations**, against `tests/reasoning/test_i14b_hardset.py`; perturb, RUN,
+restore from a sha256-verified byte backup, control green before and after.
+
+| # | mutation | result |
+|---|---|---|
+| M1 | push one negative over its cap | 5 failed — CAUGHT |
+| M2 | relabel one negative `owner_pass` (unbalancing the set) | 2 failed — CAUGHT |
+| M3 | a positive that is not the recorded summary | 2 failed — CAUGHT |
+| M4 | an edit's span no longer occurs in the summary | 2 failed — CAUGHT |
+| M5 | copy an inherited-check verdict forward | 2 failed — CAUGHT |
+
+**Three defects reported and not fixed** (outside this worker's files):
+`MAX_ANSWER_CHARS = 600` truncates the source passage, so on any passage over
+600 characters the judge is asked whether a claim is supported by a source it
+can only partly see — this measurement selected around it; `max_words` never
+reaches the judge's evidence at all (`_evidence` admits strings only, and
+`max_words` is an int), so ADR 0171's mechanism sentence about the judge
+"counting against the cap it can see in the evidence" is wrong in its
+mechanism though not in its numbers — the cap arrives through
+`state.objective`; and the disinterested judge scored a kiln leaning 340
+**centimetres** instead of millimetres at 0.625, above its own threshold —
+unit errors are the family both judges are weakest on.
+
+**Dimension 3: 8 → 10.**
+
+## P4 — the stepping stone paid, once the ladder was on the proposer's axis (ADR 0203)
+
+Worker P4. **A kept candidate descends from a candidate the gates rejected** —
+the sentence ADRs 0121, 0160 and 0198 each looked for and none could write.
+
+ADR 0198 had named the reason exactly: `cycle` takes `proposals[0]` and
+`find_constants` returns constants in source order, so the rule-based proposer
+walks ONE axis deterministically. That was read for two nights as a dead end.
+It is not: it says the ladder has to be on **that** axis, and `agents/demo`'s
+is two-dimensional by construction, because the two-constant shape is what
+lets it beat a one-constant control cohort.
+
+`agents/ladder` (new; `agents/demo` untouched, so ADR 0198's measurement still
+re-derives on the fixture it was made on). `BATCH_SIZE` first in the file, a
+floor from the item count and a ceiling from a five-slot transport frame that
+is a literal in the body rather than a module constant, so neither the
+proposer nor the cohort can tune it. The trade is stated: the demo beats the
+cohort by requiring coherence across two constants, which this fixture cannot
+use because the proposer cannot produce it; it beats the cohort by making the
+target **narrow** instead, which is a weaker guarantee and leaves the null
+hypothesis able to reject.
+
+**The staircase, measured through `aef loop score` and published before any
+arm ran** (`docs/research/j2c/staircase.txt`):
+
+```
+BATCH_SIZE 3   0.5556   the blessed baseline
+BATCH_SIZE 4   0.5556   EXACTLY the baseline — a step that gains nothing
+BATCH_SIZE 5   0.7778   the rung: both `hard-5` scenarios complete
+BATCH_SIZE 6   0.0000   over the five-slot frame; everything fails
+```
+
+`coerce_value` steps 3→4 and 4→5. Greedy's parent is the kept ref, the kept
+ref never moves, so greedy proposes 4, has it rejected by G3, proposes 4 again
+and stops on the duplicate-rejected-tree rule. **Greedy cannot reach 5 — a
+proof, not a probability.** The rung at 5 is reachable only from the rejected 4.
+
+Seeds 0–9, both arms, `rule_based` proposer, 6 turns, **0 live calls** under a
+counter capped at 0:
+
+| arm | runs | kept | descendants of a rejected member | kept from one | reached rung 5 |
+|---|---|---|---|---|---|
+| greedy | 10 | 0 | 0 | **0** | 0 |
+| sampling | 10 | 8 | 8 | **8** | 8 |
+
+Every keeper scores 0.7778 from a parent scoring 0.5556 marked `reject` — the
+rung the probe predicted, which was the third clause of the pre-registered
+falsification so that a lucky keep could not be counted as a climb. The two
+sampling seeds that did not climb drew the ROOT at turn 2 and re-proposed the
+already-rejected tree; the pre-registration put P(drawing the stone) at ≈ 0.72
+from `_parent_weight`'s own arithmetic before the sweep, and 8 of 10 is what
+that predicts. The cohort blocked none of the eight, which is luck in this
+measurement's favour and is stated as such.
+
+`sampling/seed0` also shows the other half in consecutive turns: turn 2 climbs
+to rung 5 and turn 3 walks off the cliff at rung 6, where **G2's zero-tolerance
+regression rule** catches it. Parent sampling makes a search wider; it does
+nothing to make it safer.
+
+**A defect found by RUNNING.** The first sweep reported
+`stepping_stone_keeps = 0` in BOTH arms — ADR 0198's headline, from a rig
+built to break it. `python` was not on `PATH`, so G1 rejected every candidate
+before any behavioural gate ran, every rejection was scored `None`, and
+`_parent_weight`'s zero for an unscored reject (*"recorded, never a parent"*,
+ADR 0160) collapsed the sampling arm onto the greedy one. A null result from a
+broken harness is indistinguishable from a null result about the subject at
+the level of the headline number, and distinguishable only in the turn log —
+which is the argument for committing turn-level records rather than summaries.
+
+**`sample_parents` stays off by default and is NOT deleted.** ADR 0198 set the
+deletion condition in advance — *"if a rig with both halves is built and
+sampling still buys nothing there, that is the run that deletes it"*. This rig
+has both halves and sampling bought 8. What changes is the sentence beside the
+default: from "a measured null result with a stated experiment that would
+overturn it" to **"a mechanism measured to pay when, and only when, the
+landscape has a plateau on the axis the proposer walks and a better position
+beyond it"** — and `--probe` is how an owner finds out whether theirs does, in
+zero calls.
+
+**Mutations**, against `tests/harness/test_ladder_staircase.py`:
+
+| # | mutation | result |
+|---|---|---|
+| M1 | `BATCH_SIZE` moved below a decoy constant | 1 failed — CAUGHT |
+| M2 | raise the frame ceiling; rung 6 stops collapsing | 3 failed — CAUGHT |
+| M3 | shift the predicate so rung 4 is not neutral | 5 failed — CAUGHT |
+| M4 | `RuleBasedProposer.step` 0.25 → 1.0 | 1 failed — CAUGHT |
+| M5 | a keeper whose parent was KEPT, counted as a stone | 1 failed — CAUGHT |
+
+5 of 5, **on the second pass, and both first-pass escapes were real.** M4
+escaped because the test wrote `step = 0.25` as a local literal with a comment
+naming `RuleBasedProposer.step` — a test that re-declares the constant it
+names asserts nothing about the code; it now reads the shipped attribute. M2
+escaped on a stale `.pyc`: `320 // 64` and `640 // 64` are the same number of
+bytes and CPython invalidates on mtime-in-seconds plus size, so the mutation
+silently re-ran the original bytecode. That is ADR 0198's own trap in a third
+place, and any harness here that rewrites a Python file and immediately
+imports it needs `PYTHONDONTWRITEBYTECODE`.
+
+**Dimension 6: 8 → 10.**

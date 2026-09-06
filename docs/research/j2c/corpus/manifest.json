@@ -1,0 +1,13 @@
+{
+  "scenarios": {
+    "ladder-easy-1": "train",
+    "ladder-easy-2": "train",
+    "ladder-hard-5": "train",
+    "ladder-mid-3": "train",
+    "ladder-tripwire-train": "train",
+    "ladder-tripwire-val": "validation",
+    "ladder-val-easy": "validation",
+    "ladder-val-hard-5": "validation",
+    "ladder-val-mid": "validation"
+  }
+}

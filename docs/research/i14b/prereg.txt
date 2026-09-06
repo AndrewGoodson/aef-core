@@ -1,0 +1,148 @@
+I14b — a fair test for the judge. PRE-REGISTRATION.
+Written 2026-09-06, BEFORE the quota preflight and before any measurement call.
+Worker P3 of TO_95_LOOP.md. Rubric dimension 3 is 8/10.
+
+----------------------------------------------------------------------
+1. THE PROBLEM THIS EXISTS FOR
+----------------------------------------------------------------------
+ADR 0159: the judge was graded on a corpus that is 15/18 pass, so "answer
+pass to everything" scored 15/18 and the LLM judge scored exactly 15/18.
+AUC 0.322 — below the 0.5 of no information.
+
+ADR 0171: the corpus gained seven true negatives, AUC went to 1.000 — and
+its own closing paragraph says what is wrong with that:
+
+  "AUC 1.000 is perfect separation of ONE failure family with n = 4: every
+   negative is a word-cap overrun, so what has been shown is that this judge
+   detects that failure, not that it detects failure."
+
+A word-cap overrun is detected by `len(summary.split()) > cap`. No judge is
+needed. So dimension 3's remaining points require a set where a *plausible*
+answer is wrong for a reason a word count cannot see.
+
+----------------------------------------------------------------------
+2. THE HARD SET — how it is built, and what it is NOT
+----------------------------------------------------------------------
+Six passages from `corpus/` (train + validation, all recorded on
+`claude-opus-5[1m]`), each contributing a MATCHED PAIR:
+
+  positive  the agent's own recorded summary, VERBATIM from the cassette
+  negative  that same summary with one minimal, owner-authored edit that
+            makes it wrong about the passage
+
+12 cases; 6 owner-pass, 6 owner-fail. Balanced by construction, so "pass
+everything" and "fail everything" both score 6/12.
+
+STATED PLAINLY, because it is the load-bearing weakness of this artifact:
+**the negatives are AUTHORED, not observed.** ADR 0171 tried to obtain
+content negatives by recording nineteen new runs against deliberately
+trappy passages and got none — "every content trap was handled correctly".
+So a set of content negatives cannot be recorded from this agent at this
+cap range; it has to be written. The consequence is exact and is not
+hedged: **this set grades the JUDGE. It says nothing about how often this
+agent fails, and no number from it may be quoted as an agent failure rate.**
+
+The manipulation is single-variable: the judged state is the real scenario's
+`reflect` input_state with `working_memory.summary` replaced and nothing
+else touched, so the passage, the objective, the cap and the must-mention
+terms are identical between the two members of a pair.
+
+SIX FAILURE FAMILIES, one per passage, chosen before any of them was written:
+  wrong unit            a correct number carrying the wrong unit
+  superseded figure     the number the passage supersedes, reported as the result
+  swapped entities      the answer to the neighbouring question
+  fabricated reason     the right conclusion with a cause the passage never gives
+  dropped condition     the clause whose removal reverses the finding
+  unsupported claim     a confident assertion the passage explicitly withdraws
+
+THE CONTROL THAT MAKES IT A FAIR TEST: **every one of the twelve summaries
+is within its own word cap**, verified mechanically before any call. So a
+word-count-only judge — the instrument ADR 0171's AUC 1.000 actually
+measured — scores exactly 6/12 here, the same as answering "pass" to
+everything. That is asserted as a computed number in the report, not as an
+argument.
+
+Every label is a sentence a reader could dispute, recorded per case in
+`hardset.json` as `owner_reason`, beside the exact edit.
+
+----------------------------------------------------------------------
+3. THE ARMS
+----------------------------------------------------------------------
+  rule-based   RuleBasedJudge(rubric={"quality": 1.0})          0 calls
+  llm-opus     LLMJudge on the session default, position_swap   24 calls
+  llm-sonnet   LLMJudge on `--model sonnet`, position_swap      24 calls
+
+`claude-opus-5[1m]` WROTE every positive and is the source text of every
+negative, so llm-opus is grading its own writing. `claude-sonnet-5` wrote
+none of it — ADR 0162's disinterested judge, reused deliberately so the two
+measurements are on the same third party. The difference between them on
+the SAME cases is a self-preference control on the GRADING path, which is
+new: ADR 0162's control is on the comparing path only.
+
+Baselines, all computed in the report from the same file:
+  pass-everything, fail-everything, word-count-only, and the corpus's own
+  INHERITED mechanical checks (the `TaskCheck`s already in the scenario
+  files, evaluated against the substituted state). The inherited-check
+  baseline is reported whatever it says; the corruptions were written to be
+  plausible, not to evade or to trip those checks.
+
+----------------------------------------------------------------------
+4. THE CHOOSING-PATH CONTROL
+----------------------------------------------------------------------
+ADR 0162 built `PairwiseRanker` and its own "why 8 and not 9" says:
+"Nothing in the loop calls `PairwiseRanker` yet ... dimension 3's remaining
+points want the control exercised where candidates are actually chosen."
+
+The loop's choosing act is `proposal = proposals[0]` in `cycle`
+(`aef/harness/loop.py`) — P1's file this wave, so it will NOT be edited.
+What is measured instead is the same object performing a choice whose
+outcome is scored: for each of the six passages, choose between the correct
+and the corrupted summary, position-swapped, on both judges. 24 calls.
+
+Two things are reported:
+  (a) whether the shipped guard REFUSES the Opus judge on this act
+      (both candidates carry `model="claude-opus-5[1m]"`, so
+      `allow_self_ranking=False` should raise `SelfRankingError`), and
+  (b) with the override set explicitly, whether choosing is a better
+      instrument than grading, and whether the self-interested judge
+      chooses worse than the disinterested one on the same six pairs.
+And, whatever the numbers say, the exact wiring `run_loop` would need is
+written down for whoever owns that file.
+
+----------------------------------------------------------------------
+5. BUDGET
+----------------------------------------------------------------------
+P3's cap is 90 live calls. Planned: 2 preflights + 48 grading + 24 choosing
+= 74. The remaining 16 are for retries ONLY. No case is added to the hard
+set after seeing a result; the set is frozen at 12 by this document.
+
+----------------------------------------------------------------------
+6. FALSIFICATION — decided here, before the preflight
+----------------------------------------------------------------------
+Dimension 3 moves 8 -> 10 only if ALL THREE hold:
+
+  (F1) the model judge separates pass from fail on the hard set MATERIALLY
+       better than the trivial baselines: agreement >= 9/12 AND AUC >= 0.75
+       over the 36 pass/fail pairs AND the paired statistic (correct scored
+       above corrupted) >= 5/6. All three, because 0159's lesson is that one
+       agreement count can be a constant function in disguise.
+  (F2) position sensitivity stays small: max position_delta <= 0.20, the
+       same threshold ADR 0171 pre-registered.
+  (F3) the self-preference effect on these cases is absent, OR present and
+       mitigated and re-measured — the disinterested judge is measured on
+       the identical cases and the mitigation's default is set by that
+       measurement rather than by preference.
+
+Dimension 3 moves 8 -> 9 if the hard set exists and is committed, the judge
+beats the trivial baselines on (F1), but the choosing-path control does not
+land as a measured result.
+
++0 if the model judge is no better than "pass everything" on the hard cases.
+**That is the most interesting possible outcome of this increment and it
+will be stated in the ADR's first paragraph if it happens.** It would mean
+the +1 ADR 0171 took was a measurement of a word counter.
+
+A fourth outcome is possible and is named now so it cannot be presented as
+a success later: the judge may beat the trivial baselines and still lose to
+the corpus's own inherited regex checks. If so, the ADR says that in the
+same breath as the judge's own number.
