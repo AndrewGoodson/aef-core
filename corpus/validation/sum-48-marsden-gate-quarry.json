@@ -1,0 +1,345 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Marsden\\ Gate"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)\\b(said|says|say|claim|alleg|report|assert|accus|according|disput|deni|insist|unconfirmed|unverified)"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 40
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-48-marsden-gate-quarry",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-48-marsden-gate-quarry in at most 40 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-48-marsden-gate-quarry",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 40,
+      "must_mention": [
+        "Marsden Gate"
+      ],
+      "text": "Blasting at Marsden Gate quarry has been suspended since a house on Fold Lane complained of cracked plaster in August. The operator says its own monitors recorded vibration well inside the permitted limit. Crushing and haulage continue, with lorry movements unchanged at sixty a day."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "12569910778841b7ab076e3d53702f34550c3a382cf73bf723a54ac11c638c51",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Marsden Gate.\n\nPassage:\nBlasting at Marsden Gate quarry has been suspended since a house on Fold Lane complained of cracked plaster in August. The operator says its own monitors recorded vibration well inside the permitted limit. Crushing and haulage continue, with lorry movements unchanged at sixty a day.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "cache_creation_input_tokens": 856,
+        "cache_read_input_tokens": 0,
+        "content": "Blasting at Marsden Gate quarry has been halted since August, when a Fold Lane house reported cracked plaster; the operator's monitors showed vibration within permitted limits. Crushing and haulage continue, with lorry movements steady at sixty daily.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "model_attribution": "usage_match",
+        "output_tokens": 87,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "one attributed forward-looking claim (Rule A, ADR 0201); synthetic passage",
+  "recorded_at": "2026-09-06T10:46:02.453624+00:00",
+  "source": "record",
+  "split": "validation",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-48-marsden-gate-quarry:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-06T10:46:02.462731+00:00",
+        "run_id": "sum-48-marsden-gate-quarry",
+        "trace_id": "sum-48-marsden-gate-quarry"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-48-marsden-gate-quarry in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-48-marsden-gate-quarry",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Marsden Gate"
+          ],
+          "text": "Blasting at Marsden Gate quarry has been suspended since a house on Fold Lane complained of cracked plaster in August. The operator says its own monitors recorded vibration well inside the permitted limit. Crushing and haulage continue, with lorry movements unchanged at sixty a day."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-48-marsden-gate-quarry:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-06T10:46:02.462810+00:00",
+        "run_id": "sum-48-marsden-gate-quarry",
+        "trace_id": "sum-48-marsden-gate-quarry"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-48-marsden-gate-quarry in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 89,
+            "trace_id": "sum-48-marsden-gate-quarry",
+            "ts": "2026-09-06T10:46:02.462810Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Blasting at Marsden Gate quarry has been halted since August, when a Fold Lane house reported cracked plaster; the operator's monitors showed vibration within permitted limits. Crushing and haulage continue, with lorry movements steady at sixty daily."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-48-marsden-gate-quarry in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-48-marsden-gate-quarry",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Marsden Gate"
+          ],
+          "text": "Blasting at Marsden Gate quarry has been suspended since a house on Fold Lane complained of cracked plaster in August. The operator says its own monitors recorded vibration well inside the permitted limit. Crushing and haulage continue, with lorry movements unchanged at sixty a day."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-48-marsden-gate-quarry:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-06T10:46:04.866595+00:00",
+        "run_id": "sum-48-marsden-gate-quarry",
+        "trace_id": "sum-48-marsden-gate-quarry"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-48-marsden-gate-quarry in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-48-marsden-gate-quarry in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 89,
+            "trace_id": "sum-48-marsden-gate-quarry",
+            "ts": "2026-09-06T10:46:02.462810Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-48-marsden-gate-quarry",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Marsden Gate"
+          ],
+          "summary": "Blasting at Marsden Gate quarry has been halted since August, when a Fold Lane house reported cracked plaster; the operator's monitors showed vibration within permitted limits. Crushing and haulage continue, with lorry movements steady at sixty daily.",
+          "text": "Blasting at Marsden Gate quarry has been suspended since a house on Fold Lane complained of cracked plaster in August. The operator says its own monitors recorded vibration well inside the permitted limit. Crushing and haulage continue, with lorry movements unchanged at sixty a day."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-48-marsden-gate-quarry:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-06T10:46:04.866876+00:00",
+        "run_id": "sum-48-marsden-gate-quarry",
+        "trace_id": "sum-48-marsden-gate-quarry"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-48-marsden-gate-quarry in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-48-marsden-gate-quarry in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 89,
+            "trace_id": "sum-48-marsden-gate-quarry",
+            "ts": "2026-09-06T10:46:02.462810Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-48-marsden-gate-quarry",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Marsden Gate"
+          ],
+          "summary": "Blasting at Marsden Gate quarry has been halted since August, when a Fold Lane house reported cracked plaster; the operator's monitors showed vibration within permitted limits. Crushing and haulage continue, with lorry movements steady at sixty daily.",
+          "text": "Blasting at Marsden Gate quarry has been suspended since a house on Fold Lane complained of cracked plaster in August. The operator says its own monitors recorded vibration well inside the permitted limit. Crushing and haulage continue, with lorry movements unchanged at sixty a day."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

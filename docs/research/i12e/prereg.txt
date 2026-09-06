@@ -1,0 +1,66 @@
+P2 — pre-registration, written and committed BEFORE the first arm call.
+=======================================================================
+
+Model:  the session default, claude-opus-5[1m] (no --model reaches the CLI).
+Budget: <= 140 live calls.  Spent before this point: 15
+        (1 quota preflight + 14 scenario recordings).
+
+THE ARMS  (21 summary scenarios in corpus/validation, 10 of them owner-check
+negatives, scored by the shipped score_scenario)
+
+  (a) no retrieve node                                   1 repeat   21 calls
+  (b) MemoryRetriever, raw records only                  2 repeats  42 calls
+  (c) MemoryRetriever + knowledge, knowledge_boost=0.0   0 repeats   0 calls
+  (d) MemoryRetriever + knowledge, knowledge_boost=16.0  2 repeats  42 calls
+                                                        ---------------------
+                                                         total     105 calls
+
+(c) COSTS NOTHING AND IS NOT SKIPPED. `dry_identity.py`, offline, hashes every
+rendered prompt of every arm: (c)@0.0 and (b) produce ONE sha256 over all
+twenty-one prompts, 28501c05e2af051f, on this three-entry store as they did on
+ADR 0193's one-entry store. Arm (c) IS arm (b), byte for byte, so (b)'s two
+live repeats are (c)'s two live repeats and reporting them as one arm would be
+reporting the same experiment twice.
+
+WHY 16.0 IS ARM (d)'s BOOST. Chosen offline, before any quota, from the WORST
+case: `dry_identity.py` runs the whole sequential arm under a stub whose fixed
+answer refreshes no lesson, so ADR 0116's staleness demotion walks all three
+down monotonically. On a 1.0 grid, 16.0 is the smallest value that keeps ALL
+THREE lessons inside `render_retrieved_context`'s five bullets on ALL
+twenty-one scenarios under that worst case (8.0 — ADR 0193's value, tuned on a
+one-entry store — reaches 7/21 for the word-cap lesson and 10/21 for the
+joined one). It saturates: 16, 17 and 18 give the identical prompt hash.
+
+THE DECISION RULE, evaluated by aggregate.py and not by hand
+------------------------------------------------------------
+Let spread(arm) = max(repeat means) - min(repeat means) for that arm.
+Let BAR = max(spread(b), spread(d)).
+
+  dimension 2 moves 14 -> 17  IFF
+      a second knowledge entry formed from a DIFFERENT signature   AND
+      (d) - (b) on the mean  >  BAR                                AND
+      (d) - (b) on the ten negatives  >=  0
+
+  dimension 2 moves 14 -> 15  IF a second entry formed and that band fails
+      (the capability is real; the benefit is not shown).
+
+  dimension 2 does not move  IF no second entry formed.
+
+THE KNOB
+--------
+  knowledge_boost's shipped default moves from 0.0 to 16.0 ONLY IF
+  (d) - (c) on the mean > BAR, and a test then pins the shipped value to the
+  measured one. (c) is (b), so this is the same comparison as above and is
+  decided by the same number. Otherwise the default stays 0.0 and the ADR says
+  the knob is now measured on a store where lessons compete and still not
+  earned.
+
+WHAT WOULD FALSIFY THE WHOLE INCREMENT
+--------------------------------------
+  - (d) <= (b): the second lesson costs what the first one bought, and the
+    finding is that lessons crowd each other out of the five bullets.
+  - (d) - (b) positive but inside BAR: three measurements now agree that the
+    layer's benefit is not separable from repeat noise at this sample size.
+
+Both are reportable results and neither is a reason to add a repeat, change
+the boost, or re-record a scenario after the fact.

@@ -1,0 +1,345 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Orrell\\ Baths"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)\\b(said|says|say|claim|alleg|report|assert|accus|according|disput|deni|insist|unconfirmed|unverified)"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 40
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-44-orrell-baths",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-44-orrell-baths in at most 40 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-44-orrell-baths",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 40,
+      "must_mention": [
+        "Orrell Baths"
+      ],
+      "text": "Orrell Baths will keep its Victorian tiling under the refurbishment agreed last week, after conservation officers objected to the first design. The pool will close from February to November. The trust running the building says the extra tiling work adds nine weeks and about ninety thousand pounds, which it hopes to raise from a public appeal. The gym and the cafe stay open throughout."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "1a5ca1b7b06cdfcdc5ad3a106a6bdaf3a310108b646ccb32a65110a3fcdae923",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Orrell Baths.\n\nPassage:\nOrrell Baths will keep its Victorian tiling under the refurbishment agreed last week, after conservation officers objected to the first design. The pool will close from February to November. The trust running the building says the extra tiling work adds nine weeks and about ninety thousand pounds, which it hopes to raise from a public appeal. The gym and the cafe stay open throughout.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "cache_creation_input_tokens": 878,
+        "cache_read_input_tokens": 0,
+        "content": "Orrell Baths will retain its Victorian tiling after conservation officers rejected the original refurbishment design, closing the pool from February to November. The extra work adds nine weeks and roughly £90,000, which the trust hopes a public appeal will fund; gym and cafe remain open.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "model_attribution": "usage_match",
+        "output_tokens": 94,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "one attributed forward-looking claim (Rule A, ADR 0201); synthetic passage",
+  "recorded_at": "2026-09-06T10:43:18.582562+00:00",
+  "source": "record",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-44-orrell-baths:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-06T10:43:18.590229+00:00",
+        "run_id": "sum-44-orrell-baths",
+        "trace_id": "sum-44-orrell-baths"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-44-orrell-baths in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-44-orrell-baths",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Orrell Baths"
+          ],
+          "text": "Orrell Baths will keep its Victorian tiling under the refurbishment agreed last week, after conservation officers objected to the first design. The pool will close from February to November. The trust running the building says the extra tiling work adds nine weeks and about ninety thousand pounds, which it hopes to raise from a public appeal. The gym and the cafe stay open throughout."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-44-orrell-baths:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-06T10:43:18.590320+00:00",
+        "run_id": "sum-44-orrell-baths",
+        "trace_id": "sum-44-orrell-baths"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-44-orrell-baths in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 96,
+            "trace_id": "sum-44-orrell-baths",
+            "ts": "2026-09-06T10:43:18.590320Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Orrell Baths will retain its Victorian tiling after conservation officers rejected the original refurbishment design, closing the pool from February to November. The extra work adds nine weeks and roughly £90,000, which the trust hopes a public appeal will fund; gym and cafe remain open."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-44-orrell-baths in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-44-orrell-baths",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Orrell Baths"
+          ],
+          "text": "Orrell Baths will keep its Victorian tiling under the refurbishment agreed last week, after conservation officers objected to the first design. The pool will close from February to November. The trust running the building says the extra tiling work adds nine weeks and about ninety thousand pounds, which it hopes to raise from a public appeal. The gym and the cafe stay open throughout."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-44-orrell-baths:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-06T10:43:21.169516+00:00",
+        "run_id": "sum-44-orrell-baths",
+        "trace_id": "sum-44-orrell-baths"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-44-orrell-baths in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-44-orrell-baths in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 96,
+            "trace_id": "sum-44-orrell-baths",
+            "ts": "2026-09-06T10:43:18.590320Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-44-orrell-baths",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Orrell Baths"
+          ],
+          "summary": "Orrell Baths will retain its Victorian tiling after conservation officers rejected the original refurbishment design, closing the pool from February to November. The extra work adds nine weeks and roughly £90,000, which the trust hopes a public appeal will fund; gym and cafe remain open.",
+          "text": "Orrell Baths will keep its Victorian tiling under the refurbishment agreed last week, after conservation officers objected to the first design. The pool will close from February to November. The trust running the building says the extra tiling work adds nine weeks and about ninety thousand pounds, which it hopes to raise from a public appeal. The gym and the cafe stay open throughout."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-44-orrell-baths:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-06T10:43:21.169788+00:00",
+        "run_id": "sum-44-orrell-baths",
+        "trace_id": "sum-44-orrell-baths"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-44-orrell-baths in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-44-orrell-baths in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 96,
+            "trace_id": "sum-44-orrell-baths",
+            "ts": "2026-09-06T10:43:18.590320Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-44-orrell-baths",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Orrell Baths"
+          ],
+          "summary": "Orrell Baths will retain its Victorian tiling after conservation officers rejected the original refurbishment design, closing the pool from February to November. The extra work adds nine weeks and roughly £90,000, which the trust hopes a public appeal will fund; gym and cafe remain open.",
+          "text": "Orrell Baths will keep its Victorian tiling under the refurbishment agreed last week, after conservation officers objected to the first design. The pool will close from February to November. The trust running the building says the extra tiling work adds nine weeks and about ninety thousand pounds, which it hopes to raise from a public appeal. The gym and the cafe stay open throughout."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

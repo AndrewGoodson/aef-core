@@ -1,0 +1,2009 @@
+{
+  "rows": [
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 30
+      },
+      "scenario": "sum-13-cider-press"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 14
+      },
+      "scenario": "sum-14-quarry-lake"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 30
+      },
+      "scenario": "sum-15-bookbinder"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 30
+      },
+      "scenario": "sum-16-cliff-path"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 14
+      },
+      "scenario": "sum-17-clockmaker"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 30
+      },
+      "scenario": "sum-18-heron-rookery"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 30
+      },
+      "scenario": "sum-29-brindle-viaduct"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 30
+      },
+      "scenario": "sum-30-ganister-tarn"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 30
+      },
+      "scenario": "sum-31-quernmore-kiln"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 30
+      },
+      "scenario": "sum-32-hessle-mills"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 30
+      },
+      "scenario": "sum-33-cotterdale-bus"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 30
+      },
+      "scenario": "sum-34-alder-carr"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 30
+      },
+      "scenario": "sum-35-priory-gatehouse"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-36-larkfield-quarry"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-37-ryhope-pool"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-38-bewick-refusals"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 30
+      },
+      "scenario": "sum-39-coldbeck-society"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 2
+      },
+      "scenario": "sum-46-thwaite-lane-bridge"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 14
+      },
+      "scenario": "sum-47-eller-beck-hatchery"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 14
+      },
+      "scenario": "sum-48-marsden-gate-quarry"
+    },
+    {
+      "boost": 0.0,
+      "chunks": 49,
+      "in_top5": [],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 14
+      },
+      "scenario": "sum-49-birkrigg-allotments"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 35,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-13-cider-press"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-14-quarry-lake"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 33,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-15-bookbinder"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-16-cliff-path"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-17-clockmaker"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 33,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-18-heron-rookery"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 33,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-29-brindle-viaduct"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-30-ganister-tarn"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 34,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-31-quernmore-kiln"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 33,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-32-hessle-mills"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 32,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-33-cotterdale-bus"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 34,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-34-alder-carr"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 35,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-35-priory-gatehouse"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 35,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-36-larkfield-quarry"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 37,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-37-ryhope-pool"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 35,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-38-bewick-refusals"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 32,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-39-coldbeck-society"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 32,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-46-thwaite-lane-bridge"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-47-eller-beck-hatchery"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-48-marsden-gate-quarry"
+    },
+    {
+      "boost": 1.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-49-birkrigg-allotments"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 36,
+        "ruleA": 0
+      },
+      "scenario": "sum-13-cider-press"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 15,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-14-quarry-lake"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 43,
+        "ruleA": 0
+      },
+      "scenario": "sum-15-bookbinder"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 43,
+        "ruleA": 0
+      },
+      "scenario": "sum-16-cliff-path"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 15,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-17-clockmaker"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 43,
+        "ruleA": 0
+      },
+      "scenario": "sum-18-heron-rookery"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 43,
+        "ruleA": 0
+      },
+      "scenario": "sum-29-brindle-viaduct"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 10,
+        "cap": 44,
+        "ruleA": 0
+      },
+      "scenario": "sum-30-ganister-tarn"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 35,
+        "ruleA": 0
+      },
+      "scenario": "sum-31-quernmore-kiln"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 43,
+        "ruleA": 0
+      },
+      "scenario": "sum-32-hessle-mills"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 33,
+        "ruleA": 0
+      },
+      "scenario": "sum-33-cotterdale-bus"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 44,
+        "ruleA": 0
+      },
+      "scenario": "sum-34-alder-carr"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 36,
+        "ruleA": 0
+      },
+      "scenario": "sum-35-priory-gatehouse"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 44,
+        "ruleA": 0
+      },
+      "scenario": "sum-36-larkfield-quarry"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 37,
+        "ruleA": 0
+      },
+      "scenario": "sum-37-ryhope-pool"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 44,
+        "ruleA": 0
+      },
+      "scenario": "sum-38-bewick-refusals"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 31,
+        "cap": 43,
+        "ruleA": 0
+      },
+      "scenario": "sum-39-coldbeck-society"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 16,
+        "cap": 38,
+        "ruleA": 0
+      },
+      "scenario": "sum-46-thwaite-lane-bridge"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 15,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-47-eller-beck-hatchery"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 15,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-48-marsden-gate-quarry"
+    },
+    {
+      "boost": 2.0,
+      "chunks": 49,
+      "in_top5": [
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 15,
+        "cap": 48,
+        "ruleA": 0
+      },
+      "scenario": "sum-49-birkrigg-allotments"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 6,
+        "ruleA": 0
+      },
+      "scenario": "sum-13-cider-press"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 32,
+        "ruleA": 0
+      },
+      "scenario": "sum-14-quarry-lake"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 32,
+        "ruleA": 0
+      },
+      "scenario": "sum-15-bookbinder"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 6,
+        "ruleA": 0
+      },
+      "scenario": "sum-16-cliff-path"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 32,
+        "ruleA": 0
+      },
+      "scenario": "sum-17-clockmaker"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 32,
+        "ruleA": 0
+      },
+      "scenario": "sum-18-heron-rookery"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 32,
+        "ruleA": 0
+      },
+      "scenario": "sum-29-brindle-viaduct"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 32,
+        "ruleA": 0
+      },
+      "scenario": "sum-30-ganister-tarn"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 3,
+        "ruleA": 0
+      },
+      "scenario": "sum-31-quernmore-kiln"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 32,
+        "ruleA": 0
+      },
+      "scenario": "sum-32-hessle-mills"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 4,
+        "ruleA": 0
+      },
+      "scenario": "sum-33-cotterdale-bus"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 32,
+        "ruleA": 0
+      },
+      "scenario": "sum-34-alder-carr"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 7,
+        "ruleA": 0
+      },
+      "scenario": "sum-35-priory-gatehouse"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 32,
+        "ruleA": 0
+      },
+      "scenario": "sum-36-larkfield-quarry"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-37-ryhope-pool"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 32,
+        "ruleA": 0
+      },
+      "scenario": "sum-38-bewick-refusals"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 32,
+        "ruleA": 0
+      },
+      "scenario": "sum-39-coldbeck-society"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 17,
+        "ruleA": 0
+      },
+      "scenario": "sum-46-thwaite-lane-bridge"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 32,
+        "ruleA": 0
+      },
+      "scenario": "sum-47-eller-beck-hatchery"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 32,
+        "ruleA": 0
+      },
+      "scenario": "sum-48-marsden-gate-quarry"
+    },
+    {
+      "boost": 4.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 32,
+        "ruleA": 0
+      },
+      "scenario": "sum-49-birkrigg-allotments"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-13-cider-press"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-14-quarry-lake"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-15-bookbinder"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-16-cliff-path"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-17-clockmaker"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-18-heron-rookery"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-29-brindle-viaduct"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-30-ganister-tarn"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-31-quernmore-kiln"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-32-hessle-mills"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-33-cotterdale-bus"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-34-alder-carr"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-35-priory-gatehouse"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-36-larkfield-quarry"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-37-ryhope-pool"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-38-bewick-refusals"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-39-coldbeck-society"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-46-thwaite-lane-bridge"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-47-eller-beck-hatchery"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-48-marsden-gate-quarry"
+    },
+    {
+      "boost": 8.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-49-birkrigg-allotments"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-13-cider-press"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-14-quarry-lake"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-15-bookbinder"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-16-cliff-path"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-17-clockmaker"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-18-heron-rookery"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-29-brindle-viaduct"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-30-ganister-tarn"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-31-quernmore-kiln"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-32-hessle-mills"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-33-cotterdale-bus"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-34-alder-carr"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-35-priory-gatehouse"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-36-larkfield-quarry"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-37-ryhope-pool"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-38-bewick-refusals"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-39-coldbeck-society"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-46-thwaite-lane-bridge"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-47-eller-beck-hatchery"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-48-marsden-gate-quarry"
+    },
+    {
+      "boost": 12.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-49-birkrigg-allotments"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-13-cider-press"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-14-quarry-lake"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-15-bookbinder"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-16-cliff-path"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-17-clockmaker"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-18-heron-rookery"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-29-brindle-viaduct"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-30-ganister-tarn"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-31-quernmore-kiln"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-32-hessle-mills"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-33-cotterdale-bus"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-34-alder-carr"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-35-priory-gatehouse"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-36-larkfield-quarry"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-37-ryhope-pool"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-38-bewick-refusals"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-39-coldbeck-society"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-46-thwaite-lane-bridge"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-47-eller-beck-hatchery"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-48-marsden-gate-quarry"
+    },
+    {
+      "boost": 16.0,
+      "chunks": 49,
+      "in_top5": [
+        "both",
+        "cap",
+        "ruleA"
+      ],
+      "ranks": {
+        "both": 1,
+        "cap": 2,
+        "ruleA": 0
+      },
+      "scenario": "sum-49-birkrigg-allotments"
+    }
+  ]
+}

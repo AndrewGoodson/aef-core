@@ -1,0 +1,115 @@
+{
+  "recordings": 39,
+  "rules": [
+    {
+      "rule": "money written with the pound symbol",
+      "precondition": "\\bpounds\\b",
+      "required": "\u00a3",
+      "applies": 6,
+      "fails": 2,
+      "rate": 0.3333,
+      "failing": [
+        "sum-21-ardvey-ferry",
+        "sum-25-hollin-bridge"
+      ],
+      "failing_train": [
+        "sum-21-ardvey-ferry",
+        "sum-25-hollin-bridge"
+      ],
+      "failing_validation": []
+    },
+    {
+      "rule": "the month is carried",
+      "precondition": "(?i)\\b(January|February|March|April|May|June|July|August|September|October|November|December)\\b",
+      "required": "(?i)\\b(January|February|March|April|May|June|July|August|September|October|November|December)\\b",
+      "applies": 18,
+      "fails": 4,
+      "rate": 0.2222,
+      "failing": [
+        "sum-24-pellow-mill",
+        "sum-28-kellet-branch",
+        "sum-18-heron-rookery",
+        "sum-36-larkfield-quarry"
+      ],
+      "failing_train": [
+        "sum-24-pellow-mill",
+        "sum-28-kellet-branch"
+      ],
+      "failing_validation": [
+        "sum-18-heron-rookery",
+        "sum-36-larkfield-quarry"
+      ]
+    },
+    {
+      "rule": "attribution is carried (Rule A)",
+      "precondition": "(?i)\\b(said|says|say|claim|alleg|report|assert|accus|according|disput|deni|insist|unconfirmed|unverified)",
+      "required": "(?i)\\b(said|says|say|claim|alleg|report|assert|accus|according|disput|deni|insist|unconfirmed|unverified)",
+      "applies": 9,
+      "fails": 9,
+      "rate": 1.0,
+      "failing": [
+        "sum-01-kestrel-ferry",
+        "sum-02-orchard-blight",
+        "sum-24-pellow-mill",
+        "sum-25-hollin-bridge",
+        "sum-26-netherby-clinic",
+        "sum-28-kellet-branch",
+        "sum-15-bookbinder",
+        "sum-30-ganister-tarn",
+        "sum-39-coldbeck-society"
+      ],
+      "failing_train": [
+        "sum-01-kestrel-ferry",
+        "sum-02-orchard-blight",
+        "sum-24-pellow-mill",
+        "sum-25-hollin-bridge",
+        "sum-26-netherby-clinic",
+        "sum-28-kellet-branch"
+      ],
+      "failing_validation": [
+        "sum-15-bookbinder",
+        "sum-30-ganister-tarn",
+        "sum-39-coldbeck-society"
+      ]
+    },
+    {
+      "rule": "the year is carried",
+      "precondition": "\\b(19|20)\\d\\d\\b",
+      "required": "\\b(19|20)\\d\\d\\b",
+      "applies": 12,
+      "fails": 2,
+      "rate": 0.1667,
+      "failing": [
+        "sum-01-kestrel-ferry",
+        "sum-12-bell-recast"
+      ],
+      "failing_train": [
+        "sum-01-kestrel-ferry",
+        "sum-12-bell-recast"
+      ],
+      "failing_validation": []
+    },
+    {
+      "rule": "the percentage is carried",
+      "precondition": "(?i)per cent|%",
+      "required": "(?i)per cent|%",
+      "applies": 2,
+      "fails": 0,
+      "rate": 0.0,
+      "failing": [],
+      "failing_train": [],
+      "failing_validation": []
+    },
+    {
+      "rule": "the weekday is carried",
+      "precondition": "(?i)\\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\\b",
+      "required": "(?i)\\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\\b",
+      "applies": 5,
+      "fails": 0,
+      "rate": 0.0,
+      "failing": [],
+      "failing_train": [],
+      "failing_validation": []
+    }
+  ]
+}

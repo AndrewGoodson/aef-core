@@ -1,0 +1,345 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Birkrigg"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)\\b(said|says|say|claim|alleg|report|assert|accus|according|disput|deni|insist|unconfirmed|unverified)"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 40
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-49-birkrigg-allotments",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-49-birkrigg-allotments in at most 40 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-49-birkrigg-allotments",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 40,
+      "must_mention": [
+        "Birkrigg"
+      ],
+      "text": "Twenty-two of the ninety plots at the Birkrigg allotments will become a community orchard, a decision taken by the association's committee in September. The council, which owns the land, says the change needs no planning permission. Eleven people on the waiting list have been offered the southern terrace instead."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "947e7951983805f37a49107d48b2f0672be7b4ef94731d549c08870ffad0b20d",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Birkrigg.\n\nPassage:\nTwenty-two of the ninety plots at the Birkrigg allotments will become a community orchard, a decision taken by the association's committee in September. The council, which owns the land, says the change needs no planning permission. Eleven people on the waiting list have been offered the southern terrace instead.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "cache_creation_input_tokens": 850,
+        "cache_read_input_tokens": 0,
+        "content": "Birkrigg allotments' committee decided in September to convert twenty-two of ninety plots into a community orchard; the council, which owns the land, says no planning permission is required, and eleven waiting-list applicants were offered the southern terrace instead.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "model_attribution": "usage_match",
+        "output_tokens": 81,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "one attributed forward-looking claim (Rule A, ADR 0201); synthetic passage",
+  "recorded_at": "2026-09-06T10:46:08.791290+00:00",
+  "source": "record",
+  "split": "validation",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-49-birkrigg-allotments:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-06T10:46:08.799804+00:00",
+        "run_id": "sum-49-birkrigg-allotments",
+        "trace_id": "sum-49-birkrigg-allotments"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-49-birkrigg-allotments in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-49-birkrigg-allotments",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Birkrigg"
+          ],
+          "text": "Twenty-two of the ninety plots at the Birkrigg allotments will become a community orchard, a decision taken by the association's committee in September. The council, which owns the land, says the change needs no planning permission. Eleven people on the waiting list have been offered the southern terrace instead."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-49-birkrigg-allotments:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-06T10:46:08.799879+00:00",
+        "run_id": "sum-49-birkrigg-allotments",
+        "trace_id": "sum-49-birkrigg-allotments"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-49-birkrigg-allotments in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 83,
+            "trace_id": "sum-49-birkrigg-allotments",
+            "ts": "2026-09-06T10:46:08.799879Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Birkrigg allotments' committee decided in September to convert twenty-two of ninety plots into a community orchard; the council, which owns the land, says no planning permission is required, and eleven waiting-list applicants were offered the southern terrace instead."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-49-birkrigg-allotments in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-49-birkrigg-allotments",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Birkrigg"
+          ],
+          "text": "Twenty-two of the ninety plots at the Birkrigg allotments will become a community orchard, a decision taken by the association's committee in September. The council, which owns the land, says the change needs no planning permission. Eleven people on the waiting list have been offered the southern terrace instead."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-49-birkrigg-allotments:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-06T10:46:11.407303+00:00",
+        "run_id": "sum-49-birkrigg-allotments",
+        "trace_id": "sum-49-birkrigg-allotments"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-49-birkrigg-allotments in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-49-birkrigg-allotments in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 83,
+            "trace_id": "sum-49-birkrigg-allotments",
+            "ts": "2026-09-06T10:46:08.799879Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-49-birkrigg-allotments",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Birkrigg"
+          ],
+          "summary": "Birkrigg allotments' committee decided in September to convert twenty-two of ninety plots into a community orchard; the council, which owns the land, says no planning permission is required, and eleven waiting-list applicants were offered the southern terrace instead.",
+          "text": "Twenty-two of the ninety plots at the Birkrigg allotments will become a community orchard, a decision taken by the association's committee in September. The council, which owns the land, says the change needs no planning permission. Eleven people on the waiting list have been offered the southern terrace instead."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-49-birkrigg-allotments:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-06T10:46:11.407681+00:00",
+        "run_id": "sum-49-birkrigg-allotments",
+        "trace_id": "sum-49-birkrigg-allotments"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-49-birkrigg-allotments in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-49-birkrigg-allotments in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 83,
+            "trace_id": "sum-49-birkrigg-allotments",
+            "ts": "2026-09-06T10:46:08.799879Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-49-birkrigg-allotments",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Birkrigg"
+          ],
+          "summary": "Birkrigg allotments' committee decided in September to convert twenty-two of ninety plots into a community orchard; the council, which owns the land, says no planning permission is required, and eleven waiting-list applicants were offered the southern terrace instead.",
+          "text": "Twenty-two of the ninety plots at the Birkrigg allotments will become a community orchard, a decision taken by the association's committee in September. The council, which owns the land, says the change needs no planning permission. Eleven people on the waiting list have been offered the southern terrace instead."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}
