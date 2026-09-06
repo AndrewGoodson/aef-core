@@ -1,0 +1,345 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Hallam\\ Croft"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)\\b(said|says|say|claim|alleg|report|assert|accus|according|disput|deni|insist|unconfirmed|unverified)"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 40
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-51-hallam-croft-school",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-51-hallam-croft-school in at most 40 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-51-hallam-croft-school",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 40,
+      "must_mention": [
+        "Hallam Croft"
+      ],
+      "text": "The infant classes at Hallam Croft school will move into the refurbished east wing at half term, freeing the 1950s block for demolition next year. The governors say the playing field will not be built on. Two hundred and ten pupils are on roll."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "3a200619d0ac3f029aca2f5803a85a2c6abbad2681db1a2704182434544447f6",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Hallam Croft.\n\nPassage:\nThe infant classes at Hallam Croft school will move into the refurbished east wing at half term, freeing the 1950s block for demolition next year. The governors say the playing field will not be built on. Two hundred and ten pupils are on roll.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "cache_creation_input_tokens": 836,
+        "cache_read_input_tokens": 0,
+        "content": "Hallam Croft school's infant classes will relocate to the refurbished east wing at half term, allowing the 1950s block to be demolished next year. Governors confirm the playing field will remain undeveloped. The school has 210 pupils on roll.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "model_attribution": "usage_match",
+        "output_tokens": 81,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code on claude-opus-5[1m] (ADR 0201). One attributed forward-looking claim, and the owner's Rule A: an attributed claim stays attributed",
+  "recorded_at": "2026-09-06T10:45:30.733943+00:00",
+  "source": "record",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-51-hallam-croft-school:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-06T10:45:30.742405+00:00",
+        "run_id": "sum-51-hallam-croft-school",
+        "trace_id": "sum-51-hallam-croft-school"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-51-hallam-croft-school in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-51-hallam-croft-school",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Hallam Croft"
+          ],
+          "text": "The infant classes at Hallam Croft school will move into the refurbished east wing at half term, freeing the 1950s block for demolition next year. The governors say the playing field will not be built on. Two hundred and ten pupils are on roll."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-51-hallam-croft-school:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-06T10:45:30.742483+00:00",
+        "run_id": "sum-51-hallam-croft-school",
+        "trace_id": "sum-51-hallam-croft-school"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-51-hallam-croft-school in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 83,
+            "trace_id": "sum-51-hallam-croft-school",
+            "ts": "2026-09-06T10:45:30.742483Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Hallam Croft school's infant classes will relocate to the refurbished east wing at half term, allowing the 1950s block to be demolished next year. Governors confirm the playing field will remain undeveloped. The school has 210 pupils on roll."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-51-hallam-croft-school in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-51-hallam-croft-school",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Hallam Croft"
+          ],
+          "text": "The infant classes at Hallam Croft school will move into the refurbished east wing at half term, freeing the 1950s block for demolition next year. The governors say the playing field will not be built on. Two hundred and ten pupils are on roll."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-51-hallam-croft-school:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-06T10:45:33.241175+00:00",
+        "run_id": "sum-51-hallam-croft-school",
+        "trace_id": "sum-51-hallam-croft-school"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-51-hallam-croft-school in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-51-hallam-croft-school in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 83,
+            "trace_id": "sum-51-hallam-croft-school",
+            "ts": "2026-09-06T10:45:30.742483Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-51-hallam-croft-school",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Hallam Croft"
+          ],
+          "summary": "Hallam Croft school's infant classes will relocate to the refurbished east wing at half term, allowing the 1950s block to be demolished next year. Governors confirm the playing field will remain undeveloped. The school has 210 pupils on roll.",
+          "text": "The infant classes at Hallam Croft school will move into the refurbished east wing at half term, freeing the 1950s block for demolition next year. The governors say the playing field will not be built on. Two hundred and ten pupils are on roll."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-51-hallam-croft-school:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-06T10:45:33.241637+00:00",
+        "run_id": "sum-51-hallam-croft-school",
+        "trace_id": "sum-51-hallam-croft-school"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-51-hallam-croft-school in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-51-hallam-croft-school in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 83,
+            "trace_id": "sum-51-hallam-croft-school",
+            "ts": "2026-09-06T10:45:30.742483Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-51-hallam-croft-school",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Hallam Croft"
+          ],
+          "summary": "Hallam Croft school's infant classes will relocate to the refurbished east wing at half term, allowing the 1950s block to be demolished next year. Governors confirm the playing field will remain undeveloped. The school has 210 pupils on roll.",
+          "text": "The infant classes at Hallam Croft school will move into the refurbished east wing at half term, freeing the 1950s block for demolition next year. The governors say the playing field will not be built on. Two hundred and ten pupils are on roll."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

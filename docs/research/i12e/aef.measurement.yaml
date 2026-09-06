@@ -1,0 +1,26 @@
+# P2 / I12E recording config: the ten new summary scenarios of ADR 0201.
+# Copied from docs/research/i13/aef.measurement.yaml with ONE line changed:
+extends: _base
+
+model_provider:
+  impl: claude_code
+  model: ""              # the session default answers; no --model reaches the CLI (ADR 0171)
+  fallback: []
+
+memory:
+  impl: in_memory
+
+evaluator:
+  suites: []
+
+tools:
+  allow: []
+
+policies:
+  require_hitl_above_risk: 0.0
+  forbid: []
+
+objectives: "Summarise a short passage within a word cap, mentioning every required term."
+
+evolution:
+  enabled: false

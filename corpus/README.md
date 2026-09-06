@@ -48,15 +48,16 @@ $ python -c "import json,glob,collections;
 
 holdout     claude-fable-5-1       n= 2  sum-19-tram-depot .. sum-20-seed-bank
 train       (no model call)        n= 6  boundary-3 .. tripwire-impossible-train
-train       claude-opus-5[1m]      n=20  sum-01-kestrel-ferry .. sum-28-kellet-branch
+train       claude-opus-5[1m]      n=30  sum-01-kestrel-ferry .. sum-53-culvert-lane-flood
 validation  (no model call)        n= 5  tripwire-impossible-val .. val-hard-5
-validation  claude-opus-5[1m]      n=17  sum-13-cider-press .. sum-39-coldbeck-society
+validation  claude-opus-5[1m]      n=21  sum-13-cider-press .. sum-49-birkrigg-allotments
 ```
 
 | recording model | scenarios | splits | can it be re-recorded? |
 |---|---|---|---|
 | `claude-fable-5-1` | `sum-01` … `sum-20` (20) | 12 train, 6 validation, 2 holdout | **no — that model's quota is exhausted** |
 | `claude-opus-5[1m]` | `sum-21` … `sum-39` (19) | 8 train, 11 validation | yes |
+| `claude-opus-5[1m]` | `sum-40` … `sum-53` (14, ADR 0201) | 10 train, 4 validation | yes |
 | none (the `agents/demo` scenarios) | 11 | 6 train, 5 validation | n/a — the demo agent calls no model |
 
 Two consequences that are not obvious from the counts:
@@ -113,7 +114,7 @@ body can match one input many ways is now refused when the scenario **loads**,
 with the safe rewrite in the message.
 
 **Every summary scenario now states its cap as `max_words` + `min_words: 1`**
-(ADR 0171) — checked, not assumed: 39 of 39 carry both ops. They carried the
+(ADR 0171) — checked, not assumed: 53 of 53 carry both ops. They carried the
 linear-time regex `^\s*\S+(?:\s+\S+){0,N-1}\s*$`
 until the corpus was next re-recorded, because a bare `max_words` accepts an
 empty summary and adding `min_words: 1` changes a scenario's check count and
@@ -163,6 +164,27 @@ were checks written too narrowly — `not overloaded` against "no overloading",
 before anything was called a negative. On this task, at this cap range, this
 agent's one reproducible failure is length.
 
+**That last sentence was true of one owner rule and stopped being true when a
+second was written (ADR 0201).** Fourteen more scenarios (`sum-40` … `sum-53`)
+carry one added rule — *an attributed claim stays attributed*, one constant
+regex, written before any of them was recorded — and **twelve of the fourteen
+fail it**. The two that pass are informative: `sum-49` carries the
+attribution properly, and `sum-48` passes for the wrong reason, on the word
+"reported" belonging to a different party in the same sentence. So this
+agent's failure modes are now two: it overruns a word cap, and it launders an
+interested party's forecast into fact. The corpus has **27** summary
+negatives, 10 of them in validation, and two of those ten are the first
+negatives here that are not word-cap overruns.
+
+The rule was **screened against the existing recordings before it was
+written** — six candidates, `docs/research/i12e/screen.py`, and this agent had
+never once carried an attribution through a summary (9 of 9) — and it is
+applied to **none** of them, only to the fourteen recorded afterwards. That
+disclosure is the whole of the defence; a reader who thinks a rule chosen
+because it fails is a rule not worth having should read
+`docs/research/i12e/scenarios.py`, which argues the point and states what is
+still disputable about it.
+
 `tests/harness/test_corpus_negatives.py` asserts the count cannot silently
 return to zero. Widening a check until everything passes and fixing a check
 that was too narrow look identical in a diff; the count afterwards is what
@@ -178,9 +200,12 @@ four that do not" from before the tripwires were added; the number is
 cannot demonstrate an improvement; one where everything fails cannot
 demonstrate a regression.
 
-Beside them sit the **39 `summary_agent` scenarios** (`sum-01` … `sum-39`),
+Beside them sit the **53 `summary_agent` scenarios** (`sum-01` … `sum-53`),
 which are the model-backed half and the ones every judge and knowledge
-measurement in this repo has run against. The demo scenarios call no model at
+measurement in this repo has run against. Thirty are `train` and twenty-one
+`validation`; the last fourteen (ADR 0201) are what makes the train split
+consolidate **three** knowledge signatures instead of one, which is what
+`docs/research/i12e/` measures. The demo scenarios call no model at
 all — see the provenance table above.
 
 **It does not cover:** model-backed nodes, tool calls, policy denials,

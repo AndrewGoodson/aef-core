@@ -1,0 +1,345 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Culvert\\ Lane"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)\\b(said|says|say|claim|alleg|report|assert|accus|according|disput|deni|insist|unconfirmed|unverified)"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 40
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-53-culvert-lane-flood",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-53-culvert-lane-flood in at most 40 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-53-culvert-lane-flood",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 40,
+      "must_mention": [
+        "Culvert Lane"
+      ],
+      "text": "Eleven houses on Culvert Lane were flooded on 3 November when a screen on the culvert blocked with branches. The drainage board says the screen will be replaced with a self-clearing design before next winter. The road reopened on 5 November after silt was cleared."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "6d8c53a58cb1fbbdeff95d5c6ed8030ce3e25f1c79a1fc6e15cf85466f613fc7",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Culvert Lane.\n\nPassage:\nEleven houses on Culvert Lane were flooded on 3 November when a screen on the culvert blocked with branches. The drainage board says the screen will be replaced with a self-clearing design before next winter. The road reopened on 5 November after silt was cleared.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "cache_creation_input_tokens": 845,
+        "cache_read_input_tokens": 0,
+        "content": "Flooding hit eleven Culvert Lane houses on 3 November after branches blocked the culvert screen; the drainage board plans a self-clearing replacement before next winter, and the road reopened on 5 November once silt was cleared.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "model_attribution": "usage_match",
+        "output_tokens": 78,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code on claude-opus-5[1m] (ADR 0201). One attributed forward-looking claim, and the owner's Rule A: an attributed claim stays attributed",
+  "recorded_at": "2026-09-06T10:45:43.340631+00:00",
+  "source": "record",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-53-culvert-lane-flood:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-06T10:45:43.348703+00:00",
+        "run_id": "sum-53-culvert-lane-flood",
+        "trace_id": "sum-53-culvert-lane-flood"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-53-culvert-lane-flood in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-53-culvert-lane-flood",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Culvert Lane"
+          ],
+          "text": "Eleven houses on Culvert Lane were flooded on 3 November when a screen on the culvert blocked with branches. The drainage board says the screen will be replaced with a self-clearing design before next winter. The road reopened on 5 November after silt was cleared."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-53-culvert-lane-flood:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-06T10:45:43.348775+00:00",
+        "run_id": "sum-53-culvert-lane-flood",
+        "trace_id": "sum-53-culvert-lane-flood"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-53-culvert-lane-flood in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 80,
+            "trace_id": "sum-53-culvert-lane-flood",
+            "ts": "2026-09-06T10:45:43.348775Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Flooding hit eleven Culvert Lane houses on 3 November after branches blocked the culvert screen; the drainage board plans a self-clearing replacement before next winter, and the road reopened on 5 November once silt was cleared."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-53-culvert-lane-flood in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-53-culvert-lane-flood",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Culvert Lane"
+          ],
+          "text": "Eleven houses on Culvert Lane were flooded on 3 November when a screen on the culvert blocked with branches. The drainage board says the screen will be replaced with a self-clearing design before next winter. The road reopened on 5 November after silt was cleared."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-53-culvert-lane-flood:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-06T10:45:45.743765+00:00",
+        "run_id": "sum-53-culvert-lane-flood",
+        "trace_id": "sum-53-culvert-lane-flood"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-53-culvert-lane-flood in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-53-culvert-lane-flood in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 80,
+            "trace_id": "sum-53-culvert-lane-flood",
+            "ts": "2026-09-06T10:45:43.348775Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-53-culvert-lane-flood",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Culvert Lane"
+          ],
+          "summary": "Flooding hit eleven Culvert Lane houses on 3 November after branches blocked the culvert screen; the drainage board plans a self-clearing replacement before next winter, and the road reopened on 5 November once silt was cleared.",
+          "text": "Eleven houses on Culvert Lane were flooded on 3 November when a screen on the culvert blocked with branches. The drainage board says the screen will be replaced with a self-clearing design before next winter. The road reopened on 5 November after silt was cleared."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-53-culvert-lane-flood:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-06T10:45:45.744087+00:00",
+        "run_id": "sum-53-culvert-lane-flood",
+        "trace_id": "sum-53-culvert-lane-flood"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-53-culvert-lane-flood in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-53-culvert-lane-flood in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 80,
+            "trace_id": "sum-53-culvert-lane-flood",
+            "ts": "2026-09-06T10:45:43.348775Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-53-culvert-lane-flood",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Culvert Lane"
+          ],
+          "summary": "Flooding hit eleven Culvert Lane houses on 3 November after branches blocked the culvert screen; the drainage board plans a self-clearing replacement before next winter, and the road reopened on 5 November once silt was cleared.",
+          "text": "Eleven houses on Culvert Lane were flooded on 3 November when a screen on the culvert blocked with branches. The drainage board says the screen will be replaced with a self-clearing design before next winter. The road reopened on 5 November after silt was cleared."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

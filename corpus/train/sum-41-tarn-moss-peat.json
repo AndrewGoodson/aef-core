@@ -1,0 +1,345 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Tarn\\ Moss"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)\\b(said|says|say|claim|alleg|report|assert|accus|according|disput|deni|insist|unconfirmed|unverified)"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 40
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-41-tarn-moss-peat",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-41-tarn-moss-peat in at most 40 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-41-tarn-moss-peat",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 40,
+      "must_mention": [
+        "Tarn Moss"
+      ],
+      "text": "Restoration of the peat at Tarn Moss has entered its second winter, with 4,200 metres of plastic piling now driven to hold water on the bare hags. The contractor says the water table has already risen by twelve centimetres across the northern half. Sphagnum plugs go in next spring. The site remains open to walkers, though the boardwalk from the eastern gate is closed until March."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "965f680333c1de69a9544222c4e2907c9e13de798d1e2cb63a47015acef3c4ac",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Tarn Moss.\n\nPassage:\nRestoration of the peat at Tarn Moss has entered its second winter, with 4,200 metres of plastic piling now driven to hold water on the bare hags. The contractor says the water table has already risen by twelve centimetres across the northern half. Sphagnum plugs go in next spring. The site remains open to walkers, though the boardwalk from the eastern gate is closed until March.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "cache_creation_input_tokens": 884,
+        "cache_read_input_tokens": 0,
+        "content": "Peat restoration at Tarn Moss is in its second winter, with 4,200 metres of plastic piling installed to retain water; the northern water table has risen twelve centimetres. Sphagnum plugs follow in spring. Walkers still have access, but the eastern boardwalk closes until March.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "model_attribution": "usage_match",
+        "output_tokens": 98,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code on claude-opus-5[1m] (ADR 0201). One attributed forward-looking claim, and the owner's Rule A: an attributed claim stays attributed",
+  "recorded_at": "2026-09-06T10:42:56.423205+00:00",
+  "source": "record",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-41-tarn-moss-peat:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-06T10:42:56.435563+00:00",
+        "run_id": "sum-41-tarn-moss-peat",
+        "trace_id": "sum-41-tarn-moss-peat"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-41-tarn-moss-peat in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-41-tarn-moss-peat",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Tarn Moss"
+          ],
+          "text": "Restoration of the peat at Tarn Moss has entered its second winter, with 4,200 metres of plastic piling now driven to hold water on the bare hags. The contractor says the water table has already risen by twelve centimetres across the northern half. Sphagnum plugs go in next spring. The site remains open to walkers, though the boardwalk from the eastern gate is closed until March."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-41-tarn-moss-peat:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-06T10:42:56.435638+00:00",
+        "run_id": "sum-41-tarn-moss-peat",
+        "trace_id": "sum-41-tarn-moss-peat"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-41-tarn-moss-peat in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 100,
+            "trace_id": "sum-41-tarn-moss-peat",
+            "ts": "2026-09-06T10:42:56.435638Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Peat restoration at Tarn Moss is in its second winter, with 4,200 metres of plastic piling installed to retain water; the northern water table has risen twelve centimetres. Sphagnum plugs follow in spring. Walkers still have access, but the eastern boardwalk closes until March."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-41-tarn-moss-peat in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-41-tarn-moss-peat",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Tarn Moss"
+          ],
+          "text": "Restoration of the peat at Tarn Moss has entered its second winter, with 4,200 metres of plastic piling now driven to hold water on the bare hags. The contractor says the water table has already risen by twelve centimetres across the northern half. Sphagnum plugs go in next spring. The site remains open to walkers, though the boardwalk from the eastern gate is closed until March."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-41-tarn-moss-peat:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-06T10:42:58.868286+00:00",
+        "run_id": "sum-41-tarn-moss-peat",
+        "trace_id": "sum-41-tarn-moss-peat"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-41-tarn-moss-peat in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-41-tarn-moss-peat in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 100,
+            "trace_id": "sum-41-tarn-moss-peat",
+            "ts": "2026-09-06T10:42:56.435638Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-41-tarn-moss-peat",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Tarn Moss"
+          ],
+          "summary": "Peat restoration at Tarn Moss is in its second winter, with 4,200 metres of plastic piling installed to retain water; the northern water table has risen twelve centimetres. Sphagnum plugs follow in spring. Walkers still have access, but the eastern boardwalk closes until March.",
+          "text": "Restoration of the peat at Tarn Moss has entered its second winter, with 4,200 metres of plastic piling now driven to hold water on the bare hags. The contractor says the water table has already risen by twelve centimetres across the northern half. Sphagnum plugs go in next spring. The site remains open to walkers, though the boardwalk from the eastern gate is closed until March."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-41-tarn-moss-peat:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-06T10:42:58.868715+00:00",
+        "run_id": "sum-41-tarn-moss-peat",
+        "trace_id": "sum-41-tarn-moss-peat"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-41-tarn-moss-peat in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-41-tarn-moss-peat in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 100,
+            "trace_id": "sum-41-tarn-moss-peat",
+            "ts": "2026-09-06T10:42:56.435638Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-41-tarn-moss-peat",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Tarn Moss"
+          ],
+          "summary": "Peat restoration at Tarn Moss is in its second winter, with 4,200 metres of plastic piling installed to retain water; the northern water table has risen twelve centimetres. Sphagnum plugs follow in spring. Walkers still have access, but the eastern boardwalk closes until March.",
+          "text": "Restoration of the peat at Tarn Moss has entered its second winter, with 4,200 metres of plastic piling now driven to hold water on the bare hags. The contractor says the water table has already risen by twelve centimetres across the northern half. Sphagnum plugs go in next spring. The site remains open to walkers, though the boardwalk from the eastern gate is closed until March."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

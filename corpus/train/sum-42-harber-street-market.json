@@ -1,0 +1,345 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Harber\\ Street"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)\\b(said|says|say|claim|alleg|report|assert|accus|according|disput|deni|insist|unconfirmed|unverified)"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 40
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-42-harber-street-market",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-42-harber-street-market in at most 40 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-42-harber-street-market",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 40,
+      "must_mention": [
+        "Harber Street"
+      ],
+      "text": "The Tuesday market on Harber Street will move to the civic square from January while the street's drainage is replaced. Thirty-one of the thirty-eight traders have taken a pitch in the square; the rest have asked for a refund of their annual fee. The council says the market will return to Harber Street in the autumn. Stallholders will pay no rent for the first four weeks."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "c5c1c7708b140d3edc336f657d6ec20f21c5b64bac8e776be6ef978f52f38192",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 40 words.\nThe summary must mention each of these terms, spelled exactly as given: Harber Street.\n\nPassage:\nThe Tuesday market on Harber Street will move to the civic square from January while the street's drainage is replaced. Thirty-one of the thirty-eight traders have taken a pitch in the square; the rest have asked for a refund of their annual fee. The council says the market will return to Harber Street in the autumn. Stallholders will pay no rent for the first four weeks.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "cache_creation_input_tokens": 875,
+        "cache_read_input_tokens": 0,
+        "content": "Harber Street's Tuesday market relocates to the civic square from January during drainage replacement, with 31 of 38 traders taking pitches and the others seeking refunds. Rent is waived for four weeks, and the market returns to Harber Street in autumn.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "model_attribution": "usage_match",
+        "output_tokens": 85,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code on claude-opus-5[1m] (ADR 0201). One attributed forward-looking claim, and the owner's Rule A: an attributed claim stays attributed",
+  "recorded_at": "2026-09-06T10:43:05.320526+00:00",
+  "source": "record",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-42-harber-street-market:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-06T10:43:05.328777+00:00",
+        "run_id": "sum-42-harber-street-market",
+        "trace_id": "sum-42-harber-street-market"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-42-harber-street-market in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-42-harber-street-market",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Harber Street"
+          ],
+          "text": "The Tuesday market on Harber Street will move to the civic square from January while the street's drainage is replaced. Thirty-one of the thirty-eight traders have taken a pitch in the square; the rest have asked for a refund of their annual fee. The council says the market will return to Harber Street in the autumn. Stallholders will pay no rent for the first four weeks."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-42-harber-street-market:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-06T10:43:05.328850+00:00",
+        "run_id": "sum-42-harber-street-market",
+        "trace_id": "sum-42-harber-street-market"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-42-harber-street-market in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 87,
+            "trace_id": "sum-42-harber-street-market",
+            "ts": "2026-09-06T10:43:05.328850Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "Harber Street's Tuesday market relocates to the civic square from January during drainage replacement, with 31 of 38 traders taking pitches and the others seeking refunds. Rent is waived for four weeks, and the market returns to Harber Street in autumn."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-42-harber-street-market in at most 40 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-42-harber-street-market",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Harber Street"
+          ],
+          "text": "The Tuesday market on Harber Street will move to the civic square from January while the street's drainage is replaced. Thirty-one of the thirty-eight traders have taken a pitch in the square; the rest have asked for a refund of their annual fee. The council says the market will return to Harber Street in the autumn. Stallholders will pay no rent for the first four weeks."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-42-harber-street-market:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-06T10:43:07.803466+00:00",
+        "run_id": "sum-42-harber-street-market",
+        "trace_id": "sum-42-harber-street-market"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-42-harber-street-market in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-42-harber-street-market in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 87,
+            "trace_id": "sum-42-harber-street-market",
+            "ts": "2026-09-06T10:43:05.328850Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-42-harber-street-market",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Harber Street"
+          ],
+          "summary": "Harber Street's Tuesday market relocates to the civic square from January during drainage replacement, with 31 of 38 traders taking pitches and the others seeking refunds. Rent is waived for four weeks, and the market returns to Harber Street in autumn.",
+          "text": "The Tuesday market on Harber Street will move to the civic square from January while the street's drainage is replaced. Thirty-one of the thirty-eight traders have taken a pitch in the square; the rest have asked for a refund of their annual fee. The council says the market will return to Harber Street in the autumn. Stallholders will pay no rent for the first four weeks."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-42-harber-street-market:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-06T10:43:07.803754+00:00",
+        "run_id": "sum-42-harber-street-market",
+        "trace_id": "sum-42-harber-street-market"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-42-harber-street-market in at most 40 words",
+        "plan": {
+          "goal": "summarise sum-42-harber-street-market in at most 40 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 87,
+            "trace_id": "sum-42-harber-street-market",
+            "ts": "2026-09-06T10:43:05.328850Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-42-harber-street-market",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 40,
+          "must_mention": [
+            "Harber Street"
+          ],
+          "summary": "Harber Street's Tuesday market relocates to the civic square from January during drainage replacement, with 31 of 38 traders taking pitches and the others seeking refunds. Rent is waived for four weeks, and the market returns to Harber Street in autumn.",
+          "text": "The Tuesday market on Harber Street will move to the civic square from January while the street's drainage is replaced. Thirty-one of the thirty-eight traders have taken a pitch in the square; the rest have asked for a refund of their annual fee. The council says the market will return to Harber Street in the autumn. Stallholders will pay no rent for the first four weeks."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

@@ -7148,3 +7148,129 @@ on a passing candidate; `--candidates 2` was configured and the prompt
 proposer offers one lesson by construction, so no second candidate existed;
 and two turns in four minutes is not ~100 runs a night — the gap is the
 proposer's repertoire, not the driver.
+
+## P2 — the second lesson, and the knob that turns out to be a switch (ADR 0201)
+
+Four ADRs measured the knowledge layer on a store holding exactly one entry,
+and ADR 0193 closed by naming why nothing further could be said: *this corpus
+cannot produce a second knowledge entry*. `knowledge_boost` was off "on
+judgement rather than measurement" for exactly that reason.
+
+**Zero live calls were spent before knowing a second family was reachable.**
+`docs/research/i12e/screen.py` evaluates six candidate owner rules of one shape
+— *when the passage carries X, the summary must carry X* — against the 39
+recordings that already exist. Money-with-£ fails 2 of 6, the month 4 of 18,
+the year 2 of 12, the percentage and the weekday 0. **Attribution fails 9 of
+9.** This agent has never once carried an attribution through a summary, and
+three of the nine are launderings rather than omissions: *"the trust says
+signage will be in place from the first of the month"* comes back as *"signage
+from the month's start"*.
+
+Rule A — *an attributed claim stays attributed* — is one constant regex,
+written down in `scenarios.py` and committed **before** the first of fourteen
+recordings, and applied to **none** of the nine that motivated it. That keeps
+ADR 0193's baseline and both its control arms comparable. The rule was chosen
+because it fails; that is disclosed in the file, in `corpus/README.md` and in
+the ADR, along with what is still disputable about it — the summaries it fails
+are not *wrong*.
+
+The cap took two corrections in the open. Draft 1: 34 on a 66-word passage,
+came back 36. Draft 2: a constant 40 on 62–68-word passages, came back 44, 41,
+43, 45, 43 — five of five over. Draft 3: the same cap on 48–52-word passages,
+36–41, seven of eight under. **On a 62–68-word passage this agent writes ~0.65
+of the source regardless of the cap; a roomier cap does not help and only a
+shorter passage does.** Nothing was re-recorded to tidy the earlier answers.
+
+Three lessons, from `seed.py`, zero live calls: the word cap (7 distinct runs,
+`runs_since_last_seen` 11 at seed), Rule A alone (4, since 0), and both at once
+(6, since 4).
+
+**Arm (c) — ranking off — is arm (b) byte for byte.** One sha256 over all 21
+rendered prompts, proved offline by `dry_identity.py` and matched by the live
+control's two repeats. On a three-entry store as on a one-entry one. So
+"ranking off" is not a configuration in which lessons compete; it is one in
+which no lesson reaches the model, and arm (c) cost 0 of the budget.
+
+**Arm (d)'s boost is 16.0, and that number is the finding.** Chosen offline
+from the worst case by ADR 0193's own rule — the smallest value on a 1.0 grid
+that keeps every lesson in `render_retrieved_context`'s five bullets on every
+scenario when nothing refreshes them. ADR 0193's 8.0, on the same agent and
+almost the same corpus, now reaches 21/21 for the freshest lesson and **7/21**
+for the stalest. The value that engages a store is a function of how many
+lessons it holds and how stale they are.
+
+| arm | repeats | mean | spread | negatives (n=10) | live calls |
+|---|---|---|---|---|---|
+| (a) no retrieve | 1 | 0.9000 | – | 0.8100 | 21 |
+| (b) raw records | 2 | **0.9107** | 0.0024 | 0.8425 | 42 |
+| (c) knowledge, boost 0.0 | 2 | **0.9107** | 0.0024 | 0.8425 | **0** |
+| (d) knowledge, boost 16.0 | 2 | **0.9547** | 0.0191 | 0.9400 | 42 |
+
+`(d) − (b) = +0.0440` against a `0.0191` bar — 2.30× — and `+0.0975` on the
+negatives. Pre-registered branch: **14 → 17**.
+
+**The mechanism, in failures rather than in a mean:** word-cap overruns go 8,
+8, 6 across the three control repeats and **0, 0** with the lessons in the
+prompt. The residue is Rule A, which arm (d) still failed 5 and 3 times, and
+the reason is structural: ADR 0174 strips the check's expected value from the
+record, so the bullet names the field and the operator and not the requirement.
+A word-cap lesson is self-describing; a substring lesson is not.
+
+**The knob is a switch, not a ranking control.** In every scenario of both
+repeats the three lessons hold ranks 0, 1 and 2 — the same order on 21
+different objectives — and the static sweep gives that same order at 0.0, 1.0,
+2.0, 4.0, 8.0, 12.0 and 16.0 without one inversion. Order between lessons
+belongs to staleness and confidence; the boost moves them as a block against
+the raw records.
+
+**The pre-registered trigger for moving the shipped default fired, and the
+default did not move.** That is a departure from what `prereg.txt` plainly
+intended and is recorded as one. The reason is the 8.0 → 16.0 row above: a
+scalar default cannot mean "engage the layer" when the value that does depends
+on the store. The next increment is a boost expressed relative to the record
+scores it competes with — a code change, unmeasured, and not performed on the
+strength of one corpus.
+
+Two things reported against this increment's own interest. `sum-48` scored 1.00
+in (a) and (b) and **0.75 in (d)**: it had been passing Rule A on the word
+"reported" belonging to a different party in the same sentence, and the
+rewritten answer lost it — the lessons made a passing scenario fail. And ADR
+0180's 12-character excerpt scanner has a **false-positive mode**, found by
+running it: four raw hits, all the window `'er than the '`, which lives inside
+the harness's own *"is longer than the owner's maximum"* and collided with a
+summary containing "rather than the". `leak_check.py` now subtracts the
+producer's own vocabulary and prints both counts. Zero windows of any run's own
+output in 105 live lesson blocks.
+
+**Defect found in a document, and the arithmetic the merge needs.** This
+branch left `main` at 78 and found `docs/research/self-learning-rubric.md`
+carrying **two** `## Current` headings with different totals — the live one and
+a stale `74 / 100` immediately below it, invisible to
+`tests/test_rubric_arithmetic.py`, which only ever reads the first. It was not
+fixed here, because touching a three-branch document from a fourth branch is
+how it got there; `main` has since fixed it (`74089ca`) and P1's dimension-1
+row took the live total to **83**.
+
+So the heading on this branch reads **81** — 78 plus this row's `+3` — and
+**81 is not the number to merge**. Dimension 2 moves 14 → 17 wherever it lands;
+against `main`'s 83 the recomputed heading is **86**, and
+`tests/test_rubric_arithmetic.py` will say so from the rows. Nothing else in
+this increment touches a file `main` moved: the corpus, `docs/research/i12e/`
+and `measure.py` are untouched between `c9ab35c` and `main`, which is the
+merge-order rule (ADR 0184/0191) holding for once by arrangement rather than
+by luck.
+
+120 live calls of a 140 budget, all `claude-opus-5[1m]`; every offline step —
+the screen, the seed, the static sweep, 21 dry arms, the leak scan, the
+aggregation — cost 0. Registered in `make measure` as `i12e-seed` and
+`i12e-arms`, 13 rows, re-derived from committed data. **Dimension 2: 14 → 17.**
+
+One regression guard added, `tests/harness/test_corpus_failure_families.py`
+(+3), and it guards the capability rather than a number: that the corpus's
+negatives fall into **more than one recurring family**, which is the
+precondition for every measurement above. Three mutations, three caught —
+deleting the four regex-only train scenarios is caught by the "not the word
+cap" test and *not* by the count alone (the joined family still recurs);
+widening Rule A until it always passes is caught by both; dropping Rule A from
+the two validation negatives is caught by the scored-split test. The sha256 map
+over all 65 corpus files is identical before and after.

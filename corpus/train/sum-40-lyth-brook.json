@@ -1,0 +1,345 @@
+{
+  "budget_ms": 60000.0,
+  "checks": [
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)Lyth\\ Brook"
+    },
+    {
+      "op": "regex",
+      "path": "working_memory.summary",
+      "value": "(?i)\\b(said|says|say|claim|alleg|report|assert|accus|according|disput|deni|insist|unconfirmed|unverified)"
+    },
+    {
+      "op": "max_words",
+      "path": "working_memory.summary",
+      "value": 34
+    },
+    {
+      "op": "min_words",
+      "path": "working_memory.summary",
+      "value": 1
+    }
+  ],
+  "expected": "unspecified",
+  "format_version": "1.0.0",
+  "graph_id": "summary_agent",
+  "graph_version": "0.1.0",
+  "id": "sum-40-lyth-brook",
+  "initial_state": {
+    "agent_id": "summary_agent",
+    "checkpoint_seq": 0,
+    "context_budget_tokens": 8000,
+    "errors": [],
+    "messages": [],
+    "objective": "summarise sum-40-lyth-brook in at most 34 words",
+    "plan": null,
+    "provenance": [],
+    "reflections": [],
+    "retrieved_context": [],
+    "run_id": "sum-40-lyth-brook",
+    "schema_version": "1.0.0",
+    "scores": {},
+    "tool_results": [],
+    "working_memory": {
+      "max_words": 34,
+      "must_mention": [
+        "Lyth Brook"
+      ],
+      "text": "The footbridge over Lyth Brook has been closed since a survey in June found rot in two of its four main beams. The parish council has ordered replacement timbers, which are due in October, and says the crossing should reopen before the winter. Walkers are being sent round by the ford at Bank End, which adds about a mile to the route. The bridge carries no vehicles."
+    }
+  },
+  "model_calls": [
+    {
+      "key": "88c7f458879464db6fe92b9929d4c50c1f17f0af29c544b7173f6f711183688c",
+      "request": {
+        "max_tokens": 16000,
+        "messages": [
+          {
+            "content": "You write one-paragraph summaries. Reply with the summary only: no preamble, no heading, no quotation marks, no bullet points, no closing remark.",
+            "role": "system"
+          },
+          {
+            "content": "Summarise the passage below in at most 34 words.\nThe summary must mention each of these terms, spelled exactly as given: Lyth Brook.\n\nPassage:\nThe footbridge over Lyth Brook has been closed since a survey in June found rot in two of its four main beams. The parish council has ordered replacement timbers, which are due in October, and says the crossing should reopen before the winter. Walkers are being sent round by the ford at Bank End, which adds about a mile to the route. The bridge carries no vehicles.",
+            "role": "user"
+          }
+        ],
+        "model": ""
+      },
+      "result": {
+        "cache_creation_input_tokens": 874,
+        "cache_read_input_tokens": 0,
+        "content": "The Lyth Brook footbridge closed after a June survey found rot in two of four main beams. Replacement timbers arrive in October, with reopening expected before winter; walkers detour via Bank End ford, adding a mile.",
+        "input_tokens": 2,
+        "model": "claude-opus-5[1m]",
+        "model_attribution": "usage_match",
+        "output_tokens": 74,
+        "stop_reason": "end_turn"
+      }
+    }
+  ],
+  "notes": "synthetic passage; recorded live via claude_code on claude-opus-5[1m] (ADR 0201). One attributed forward-looking claim, and the owner's Rule A: an attributed claim stays attributed",
+  "recorded_at": "2026-09-06T10:42:08.895928+00:00",
+  "source": "record",
+  "split": "train",
+  "trace": [
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-40-lyth-brook:retrieve:0",
+        "node_id": "retrieve",
+        "now": "2026-09-06T10:42:08.909013+00:00",
+        "run_id": "sum-40-lyth-brook",
+        "trace_id": "sum-40-lyth-brook"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 0,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-40-lyth-brook in at most 34 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-40-lyth-brook",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 34,
+          "must_mention": [
+            "Lyth Brook"
+          ],
+          "text": "The footbridge over Lyth Brook has been closed since a survey in June found rot in two of its four main beams. The parish council has ordered replacement timbers, which are due in October, and says the crossing should reopen before the winter. Walkers are being sent round by the ford at Bank End, which adds about a mile to the route. The bridge carries no vehicles."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "retrieve",
+      "route": {
+        "id": "draft",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-40-lyth-brook:draft:1",
+        "node_id": "draft",
+        "now": "2026-09-06T10:42:08.909092+00:00",
+        "run_id": "sum-40-lyth-brook",
+        "trace_id": "sum-40-lyth-brook"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": {
+          "goal": "summarise sum-40-lyth-brook in at most 34 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 76,
+            "trace_id": "sum-40-lyth-brook",
+            "ts": "2026-09-06T10:42:08.909092Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "summary": "The Lyth Brook footbridge closed after a June survey found rot in two of four main beams. Replacement timbers arrive in October, with reopening expected before winter; walkers detour via Bank End ford, adding a mile."
+        }
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 1,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-40-lyth-brook in at most 34 words",
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-40-lyth-brook",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 34,
+          "must_mention": [
+            "Lyth Brook"
+          ],
+          "text": "The footbridge over Lyth Brook has been closed since a survey in June found rot in two of its four main beams. The parish council has ordered replacement timbers, which are due in October, and says the crossing should reopen before the winter. Walkers are being sent round by the ford at Bank End, which adds about a mile to the route. The bridge carries no vehicles."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "draft",
+      "route": {
+        "id": "reflect",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-40-lyth-brook:reflect:2",
+        "node_id": "reflect",
+        "now": "2026-09-06T10:42:11.711664+00:00",
+        "run_id": "sum-40-lyth-brook",
+        "trace_id": "sum-40-lyth-brook"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 2,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-40-lyth-brook in at most 34 words",
+        "plan": {
+          "goal": "summarise sum-40-lyth-brook in at most 34 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 76,
+            "trace_id": "sum-40-lyth-brook",
+            "ts": "2026-09-06T10:42:08.909092Z"
+          }
+        ],
+        "reflections": [],
+        "retrieved_context": [],
+        "run_id": "sum-40-lyth-brook",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 34,
+          "must_mention": [
+            "Lyth Brook"
+          ],
+          "summary": "The Lyth Brook footbridge closed after a June survey found rot in two of four main beams. Replacement timbers arrive in October, with reopening expected before winter; walkers detour via Bank End ford, adding a mile.",
+          "text": "The footbridge over Lyth Brook has been closed since a survey in June found rot in two of its four main beams. The parish council has ordered replacement timbers, which are due in October, and says the crossing should reopen before the winter. Walkers are being sent round by the ford at Bank End, which adds about a mile to the route. The bridge carries no vehicles."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "reflect",
+      "route": {
+        "id": "consolidate",
+        "kind": "node"
+      }
+    },
+    {
+      "context": {
+        "attempt": 1,
+        "graph_version": "0.1.0",
+        "idempotency_key": "sum-40-lyth-brook:consolidate:3",
+        "node_id": "consolidate",
+        "now": "2026-09-06T10:42:11.711969+00:00",
+        "run_id": "sum-40-lyth-brook",
+        "trace_id": "sum-40-lyth-brook"
+      },
+      "delta": {
+        "context_budget_tokens": null,
+        "errors": [],
+        "messages": [],
+        "plan": null,
+        "provenance": [],
+        "reflections": [],
+        "retrieved_context": [],
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {}
+      },
+      "input_state": {
+        "agent_id": "summary_agent",
+        "checkpoint_seq": 3,
+        "context_budget_tokens": 8000,
+        "errors": [],
+        "messages": [],
+        "objective": "summarise sum-40-lyth-brook in at most 34 words",
+        "plan": {
+          "goal": "summarise sum-40-lyth-brook in at most 34 words",
+          "reusable_key": null,
+          "status": "done",
+          "subgoals": []
+        },
+        "provenance": [
+          {
+            "graph_version": "0.1.0",
+            "model": "claude-opus-5[1m]",
+            "node_id": "draft",
+            "token_cost": 76,
+            "trace_id": "sum-40-lyth-brook",
+            "ts": "2026-09-06T10:42:08.909092Z"
+          }
+        ],
+        "reflections": [
+          "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+        ],
+        "retrieved_context": [],
+        "run_id": "sum-40-lyth-brook",
+        "schema_version": "1.0.0",
+        "scores": {},
+        "tool_results": [],
+        "working_memory": {
+          "max_words": 34,
+          "must_mention": [
+            "Lyth Brook"
+          ],
+          "summary": "The Lyth Brook footbridge closed after a June survey found rot in two of four main beams. Replacement timbers arrive in October, with reopening expected before winter; walkers detour via Bank End ford, adding a mile.",
+          "text": "The footbridge over Lyth Brook has been closed since a survey in June found rot in two of its four main beams. The parish council has ordered replacement timbers, which are due in October, and says the crossing should reopen before the winter. Walkers are being sent round by the ford at Bank End, which adds about a mile to the route. The bridge carries no vehicles."
+        }
+      },
+      "is_fallback": false,
+      "node_id": "consolidate",
+      "route": {
+        "kind": "end"
+      }
+    }
+  ]
+}

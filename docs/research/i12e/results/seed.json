@@ -1,0 +1,1465 @@
+{
+  "entries": [
+    {
+      "confidence": 0.5,
+      "content": {
+        "failing_nodes": [],
+        "latest_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 228 chars",
+        "objective": "summarise sum-53-culvert-lane-flood in at most 40 words",
+        "run_ids": [
+          "sum-50-garrow-tunnel",
+          "sum-51-hallam-croft-school",
+          "sum-52-riddings-bakery",
+          "sum-53-culvert-lane-flood"
+        ],
+        "signature": "failure:check:working_memory.summary:regex"
+      },
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "kind": "failure",
+      "occurrences": 4,
+      "runs": [
+        "checkfail-85d01e2f4b48c2b3876d70b1cb4af83f",
+        "checkfail-ad8d6d824a0256c150eb241e53d52ae4",
+        "checkfail-be583f0fcf259a62a915a37a310d61cb",
+        "checkfail-bbd322fe12622be347621f8511010b18"
+      ],
+      "runs_since_last_seen": 0,
+      "signature": "failure:check:working_memory.summary:regex"
+    },
+    {
+      "confidence": 0.6,
+      "content": {
+        "failing_nodes": [],
+        "latest_feedback": "2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars",
+        "objective": "summarise sum-45-nether-gill-reservoir in at most 40 words",
+        "run_ids": [
+          "sum-40-lyth-brook",
+          "sum-41-tarn-moss-peat",
+          "sum-42-harber-street-market",
+          "sum-43-crake-fell-mast",
+          "sum-44-orrell-baths",
+          "sum-45-nether-gill-reservoir"
+        ],
+        "signature": "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words"
+      },
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "kind": "failure",
+      "occurrences": 6,
+      "runs": [
+        "checkfail-38b122fb43d00f8427641c7593e71e42",
+        "checkfail-e64ba46363231cd4a18984d31d91e3c4",
+        "checkfail-49b60a1c7b4454f7a436a6b60cacdf16",
+        "checkfail-c09b5a856240c3df03946307898df872",
+        "checkfail-f5480f34d42c5a1bd79487485446f1ba",
+        "checkfail-4bcb714b839a7a82d09e2b6adc09da46"
+      ],
+      "runs_since_last_seen": 4,
+      "signature": "failure:check:working_memory.summary:regex>check:working_memory.summary:max_words"
+    },
+    {
+      "confidence": 0.6363636363636364,
+      "content": {
+        "failing_nodes": [],
+        "latest_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars",
+        "objective": "summarise sum-11-lantern-festival in at most 35 words",
+        "run_ids": [
+          "sum-22-marlowe-street",
+          "sum-25-hollin-bridge",
+          "sum-26-netherby-clinic",
+          "sum-04-halden-reservoir",
+          "sum-05-bramble-bakery",
+          "sum-08-glasshouse-tomatoes",
+          "sum-11-lantern-festival"
+        ],
+        "signature": "failure:check:working_memory.summary:max_words"
+      },
+      "harmful": 0,
+      "harmful_elsewhere": 0,
+      "helpful": 0,
+      "kind": "failure",
+      "occurrences": 7,
+      "runs": [
+        "checkfail-2ba1bfb0e98c137506bf303d1bc393a6",
+        "checkfail-a71aac60683fd2300a4af03d643527fb",
+        "checkfail-2fcb020654d70e8c9ec5ceb9f4ed3908",
+        "checkfail-ab2566aa47b9d34c8e8295f0bbe1feb2",
+        "checkfail-55fddde79e21358988e42e65051c79d7",
+        "checkfail-4dbc104cc7959de450113d0d7fb1740a",
+        "checkfail-21ddf25f6a7b7d9756ee722717178ee6"
+      ],
+      "runs_since_last_seen": 11,
+      "signature": "failure:check:working_memory.summary:max_words"
+    }
+  ],
+  "excerpt_check": {
+    "records_checked": 47,
+    "window": 12
+  },
+  "records": [
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 228 chars"
+        ],
+        "checks_passed": 3,
+        "checks_total": 4,
+        "failed_checks": [
+          "check:working_memory.summary:regex"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-53-culvert-lane-flood in at most 40 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 228 chars"
+      },
+      "id": "checkfail-bbd322fe12622be347621f8511010b18",
+      "kind": "failure",
+      "run_id": "sum-53-culvert-lane-flood"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary does not match the pattern the owner declared; observed 35 words, 231 chars"
+        ],
+        "checks_passed": 3,
+        "checks_total": 4,
+        "failed_checks": [
+          "check:working_memory.summary:regex"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-52-riddings-bakery in at most 40 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 35 words, 231 chars"
+      },
+      "id": "checkfail-be583f0fcf259a62a915a37a310d61cb",
+      "kind": "failure",
+      "run_id": "sum-52-riddings-bakery"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary does not match the pattern the owner declared; observed 39 words, 242 chars"
+        ],
+        "checks_passed": 3,
+        "checks_total": 4,
+        "failed_checks": [
+          "check:working_memory.summary:regex"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-51-hallam-croft-school in at most 40 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 39 words, 242 chars"
+      },
+      "id": "checkfail-ad8d6d824a0256c150eb241e53d52ae4",
+      "kind": "failure",
+      "run_id": "sum-51-hallam-croft-school"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 242 chars"
+        ],
+        "checks_passed": 3,
+        "checks_total": 4,
+        "failed_checks": [
+          "check:working_memory.summary:regex"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-50-garrow-tunnel in at most 40 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 242 chars"
+      },
+      "id": "checkfail-85d01e2f4b48c2b3876d70b1cb4af83f",
+      "kind": "failure",
+      "run_id": "sum-50-garrow-tunnel"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars",
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars"
+        ],
+        "checks_passed": 2,
+        "checks_total": 4,
+        "failed_checks": [
+          "check:working_memory.summary:regex",
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]",
+          "errors[1]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-45-nether-gill-reservoir in at most 40 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars"
+      },
+      "id": "checkfail-4bcb714b839a7a82d09e2b6adc09da46",
+      "kind": "failure",
+      "run_id": "sum-45-nether-gill-reservoir"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary does not match the pattern the owner declared; observed 45 words, 288 chars",
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 45 words, 288 chars"
+        ],
+        "checks_passed": 2,
+        "checks_total": 4,
+        "failed_checks": [
+          "check:working_memory.summary:regex",
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]",
+          "errors[1]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-44-orrell-baths in at most 40 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 45 words, 288 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 45 words, 288 chars"
+      },
+      "id": "checkfail-f5480f34d42c5a1bd79487485446f1ba",
+      "kind": "failure",
+      "run_id": "sum-44-orrell-baths"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 263 chars",
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 263 chars"
+        ],
+        "checks_passed": 2,
+        "checks_total": 4,
+        "failed_checks": [
+          "check:working_memory.summary:regex",
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]",
+          "errors[1]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-43-crake-fell-mast in at most 40 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 263 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 263 chars"
+      },
+      "id": "checkfail-c09b5a856240c3df03946307898df872",
+      "kind": "failure",
+      "run_id": "sum-43-crake-fell-mast"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary does not match the pattern the owner declared; observed 41 words, 253 chars",
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 41 words, 253 chars"
+        ],
+        "checks_passed": 2,
+        "checks_total": 4,
+        "failed_checks": [
+          "check:working_memory.summary:regex",
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]",
+          "errors[1]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-42-harber-street-market in at most 40 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 41 words, 253 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 41 words, 253 chars"
+      },
+      "id": "checkfail-49b60a1c7b4454f7a436a6b60cacdf16",
+      "kind": "failure",
+      "run_id": "sum-42-harber-street-market"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary does not match the pattern the owner declared; observed 44 words, 278 chars",
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 44 words, 278 chars"
+        ],
+        "checks_passed": 2,
+        "checks_total": 4,
+        "failed_checks": [
+          "check:working_memory.summary:regex",
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]",
+          "errors[1]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-41-tarn-moss-peat in at most 40 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 44 words, 278 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 44 words, 278 chars"
+      },
+      "id": "checkfail-e64ba46363231cd4a18984d31d91e3c4",
+      "kind": "failure",
+      "run_id": "sum-41-tarn-moss-peat"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 216 chars",
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 36 words, 216 chars"
+        ],
+        "checks_passed": 2,
+        "checks_total": 4,
+        "failed_checks": [
+          "check:working_memory.summary:regex",
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]",
+          "errors[1]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-40-lyth-brook in at most 34 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 216 chars; errors[1]: check failed: working_memory.summary is longer than the owner's maximum; observed 36 words, 216 chars"
+      },
+      "id": "checkfail-38b122fb43d00f8427641c7593e71e42",
+      "kind": "failure",
+      "run_id": "sum-40-lyth-brook"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars"
+        ],
+        "checks_passed": 4,
+        "checks_total": 5,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-11-lantern-festival in at most 35 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars"
+      },
+      "id": "checkfail-ab2566aa47b9d34c8e8295f0bbe1feb2",
+      "kind": "failure",
+      "run_id": "sum-11-lantern-festival"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 237 chars"
+        ],
+        "checks_passed": 4,
+        "checks_total": 5,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-08-glasshouse-tomatoes in at most 35 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 237 chars"
+      },
+      "id": "checkfail-2fcb020654d70e8c9ec5ceb9f4ed3908",
+      "kind": "failure",
+      "run_id": "sum-08-glasshouse-tomatoes"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 36 words, 227 chars"
+        ],
+        "checks_passed": 4,
+        "checks_total": 5,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-05-bramble-bakery in at most 35 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 36 words, 227 chars"
+      },
+      "id": "checkfail-a71aac60683fd2300a4af03d643527fb",
+      "kind": "failure",
+      "run_id": "sum-05-bramble-bakery"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 42 words, 264 chars"
+        ],
+        "checks_passed": 4,
+        "checks_total": 5,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-04-halden-reservoir in at most 40 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 42 words, 264 chars"
+      },
+      "id": "checkfail-2ba1bfb0e98c137506bf303d1bc393a6",
+      "kind": "failure",
+      "run_id": "sum-04-halden-reservoir"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 208 chars"
+        ],
+        "checks_passed": 4,
+        "checks_total": 5,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-26-netherby-clinic in at most 30 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 208 chars"
+      },
+      "id": "checkfail-21ddf25f6a7b7d9756ee722717178ee6",
+      "kind": "failure",
+      "run_id": "sum-26-netherby-clinic"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 26 words, 175 chars"
+        ],
+        "checks_passed": 3,
+        "checks_total": 4,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-25-hollin-bridge in at most 25 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 26 words, 175 chars"
+      },
+      "id": "checkfail-4dbc104cc7959de450113d0d7fb1740a",
+      "kind": "failure",
+      "run_id": "sum-25-hollin-bridge"
+    },
+    {
+      "content": {
+        "check_failures": [
+          "check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 210 chars"
+        ],
+        "checks_passed": 4,
+        "checks_total": 5,
+        "failed_checks": [
+          "check:working_memory.summary:max_words"
+        ],
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [
+          "errors[0]"
+        ],
+        "node_id": "task_checks",
+        "objective": "summarise sum-22-marlowe-street in at most 30 words",
+        "output_location": "the observed value is not recorded here \u2014 replay the run's trace (corpus/<split>/<scenario>.json) and read the check's own state path",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "1 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 210 chars"
+      },
+      "id": "checkfail-55fddde79e21358988e42e65051c79d7",
+      "kind": "failure",
+      "run_id": "sum-22-marlowe-street"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-53-culvert-lane-flood in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "c83f2cab37cf47e19eea6ce0c9262db0",
+      "kind": "success",
+      "run_id": "sum-53-culvert-lane-flood"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-52-riddings-bakery in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "3146fcf8df7e4e3b8de7053c97a50436",
+      "kind": "success",
+      "run_id": "sum-52-riddings-bakery"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-51-hallam-croft-school in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "f05719b8e3414993a3d8b3bf31b1e2be",
+      "kind": "success",
+      "run_id": "sum-51-hallam-croft-school"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-50-garrow-tunnel in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "dc5b087534c34f409015541b9eb76685",
+      "kind": "success",
+      "run_id": "sum-50-garrow-tunnel"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-45-nether-gill-reservoir in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "486bbd1c6ebc4d84b358ae172ddaffa1",
+      "kind": "success",
+      "run_id": "sum-45-nether-gill-reservoir"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-44-orrell-baths in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "cb75cba2b203480f8d80eb40785c9080",
+      "kind": "success",
+      "run_id": "sum-44-orrell-baths"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-43-crake-fell-mast in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "0a6d51a64fef4d23a6be2fe0a65b46b0",
+      "kind": "success",
+      "run_id": "sum-43-crake-fell-mast"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-42-harber-street-market in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "8c2d48c130f548259a2cbbef85545608",
+      "kind": "success",
+      "run_id": "sum-42-harber-street-market"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-41-tarn-moss-peat in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "7887965638b246aba1f48dee9bea3157",
+      "kind": "success",
+      "run_id": "sum-41-tarn-moss-peat"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-40-lyth-brook in at most 34 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "fe04ec6096434fe4b364b563ad2a7bee",
+      "kind": "success",
+      "run_id": "sum-40-lyth-brook"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-12-bell-recast in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "8197bfed922e4e24b5b268c28b165d85",
+      "kind": "success",
+      "run_id": "sum-12-bell-recast"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-11-lantern-festival in at most 35 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "44d326b225594ab59ebb8d4d2e0b1cae",
+      "kind": "success",
+      "run_id": "sum-11-lantern-festival"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-10-clay-pit in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "2448f59b16564005bffc305dd24551a3",
+      "kind": "success",
+      "run_id": "sum-10-clay-pit"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-09-choir-tour in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "fb7d2e9541924adca3d3481b0be3679f",
+      "kind": "success",
+      "run_id": "sum-09-choir-tour"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-08-glasshouse-tomatoes in at most 35 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "86fbbedefadd4839837fe5f3177f6386",
+      "kind": "success",
+      "run_id": "sum-08-glasshouse-tomatoes"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-07-signal-box in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "c89b6265d600404e82c94bb7afb32927",
+      "kind": "success",
+      "run_id": "sum-07-signal-box"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-06-weir-otters in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "3ccfe04beb824ceeb02c028d4c956f29",
+      "kind": "success",
+      "run_id": "sum-06-weir-otters"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-05-bramble-bakery in at most 35 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "e41d96335a534bd488fb6ffff48238c9",
+      "kind": "success",
+      "run_id": "sum-05-bramble-bakery"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-04-halden-reservoir in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "554ad6f4edf1438ea40bd4baa9f7919c",
+      "kind": "success",
+      "run_id": "sum-04-halden-reservoir"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-03-tidewell-library in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "6fbe8a74b7d147cd845d8b7a071136ea",
+      "kind": "success",
+      "run_id": "sum-03-tidewell-library"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-02-orchard-blight in at most 40 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "f894f680e37042d59360c6ab9cdf659e",
+      "kind": "success",
+      "run_id": "sum-02-orchard-blight"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-01-kestrel-ferry in at most 35 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "2e8401196ee0488fa2de0269be292302",
+      "kind": "success",
+      "run_id": "sum-01-kestrel-ferry"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-28-kellet-branch in at most 20 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "74df54ef70a54006b6798317f8c771f7",
+      "kind": "success",
+      "run_id": "sum-28-kellet-branch"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-27-sallow-vale in at most 22 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "28f0fa6ff68d4ae793ab8d77fb2d9e69",
+      "kind": "success",
+      "run_id": "sum-27-sallow-vale"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-26-netherby-clinic in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "2bed86014f784369a9b37c2b2b723930",
+      "kind": "success",
+      "run_id": "sum-26-netherby-clinic"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-25-hollin-bridge in at most 25 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "b1cd0c5a086642ba8a2d577a38fa8ed4",
+      "kind": "success",
+      "run_id": "sum-25-hollin-bridge"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-24-pellow-mill in at most 12 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "d3829ca33f4743288cacb7ff0f6d4c5c",
+      "kind": "success",
+      "run_id": "sum-24-pellow-mill"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-23-cransley-cut in at most 25 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "8ecac2616e6347428bfe205474d71597",
+      "kind": "success",
+      "run_id": "sum-23-cransley-cut"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-22-marlowe-street in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "e0823c243aca485b9a298dd4a9f54630",
+      "kind": "success",
+      "run_id": "sum-22-marlowe-street"
+    },
+    {
+      "content": {
+        "failing_nodes": [],
+        "graph_version": "1.0.0",
+        "grounded_in": [],
+        "node_id": "reflect",
+        "objective": "summarise sum-21-ardvey-ferry in at most 30 words",
+        "rationale": "weighted score 0 over 1 rubric term(s); top: quality=0; missing from state.scores (counted as 0.0): quality",
+        "retrieved_signatures": [],
+        "rubric": {
+          "quality": 1.0
+        },
+        "score": 0.0,
+        "verbal_feedback": "no failure signals: 0 error(s) recorded, 0 tool call(s), none failed"
+      },
+      "id": "fce0e8caa86c4e2fa9aaca7a51ec97ed",
+      "kind": "success",
+      "run_id": "sum-21-ardvey-ferry"
+    }
+  ],
+  "rows": [
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-01-kestrel-ferry",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-02-orchard-blight",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-03-tidewell-library",
+      "score": 1.0
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 42 words, 264 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-04-halden-reservoir",
+      "score": 0.8
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 36 words, 227 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-05-bramble-bakery",
+      "score": 0.8
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-06-weir-otters",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-07-signal-box",
+      "score": 1.0
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 237 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-08-glasshouse-tomatoes",
+      "score": 0.8
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-09-choir-tour",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-10-clay-pit",
+      "score": 1.0
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 37 words, 233 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-11-lantern-festival",
+      "score": 0.8
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-12-bell-recast",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-21-ardvey-ferry",
+      "score": 1.0
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 210 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-22-marlowe-street",
+      "score": 0.8
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-23-cransley-cut",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-24-pellow-mill",
+      "score": 1.0
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 26 words, 175 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-25-hollin-bridge",
+      "score": 0.75
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 31 words, 208 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-26-netherby-clinic",
+      "score": 0.8
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-27-sallow-vale",
+      "score": 1.0
+    },
+    {
+      "check_failures": null,
+      "failed_checks": null,
+      "id": "sum-28-kellet-branch",
+      "score": 1.0
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 216 chars",
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 36 words, 216 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:regex",
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-40-lyth-brook",
+      "score": 0.5
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary does not match the pattern the owner declared; observed 44 words, 278 chars",
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 44 words, 278 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:regex",
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-41-tarn-moss-peat",
+      "score": 0.5
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary does not match the pattern the owner declared; observed 41 words, 253 chars",
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 41 words, 253 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:regex",
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-42-harber-street-market",
+      "score": 0.5
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 263 chars",
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 263 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:regex",
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-43-crake-fell-mast",
+      "score": 0.5
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary does not match the pattern the owner declared; observed 45 words, 288 chars",
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 45 words, 288 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:regex",
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-44-orrell-baths",
+      "score": 0.5
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary does not match the pattern the owner declared; observed 43 words, 265 chars",
+        "check failed: working_memory.summary is longer than the owner's maximum; observed 43 words, 265 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:regex",
+        "check:working_memory.summary:max_words"
+      ],
+      "id": "sum-45-nether-gill-reservoir",
+      "score": 0.5
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 242 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:regex"
+      ],
+      "id": "sum-50-garrow-tunnel",
+      "score": 0.75
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary does not match the pattern the owner declared; observed 39 words, 242 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:regex"
+      ],
+      "id": "sum-51-hallam-croft-school",
+      "score": 0.75
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary does not match the pattern the owner declared; observed 35 words, 231 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:regex"
+      ],
+      "id": "sum-52-riddings-bakery",
+      "score": 0.75
+    },
+    {
+      "check_failures": [
+        "check failed: working_memory.summary does not match the pattern the owner declared; observed 36 words, 228 chars"
+      ],
+      "failed_checks": [
+        "check:working_memory.summary:regex"
+      ],
+      "id": "sum-53-culvert-lane-flood",
+      "score": 0.75
+    }
+  ],
+  "scenarios": 30
+}
