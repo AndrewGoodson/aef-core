@@ -1,0 +1,18 @@
+detected framework: prompt_files (8 agents, 5 skills, AGENTS.md, .codex)
+wrote CLAUDE.md
+wrote aef.yaml
+wrote aef_adapter.py
+wrote AGENT_INTEGRATION.md
+wrote AUTONOMY.md
+wrote .github/copilot-instructions.md
+wrote .cursor/rules/aef.mdc
+wrote AEF_MIGRATION_CHECKLIST.md
+wrote LOOP.md
+wrote FIRST_DAY.md
+wrote agents/README.md
+wrote corpus/README.md
+wrote .github/workflows/loop-gate.yml
+wrote .github/workflows/loop-monitor.yml
+wrote .claude/skills/new-model-check/SKILL.md
+appended aef block to .gitignore (your bytes outside it are unchanged)
+appended aef block to AGENTS.md (your bytes outside it are unchanged)

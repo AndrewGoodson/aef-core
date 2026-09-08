@@ -1,0 +1,3 @@
+<frozen runpy>:128: RuntimeWarning: 'aef.cli.main' found in sys.modules after import of package 'aef.cli', but prior to execution of 'aef.cli.main'; this may result in unpredictable behaviour
+no lineage for 'default' at /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/state/lineage/default.jsonl
+  Either no `aef loop run` has gated a candidate under this --state and --graph-id yet, or it was run with --no-lineage.

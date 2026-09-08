@@ -1,0 +1,12 @@
+[src-01-cape-coral-cursor] exit=0 44.0s
+[src-02-lee-wells-late-arrival] exit=0 42.7s
+[src-03-hillsborough-full-page-at-cap] exit=0 37.0s
+[src-04-pinellas-count-mismatch] exit=0 27.9s
+[src-05-sunbiz-no-count-endpoint] exit=0 26.6s
+[src-06-lee-accela-credentials] exit=0 26.1s
+[src-07-cape-coral-record-id] exit=0 25.7s
+[src-08-manatee-duplicates-suppressed] exit=0 41.5s
+[src-09-template-zero-grace] exit=0 35.8s
+[src-10-lee-dev-activity-readback] exit=0 22.0s
+live model calls spent by this script: 10
+recorded run files now in /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/runs-armB: 10

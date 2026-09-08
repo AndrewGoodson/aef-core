@@ -1,0 +1,15 @@
+error: harness executable not found: 'claude'
+task metric — agents.migrated.marlin_source.graph (marlin-source) — repeat=1
+  model calls: 0 cassette hit(s), 5 miss(es), on_miss=live — LIVE
+  train       n=5   with_checks=5   mean=0.0000 stdev=0.0000 ci95=[0.0000, 0.0000] repeat_spread=0.000000
+      0.0000  2b1b3501-a4bd-4002-b71d-0659082969c6
+                raised: ModelProviderError: harness executable not found: 'claude'
+      0.0000  48572a57-344f-4664-ad46-5f7718a574e1
+                raised: ModelProviderError: harness executable not found: 'claude'
+      0.0000  9305e905-4860-42cd-8242-865429b8c2b9
+                raised: ModelProviderError: harness executable not found: 'claude'
+      0.0000  a62dfb48-6235-40bb-a653-57ac98c4098e
+                raised: ModelProviderError: harness executable not found: 'claude'
+      0.0000  a9c8ba03-c62c-49a8-824e-1c68f77d6d66
+                raised: ModelProviderError: harness executable not found: 'claude'
+  validation  n=0

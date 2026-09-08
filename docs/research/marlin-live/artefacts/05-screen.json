@@ -1,0 +1,83 @@
+{
+ "R1  status: pass|fail|blocked line": {
+  "applies": 10,
+  "fails": 1,
+  "ids": [
+   "src-09-template-zero-grace"
+  ]
+ },
+ "R2  DATA LOSS on a count mismatch": {
+  "applies": 3,
+  "fails": 0,
+  "ids": []
+ },
+ "R3  the count left behind, as a number": {
+  "applies": 3,
+  "fails": 0,
+  "ids": []
+ },
+ "R4  a publication-order field named": {
+  "applies": 4,
+  "fails": 1,
+  "ids": [
+   "src-06-lee-accela-credentials"
+  ]
+ },
+ "R5  exceededTransferLimit named": {
+  "applies": 8,
+  "fails": 0,
+  "ids": []
+ },
+ "R6  a non-zero grace_days, with the number": {
+  "applies": 2,
+  "fails": 1,
+  "ids": [
+   "src-09-template-zero-grace"
+  ]
+ },
+ "R7  all four counts named": {
+  "applies": 10,
+  "fails": 0,
+  "ids": []
+ },
+ "R8  the two-manual-runs rule stated": {
+  "applies": 10,
+  "fails": 3,
+  "ids": [
+   "src-02-lee-wells-late-arrival",
+   "src-05-sunbiz-no-count-endpoint",
+   "src-08-manatee-duplicates-suppressed"
+  ]
+ },
+ "R9  a 'Next step' heading": {
+  "applies": 10,
+  "fails": 10,
+  "ids": [
+   "src-01-cape-coral-cursor",
+   "src-02-lee-wells-late-arrival",
+   "src-03-hillsborough-full-page-at-cap",
+   "src-04-pinellas-count-mismatch",
+   "src-05-sunbiz-no-count-endpoint",
+   "src-06-lee-accela-credentials",
+   "src-07-cape-coral-record-id",
+   "src-08-manatee-duplicates-suppressed",
+   "src-09-template-zero-grace",
+   "src-10-lee-dev-activity-readback"
+  ]
+ },
+ "R10 returnCountOnly named (ArcGIS)": {
+  "applies": 8,
+  "fails": 1,
+  "ids": [
+   "src-08-manatee-duplicates-suppressed"
+  ]
+ },
+ "R11 the verdict token marlin's rules force": {
+  "applies": 10,
+  "fails": 2,
+  "ids": [
+   "src-08-manatee-duplicates-suppressed",
+   "src-09-template-zero-grace"
+  ]
+ }
+}

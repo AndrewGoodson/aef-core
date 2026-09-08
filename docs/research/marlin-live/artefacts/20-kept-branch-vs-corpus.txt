@@ -1,0 +1,42 @@
+F-Q1-6 — the never-shrinks baseline is read from the KEPT BRANCH, and the
+remedy the refusal names cannot fix the condition it names.
+
+Sequence, all real output:
+
+$ git -C <clone> branch --list -v
+  loop/cycle-20260906T143007-prompt f053f1e loop: loop/cycle-20260906T143007-prompt
+  loop/cycle-20260906T144151-prompt 7f50524 loop: loop/cycle-20260906T144151-prompt
+  loop/kept                         cefb1ed chore(aef): adopt + migrate + corpus, on the clone only
+* main                              b652465 chore(corpus): move two passing scenarios to validation
+
+  `loop/kept` was created by an earlier turn, from `main`, BEFORE the corpus
+  split changed. `main` has moved since; `loop/kept` has not.
+
+$ cat corpus/manifest.json | head        # the working tree
+    "2b1b3501-...": "validation",  "48572a57-...": "validation",  ... train x3
+$ git show main:corpus/manifest.json     # and the default branch agree
+    "2b1b3501-...": "validation",  "48572a57-...": "validation",  ... train x3
+
+$ aef loop run ... (no --base)
+error (CorpusShrankError): scenario(s) changed split, which erases evidence:
+  ['2b1b3501-...: train -> validation', '48572a57-...: train -> validation'].
+  If the move was deliberate, run `aef loop corpus reconcile --corpus corpus` by hand.
+EXIT=3
+
+$ aef loop corpus reconcile --corpus corpus          # the remedy it names
+manifest already describes the 5 scenario(s) on disk at corpus; nothing to reconcile
+
+$ aef loop run ...        # unchanged: same error, exit 3
+
+The baseline comes from `_corpus_baseline_manifest`, which reads
+`<base ref>:corpus/manifest.json`; the turn's base is the KEPT BRANCH, which
+still carries the pre-move manifest. `reconcile` rewrites the manifest ON DISK
+from the files on disk — it cannot touch a manifest committed on another ref —
+so the command the refusal names is a no-op against the condition the refusal
+describes, and it says so ("nothing to reconcile") without contradicting the
+refusal. The actual remedy is `git branch -D loop/kept` (or advancing it),
+which the message does not mention.
+
+The refusal itself is CORRECT and must stay: a corpus whose splits move
+between the base ref and the working tree is exactly the shape ADR 0141 exists
+to catch. What is wrong is only the remedy it names.

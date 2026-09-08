@@ -1,0 +1,3 @@
+promoted 5 run(s) to the train split
+  5 held back by the daily rate limit: ced85637-69e0-471d-a813-ce00cbb68af4, d095f70f-708b-455c-9ac0-5077aec836cd, d5a26927-b4c2-4762-a5b9-ef50ea4651fc, d9d454e0-966a-4d84-ba7e-03e71b893738, e4368c56-7536-4c20-b463-49988f517be3
+      the limit is 5 HARVESTED scenario(s) per 24h; 0 had been harvested before this run and 5 were promoted by it

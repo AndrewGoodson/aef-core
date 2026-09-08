@@ -1,0 +1,8 @@
+  model calls: 5 cassette hit(s), 0 miss(es), on_miss=fail — replayed
+  train       n=3   with_checks=3   mean=0.4444 stdev=0.5092 ci95=[-0.1317, 1.0206] repeat_spread=0.000000
+      0.0000  9305e905-4860-42cd-8242-865429b8c2b9
+      0.3333  a62dfb48-6235-40bb-a653-57ac98c4098e
+      1.0000  a9c8ba03-c62c-49a8-824e-1c68f77d6d66
+  validation  n=2   with_checks=2   mean=1.0000 stdev=0.0000 ci95=[1.0000, 1.0000] repeat_spread=0.000000
+      1.0000  2b1b3501-a4bd-4002-b71d-0659082969c6
+      1.0000  48572a57-344f-4664-ad46-5f7718a574e1

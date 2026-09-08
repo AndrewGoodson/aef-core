@@ -1,0 +1,12 @@
+diff --git a/.claude/agents/source-agent.md b/.claude/agents/source-agent.md
+index 3741783..8767dcc 100644
+--- a/.claude/agents/source-agent.md
++++ b/.claude/agents/source-agent.md
+@@ -63,3 +63,7 @@ schedule. A pass requires observable effects (count reconciliation, readback,
+ and deduplicated replay) and non-zero failure-path tests;
+ do not claim reconciliation until both manual runs, replay, and readback are
+ evidenced.
++
++## Lessons (aef)
++
++- <!-- aef sig=failure:check:working_memory.prompt_agent:regex runs=2 --> 2 error(s) recorded; 0/0 tool call(s) failed. errors[0]: check failed: working_memory.prompt_agent does not match the pattern the owner declared; observed 487 words, 3108 chars; errors[1]: check failed: working_memory.prompt_agent does not match the pattern the owner declared; observed 487 words, 3108 chars

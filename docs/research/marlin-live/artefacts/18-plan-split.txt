@@ -1,0 +1,15 @@
+NOTE (added at commit time): this is the 2026-09-06 planning output, and the
+move it planned was REVERTED — see resplit.py's --restore docstring. The
+night's own ledger line showed GATED = corpus - audit slice, not train - slice,
+so shrinking the train split made a turn dearer rather than cheaper. Kept as
+the record of a decision made on a wrong inference, not regenerated.
+
+train today: ['2b1b3501', '48572a57', '9305e905', 'a62dfb48', 'a9c8ba03']   date 2026-09-06
+
+moved to validation    held back              GATED (id, objective, score)
+(none)                 ['2b1b3501', '48572a57'] 9305e905 src-06 0.00, a62dfb48 src-10 0.33, a9c8ba03 src-05 1.00
+2b1b3501               ['a62dfb48', 'a9c8ba03'] 48572a57 src-07 1.00, 9305e905 src-06 0.00
+48572a57               ['a62dfb48', 'a9c8ba03'] 2b1b3501 src-02 1.00, 9305e905 src-06 0.00
+9305e905               ['a62dfb48', 'a9c8ba03'] 2b1b3501 src-02 1.00, 48572a57 src-07 1.00
+a62dfb48               ['9305e905', 'a9c8ba03'] 2b1b3501 src-02 1.00, 48572a57 src-07 1.00
+a9c8ba03               ['9305e905', 'a62dfb48'] 2b1b3501 src-02 1.00, 48572a57 src-07 1.00

@@ -1,0 +1,32 @@
+<frozen runpy>:128: RuntimeWarning: 'aef.cli.main' found in sys.modules after import of package 'aef.cli', but prior to execution of 'aef.cli.main'; this may result in unpredictable behaviour
+detected framework: prompt_files (8 agents, 5 skills, AGENTS.md, .codex)
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/CLAUDE.md
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/aef.yaml
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/aef_adapter.py
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/AGENT_INTEGRATION.md
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/AUTONOMY.md
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/.github/copilot-instructions.md
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/.cursor/rules/aef.mdc
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/AEF_MIGRATION_CHECKLIST.md
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/LOOP.md
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/FIRST_DAY.md
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/agents/README.md
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/corpus/README.md
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/.github/workflows/loop-gate.yml
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/.github/workflows/loop-monitor.yml
+wrote /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/.claude/skills/new-model-check/SKILL.md
+appended aef block to /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/.gitignore (your bytes outside it are unchanged)
+appended aef block to /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/marlin/AGENTS.md (your bytes outside it are unchanged)
+
+migration checklist:
+  1. Read the generated CLAUDE.md and AGENTS.md (they are byte-identical) in full before writing any code.
+  2. Fill in aef.yaml: objectives, tools.allow, policies, evaluator.suites.
+  3. Identify your current entrypoint(s) — the function(s) that start an agent run.
+  4. Put every node you convert under `agents/` — Zone A, the only tree the loop is allowed to propose changes to. `aef migrate` writes its generated graph to `agents/migrated/<agent>/graph.py`, which is inside Zone A, and names the zone of the path in its report; anywhere else is Zone C and, measured, a candidate touching it is rejected with `G0 rejected it: candidate touches paths outside Zone A` and the cycle exits 1 (ADR 0142, ADR 0143).
+  5. Run `aef migrate --dir .` — it registers 8 prompt agents (`.claude/agents/**/*.md`, recursively) as graphs, one four-node graph per agent at `agents/migrated/<agent>/graph.py` (`retrieve -> prompt_agent -> reflect -> consolidate -> END`; the graph's `graph_id` is the agent's name), inside Zone A. There is no call site to convert: each `prompt_agent` node runs that agent's persona as one model call, reading the file at execution time. The persona's `tools:` frontmatter is parsed, reported and never obeyed — but WHAT ELSE the call may do is the provider's answer and not migrate's, it differs per `model_provider.impl`, and migrate's own report prints the measured table (aef-core ADR 0169). NOTE which file the loop may then edit: the GRAPH is Zone A, the PERSONA `.md` is Zone C by default, so a candidate editing the prompt itself is rejected until you widen the agent root — `aef migrate --agent-root ...` is opt-in per repo and its report says what that adds to the loop's blast radius.
+  6. Read `.claude/agents/*.md` and decide WHICH agents the loop should improve — one graph per agent means one loop target per agent, each with its own corpus, baseline and drift budget.
+  7. Prove one harness call before the loop depends on it: `aef run <the generated module> --objective "..." --config aef.yaml --checkpoints-dir .aef-runs`. `model_provider.impl: claude_code` needs no API key.
+  8. Add an Evaluator (start with aef.services.eval.rule_based.RuleBasedEvaluator).
+  9. Run `aef doctor` to confirm the config and imports are wired correctly.
+  10. Then read `FIRST_DAY.md` and run the sequence it documents: `aef migrate` -> `aef loop bootstrap --state <dir> --memory <file>` -> the tripwire line bootstrap prints -> `aef loop bless` -> `aef loop doctor` -> `aef loop cycle`. It is the only document that says what each step costs you and which failures exit 0 having done nothing.
+  11. `aef adopt` appended `__pycache__/` and `*.py[cod]` to your existing `.gitignore`, inside a `# aef:begin` / `# aef:end` block — every byte you had is untouched and outside it, and re-running adopt replaces only that block. Delete the block if you ignore bytecode another way. Committed bytecode under your AGENT ROOT is Zone A content the loop never wrote, and G5 charges it as drift: measured 0.4675 of a 0.500 budget for a one-line candidate, against 0.0238 with the bytecode excluded (ADR 0142). The agent root is `agents/` by default and whatever you pass to `aef migrate --agent-root` otherwise (`.claude/agents/` for a prompt-file repo) — `aef adopt` runs before `aef migrate` and cannot know which you will choose, so both patterns are repo-wide and cover either.

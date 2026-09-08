@@ -1,0 +1,7 @@
+  loop/cycle-20260906T142446-prompt
+  loop/cycle-20260906T142447-prompt
+  loop/cycle-20260906T142606-prompt
+  loop/cycle-20260906T142607-prompt
+  loop/cycle-20260906T142702-prompt
+  loop/kept
+* main

@@ -1,0 +1,3 @@
+b652465 chore(corpus): move two passing scenarios to validation (wall-clock, ADR 0204 resplit.py)
+cefb1ed chore(aef): adopt + migrate + corpus, on the clone only
+1b00f82 docs: Lee County POC demo runbook + green-up notes

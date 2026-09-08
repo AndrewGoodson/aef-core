@@ -1,0 +1,12 @@
+== AGENTS.md
+   aef block   : lines 29..63; blank separator at 28
+   before      : sha256 ffd0ff4aac70ce5f10f9d3c9efb02b6b612b24e44a614e24abc3587040620cc4  1516 bytes
+   outside now : sha256 ffd0ff4aac70ce5f10f9d3c9efb02b6b612b24e44a614e24abc3587040620cc4  1516 bytes
+   IDENTICAL   : True
+== .gitignore
+   aef block   : lines 34..37; blank separator at 33
+   before      : sha256 f7e1bbe7ff336ef879b3ae00e146d6305778c20e911ab8077be6c5e193ec8e12  582 bytes
+   outside now : sha256 f7e1bbe7ff336ef879b3ae00e146d6305778c20e911ab8077be6c5e193ec8e12  582 bytes
+   IDENTICAL   : True
+
+all pre-existing bytes survived verbatim: True

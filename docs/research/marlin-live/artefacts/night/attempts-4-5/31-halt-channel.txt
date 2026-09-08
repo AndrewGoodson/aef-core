@@ -1,0 +1,2 @@
+--- halt channel log ---
+(the channel never fired — no file)

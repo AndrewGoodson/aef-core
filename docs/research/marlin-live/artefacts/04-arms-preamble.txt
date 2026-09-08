@@ -1,0 +1,6 @@
+arm                n  <1000 chars  tool-shaped  status: line
+A  no preamble    10            6            8             4
+B  + preamble     10            0            0             9
+
+A  no preamble   word counts: [7, 7, 10, 22, 70, 86, 543, 638, 901, 1013]
+B  + preamble    word counts: [512, 576, 581, 609, 673, 711, 715, 729, 854, 887]

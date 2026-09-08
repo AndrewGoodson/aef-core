@@ -1,0 +1,3 @@
+aef loop run exit: 142
+wall clock       : 580s
+meaning        : the night's own 580s alarm fired (SIGALRM) — it overran

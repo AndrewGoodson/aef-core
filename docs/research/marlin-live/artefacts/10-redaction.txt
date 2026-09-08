@@ -1,0 +1,50 @@
+policy patterns: connection_string, email, api_key, bearer, jwt, aws_key, github_token, slack_token, uuid, opaque_secret
+working_memory keys dropped outright: ['api_key', 'token', 'secret', 'password']
+
+== 1. the shipped policy over every recorded run
+   2b1b3501  substitutions=0
+   48572a57  substitutions=0
+   9305e905  substitutions=0
+   a62dfb48  substitutions=0
+   a9c8ba03  substitutions=0
+   ced85637  substitutions=0
+   d095f70f  substitutions=0
+   d5a26927  substitutions=0
+   d9d454e0  substitutions=0
+   e4368c56  substitutions=0
+   TOTAL substitutions over 10 run(s): 0   by label: {}
+
+== 2. what it does NOT match (this repo's public vocabulary)
+   county endpoint            substitutions=1  -> https://capeims.capecoral.gov/arcgis/rest/services/OpenData/OpenData/Map  <- FALSE POSITIVE, matched ['opaque_secret']: https://capeims.capecoral.[REDACTED:opaque_secret]
+   resource group             substitutions=0  -> resource group rg-marlin-dev, tags project=marlin costCenter=marlin
+   key vault secret NAMES     substitutions=0  -> accela-app-id, accela-app-secret, accela-username, accela-password
+   cursor field               substitutions=0  -> cursor_field: last_edited_date, grace_days: 7
+   the wrapper                substitutions=0  -> ./infra/az-marlin group show --name rg-marlin-dev
+   a count query              substitutions=0  -> returnCountOnly=true returned 41377; fetched 41290
+
+== 3. the control — one planted, synthetic credential at a time
+   email                            substitutions=1  -> Escalate to [REDACTED:email] about the cap.
+   api_key                          substitutions=1  -> Escalate to [REDACTED:api_key] about the cap.
+   bearer                           substitutions=1  -> Escalate to [REDACTED:bearer] about the cap.
+   aws_key                          substitutions=1  -> Escalate to [REDACTED:aws_key] about the cap.
+   github_token                     substitutions=1  -> Escalate to [REDACTED:github_token] about the cap.
+   slack_token                      substitutions=1  -> Escalate to [REDACTED:slack_token] about the cap.
+   jwt                              substitutions=1  -> Escalate to [REDACTED:jwt] about the cap.
+   connection_string                substitutions=1  -> Escalate to [REDACTED:connection_string]/db about the cap.
+   uuid (a subscription-shaped id)  substitutions=1  -> Escalate to [REDACTED:uuid] about the cap.
+   opaque_secret                    substitutions=1  -> Escalate to [REDACTED:opaque_secret] about the cap.
+
+   10 of 10 planted shapes caught. The scan scans.
+
+== 4. marlin's own agentic surface, scanned where it would reach a scenario
+   .claude/agents/accela-agent.md             {}
+   .claude/agents/azure-agent.md              {'uuid': 1}  <- would be redacted if this persona ran
+   .claude/agents/bug-hunter-agent.md         {'uuid': 1}  <- would be redacted if this persona ran
+   .claude/agents/implementer-agent.md        {'uuid': 1}  <- would be redacted if this persona ran
+   .claude/agents/orchestrator-agent.md       {'uuid': 1}  <- would be redacted if this persona ran
+   .claude/agents/reviewer-agent.md           {}
+   .claude/agents/security-agent.md           {'uuid': 1}  <- would be redacted if this persona ran
+   .claude/agents/source-agent.md             {}
+   AGENTS.md                                  {'uuid': 1}  <- would be redacted if this persona ran
+   the persona this pilot ran is .claude/agents/source-agent.md; the scan above says what it carries.
+   working-memory keys: before ['api_key', 'cursor_field', 'token'] -> after ['cursor_field'] (substitutions+drops 2)

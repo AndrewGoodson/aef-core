@@ -1,0 +1,50 @@
+9 objective(s); runs -> /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/runs-screen; memory -> /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/state/memory.jsonl
+[src-02-lee-wells-late-arrival] exit=0 6.0s
+    {
+      "schema_version": "1.0.0",
+      "run_id": "cea07867-153f-449d-865e-5bad871de1a4",
+[src-03-hillsborough-full-page-at-cap] exit=0 42.5s
+    {
+      "schema_version": "1.0.0",
+      "run_id": "4499d444-a495-43ee-b8e9-020bc2e67d5b",
+[src-04-pinellas-count-mismatch] exit=0 32.3s
+    {
+      "schema_version": "1.0.0",
+      "run_id": "5f7931f0-f216-4624-8081-ff2943e9c35f",
+[src-05-sunbiz-no-count-endpoint] exit=0 39.0s
+    {
+      "schema_version": "1.0.0",
+      "run_id": "40eeb345-2e06-4a28-9b52-6ec1152547ab",
+[src-06-lee-accela-credentials] exit=0 5.8s
+    {
+      "schema_version": "1.0.0",
+      "run_id": "0b7a34fe-872e-4128-983e-3949a46eb692",
+[src-07-cape-coral-record-id] exit=0 10.8s
+    {
+      "schema_version": "1.0.0",
+      "run_id": "1f090b7f-27d6-4765-8921-df5758983e3e",
+[src-08-manatee-duplicates-suppressed] exit=0 45.4s
+    {
+      "schema_version": "1.0.0",
+      "run_id": "4e2603ce-aadc-426e-8660-4d54e3e9aee2",
+[src-09-template-zero-grace] exit=0 18.5s
+    {
+      "schema_version": "1.0.0",
+      "run_id": "b65df398-4332-4b6d-8271-783972cdb999",
+[src-10-lee-dev-activity-readback] exit=0 7.0s
+    {
+      "schema_version": "1.0.0",
+      "run_id": "8c4bcca4-0107-48ac-bed0-6d01b03a3048",
+
+live model calls spent by this script: 9
+recorded run files now in /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/runs-screen: 10
+  0b7a34fe-872e-4128-983e-3949a46eb692.json  graph_id=marlin-source  model_calls=1
+  1f090b7f-27d6-4765-8921-df5758983e3e.json  graph_id=marlin-source  model_calls=1
+  40eeb345-2e06-4a28-9b52-6ec1152547ab.json  graph_id=marlin-source  model_calls=1
+  4499d444-a495-43ee-b8e9-020bc2e67d5b.json  graph_id=marlin-source  model_calls=1
+  4e2603ce-aadc-426e-8660-4d54e3e9aee2.json  graph_id=marlin-source  model_calls=1
+  5f7931f0-f216-4624-8081-ff2943e9c35f.json  graph_id=marlin-source  model_calls=1
+  8c4bcca4-0107-48ac-bed0-6d01b03a3048.json  graph_id=marlin-source  model_calls=1
+  b65df398-4332-4b6d-8271-783972cdb999.json  graph_id=marlin-source  model_calls=1
+  b76384bc-191b-41f4-afb2-25c2261c76de.json  graph_id=marlin-source  model_calls=1
+  cea07867-153f-449d-865e-5bad871de1a4.json  graph_id=marlin-source  model_calls=1

@@ -1,0 +1,14 @@
+arm: runs-armB
+objective                                 model   forced  agree
+src-01-cape-coral-cursor                blocked  blocked  yes
+src-02-lee-wells-late-arrival           blocked  blocked  yes
+src-03-hillsborough-full-page-at-cap       fail     fail  yes
+src-04-pinellas-count-mismatch             fail     fail  yes
+src-05-sunbiz-no-count-endpoint         blocked  blocked  yes
+src-06-lee-accela-credentials           blocked  blocked  yes
+src-07-cape-coral-record-id                fail     fail  yes
+src-08-manatee-duplicates-suppressed    blocked     fail  NO
+src-09-template-zero-grace               (none)     fail  NO
+src-10-lee-dev-activity-readback        blocked  blocked  yes
+
+agree on 8 of 10

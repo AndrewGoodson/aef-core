@@ -7484,3 +7484,103 @@ place, and any harness here that rewrites a Python file and immediately
 imports it needs `PYTHONDONTWRITEBYTECODE`.
 
 **Dimension 6: 8 → 10.**
+
+---
+
+## Q1 — the loop on a repository somebody uses, and the bullet that made it worse
+
+ADR 0204. `/Users/raptor/marlin`: a Florida permit-data pipeline, eight
+personas in `.claude/agents/`, written and used by its owner. The question was
+the one 90/100 has never answered — **can the loop KEEP an improvement on a
+real repo?** The answer is again no, and this time it comes with a controlled
+measurement saying the loop was right.
+
+**What an owner gets in ten minutes.** `adopt` wrote 15 files and appended
+inside markers to `AGENTS.md` and `.gitignore`; the bytes outside each block
+are sha256-identical before and after, the diff is insertions only (`36 0` /
+`5 0`), a second `adopt` left all 17 byte-identical, and `migrate` wrote one
+graph per persona — **8 of 8 printed `aef run` commands parse, import and
+compile.** Unlike the cold-start repo (ADR 0192), these graphs run.
+
+**F-Q1-1, the finding that transfers.** marlin's personas are written for a
+tool-using coding agent; `migrate` makes each the system message of a
+`--tools "" --max-turns 1` completion. Six of ten answers came back under 1000
+characters, eight of ten were tool-shaped, and one **hallucinated its tool
+calls and their results** — `No files found`, `The working directory is empty`
+— then ruled from the invented observation, on a run whose own containment
+block records `no_tools`. Containment stopped the tools. It did not stop the
+model believing it had used them. One sentence saying there are no tools takes
+tool-shaped from 8 to **0**; that sentence is in no document `adopt` writes.
+
+**The screen came free.** ADR 0201's method is offline, so the six candidate
+owner rules the brief budgeted became eleven at zero cost. `a "Next step"
+heading` fails 10/10; `the two-manual-runs rule stated` 3/10; `the verdict
+token marlin's own rules force` 2/10, its value computed per scenario from the
+persona's own precedence. Four rules fail 0/10 and were rejected for teaching
+the loop nothing; the 10/10 rule was rejected for leaving G2 nothing to
+protect. Chosen because the agent fails them, disclosed, applied only to
+scenarios recorded after the screen.
+
+**The night.** Scheduled, fired, left. 331 s, one turn, exit 0. It proposed one
+candidate grounded in two harvest-sourced check-failure records — corpus
+`{"harvest": 5}`, bootstrap 0, record 0 — and **G3 refused to judge**: `4 dead
+call(s) of 4 scenario(s) (100%), over the 25% ceiling`, the operator's quota
+having run out mid-night. G0, G1, G2, G4 and G5 all returned real verdicts,
+including `G2 pass`. It kept nothing, moved neither `main` nor `loop/kept`, and
+left a digest, a monitor line, a status, a lineage listing and a halt-channel
+dump a person read cold.
+
+**Then the measurement the gates could not finish**, three arms over the same
+five scenarios, one variable each:
+
+| arm | scored | mean |
+|---|---|---|
+| incumbent, as marlin ships it | cassette | **0.6667** |
+| placebo — `## Lessons (aef)` + an inert bullet | live | **0.8667** |
+| candidate — the same section, **the loop's own bullet** | live | **0.4000** |
+
+Two scenarios the incumbent passes at 1.0000 collapse to 0.3333 and 0.0000.
+**The harm is the bullet's text.** Not the model's own words — ADR 0180
+removed those and the harm survived. Not the section header — the placebo
+carries it and scores higher than the incumbent. The bullet names a field, an
+operator and a word count, and never the requirement, because ADR 0174 strips
+the check's expected value; ADR 0201 called its own version of this "close to
+unactionable by construction", and this is that finding arriving from
+production evidence.
+
+And the arm pair says something about the gates: **resampling alone moved the
+incumbent +0.2**, so G2/G3's live-candidate-vs-cassette-incumbent comparison is
+biased *for* every prompt candidate here — ADR 0200's F-P1-3 with the sign
+reversed, because these owner checks pin no dates.
+
+**Cost, measured, because three attempts at the night died to it.** 27–34 s per
+live call on 512–887-word answers; 6 × (corpus − audit slice) calls per turn;
+one gated turn on this repo is about ten minutes. **ADR 0200's 131 s/turn does
+not generalise — a turn's cost is set by the adopting repo's answer length.**
+
+**Five defects, all reproduced by running.** F-Q1-1 above; F-Q1-3 (`bless
+--graph-id X` archives under `X` while `run` keeps the archive key `default`,
+so G5 rejects with "Create one with `aef loop bless`" — the command already
+run, which `doctor` reports `[OK]`); F-Q1-4 (a run's `--workdir` is single-use
+and the generated `LOOP.md` names a fixed `/tmp/loop` twice); F-Q1-5 (a
+provider that cannot be *launched* is reported by the gate as `3
+previously-passing scenario(s) no longer pass`, while `aef loop score` names
+`harness executable not found` on every scenario — ADR 0158's F-M5-2 surviving
+ADR 0181); F-Q1-6 (the never-shrinks baseline read from a stale `loop/kept`, so
+the reconcile command the refusal names answers "nothing to reconcile") —
+**fixed on the trunk by the orchestrator, citing this pilot's reproduction.**
+ADR 0192's F-N7-1 and F-N7-2 and ADR 0200's F-P1-2 all reproduce here on a
+second repository.
+
+**Redaction**: 0 substitutions over ten real runs, 10 of 10 planted shapes
+caught, 2 of 3 secret-shaped keys dropped, and the residual named —
+`opaque_secret` fires on a public ArcGIS endpoint URL, ADR 0192's
+false-positive mode on the exact kind of string this repo is built from. Five
+of the eight personas and `AGENTS.md` carry marlin's Azure subscription id and
+`source-agent.md` does not, so the zero is a property of the persona chosen and
+is stated as one; the id is checked **by value** in every committed artefact
+and is in none of them.
+
+**Dimension 7: 5 → 7**, heading 90 → 92. Not 8, because nothing was kept. The
+last three points are not ours to earn: **marlin is the owner's own repository,
+not a third party.**
