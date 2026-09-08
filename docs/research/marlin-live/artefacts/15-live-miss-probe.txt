@@ -1,0 +1,34 @@
+ADR 0200's live-miss probe, on marlin, to SIZE the night before spending it.
+One bullet appended to .claude/agents/source-agent.md, `aef loop score
+--cassette-miss live`, then the persona restored from a byte-verified backup
+(sha256 e15f33f9...54502b before and after; `git status --porcelain` empty).
+
+$ date -u; aef loop score agents.migrated.marlin_source.graph \
+      --corpus corpus --config aef.yaml --cassette-miss live; date -u
+start 14:20:39
+  model calls: 0 cassette hit(s), 5 miss(es), on_miss=live — LIVE
+  train       n=5   with_checks=5   mean=0.8667 stdev=0.2981 ci95=[0.6053, 1.1280]
+      1.0000  2b1b3501   1.0000  48572a57   0.3333  9305e905
+      1.0000  a62dfb48   1.0000  a9c8ba03
+end 14:22:54
+
+135 s for 5 live calls = 27 s PER LIVE CALL, on 500-900-word answers.
+A turn is (cohort 5 + 2) corpus passes; the incumbent's pass hits the cassette,
+so a turn costs 6 x (gated scenarios) live calls:
+
+  gated 5 (no audit slice) : 30 calls ~ 810 s
+  gated 4 (--audit-slice 1): 24 calls ~ 648 s
+  gated 3 (--audit-slice 2): 18 calls ~ 486 s
+
+ADR 0200's night measured 131 s/turn for 24 calls (5.5 s/call) on the peptide
+pilot's 211-394-word answers. The cost of a turn is set by ANSWER LENGTH, not
+by the loop, and this repo's answers are 2-4x longer.
+
+AND THE SECOND READING, which matters more than the timing: the same five
+scenarios scored 0.6667 from the cassette (11-score.txt) and 0.8667 LIVE with
+one inert bullet appended. a62dfb48 went 0.3333 -> 1.0000 and 9305e905 went
+0.0000 -> 0.3333 on a bullet that says nothing. That is ADR 0200's F-P1-3
+asymmetry with the sign reversed: these owner checks pin no dates, so what is
+left is resampling, and resampling FLATTERS the live arm. G2 and G3 compare a
+live candidate against a cassette-replayed incumbent, so on this corpus the
+comparison is biased FOR every prompt candidate.

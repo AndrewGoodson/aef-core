@@ -1,0 +1,11 @@
+printed `aef run` commands: 8
+  PARSES + BUILDS  agents.migrated.marlin_accela.graph           retrieve -> prompt_agent -> reflect -> consolidate
+  PARSES + BUILDS  agents.migrated.marlin_azure.graph            retrieve -> prompt_agent -> reflect -> consolidate
+  PARSES + BUILDS  agents.migrated.marlin_bug_hunter.graph       retrieve -> prompt_agent -> reflect -> consolidate
+  PARSES + BUILDS  agents.migrated.marlin_implementer.graph      retrieve -> prompt_agent -> reflect -> consolidate
+  PARSES + BUILDS  agents.migrated.marlin_orchestrator.graph     retrieve -> prompt_agent -> reflect -> consolidate
+  PARSES + BUILDS  agents.migrated.marlin_reviewer.graph         retrieve -> prompt_agent -> reflect -> consolidate
+  PARSES + BUILDS  agents.migrated.marlin_security.graph         retrieve -> prompt_agent -> reflect -> consolidate
+  PARSES + BUILDS  agents.migrated.marlin_source.graph           retrieve -> prompt_agent -> reflect -> consolidate
+
+8/8 printed run commands parse, import and compile

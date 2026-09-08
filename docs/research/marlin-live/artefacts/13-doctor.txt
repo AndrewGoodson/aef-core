@@ -1,0 +1,7 @@
+Loop readiness — 6 things you must supply
+  [--] corpus + tripwire       5 scenario(s), 0 tripwire(s)
+  [OK] reflect node routed to  agents/migrated/marlin_source/graph.py: make_prompt_agent_node(route='reflect') builds a node that routes to it
+  [OK] observations            10 recorded run(s) at /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/state/observations.jsonl
+  [--] halt channel            none — a halt would tell nobody
+  [OK] blessed baseline        1 archived version(s) of '.claude/agents'
+  [OK] model calls visible     2 graphs scanned, none reaches a model SDK the harness cannot see

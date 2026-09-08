@@ -1,0 +1,3 @@
+cefb1ed chore(aef): adopt + migrate + corpus, on the clone only
+1b00f82 docs: Lee County POC demo runbook + green-up notes
+e024a8d feat(map): make the lead map Lee-ready for the POC

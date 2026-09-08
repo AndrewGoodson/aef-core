@@ -1,0 +1,15 @@
+<frozen runpy>:128: RuntimeWarning: 'aef.cli.main' found in sys.modules after import of package 'aef.cli', but prior to execution of 'aef.cli.main'; this may result in unpredictable behaviour
+  kept branch loop/kept at cefb1ed9b55a (from main)
+  lineage: resumed 2 member(s) from /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/state/lineage/marlin-source.jsonl
+  turn 1: ledger verified: 13 entr(ies)
+  turn 1: promoted 0 run(s) to the train split
+  turn 1:   5 already in the corpus: 2b1b3501-a4bd-4002-b71d-0659082969c6, 48572a57-344f-4664-ad46-5f7718a574e1, 9305e905-4860-42cd-8242-865429b8c2b9, a62dfb48-6235-40bb-a653-57ac98c4098e, a9c8ba03-c62c-49a8-824e-1c68f77d6d66
+  turn 1:   5 passed, not promoted: ced85637-69e0-471d-a813-ce00cbb68af4, d095f70f-708b-455c-9ac0-5077aec836cd, d5a26927-b4c2-4762-a5b9-ef50ea4651fc, d9d454e0-966a-4d84-ba7e-03e71b893738, e4368c56-7536-4c20-b463-49988f517be3
+  turn 1: audit slice 2026-09-06: 2 of 5 train scenario(s) held back — 2b1b3501-a4bd-4002-b71d-0659082969c6, 48572a57-344f-4664-ad46-5f7718a574e1
+  turn 1: proposed cycle-20260906T142702-prompt on local branch loop/cycle-20260906T142702-prompt (never pushed; proposer=rule_based_prompt)
+  turn 1: gated: reject — G2 rejected it: 3 previously-passing scenario(s) no longer pass (zero tolerance)
+  turn 1: audit (2026-09-06): not read — no candidate passed the gates
+  turn 1: reverted (reject), archived as a stepping stone (score 0.0)
+  stopped: turn 1 re-proposed a tree already rejected; the proposer has nothing new
+kept 0, reverted 1, loop/kept@cefb1ed9b55a — review and merge by hand; Tier-1 auto-merge is off
+archive: 4 member(s) (2 resumed from earlier run(s)), 0 distinct kept tree(s), 1 distinct gated tree(s); sampling off

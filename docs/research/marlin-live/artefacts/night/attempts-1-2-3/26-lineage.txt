@@ -1,0 +1,8 @@
+<frozen runpy>:128: RuntimeWarning: 'aef.cli.main' found in sys.modules after import of package 'aef.cli', but prior to execution of 'aef.cli.main'; this may result in unpredictable behaviour
+lineage for 'default' — 3 member(s) — /private/tmp/claude-501/-Users-raptor-aef-core/8b1c008a-2030-4e1d-88fe-224f5c867a6e/scratchpad/w/q1/state/lineage/default.jsonl
+  ref           parent          score  verdict    kids  sampleable
+  99f1f7248304  cefb1ed9b55a        -  reject        0  no  (rejected before G3 scored it — recorded, never a parent)
+  68b03f6d2c8d  cefb1ed9b55a        -  reject        0  no  (rejected before G3 scored it — recorded, never a parent)
+  cefb1ed9b55a  -                   -  kept          2  yes
+  1 kept, 2 rejected; 1 sampleable as a parent
+  no kept member descends from a rejected one

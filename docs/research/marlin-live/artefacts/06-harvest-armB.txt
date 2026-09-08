@@ -1,0 +1,2 @@
+promoted 1 run(s) to the train split
+  9 REJECTED, did not re-execute deterministically: 3fc078a9-bc5f-489e-9458-3181b5719a26, 6427033b-4bee-4955-8883-954a469425bc, 7d7e2566-7602-4fc8-90ea-ce498a2e9b65, 824a876c-75ad-48aa-b92f-619aeeb15d1d, babbfc1a-3a28-4364-a661-7e2233693300

@@ -1,0 +1,56 @@
+  arms_preamble.py                                       {'uuid': 1}
+  artefact_scan.py                                       {'uuid': 3}
+  artefacts/00-preflight.json                            {'uuid': 2}
+  artefacts/00b-preflight-after-reset.json               {'uuid': 2}
+  artefacts/01-adopt.txt                                 {'uuid': 17, 'opaque_secret': 10}
+  artefacts/01b-bytes-outside-the-block.txt              {'opaque_secret': 4}
+  artefacts/01c-adopt-again.txt                          {'uuid': 17, 'opaque_secret': 10}
+  artefacts/02-migrate.txt                               {'uuid': 9, 'opaque_secret': 9}
+  artefacts/03-screen-runs.txt                           {'uuid': 22, 'opaque_secret': 1}
+  artefacts/03b-armB-runs.txt                            {'uuid': 1}
+  artefacts/06-harvest-armB.txt                          {'uuid': 5}
+  artefacts/07-record-runs.txt                           {'uuid': 11}
+  artefacts/08-harvest.txt                               {'uuid': 5}
+  artefacts/11-score.txt                                 {'uuid': 5}
+  artefacts/11c-score-after-resplit.txt                  {'uuid': 5}
+  artefacts/13-doctor.txt                                {'uuid': 1, 'opaque_secret': 1}
+  artefacts/17-no-claude-on-path.txt                     {'uuid': 5}
+  artefacts/22-candidate-live-score.txt                  {'uuid': 5}
+  artefacts/adopt17.sha256                               {'opaque_secret': 17}
+  artefacts/night/attempt-6-quota-outage/21-run.txt      {'uuid': 12, 'opaque_secret': 1}
+  artefacts/night/attempt-6-quota-outage/26-lineage.txt  {'uuid': 1, 'opaque_secret': 1}
+  artefacts/night/attempt-6-quota-outage/27-ledger.jsonl {'opaque_secret': 14}
+  artefacts/night/attempt-6-quota-outage/28-cycles.jsonl {'uuid': 4}
+  artefacts/night/attempt-7-overran/26-lineage.txt       {'uuid': 1, 'opaque_secret': 1}
+  artefacts/night/attempt-7-overran/27-ledger.jsonl      {'opaque_secret': 17}
+  artefacts/night/attempt-7-overran/28-cycles.jsonl      {'uuid': 4}
+  artefacts/night/attempts-1-2-3/21-run.txt              {'uuid': 13, 'opaque_secret': 1}
+  artefacts/night/attempts-1-2-3/26-lineage.txt          {'uuid': 1, 'opaque_secret': 1}
+  artefacts/night/attempts-1-2-3/27-ledger.jsonl         {'uuid': 4, 'opaque_secret': 40}
+  artefacts/night/attempts-1-2-3/attempt-2-run.txt       {'uuid': 27, 'opaque_secret': 3}
+  artefacts/night/attempts-4-5/26-lineage.txt            {'uuid': 1, 'opaque_secret': 1}
+  artefacts/night/attempts-4-5/27-ledger.jsonl           {'opaque_secret': 7}
+  bytes_outside.py                                       {'uuid': 1}
+  night.sh                                               {'uuid': 1}
+  parse_run_commands.py                                  {'uuid': 2}
+  recheck.py                                             {'uuid': 1}
+  redaction_scan.py                                      {'connection_string': 1, 'email': 2, 'api_key': 1, 'bearer': 1, 'jwt': 1, 'aws_key': 1, 'github_token': 1, 'slack_token': 1, 'uuid': 2, 'opaque_secret': 3}
+  screen.py                                              {'uuid': 1}
+
+totals across every committed artefact: {'uuid': 192, 'opaque_secret': 142, 'connection_string': 1, 'email': 2, 'api_key': 1, 'bearer': 1, 'jwt': 1, 'aws_key': 1, 'github_token': 1, 'slack_token': 1}
+
+distinct uuid-shaped strings: 32
+  this session's scratchpad directory       : True
+  planted control / synthetic state id      : 2
+  run ids and scenario ids this pilot wrote : 29
+  Every one of those is a uuid4 the harness assigned to a run of this
+  pilot. None is a value read out of marlin.
+
+distinct opaque_secret matches: 72
+  sha256 digests (adopt17.sha256, the ledger's own hash chain) and long
+  path segments — ADR 0192's named false-positive mode, reproduced here
+  on a public ArcGIS endpoint URL (see 10-redaction.txt section 2).
+
+marlin's Azure subscription id in a committed artefact: NO
+Key Vault secret NAME 'accela-app-secret': ['artefact_scan.py', 'artefacts/10-redaction.txt', 'objectives.py', 'redaction_scan.py'] — a name, never a value
+Key Vault secret NAME 'accela-password': ['artefact_scan.py', 'artefacts/10-redaction.txt', 'objectives.py', 'redaction_scan.py'] — a name, never a value

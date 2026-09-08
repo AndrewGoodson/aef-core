@@ -1,0 +1,7 @@
+moved 2b1b3501 train -> validation
+moved 48572a57 train -> validation
+2 scenario(s) moved
+manifest already describes the 5 scenario(s) on disk at corpus; nothing to reconcile
+restored 2b1b3501 validation -> train
+restored 48572a57 validation -> train
+2 scenario(s) restored; manifest rewritten

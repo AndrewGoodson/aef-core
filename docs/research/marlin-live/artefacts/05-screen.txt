@@ -1,0 +1,29 @@
+screened against 10 arm-B answers in runs-armB
+
+candidate                                     applies  fails   rate
+R1  status: pass|fail|blocked line                 10      1    10%
+R2  DATA LOSS on a count mismatch                   3      0     0%
+R3  the count left behind, as a number              3      0     0%
+R4  a publication-order field named                 4      1    25%
+R5  exceededTransferLimit named                     8      0     0%
+R6  a non-zero grace_days, with the number          2      1    50%
+R7  all four counts named                          10      0     0%
+R8  the two-manual-runs rule stated                10      3    30%
+R9  a 'Next step' heading                          10     10   100%
+R10 returnCountOnly named (ArcGIS)                  8      1    12%
+R11 the verdict token marlin's rules force         10      2    20%
+
+R1  status: pass|fail|blocked line
+    fails on: src-09-template-zero-grace
+R4  a publication-order field named
+    fails on: src-06-lee-accela-credentials
+R6  a non-zero grace_days, with the number
+    fails on: src-09-template-zero-grace
+R8  the two-manual-runs rule stated
+    fails on: src-02-lee-wells-late-arrival, src-05-sunbiz-no-count-endpoint, src-08-manatee-duplicates-suppressed
+R9  a 'Next step' heading
+    fails on: src-01-cape-coral-cursor, src-02-lee-wells-late-arrival, src-03-hillsborough-full-page-at-cap, src-04-pinellas-count-mismatch, src-05-sunbiz-no-count-endpoint, src-06-lee-accela-credentials, src-07-cape-coral-record-id, src-08-manatee-duplicates-suppressed, src-09-template-zero-grace, src-10-lee-dev-activity-readback
+R10 returnCountOnly named (ArcGIS)
+    fails on: src-08-manatee-duplicates-suppressed
+R11 the verdict token marlin's rules force
+    fails on: src-08-manatee-duplicates-suppressed, src-09-template-zero-grace
