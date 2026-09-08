@@ -456,3 +456,35 @@ def test_the_source_field_round_trips_and_defaults_for_legacy_files(tmp_path: Pa
     del payload["source"]
     path.write_text(json.dumps(payload))
     assert load_scenario(path).source is Source.UNSPECIFIED
+
+
+def test_a_split_move_against_a_stale_kept_branch_names_the_branch_not_reconcile() -> None:
+    """ADR 0204's F-Q1-6, found installing on a real repository. The baseline
+    is read from the base ref, and during a multi-turn run that ref is the
+    loop's OWN kept branch — created by an earlier turn and never advanced. It
+    still carries the pre-move manifest, so the refusal fired, named
+    `reconcile`, and `reconcile` answered "nothing to reconcile" because it
+    rewrites the manifest on disk and cannot reach one committed on a branch.
+    The check is correct and unchanged; the remedy it names now depends on
+    where the baseline came from."""
+    from aef.harness.corpus import CorpusManifest, Split, check_never_shrinks
+
+    class _Corpus:
+        root = Path("/tmp/corpus")
+        ids = {"a", "b"}
+
+        def manifest(self):
+            return CorpusManifest(ids={"a": Split.TRAIN, "b": Split.VALIDATION})
+
+    baseline = CorpusManifest(ids={"a": Split.TRAIN, "b": Split.TRAIN})
+
+    with pytest.raises(CorpusShrankError) as stale:
+        check_never_shrinks(_Corpus(), baseline, baseline_ref="loop/kept")  # type: ignore[arg-type]
+    assert "git branch -D loop/kept" in str(stale.value)
+    assert "will answer 'nothing to reconcile'" in str(stale.value)
+
+    # From the working tree, reconcile IS the remedy and is still named.
+    with pytest.raises(CorpusShrankError) as tree:
+        check_never_shrinks(_Corpus(), baseline)  # type: ignore[arg-type]
+    assert "corpus reconcile" in str(tree.value)
+    assert "git branch -D" not in str(tree.value)
