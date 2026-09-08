@@ -372,6 +372,11 @@ def load_manifest(root: Path) -> CorpusManifest:
     return CorpusManifest.from_payload(loads(path.read_text()))
 
 
+LOOP_BRANCH_PREFIX = "loop/"
+"""Branches this loop creates. A baseline read from one of these is a
+baseline the loop itself left behind (ADR 0204's F-Q1-6)."""
+
+
 def reconcile_command(root: Path) -> str:
     """The command an OWNER runs to make the manifest describe the files on
     disk. Named by every refusal that a stale manifest can cause, because a
@@ -380,7 +385,44 @@ def reconcile_command(root: Path) -> str:
     return f"aef loop corpus reconcile --corpus {root}"
 
 
-def check_never_shrinks(corpus: Corpus, baseline: CorpusManifest) -> None:
+def _split_move_remedy(corpus: Corpus, baseline_ref: str) -> str:
+    """The remedy that actually fixes the condition named, which depends on
+    WHERE the baseline came from.
+
+    `reconcile` rewrites the manifest ON DISK from the files on disk. That is
+    the right answer when the baseline is the working tree's own manifest. It
+    is a no-op when the baseline was read from a ref, because the stale
+    manifest is committed on that ref and `reconcile` cannot reach it — and
+    the loop's own kept branch is exactly such a ref, left behind by an
+    earlier turn while the default branch moved on.
+
+    Found on the marlin install (ADR 0204's F-Q1-6): the refusal named
+    `reconcile`, `reconcile` answered "nothing to reconcile", and the refusal
+    then repeated itself unchanged. The check is correct and stays; what was
+    wrong was telling an owner to run a command that cannot help.
+    """
+    if baseline_ref and baseline_ref.startswith(LOOP_BRANCH_PREFIX):
+        return (
+            f"The baseline came from `{baseline_ref}`, a branch THIS LOOP created and has "
+            f"not advanced, so it still carries the manifest from before the move — "
+            f"`{reconcile_command(corpus.root)}` rewrites the manifest on disk and cannot "
+            f"reach a manifest committed on another ref, so it will answer 'nothing to "
+            f"reconcile' and this refusal will repeat. If the move was deliberate, delete "
+            f"the stale branch (`git branch -D {baseline_ref}`) or advance it to the ref "
+            f"you moved on; the next turn then reads the manifest you meant."
+        )
+    if baseline_ref:
+        return (
+            f"The baseline came from `{baseline_ref}`. If the move was deliberate, make it "
+            f"on that ref too — `{reconcile_command(corpus.root)}` rewrites the manifest on "
+            f"disk and cannot reach one committed elsewhere."
+        )
+    return f"If the move was deliberate, run `{reconcile_command(corpus.root)}` by hand."
+
+
+def check_never_shrinks(
+    corpus: Corpus, baseline: CorpusManifest, *, baseline_ref: str = ""
+) -> None:
     """Raise unless `corpus` still contains every id `baseline` recorded.
 
     Growth is fine and expected; a scenario changing split is not, because
@@ -412,8 +454,8 @@ def check_never_shrinks(corpus: Corpus, baseline: CorpusManifest) -> None:
     )
     if moved:
         raise CorpusShrankError(
-            f"scenario(s) changed split, which erases evidence: {moved}. If the move was "
-            f"deliberate, run `{reconcile_command(corpus.root)}` by hand."
+            f"scenario(s) changed split, which erases evidence: {moved}. "
+            + _split_move_remedy(corpus, baseline_ref)
         )
 
 

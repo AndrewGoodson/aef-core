@@ -199,7 +199,17 @@ def test_the_loop_preflight_checks_the_corpus_never_shrank() -> None:
     import aef.harness.loop as loop_harness
 
     source = inspect.getsource(loop_harness._preflight)
-    assert "check_never_shrinks(config.corpus" in source
+    # Was `"check_never_shrinks(config.corpus" in source` — a pin on ONE LINE's
+    # spelling, which a reformat broke while the call it guards was untouched
+    # (the call gained a `baseline_ref=` argument in ADR 0204 and wrapped).
+    # Normalise the whitespace so the assertion is about the call, not the
+    # line breaks.
+    flat = " ".join(source.split())
+    called = flat.replace("( ", "(")
+    assert "check_never_shrinks(config.corpus" in called
+    assert "baseline_ref=config.base_ref" in flat, (
+        "the refusal's remedy depends on where the baseline came from (ADR 0204)"
+    )
     assert "archive.check_never_shrinks" in source, "the archive check must still be there"
 
 

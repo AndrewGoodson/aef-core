@@ -535,7 +535,11 @@ def _preflight(config: LoopConfig) -> tuple[ledger.LedgerEntry, ...]:
     # `recorder.refuse_existing_ids` cited this guard as its justification
     # (ADR 0141). It is the same audit-trail argument as the two above.
     if config.corpus is not None:
-        check_never_shrinks(config.corpus, _corpus_baseline_manifest(config, config.corpus))
+        check_never_shrinks(
+            config.corpus,
+            _corpus_baseline_manifest(config, config.corpus),
+            baseline_ref=config.base_ref,
+        )
     # A live gate pass hands the operator's own harness login to the process
     # that runs candidate code, so the repo has to have said yes in writing.
     # Checked HERE, before a proposal is journalled, rather than at the first
