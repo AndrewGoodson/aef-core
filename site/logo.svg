@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <title>AEF connected A mark</title>
-  <defs><linearGradient id="teal" x1="10" y1="8" x2="55" y2="60" gradientUnits="userSpaceOnUse"><stop stop-color="#59ead5"/><stop offset="1" stop-color="#07838c"/></linearGradient></defs>
-  <rect width="64" height="64" rx="16" fill="#062b35"/>
-  <path d="M14 48 32 14 50 48M22 34h20" stroke="url(#teal)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="m22 34 10 14 10-14" stroke="#4be0d0" stroke-opacity=".45" stroke-width="2"/>
-  <circle cx="32" cy="14" r="5" fill="#b0fff0"/><circle cx="14" cy="48" r="5" fill="#58e5d1"/><circle cx="50" cy="48" r="5" fill="#1ba9b0"/><circle cx="32" cy="48" r="3" fill="#58e5d1"/>
-</svg>

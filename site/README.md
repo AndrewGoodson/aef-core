@@ -47,13 +47,13 @@ hide an earlier failure.
 
 1. Review public copy and links. Keep private targets, tax records, source code,
    credentials, internal logs and owner-only documents out of the public site.
-2. Copy **only** `index.html`, `styles.css`, `app.js`, `graph.js`, `favicon.svg`, `logo.svg`,
+2. Copy **only** `index.html`, `styles.css`, `app.js`, `graph.js`, `logo.png`,
    `learning-protocol.txt` and `THIRD_PARTY_NOTICES.txt` from this directory to the
    root of an isolated clone of `AndrewGoodson/aef-core-site`. Do not mirror the aef-core repository.
 3. Review the public clone's diff; commit and push its `main` branch with Git.
    Do not use GitHub CLI. GitHub Pages serves `main` / root, with an empty
    `.nojekyll` file. The public repository may have its own short README.
-4. Verify the Pages deployment and compare all eight served assets with these
+4. Verify the Pages deployment and compare all seven served assets with these
    source files. Check the public URL in a browser before reporting it live.
 
 Source and website use separate commits. A source push alone does not publish
@@ -81,11 +81,29 @@ when changed while open. Animation frames stop when hidden or offscreen.
 
 ## Teal identity and 3D presentation
 
-`logo.svg` is the original AEF connected-A mark; `favicon.svg` uses the same
-vector artwork. Teal surfaces and benefit-led copy carry the identity across
-navigation, graph, instructions and integration controls.
+`logo.png` is the AEF learning-loop mark: interlocking teal and mint ribbons
+turn upward at their crossing. The transparent PNG also serves as the favicon.
+The site uses proportional sans-serif typography, including commands and graph
+labels. Headlines describe the workflow and its limits directly.
 
 The graph uses real XYZ coordinates with perspective projection onto Canvas 2D.
 Depth-sorted, shaded spheres and great-circle orbital planes expose its volume;
 automatic yaw completes a full rotation, with a small pitch drift. It remains
 an illustrative graph, not a live runtime viewer. No WebGL dependency is needed.
+
+## Logo generation
+
+Created with the built-in image-generation tool. The generated transparent PNG
+is stored unchanged in this directory. Final prompt:
+
+> Create one polished original logo symbol for AEF, an agent learning framework.
+> Symbol only, no text. A bold continuous ribbon makes two interlocking asymmetric
+> loops, with a small upward opening suggesting learning, returning, and progressing.
+> Invent a distinctive simple silhouette, compact and balanced, strong enough to
+> recognize at 40 pixels. Two flat rich colors: deep teal #087F83 and luminous mint
+> #5CE6D1; clever clean negative space at the crossover. Professional identity
+> design, precise geometry, rounded but confident curves, flat vector-like solid
+> fills. Actual transparent background. Fill about 85 percent of square canvas.
+> No letter A, no brain, no circuit board, no node dots, no sparkle, no glow, no
+> gradient, no shadows, no 3D mockup, no typography, no border, no presentation
+> sheet. Deliver a single finished symbol.
