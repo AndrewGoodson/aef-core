@@ -43,6 +43,56 @@ node --check site/graph.js
 Check each exit code before continuing; a later successful command must not
 hide an earlier failure.
 
+## Saved click-by-click browser tests
+
+[Latest verified results and complete action ledger](../docs/model-checks/2026-09-12-site-drilldowns.md).
+
+[`tests/drilldowns.mjs`](tests/drilldowns.mjs) drives a real Chromium browser
+through every website link and control at 1440, 768, 390 and 320 CSS pixels.
+It checks all six sphere clicks and selector details, all four workflow panels
+against exact expected text, keyboard activation, drag/reset, a full rotation,
+motion preferences, offscreen suspension, all three command variants, validation,
+clipboard success/failure/races, disclosure open/close, download bytes, navigation
+and the seven published asset hashes. The canvas probe observes rendered label
+coordinates; tests still use real pointer clicks rather than calling handlers.
+
+Install the pinned browser tool under ignored scratch space (no website or
+Python runtime dependency), with Node.js 20 or newer:
+
+```sh
+npm install --prefix .scratch/site-browser --no-audit --no-fund playwright@1.62.1
+node .scratch/site-browser/node_modules/playwright/cli.js install chromium
+```
+
+Start the local server above in one terminal. In another, from the repo root:
+
+```sh
+HEADED=1 \
+PLAYWRIGHT_MODULE="$PWD/.scratch/site-browser/node_modules/playwright/index.mjs" \
+node site/tests/drilldowns.mjs
+```
+
+For the deployed site, repeat with
+`SITE_URL=https://andrewgoodson.github.io/aef-core-site/` in the environment.
+Omit `HEADED=1` for headless execution. A failed assertion exits nonzero.
+Each run saves its action/expected-result ledger as JSON and Markdown, full-page
+and graph screenshots, failed-step screenshots, downloaded instructions, and
+Playwright traces under `output/playwright/<timestamp>/`. Set `TEST_OUTPUT` to
+choose a distinct run directory; reusing one overwrites that run's artifacts.
+Open a trace with:
+
+```sh
+node .scratch/site-browser/node_modules/playwright/cli.js show-trace output/playwright/<run>/1440px-trace.zip
+```
+
+The suite checks outbound links through actual navigation and records HTTP
+status separately. External availability and authenticated source access are
+not guaranteed by a passing interaction check; inspect that report section.
+Widths simulate responsive layouts in Chromium, not Safari, Firefox or physical
+mobile devices. Test paths are synthetic; no integration command is executed.
+Raw browser evidence stays local and out of publication. Commit a curated report
+under `docs/model-checks/` with findings, results and evidence paths.
+
 ## Publish a website update
 
 1. Review public copy and links. Keep private targets, tax records, source code,

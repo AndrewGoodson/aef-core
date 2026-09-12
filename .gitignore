@@ -24,3 +24,6 @@ mindgraph/node_modules/
 
 # Worker scratch (measurement scripts, never committed)
 .scratch/
+
+# Browser traces and screenshots are retained locally; curated reports are tracked.
+output/playwright/

@@ -31,7 +31,7 @@ function updateCommand() {
   const path = target.value;
   // Native skill invocation, not a shell command. Reject ambiguous quoting
   // and control characters rather than promising parser-specific escaping.
-  const valid = path.startsWith("/") && path !== "/" && !/[\x00-\x1f\x7f"\\]/.test(path);
+  const valid = path.startsWith("/") && !/^\/+$/.test(path) && !/[\x00-\x1f\x7f"\\]/.test(path);
   target.setAttribute("aria-invalid", String(!valid));
   copy.disabled = !valid;
   command.textContent = valid ? `${harness.value === "codex" ? "$" : "/"}target-repo "${path}"` : "Enter an absolute directory to preview the command.";
@@ -45,7 +45,7 @@ copy.addEventListener("click", async () => {
     await navigator.clipboard.writeText(copiedCommand);
     if (command.textContent === copiedCommand) status.textContent = "Copied. Paste into your coding agent, not a shell.";
   } catch {
-    status.textContent = "Clipboard unavailable. Select and copy the command above.";
+    if (command.textContent === copiedCommand) status.textContent = "Clipboard unavailable. Select and copy the command above.";
   }
 });
 updateCommand();
