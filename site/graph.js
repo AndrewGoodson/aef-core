@@ -3,7 +3,7 @@
  * doc/assets/mission-orbit.html at 953b01d85fac9a6af45618e3f093f08cf5c647ba.
  * Original copyright (c) Microsoft Corporation, MIT. See THIRD_PARTY_NOTICES.txt.
  * AEF adaptation: sequential route, shared-state links, accessible selection,
- * elapsed-time motion, frozen pause, reduced motion and visibility scheduling.
+ * 3D spheres and orbital planes, elapsed-time rotation, accessible motion controls.
  */
 (() => {
   "use strict";
@@ -18,15 +18,15 @@
   const nodes = [
     { id: "state", label: "SHARED STATE", short: "AEF", type: "core", x: 0, y: 0, z: 0,
       copy: "Each workflow node reads AEFState and returns a StateDelta plus its next route." },
-    { id: "retrieve", label: "RETRIEVE", short: "01", type: "agent", x: -190, y: -125, z: -50,
+    { id: "retrieve", label: "RETRIEVE", short: "01", type: "agent", x: -190, y: -145, z: -110,
       copy: "Retrieve relevant memory through injected services. Stored lessons remain fallible evidence." },
-    { id: "prompt", label: "PROMPT AGENT", short: "02", type: "agent", x: 150, y: -140, z: -75,
+    { id: "prompt", label: "PROMPT AGENT", short: "02", type: "agent", x: 180, y: -100, z: 125,
       copy: "Call the configured model inside an explicitly nondeterministic node. Tools need target wiring." },
-    { id: "reflect", label: "REFLECT", short: "03", type: "agent", x: 220, y: 65, z: 35,
+    { id: "reflect", label: "REFLECT", short: "03", type: "agent", x: 210, y: 115, z: -105,
       copy: "Inspect the outcome. Rule-based reflection is implemented; optional LLM reflection defaults off." },
-    { id: "consolidate", label: "CONSOLIDATE", short: "04", type: "learning", x: 0, y: 190, z: 45,
+    { id: "consolidate", label: "CONSOLIDATE", short: "04", type: "learning", x: -25, y: 190, z: 140,
       copy: "Update knowledge through injected services. This does not train weights or establish task gains." },
-    { id: "end", label: "END", short: "✓", type: "finding", x: -215, y: 65, z: 50,
+    { id: "end", label: "END", short: "✓", type: "finding", x: -215, y: 65, z: 80,
       copy: "Finish this graph run. There is no automatic route back, self-rewrite or automatic merge." }
   ];
   const edges = [["retrieve", "prompt"], ["prompt", "reflect"], ["reflect", "consolidate"], ["consolidate", "end"]];
@@ -38,7 +38,7 @@
   let projected = new Map();
   let elapsed = 0, previous = null, frame = null, visible = true;
   function color(type) {
-    return type === "learning" ? "#d4ed9b" : type === "finding" ? "#f1f5e7" : type === "core" ? "#d4ed9b" : "#92c8b0";
+    return type === "learning" ? "#5ce6d1" : type === "finding" ? "#dcfffa" : type === "core" ? "#5ce6d1" : "#36bcd2";
   }
   function project(node) {
     const cosY = Math.cos(rotationY);
@@ -49,7 +49,7 @@
     const sinX = Math.sin(rotationX);
     const y2 = node.y * cosX - z1 * sinX;
     const z2 = node.y * sinX + z1 * cosX;
-    const camera = 760;
+    const camera = 650;
     const scale = camera / (camera + z2);
     const compact = width <= 560;
     const top = 36;
@@ -58,8 +58,8 @@
     const xCompression = compact ? 0.84 : 1;
     const graphHeight = height - top - bottom;
     const fit = Math.min(
-      (width - horizontalPadding - 50) / (610 * xCompression),
-      graphHeight / 500
+      (width - horizontalPadding - 50) / (730 * xCompression),
+      graphHeight / 680
     );
     return {
       x: width / 2 + x1 * scale * fit * xCompression,
@@ -69,23 +69,33 @@
     };
   }
 
-  function drawOrbit(radiusX, radiusY, tilt, color) {
-    context.beginPath();
-    for (let index = 0; index <= 80; index += 1) {
-      const angle = index / 80 * TAU;
-      const point = project({ x: Math.cos(angle) * radiusX, y: Math.sin(angle) * radiusY, z: Math.sin(angle) * tilt });
-      if (index === 0) context.moveTo(point.x, point.y);
-      else context.lineTo(point.x, point.y);
+  // Three-dimensional great circles, projected with the same camera as nodes.
+  function drawOrbit(radius, plane, tilt) {
+    let previousPoint = null;
+    for (let index = 0; index <= 120; index += 1) {
+      const angle = index / 120 * TAU;
+      const a = Math.cos(angle) * radius, b = Math.sin(angle) * radius;
+      const point = project(plane === "xz"
+        ? { x: a, y: b * Math.sin(tilt), z: b * Math.cos(tilt) }
+        : { x: a * Math.cos(tilt), y: b, z: a * Math.sin(tilt) });
+      if (previousPoint) {
+        context.beginPath();
+        context.moveTo(previousPoint.x, previousPoint.y);
+        context.lineTo(point.x, point.y);
+        const alpha = Math.max(0.035, 0.17 - point.z / 2600);
+        context.strokeStyle = `rgba(76,207,223,${alpha})`;
+        context.lineWidth = point.z < 0 ? 0.85 : 0.55;
+        context.stroke();
+      }
+      previousPoint = point;
     }
-    context.strokeStyle = color;
-    context.lineWidth = 0.75;
-    context.stroke();
   }
 
   function drawNode(node, point, time) {
     const active = node.id === selected;
     const core = node.type === "core";
-    const radius = (core ? 19 : 11) * Math.max(0.72, point.scale);
+    const radius = (core ? 25 : 16) * Math.max(0.65, point.scale);
+    context.globalAlpha = Math.max(0.55, Math.min(1, 1.05 - point.z / 850));
     const nodeColor = color(node.type);
     const breathe = Math.sin(time * 0.0018 + node.x) * 1.1;
 
@@ -106,25 +116,34 @@
 
     context.beginPath();
     context.arc(point.x, point.y, radius, 0, TAU);
-    context.fillStyle = core ? "#18291d" : nodeColor;
+    const sphere = context.createRadialGradient(
+      point.x - radius * 0.35, point.y - radius * 0.4, radius * 0.04,
+      point.x + radius * 0.18, point.y + radius * 0.2, radius * 1.3
+    );
+    sphere.addColorStop(0, core ? "#b5fff0" : "#e6ffff");
+    sphere.addColorStop(0.3, nodeColor);
+    sphere.addColorStop(0.68, core ? "#087f83" : "#12607e");
+    sphere.addColorStop(1, "#031b2d");
+    context.fillStyle = sphere;
     context.fill();
     context.strokeStyle = nodeColor;
     context.lineWidth = core ? 2 : 1;
     context.stroke();
 
-    context.fillStyle = core ? "#f1f5e7" : "#101913";
+    context.fillStyle = "#032a36";
     context.font = `800 ${core ? 8.5 : 7.5}px system-ui, sans-serif`;
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.fillText(node.short, point.x, point.y + 0.5);
 
-    context.fillStyle = active || core ? "#f1f5e7" : "#c0cebd";
+    context.fillStyle = active || core ? "#dcfffa" : "#a3d5df";
     context.font = `${active || core ? 720 : 620} ${core ? 10.5 : 8.5}px system-ui, sans-serif`;
     context.textBaseline = "top";
     context.shadowBlur = 5;
-    context.shadowColor = "#101913";
+    context.shadowColor = "#031923";
     context.fillText(node.label, point.x, point.y + radius + 8);
     context.shadowBlur = 0;
+    context.globalAlpha = 1;
   }
 
   function drawEdge(edge, index) {
@@ -132,7 +151,7 @@
     context.beginPath();
     context.moveTo(from.x, from.y);
     context.lineTo(to.x, to.y);
-    context.strokeStyle = "#8fae8c";
+    context.strokeStyle = "#55b1c1";
     context.lineWidth = 1.2;
     context.stroke();
     const angle = Math.atan2(to.y - from.y, to.x - from.x);
@@ -149,8 +168,8 @@
     if (Math.floor(step) !== index) return;
     const phase = step % 1;
     context.beginPath();
-    context.fillStyle = "#e7ffac";
-    context.shadowColor = "#d4ed9b";
+    context.fillStyle = "#a0fff0";
+    context.shadowColor = "#5ce6d1";
     context.shadowBlur = 14;
     context.arc(from.x + (to.x - from.x) * phase, from.y + (to.y - from.y) * phase, 3, 0, TAU);
     context.fill();
@@ -158,16 +177,24 @@
   }
   function render() {
     context.clearRect(0, 0, width, height);
-    drawOrbit(265, 200, 78, "rgba(146,200,176,.16)");
-    drawOrbit(185, 160, -105, "rgba(146,200,176,.11)");
-    drawOrbit(125, 210, 50, "rgba(212,237,155,.10)");
+    // Sparse fixed stars give the rotating volume a stable frame of reference.
+    for (let i = 0; i < 48; i++) {
+      const x = ((i * 137.508) % 100) / 100 * width;
+      const y = ((i * 73.31) % 100) / 100 * height;
+      context.fillStyle = i % 5 === 0 ? "#6eafbd66" : "#6eafbd26";
+      context.beginPath(); context.arc(x, y, i % 5 === 0 ? 1 : 0.6, 0, TAU); context.fill();
+    }
+    drawOrbit(300, "xz", 0);
+    drawOrbit(300, "xy", 0);
+    drawOrbit(300, "xy", Math.PI / 2);
+    drawOrbit(300, "xz", Math.PI / 4);
     projected = new Map(nodes.map(node => [node.id, project(node)]));
     // Dashed lines are shared-state relationships, never dispatch routes.
     context.setLineDash([3, 6]);
     for (const node of nodes.slice(1, 5)) {
       const from = projected.get("state"), to = projected.get(node.id);
       context.beginPath(); context.moveTo(from.x, from.y); context.lineTo(to.x, to.y);
-      context.strokeStyle = "rgba(146,200,176,.25)"; context.lineWidth = 1; context.stroke();
+      context.strokeStyle = "rgba(93,203,219,.28)"; context.lineWidth = 1; context.stroke();
     }
     context.setLineDash([]);
     edges.forEach(drawEdge);
@@ -179,8 +206,11 @@
     if (previous !== null) {
       const delta = Math.min(now - previous, 64);
       elapsed += delta;
-      // A gentle sweep keeps the route readable instead of turning it edge-on.
-      if (!dragging) rotationY += (Math.sin(elapsed / 9000) - Math.sin((elapsed - delta) / 9000)) * 0.48;
+      // Full azimuth rotation and a small pitch drift expose all three axes.
+      if (!dragging) {
+        rotationY += delta * 0.00016;
+        rotationX += (Math.sin(elapsed / 8000) - Math.sin((elapsed - delta) / 8000)) * 0.14;
+      }
     }
     previous = now;
     render();

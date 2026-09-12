@@ -47,13 +47,13 @@ hide an earlier failure.
 
 1. Review public copy and links. Keep private targets, tax records, source code,
    credentials, internal logs and owner-only documents out of the public site.
-2. Copy **only** `index.html`, `styles.css`, `app.js`, `graph.js`, `favicon.svg`,
+2. Copy **only** `index.html`, `styles.css`, `app.js`, `graph.js`, `favicon.svg`, `logo.svg`,
    `learning-protocol.txt` and `THIRD_PARTY_NOTICES.txt` from this directory to the
    root of an isolated clone of `AndrewGoodson/aef-core-site`. Do not mirror the aef-core repository.
 3. Review the public clone's diff; commit and push its `main` branch with Git.
    Do not use GitHub CLI. GitHub Pages serves `main` / root, with an empty
    `.nojekyll` file. The public repository may have its own short README.
-4. Verify the Pages deployment and compare all seven served assets with these
+4. Verify the Pages deployment and compare all eight served assets with these
    source files. Check the public URL in a browser before reporting it live.
 
 Source and website use separate commits. A source push alone does not publish
@@ -78,3 +78,14 @@ rotate; focus the canvas for arrow keys and Home. Vertical touch scrolling
 remains available. Pause freezes all automatic motion; explicit manipulation
 still works. Reduced-motion preference starts the graph paused and is respected
 when changed while open. Animation frames stop when hidden or offscreen.
+
+## Teal identity and 3D presentation
+
+`logo.svg` is the original AEF connected-A mark; `favicon.svg` uses the same
+vector artwork. Teal surfaces and benefit-led copy carry the identity across
+navigation, graph, instructions and integration controls.
+
+The graph uses real XYZ coordinates with perspective projection onto Canvas 2D.
+Depth-sorted, shaded spheres and great-circle orbital planes expose its volume;
+automatic yaw completes a full rotation, with a small pitch drift. It remains
+an illustrative graph, not a live runtime viewer. No WebGL dependency is needed.
