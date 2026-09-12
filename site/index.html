@@ -14,6 +14,7 @@
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" defer></script>
+  <script src="graph.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
@@ -30,17 +31,20 @@
         <div class="actions"><a class="button primary" href="#integrate">Bring AEF to your repo <span aria-hidden="true">↗</span></a><a class="text-link" href="#architecture">Explore the architecture <span aria-hidden="true">↓</span></a></div>
         <p class="hero-note">Python 3.11+ <span>·</span> Experimental <span>·</span> Offline onboarding by default</p>
       </div>
-      <div class="hero-graphic" aria-label="Illustration: graph execution connected to state, policies and evaluation">
-        <div class="graphic-top"><span class="tiny-label">EXPLICIT BY DESIGN</span><span class="tiny-label">01 / GRAPH</span></div>
-        <svg viewBox="0 0 540 340" role="img" aria-label="Retrieve, act and reflect nodes on a connected graph">
-          <defs><pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#435046"/></pattern></defs>
-          <rect width="540" height="340" fill="url(#dots)"/>
-          <g fill="none" stroke="#7f9782" stroke-width="1.5"><path d="M92 174H205M335 174H447M270 100V65H447V148M270 210V278H92V200"/><path stroke-dasharray="5 6" d="M447 200V278H296"/></g>
-          <g font-family="ui-monospace, monospace" font-size="12" text-anchor="middle"><rect x="35" y="148" width="114" height="52" rx="8" fill="#1d2b21" stroke="#68806d"/><text x="92" y="179" fill="#f2f4e9">retrieve</text><rect x="205" y="136" width="130" height="76" rx="12" fill="#d4ed9b"/><text x="270" y="170" fill="#18221a" font-size="17" font-weight="bold">agent</text><text x="270" y="190" fill="#344830" font-size="10">MODEL NODE</text><rect x="390" y="148" width="114" height="52" rx="8" fill="#1d2b21" stroke="#68806d"/><text x="447" y="179" fill="#f2f4e9">reflect</text><rect x="207" y="39" width="126" height="42" rx="21" fill="#101913" stroke="#68806d"/><text x="270" y="65" fill="#bbcebc">tool policy</text><rect x="209" y="257" width="122" height="42" rx="21" fill="#101913" stroke="#68806d"/><text x="270" y="283" fill="#bbcebc">shared state</text></g>
-          <g fill="#d4ed9b"><circle cx="175" cy="174" r="4"/><circle cx="363" cy="174" r="4"/><circle cx="447" cy="65" r="4"/><circle cx="92" cy="278" r="4"/></g>
-        </svg>
-        <div class="graphic-bottom"><span><i></i> Deterministic control</span><span><i></i> Explicit reasoning</span></div>
-        <p class="graphic-caption">Architecture illustration · no live execution</p>
+      <div class="hero-graphic">
+        <div class="graphic-top"><span class="tiny-label">AEF / NODE ORBIT</span><span class="orbit-badge">Interactive demo</span></div>
+        <canvas id="orbit" tabindex="0" role="img" aria-label="Rotating AEF workflow graph. Retrieve to prompt agent to reflect to consolidate to END, with shared state at the center." aria-describedby="orbit-help">Retrieve → Prompt agent → Reflect → Consolidate → END. Every workflow node uses shared AEFState.</canvas>
+        <div class="orbit-legend"><span>→ Execution route</span><span>┄ Shared state</span></div>
+        <p id="orbit-help">Drag to rotate · Arrow keys rotate · Home resets</p>
+        <div class="orbit-controls">
+          <label for="orbit-node">Inspect node</label>
+          <select id="orbit-node" disabled><option value="state">Shared state</option><option value="retrieve">01 / Retrieve</option><option value="prompt">02 / Prompt agent</option><option value="reflect">03 / Reflect</option><option value="consolidate">04 / Consolidate</option><option value="end">END</option></select>
+          <button id="motion" type="button" aria-pressed="true" disabled>Motion unavailable</button>
+          <button id="orbit-reset" type="button" disabled>Reset view</button>
+        </div>
+        <p id="orbit-description" aria-live="polite">Each workflow node reads AEFState and returns a StateDelta plus its next route.</p>
+        <p class="graphic-caption">Illustrative motion · no live agent execution<br><a href="https://github.com/Contoso-State/red-team-agent-orchestration/blob/953b01d85fac9a6af45618e3f093f08cf5c647ba/doc/assets/mission-orbit.html">Adapted from Red Team Mission Orbit</a> · <a href="THIRD_PARTY_NOTICES.txt">MIT notice</a></p>
+        <noscript><p class="orbit-fallback">Retrieve → Prompt agent → Reflect → Consolidate → END.<br>Enable JavaScript for motion, or explore each step below.</p></noscript>
       </div>
     </section>
     <div class="harness-strip"><div class="wrap"><span>MEET YOUR AGENTS WHERE THEY WORK</span><p>Claude <b>·</b> Codex <b>·</b> Grok <b>·</b> Cursor <b>·</b> GitHub Copilot</p></div></div>
