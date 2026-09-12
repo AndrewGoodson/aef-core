@@ -13,6 +13,10 @@
 
 For **Claude · Codex · Grok · Cursor · GitHub Copilot** workflows and Python agents.
 
+[**Explore the public showcase ↗**](https://andrewgoodson.github.io/aef-core-site/) ·
+[Graph and learning methodology](docs/graph-and-learning.md) ·
+[Target a repository](docs/target-repo.md)
+
 </div>
 
 ---

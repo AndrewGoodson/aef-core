@@ -1,0 +1,58 @@
+# AEF public showcase
+
+Public URL: <https://andrewgoodson.github.io/aef-core-site/>
+
+The canonical source is this directory in aef-core. The separate public
+[`AndrewGoodson/aef-core-site`](https://github.com/AndrewGoodson/aef-core-site)
+repository hosts only the curated website. aef-core itself remains private:
+its current GitHub plan does not enable Pages for the private repository.
+
+## Preview and check
+
+From the aef-core checkout:
+
+```sh
+.venv/bin/python -m http.server 8765 --bind 127.0.0.1 --directory site
+```
+
+Open `http://127.0.0.1:8765`. There are no build dependencies, remote fonts,
+analytics, model calls or submitted forms. The target path stays in the page;
+copying the command is an explicit clipboard action. The graph is an explainer.
+
+Before publishing, manually check desktop and mobile layouts, all graph steps,
+each harness command, a path containing spaces, rejected invalid paths,
+clipboard behavior, keyboard focus and the instruction download. Run
+`node --check site/app.js` and the repository's full green bar before committing
+changes to aef-core. See [methodology and evidence](../docs/graph-and-learning.md).
+
+Activate the environment before the checks: test subprocesses invoke `python`
+and `ruff` by name. Calling `.venv/bin/pytest` alone does not put them on `PATH`.
+
+```sh
+source .venv/bin/activate
+pytest -q
+mypy --strict aef
+ruff check .
+ruff format --check aef tests examples
+node --check site/app.js
+```
+
+Check each exit code before continuing; a later successful command must not
+hide an earlier failure.
+
+## Publish a website update
+
+1. Review public copy and links. Keep private targets, tax records, source code,
+   credentials, internal logs and owner-only documents out of the public site.
+2. Copy **only** `index.html`, `styles.css`, `app.js`, `favicon.svg` and
+   `learning-protocol.txt` from this directory to the root of an isolated clone
+   of `AndrewGoodson/aef-core-site`. Do not mirror the aef-core repository.
+3. Review the public clone's diff; commit and push its `main` branch with Git.
+   Do not use GitHub CLI. GitHub Pages serves `main` / root, with an empty
+   `.nojekyll` file. The public repository may have its own short README.
+4. Verify the Pages deployment and compare all five served assets with these
+   source files. Check the public URL in a browser before reporting it live.
+
+Source and website use separate commits. A source push alone does not publish
+the website; repeat this allowlisted sync after every site change. No cross-repo
+publication token or automatic export of private content is configured.
