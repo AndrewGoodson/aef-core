@@ -1,0 +1,110 @@
+{
+  "release_commit": "134c8d55893883e1cc95b448033fca87f40b4c85",
+  "ci": {
+    "conclusion": "failure",
+    "event": "push",
+    "headSha": "134c8d55893883e1cc95b448033fca87f40b4c85",
+    "jobs": [
+      {
+        "completedAt": "2026-09-12T04:55:42Z",
+        "conclusion": "failure",
+        "databaseId": 103501186391,
+        "name": "live-harness",
+        "startedAt": "2026-09-12T04:55:41Z",
+        "status": "completed",
+        "steps": [],
+        "url": "https://github.com/AndrewGoodson/aef-core/actions/runs/34674273607/job/103501186391"
+      },
+      {
+        "completedAt": "2026-09-12T04:55:43Z",
+        "conclusion": "failure",
+        "databaseId": 103501186522,
+        "name": "test (3.11)",
+        "startedAt": "2026-09-12T04:55:41Z",
+        "status": "completed",
+        "steps": [],
+        "url": "https://github.com/AndrewGoodson/aef-core/actions/runs/34674273607/job/103501186522"
+      },
+      {
+        "completedAt": "2026-09-12T04:55:43Z",
+        "conclusion": "failure",
+        "databaseId": 103501186528,
+        "name": "test (3.13)",
+        "startedAt": "2026-09-12T04:55:41Z",
+        "status": "completed",
+        "steps": [],
+        "url": "https://github.com/AndrewGoodson/aef-core/actions/runs/34674273607/job/103501186528"
+      }
+    ],
+    "name": "CI",
+    "status": "completed",
+    "url": "https://github.com/AndrewGoodson/aef-core/actions/runs/34674273607"
+  },
+  "ci_annotations": [
+    {
+      "id": 103501186391,
+      "name": "live-harness",
+      "annotations": [
+        {
+          "path": ".github",
+          "blob_href": "https://github.com/AndrewGoodson/aef-core/blob/134c8d55893883e1cc95b448033fca87f40b4c85/.github",
+          "start_line": 1,
+          "start_column": null,
+          "end_line": 1,
+          "end_column": null,
+          "annotation_level": "failure",
+          "title": "",
+          "message": "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings",
+          "raw_details": ""
+        }
+      ]
+    },
+    {
+      "id": 103501186522,
+      "name": "test (3.11)",
+      "annotations": [
+        {
+          "path": ".github",
+          "blob_href": "https://github.com/AndrewGoodson/aef-core/blob/134c8d55893883e1cc95b448033fca87f40b4c85/.github",
+          "start_line": 1,
+          "start_column": null,
+          "end_line": 1,
+          "end_column": null,
+          "annotation_level": "failure",
+          "title": "",
+          "message": "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings",
+          "raw_details": ""
+        }
+      ]
+    },
+    {
+      "id": 103501186528,
+      "name": "test (3.13)",
+      "annotations": [
+        {
+          "path": ".github",
+          "blob_href": "https://github.com/AndrewGoodson/aef-core/blob/134c8d55893883e1cc95b448033fca87f40b4c85/.github",
+          "start_line": 1,
+          "start_column": null,
+          "end_line": 1,
+          "end_column": null,
+          "annotation_level": "failure",
+          "title": "",
+          "message": "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings",
+          "raw_details": ""
+        }
+      ]
+    }
+  ],
+  "workflow_schema_failure": {
+    "conclusion": "failure",
+    "event": "push",
+    "headSha": "134c8d55893883e1cc95b448033fca87f40b4c85",
+    "jobs": [],
+    "name": ".github/workflows/loop-gate.yml",
+    "status": "completed",
+    "url": "https://github.com/AndrewGoodson/aef-core/actions/runs/34674273224"
+  },
+  "interpretation": "CI jobs could not start due to account billing or spending limits. The separate loop-gate workflow was rejected before any jobs were created; this is a repository defect requiring a follow-up correction, not a billing diagnosis.",
+  "manual_dispatch_performed": false
+}

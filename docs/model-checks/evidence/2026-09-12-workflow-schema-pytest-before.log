@@ -1,0 +1,332 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+____ test_gate_root_uses_runner_temp_after_job_context_is_available[False] _____
+
+prepared = (PosixPath('/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/pytest-126/test_gate_root_uses_r...', 'CODEX_PERMISSION_PROFILE': ':danger-full-access', 'CODEX_SESSION_ID': '01a082bf-be62-7d81-bb02-093371ba0d9f', ...})
+tmp_path = PosixPath('/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/pytest-126/test_gate_root_uses_runner_tem0')
+core = False
+
+    @pytest.mark.parametrize("core", [False, True])
+    def test_gate_root_uses_runner_temp_after_job_context_is_available(
+        prepared: tuple[Path, dict[str, str]], tmp_path: Path, core: bool
+    ) -> None:
+        checkout, env = prepared
+        # Job-level env is evaluated before the runner context exists. Resolve
+        # the path in a real step and pass it to later steps via GITHUB_ENV.
+>       assert "AEF_GATE_ROOT" not in _job(core)["env"]
+E       AssertionError: assert 'AEF_GATE_ROOT' not in {'AEF_GATE_ROOT': '${{ runner.temp }}/aef-loop-gate', 'AEF_GATE_IMAGE': 'aef-loop-gate:${{ github.run_id }}-${{ github.run_attempt }}'}
+
+tests/harness/test_loop_gate_preparation.py:139: AssertionError
+_____ test_gate_root_uses_runner_temp_after_job_context_is_available[True] _____
+
+prepared = (PosixPath('/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/pytest-126/test_gate_root_uses_r...', 'CODEX_PERMISSION_PROFILE': ':danger-full-access', 'CODEX_SESSION_ID': '01a082bf-be62-7d81-bb02-093371ba0d9f', ...})
+tmp_path = PosixPath('/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/pytest-126/test_gate_root_uses_runner_tem1')
+core = True
+
+    @pytest.mark.parametrize("core", [False, True])
+    def test_gate_root_uses_runner_temp_after_job_context_is_available(
+        prepared: tuple[Path, dict[str, str]], tmp_path: Path, core: bool
+    ) -> None:
+        checkout, env = prepared
+        # Job-level env is evaluated before the runner context exists. Resolve
+        # the path in a real step and pass it to later steps via GITHUB_ENV.
+>       assert "AEF_GATE_ROOT" not in _job(core)["env"]
+E       AssertionError: assert 'AEF_GATE_ROOT' not in {'AEF_GATE_ROOT': '${{ runner.temp }}/aef-loop-gate', 'AEF_GATE_IMAGE': 'aef-loop-gate:${{ github.run_id }}-${{ github.run_attempt }}'}
+
+tests/harness/test_loop_gate_preparation.py:139: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102: PytestWarning: (rm_rf) unknown function <built-in function scandir> when removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9212c0bd-79c4-4d5a-b370-49813729d626/test_main_sets_optuna_n_jobs_10/logs:
+  <class 'PermissionError'>: [Errno 1] Operation not permitted: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9212c0bd-79c4-4d5a-b370-49813729d626/test_main_sets_optuna_n_jobs_10/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9212c0bd-79c4-4d5a-b370-49813729d626/test_main_sets_optuna_n_jobs_10/logs
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9212c0bd-79c4-4d5a-b370-49813729d626/test_main_sets_optuna_n_jobs_10/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9212c0bd-79c4-4d5a-b370-49813729d626/test_main_sets_optuna_n_jobs_10
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9212c0bd-79c4-4d5a-b370-49813729d626/test_main_sets_optuna_n_jobs_10'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9212c0bd-79c4-4d5a-b370-49813729d626
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9212c0bd-79c4-4d5a-b370-49813729d626'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102: PytestWarning: (rm_rf) unknown function <built-in function scandir> when removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-012c5a91-b8a5-470f-9391-63ce7b2fd747/test_main_sets_optuna_n_jobs_10/logs:
+  <class 'PermissionError'>: [Errno 1] Operation not permitted: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-012c5a91-b8a5-470f-9391-63ce7b2fd747/test_main_sets_optuna_n_jobs_10/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-012c5a91-b8a5-470f-9391-63ce7b2fd747/test_main_sets_optuna_n_jobs_10/logs
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-012c5a91-b8a5-470f-9391-63ce7b2fd747/test_main_sets_optuna_n_jobs_10/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-012c5a91-b8a5-470f-9391-63ce7b2fd747/test_main_sets_optuna_n_jobs_10
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-012c5a91-b8a5-470f-9391-63ce7b2fd747/test_main_sets_optuna_n_jobs_10'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-012c5a91-b8a5-470f-9391-63ce7b2fd747
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-012c5a91-b8a5-470f-9391-63ce7b2fd747'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102: PytestWarning: (rm_rf) unknown function <built-in function scandir> when removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ffb42d1d-e622-4518-b566-4d7c4928d811/test_main_sets_optuna_n_jobs_10/logs:
+  <class 'PermissionError'>: [Errno 1] Operation not permitted: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ffb42d1d-e622-4518-b566-4d7c4928d811/test_main_sets_optuna_n_jobs_10/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ffb42d1d-e622-4518-b566-4d7c4928d811/test_main_sets_optuna_n_jobs_10/logs
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ffb42d1d-e622-4518-b566-4d7c4928d811/test_main_sets_optuna_n_jobs_10/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ffb42d1d-e622-4518-b566-4d7c4928d811/test_main_sets_optuna_n_jobs_10
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ffb42d1d-e622-4518-b566-4d7c4928d811/test_main_sets_optuna_n_jobs_10'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ffb42d1d-e622-4518-b566-4d7c4928d811
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ffb42d1d-e622-4518-b566-4d7c4928d811'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102: PytestWarning: (rm_rf) unknown function <built-in function scandir> when removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-5c60ae37-438c-4f8d-a9f8-09589d4fcd1c/popen-gw2/test_main_calls_queue_complete0/logs:
+  <class 'PermissionError'>: [Errno 1] Operation not permitted: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-5c60ae37-438c-4f8d-a9f8-09589d4fcd1c/popen-gw2/test_main_calls_queue_complete0/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-5c60ae37-438c-4f8d-a9f8-09589d4fcd1c/popen-gw2/test_main_calls_queue_complete0/logs
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-5c60ae37-438c-4f8d-a9f8-09589d4fcd1c/popen-gw2/test_main_calls_queue_complete0/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-5c60ae37-438c-4f8d-a9f8-09589d4fcd1c/popen-gw2/test_main_calls_queue_complete0
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-5c60ae37-438c-4f8d-a9f8-09589d4fcd1c/popen-gw2/test_main_calls_queue_complete0'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-5c60ae37-438c-4f8d-a9f8-09589d4fcd1c/popen-gw2
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-5c60ae37-438c-4f8d-a9f8-09589d4fcd1c/popen-gw2'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-5c60ae37-438c-4f8d-a9f8-09589d4fcd1c
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-5c60ae37-438c-4f8d-a9f8-09589d4fcd1c'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102: PytestWarning: (rm_rf) unknown function <built-in function scandir> when removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-153f41c2-2ac6-4386-8b50-fe86de9660d2/popen-gw0/test_main_calls_queue_fail_on_0/logs:
+  <class 'PermissionError'>: [Errno 1] Operation not permitted: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-153f41c2-2ac6-4386-8b50-fe86de9660d2/popen-gw0/test_main_calls_queue_fail_on_0/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-153f41c2-2ac6-4386-8b50-fe86de9660d2/popen-gw0/test_main_calls_queue_fail_on_0/logs
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-153f41c2-2ac6-4386-8b50-fe86de9660d2/popen-gw0/test_main_calls_queue_fail_on_0/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-153f41c2-2ac6-4386-8b50-fe86de9660d2/popen-gw0/test_main_calls_queue_fail_on_0
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-153f41c2-2ac6-4386-8b50-fe86de9660d2/popen-gw0/test_main_calls_queue_fail_on_0'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-153f41c2-2ac6-4386-8b50-fe86de9660d2/popen-gw0
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-153f41c2-2ac6-4386-8b50-fe86de9660d2/popen-gw0'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-153f41c2-2ac6-4386-8b50-fe86de9660d2
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-153f41c2-2ac6-4386-8b50-fe86de9660d2'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102: PytestWarning: (rm_rf) unknown function <built-in function scandir> when removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9a02efa7-140e-4cca-92a2-b3cd8f332f00/popen-gw4/test_creates_gz_on_rotation0:
+  <class 'PermissionError'>: [Errno 1] Operation not permitted: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9a02efa7-140e-4cca-92a2-b3cd8f332f00/popen-gw4/test_creates_gz_on_rotation0'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9a02efa7-140e-4cca-92a2-b3cd8f332f00/popen-gw4/test_creates_gz_on_rotation0
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9a02efa7-140e-4cca-92a2-b3cd8f332f00/popen-gw4/test_creates_gz_on_rotation0'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9a02efa7-140e-4cca-92a2-b3cd8f332f00/popen-gw4
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9a02efa7-140e-4cca-92a2-b3cd8f332f00/popen-gw4'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9a02efa7-140e-4cca-92a2-b3cd8f332f00
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-9a02efa7-140e-4cca-92a2-b3cd8f332f00'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102: PytestWarning: (rm_rf) unknown function <built-in function scandir> when removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-04ff0929-7905-40fd-828c-da4634206d30/test_main_sets_optuna_n_jobs_10/logs:
+  <class 'PermissionError'>: [Errno 1] Operation not permitted: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-04ff0929-7905-40fd-828c-da4634206d30/test_main_sets_optuna_n_jobs_10/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-04ff0929-7905-40fd-828c-da4634206d30/test_main_sets_optuna_n_jobs_10/logs
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-04ff0929-7905-40fd-828c-da4634206d30/test_main_sets_optuna_n_jobs_10/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-04ff0929-7905-40fd-828c-da4634206d30/test_main_sets_optuna_n_jobs_10
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-04ff0929-7905-40fd-828c-da4634206d30/test_main_sets_optuna_n_jobs_10'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-04ff0929-7905-40fd-828c-da4634206d30
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-04ff0929-7905-40fd-828c-da4634206d30'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102: PytestWarning: (rm_rf) unknown function <built-in function scandir> when removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-91ce367b-afa5-4808-b5a5-c67296400126/popen-gw0/test_creates_gz_on_rotation0:
+  <class 'PermissionError'>: [Errno 1] Operation not permitted: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-91ce367b-afa5-4808-b5a5-c67296400126/popen-gw0/test_creates_gz_on_rotation0'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-91ce367b-afa5-4808-b5a5-c67296400126/popen-gw0/test_creates_gz_on_rotation0
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-91ce367b-afa5-4808-b5a5-c67296400126/popen-gw0/test_creates_gz_on_rotation0'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-91ce367b-afa5-4808-b5a5-c67296400126/popen-gw0
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-91ce367b-afa5-4808-b5a5-c67296400126/popen-gw0'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-91ce367b-afa5-4808-b5a5-c67296400126
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-91ce367b-afa5-4808-b5a5-c67296400126'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102: PytestWarning: (rm_rf) unknown function <built-in function scandir> when removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-0e8e8c39-e333-41d8-b218-79c44b1e9ead/test_main_sets_optuna_n_jobs_10/logs:
+  <class 'PermissionError'>: [Errno 1] Operation not permitted: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-0e8e8c39-e333-41d8-b218-79c44b1e9ead/test_main_sets_optuna_n_jobs_10/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-0e8e8c39-e333-41d8-b218-79c44b1e9ead/test_main_sets_optuna_n_jobs_10/logs
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-0e8e8c39-e333-41d8-b218-79c44b1e9ead/test_main_sets_optuna_n_jobs_10/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-0e8e8c39-e333-41d8-b218-79c44b1e9ead/test_main_sets_optuna_n_jobs_10
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-0e8e8c39-e333-41d8-b218-79c44b1e9ead/test_main_sets_optuna_n_jobs_10'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-0e8e8c39-e333-41d8-b218-79c44b1e9ead
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-0e8e8c39-e333-41d8-b218-79c44b1e9ead'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102: PytestWarning: (rm_rf) unknown function <built-in function scandir> when removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ad44032c-9ce7-43bf-a4e5-dcc4ebdb22a9/popen-gw1/test_creates_gz_on_rotation0:
+  <class 'PermissionError'>: [Errno 1] Operation not permitted: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ad44032c-9ce7-43bf-a4e5-dcc4ebdb22a9/popen-gw1/test_creates_gz_on_rotation0'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ad44032c-9ce7-43bf-a4e5-dcc4ebdb22a9/popen-gw1/test_creates_gz_on_rotation0
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ad44032c-9ce7-43bf-a4e5-dcc4ebdb22a9/popen-gw1/test_creates_gz_on_rotation0'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ad44032c-9ce7-43bf-a4e5-dcc4ebdb22a9/popen-gw1
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ad44032c-9ce7-43bf-a4e5-dcc4ebdb22a9/popen-gw1'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ad44032c-9ce7-43bf-a4e5-dcc4ebdb22a9
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ad44032c-9ce7-43bf-a4e5-dcc4ebdb22a9'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102: PytestWarning: (rm_rf) unknown function <built-in function scandir> when removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-18c821ad-dce5-41ae-99fd-4d808be14e51/popen-gw1/test_creates_gz_on_rotation0:
+  <class 'PermissionError'>: [Errno 1] Operation not permitted: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-18c821ad-dce5-41ae-99fd-4d808be14e51/popen-gw1/test_creates_gz_on_rotation0'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-18c821ad-dce5-41ae-99fd-4d808be14e51/popen-gw1/test_creates_gz_on_rotation0
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-18c821ad-dce5-41ae-99fd-4d808be14e51/popen-gw1/test_creates_gz_on_rotation0'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-18c821ad-dce5-41ae-99fd-4d808be14e51/popen-gw1
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-18c821ad-dce5-41ae-99fd-4d808be14e51/popen-gw1'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-18c821ad-dce5-41ae-99fd-4d808be14e51
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-18c821ad-dce5-41ae-99fd-4d808be14e51'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102: PytestWarning: (rm_rf) unknown function <built-in function scandir> when removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ac74bb85-a763-473a-ace7-4fbc1059edd6/test_main_sets_optuna_n_jobs_10/logs:
+  <class 'PermissionError'>: [Errno 1] Operation not permitted: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ac74bb85-a763-473a-ace7-4fbc1059edd6/test_main_sets_optuna_n_jobs_10/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ac74bb85-a763-473a-ace7-4fbc1059edd6/test_main_sets_optuna_n_jobs_10/logs
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ac74bb85-a763-473a-ace7-4fbc1059edd6/test_main_sets_optuna_n_jobs_10/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ac74bb85-a763-473a-ace7-4fbc1059edd6/test_main_sets_optuna_n_jobs_10
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ac74bb85-a763-473a-ace7-4fbc1059edd6/test_main_sets_optuna_n_jobs_10'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ac74bb85-a763-473a-ace7-4fbc1059edd6
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-ac74bb85-a763-473a-ace7-4fbc1059edd6'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102: PytestWarning: (rm_rf) unknown function <built-in function scandir> when removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-76810211-c88d-473e-a4e8-664ab2040f51/popen-gw2/test_creates_gz_on_rotation0:
+  <class 'PermissionError'>: [Errno 1] Operation not permitted: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-76810211-c88d-473e-a4e8-664ab2040f51/popen-gw2/test_creates_gz_on_rotation0'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-76810211-c88d-473e-a4e8-664ab2040f51/popen-gw2/test_creates_gz_on_rotation0
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-76810211-c88d-473e-a4e8-664ab2040f51/popen-gw2/test_creates_gz_on_rotation0'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-76810211-c88d-473e-a4e8-664ab2040f51/popen-gw2
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-76810211-c88d-473e-a4e8-664ab2040f51/popen-gw2'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-76810211-c88d-473e-a4e8-664ab2040f51
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-76810211-c88d-473e-a4e8-664ab2040f51'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:102: PytestWarning: (rm_rf) unknown function <built-in function scandir> when removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-55977e20-7f6e-4b73-ab3f-e86355a6df6a/test_main_sets_optuna_n_jobs_10/logs:
+  <class 'PermissionError'>: [Errno 1] Operation not permitted: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-55977e20-7f6e-4b73-ab3f-e86355a6df6a/test_main_sets_optuna_n_jobs_10/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-55977e20-7f6e-4b73-ab3f-e86355a6df6a/test_main_sets_optuna_n_jobs_10/logs
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-55977e20-7f6e-4b73-ab3f-e86355a6df6a/test_main_sets_optuna_n_jobs_10/logs'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-55977e20-7f6e-4b73-ab3f-e86355a6df6a/test_main_sets_optuna_n_jobs_10
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-55977e20-7f6e-4b73-ab3f-e86355a6df6a/test_main_sets_optuna_n_jobs_10'
+    warnings.warn(
+
+.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95
+  /Users/raptor/aef-core/.venv/lib/python3.13/site-packages/_pytest/pathlib.py:95: PytestWarning: (rm_rf) error removing /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-55977e20-7f6e-4b73-ab3f-e86355a6df6a
+  <class 'OSError'>: [Errno 66] Directory not empty: '/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/pytest-of-raptor/garbage-55977e20-7f6e-4b73-ab3f-e86355a6df6a'
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/harness/test_loop_gate_preparation.py::test_gate_root_uses_runner_temp_after_job_context_is_available[False]
+FAILED tests/harness/test_loop_gate_preparation.py::test_gate_root_uses_runner_temp_after_job_context_is_available[True]
+2 failed, 13 deselected, 58 warnings in 1.18s

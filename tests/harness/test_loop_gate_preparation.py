@@ -130,6 +130,34 @@ def test_core_workflow_is_the_same_audited_template() -> None:
 
 
 @pytest.mark.parametrize("core", [False, True])
+def test_gate_root_uses_runner_temp_after_job_context_is_available(
+    prepared: tuple[Path, dict[str, str]], tmp_path: Path, core: bool
+) -> None:
+    checkout, env = prepared
+    # Job-level env is evaluated before the runner context exists. Resolve
+    # the path in a real step and pass it to later steps via GITHUB_ENV.
+    assert "AEF_GATE_ROOT" not in _job(core)["env"]
+    env.pop("AEF_GATE_ROOT")
+    runner_temp = tmp_path / "runner temp with spaces"
+    runner_temp.mkdir()
+    environment_file = tmp_path / "github environment"
+    env.update({"RUNNER_TEMP": str(runner_temp), "GITHUB_ENV": str(environment_file)})
+    initialized = _run("Set up gate paths", prepared, core=core)
+    assert initialized.returncode == 0, initialized.stderr
+    # Emulate GitHub's environment-file handoff between separate shells.
+    env.update(line.split("=", 1) for line in environment_file.read_text().splitlines())
+    expected_root = runner_temp / "aef-loop-gate"
+    assert env["AEF_GATE_ROOT"] == str(expected_root)
+    assert not expected_root.exists()
+    for step in ("Build the trusted runtime image", "Fetch the candidate as data", "Gate"):
+        done = _run(step, (checkout, env), core=core)
+        assert done.returncode == 0, done.stderr
+    args = json.loads(Path(env["DOCKER_RECORD"]).read_text())
+    assert f"type=bind,src={expected_root}/repo,dst=/repo,readonly" in args
+    assert (expected_root / "image/source/trusted.txt").read_text() == "base\n"
+
+
+@pytest.mark.parametrize("core", [False, True])
 def test_only_committed_base_enters_image_then_candidate_enters_clean_repo(
     prepared: tuple[Path, dict[str, str]], core: bool
 ) -> None:

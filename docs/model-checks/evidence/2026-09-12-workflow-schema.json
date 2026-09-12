@@ -1,0 +1,163 @@
+{
+  "command": [
+    "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-actionlint-b3hi79vu/actionlint",
+    "-color",
+    "-shellcheck=",
+    "-pyflakes=",
+    ".github/workflows/ci.yml",
+    ".github/workflows/loop-gate.yml",
+    ".github/workflows/loop-monitor.yml",
+    "/tmp/aef-workflow-schema-review/adopter-loop-gate.yml",
+    "/tmp/aef-workflow-schema-review/adopter-loop-monitor.yml",
+    "/tmp/aef-workflow-schema-review/prompt-loop-monitor.yml"
+  ],
+  "files": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/loop-gate.yml",
+    ".github/workflows/loop-monitor.yml",
+    "/tmp/aef-workflow-schema-review/adopter-loop-gate.yml",
+    "/tmp/aef-workflow-schema-review/adopter-loop-monitor.yml",
+    "/tmp/aef-workflow-schema-review/prompt-loop-monitor.yml"
+  ],
+  "exit_code": 0,
+  "log": "docs/model-checks/evidence/2026-09-12-workflow-schema-actionlint-after.log",
+  "actionlint_version": "1.7.12\ninstalled by downloading from release page\nbuilt with go1.26.1 compiler for darwin/arm64",
+  "tool_archive_sha256": "aba9ced2dee8d27fecca3dc7feb1a7f9a52caefa1eb46f3271ea66b6e0e6953f",
+  "before": {
+    "actionlint_exit_code": 1,
+    "schema_errors": 2,
+    "pytest_exit_code": 1,
+    "new_regressions_failed": 2
+  },
+  "after": {
+    "actionlint_exit_code": 0,
+    "workflow_files_checked": 6,
+    "pytest_exit_code": 0,
+    "tests_passed": 43,
+    "seconds": 5.1,
+    "ruff_check": "passed",
+    "ruff_format_check": "passed"
+  },
+  "logs": {
+    "actionlint-before.log": {
+      "path": "docs/model-checks/evidence/2026-09-12-workflow-schema-actionlint-before.log",
+      "bytes": 822,
+      "sha256": "7d37d326ce47c67f4b69c3671f46926edda37b3a7f77c78c4d094f227c15b7eb"
+    },
+    "actionlint-after.log": {
+      "path": "docs/model-checks/evidence/2026-09-12-workflow-schema-actionlint-after.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "pytest-before.log": {
+      "path": "docs/model-checks/evidence/2026-09-12-workflow-schema-pytest-before.log",
+      "bytes": 35325,
+      "sha256": "77b2d0cfa056c459e518b6153dae32ab191828995ce44ce9a8754ae3b80ca3d3"
+    },
+    "pytest-after.log": {
+      "path": "docs/model-checks/evidence/2026-09-12-workflow-schema-pytest-after.log",
+      "bytes": 99,
+      "sha256": "797cbc050516659fa89e6bbdeebe0d8537b83fbc47f1372075925190428d9034"
+    },
+    "ruff-check.log": {
+      "path": "docs/model-checks/evidence/2026-09-12-workflow-schema-ruff-check.log",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    "ruff-format.log": {
+      "path": "docs/model-checks/evidence/2026-09-12-workflow-schema-ruff-format.log",
+      "bytes": 26,
+      "sha256": "3bc53bf3e981a98a34a852e175bf9b77af841edea74fca595d9aedcbaf9a4938"
+    }
+  },
+  "limits": [
+    "Actionlint schema/expression checks used -shellcheck= -pyflakes=; these external linters were disabled. Real Git and shell fixtures independently exercised workflow setup, environment handoff, preparation and container argv.",
+    "No GitHub workflow was dispatched. GitHub hosted execution remains pending owner billing availability.",
+    "The prior Docker smoke exercised shell steps with supplied environment values and therefore missed GitHub expression-context validation."
+  ],
+  "cwd": "/Users/raptor/aef-core",
+  "tool_archive_url": "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_darwin_arm64.tar.gz",
+  "verification_commands": {
+    "pytest_before": {
+      "cwd": "/Users/raptor/aef-core",
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/harness/test_loop_gate_preparation.py",
+        "-k",
+        "root_uses_runner_temp"
+      ],
+      "stdout": "/tmp/aef-workflow-schema-review/pytest-before.log",
+      "stderr": "merged into stdout",
+      "stdout_mode": "raw bytes",
+      "note": "Ran before the no-cache instruction; its newly created untracked .pytest_cache was removed after verification.",
+      "retained_log": "docs/model-checks/evidence/2026-09-12-workflow-schema-pytest-before.log"
+    },
+    "pytest_after": {
+      "cwd": "/Users/raptor/aef-core",
+      "env_overrides": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "stderr": "merged into stdout",
+      "stdout_mode": "raw bytes",
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--basetemp=/tmp/aef-workflow-schema-review/pytest-tmp",
+        "tests/harness/test_loop_gate_preparation.py",
+        "tests/harness/test_workflows.py"
+      ],
+      "stdout": "/tmp/aef-workflow-schema-review/pytest-after.log",
+      "retained_log": "docs/model-checks/evidence/2026-09-12-workflow-schema-pytest-after.log"
+    },
+    "ruff_check": {
+      "cwd": "/Users/raptor/aef-core",
+      "env_overrides": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "stderr": "merged into stdout",
+      "stdout_mode": "raw bytes",
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "ruff",
+        "check",
+        "--no-cache",
+        "aef/cli/adopt_loop.py",
+        "tests/harness/test_loop_gate_preparation.py"
+      ],
+      "stdout": "/tmp/aef-workflow-schema-review/ruff-check.log",
+      "retained_log": "docs/model-checks/evidence/2026-09-12-workflow-schema-ruff-check.log"
+    },
+    "ruff_format": {
+      "cwd": "/Users/raptor/aef-core",
+      "env_overrides": {
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "stderr": "merged into stdout",
+      "stdout_mode": "raw bytes",
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "ruff",
+        "format",
+        "--check",
+        "--no-cache",
+        "aef/cli/adopt_loop.py",
+        "tests/harness/test_loop_gate_preparation.py"
+      ],
+      "stdout": "/tmp/aef-workflow-schema-review/ruff-format.log",
+      "retained_log": "docs/model-checks/evidence/2026-09-12-workflow-schema-ruff-format.log"
+    }
+  }
+}

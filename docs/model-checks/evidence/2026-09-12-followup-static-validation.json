@@ -1,0 +1,33 @@
+{
+  "recorded_at_utc": "2026-09-12T05:03:04.304933+00:00",
+  "cwd": "/Users/raptor/aef-core",
+  "parent_commit": "134c8d55893883e1cc95b448033fca87f40b4c85",
+  "checks": [
+    {
+      "command": ".venv/bin/ruff check --no-cache aef tests examples",
+      "exit_code": 0,
+      "output": "All checks passed!\n"
+    },
+    {
+      "command": ".venv/bin/ruff format --check --no-cache aef tests examples",
+      "exit_code": 0,
+      "output": "332 files already formatted\n"
+    },
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 .venv/bin/mypy --strict --cache-dir /tmp/aef-followup-mypy-cache aef examples",
+      "exit_code": 0,
+      "output": "Success: no issues found in 139 source files\n"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "output": ""
+    }
+  ],
+  "changed_runtime_and_test_sha256": {
+    "aef/cli/adopt_loop.py": "997d05251d66673689020362819e626c2f19fa2e8465f5d8467495ff072e3798",
+    ".github/workflows/loop-gate.yml": "dae297c63910f65362663e71430c314ede44440a9f40e978ba47fadbca2f1068",
+    "tests/harness/test_loop_gate_preparation.py": "38be661522fd3712cf6de8b6f983af9bd4e6d3f2f460ba87e3f1743308070944"
+  },
+  "scope": "Follow-up workflow schema correction. Full suite results retained separately describe the preceding release; focused workflow tests cover this correction."
+}

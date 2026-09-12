@@ -14,6 +14,13 @@ The candidate branch was also interpolated directly into shell source. The
 optional live-harness CI job had no event/ref condition separating ordinary PR
 validation from a configured credentialed runner.
 
+The first reviewed release (`134c8d5`) exposed a further workflow schema error:
+the renderer referenced `runner.temp` in job-level `env`, where GitHub does not
+allow the `runner` context. GitHub rejected the workflow before creating a job.
+Local YAML parsing and execution of extracted shell steps had missed this
+restriction. Runner-dependent values must be initialized at a supported step
+scope; see GitHub's [context availability table](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#context-availability).
+
 ## Decision
 
 Prepare dependencies from trusted main with network access, then evaluate in a

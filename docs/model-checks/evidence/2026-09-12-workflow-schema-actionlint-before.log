@@ -1,0 +1,8 @@
+.github/workflows/loop-gate.yml:25:26: context "runner" is not allowed here. available contexts are "github", "inputs", "matrix", "needs", "secrets", "strategy", "vars". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [expression]
+   |
+25 |       AEF_GATE_ROOT: ${{ runner.temp }}/aef-loop-gate
+   |                          ^~~~~~~~~~~
+../../../tmp/aef-workflow-schema-review/adopter-loop-gate.yml:25:26: context "runner" is not allowed here. available contexts are "github", "inputs", "matrix", "needs", "secrets", "strategy", "vars". see https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability for more details [expression]
+   |
+25 |       AEF_GATE_ROOT: ${{ runner.temp }}/aef-loop-gate
+   |                          ^~~~~~~~~~~

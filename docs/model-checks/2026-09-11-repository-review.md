@@ -239,3 +239,31 @@ CI success. Publication requires the release commit at `origin/main`; the
 commit's [Actions run](https://github.com/AndrewGoodson/aef-core/actions/workflows/ci.yml)
 is the source of truth for whether remote Python 3.11/3.13 jobs actually ran.
 The final release response reports that exact commit and its CI outcome.
+
+## Publication follow-up
+
+The first push, `134c8d5`, reached main. Its
+[CI run](https://github.com/AndrewGoodson/aef-core/actions/runs/34674273607)
+created Python 3.11, Python 3.13 and live-harness jobs, all with zero steps and
+the same account billing/spending-limit annotation. Separately, GitHub
+[rejected the loop-gate workflow](https://github.com/AndrewGoodson/aef-core/actions/runs/34674273224)
+before creating any job. That was a repository defect: the renderer used
+`runner.temp` in job-level `env`, where GitHub's context rules prohibit it.
+Local YAML parsing and the Docker smoke test did not validate that schema rule.
+The [first-push evidence](evidence/2026-09-12-first-push-verification.json)
+keeps these two failures distinct. The full-suite results above describe the
+first release's code; the workflow correction receives separate focused
+validation before the follow-up push. No manual workflow was dispatched.
+
+The correction initializes the path in a shell step using `RUNNER_TEMP` and
+passes it to later steps through `GITHUB_ENV`. Both new regressions failed
+against the first release; after the correction, all 43 focused tests passed,
+including the environment handoff and preparation under a path containing
+spaces. Actionlint 1.7.12 reproduced two schema errors before the fix and
+accepted all three stored workflows plus three generated adoption templates
+afterward. Ruff and formatting checks passed. The
+[workflow schema evidence](evidence/2026-09-12-workflow-schema.json) retains
+before/after logs and tool provenance. Actionlint's optional ShellCheck and
+Pyflakes integrations were disabled; the shell behavior was exercised by the
+regression fixtures. This validates the correction locally, not a successful
+GitHub-hosted run.

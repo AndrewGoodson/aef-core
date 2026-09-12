@@ -672,7 +672,6 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
-      AEF_GATE_ROOT: ${{ runner.temp }}/aef-loop-gate
       AEF_GATE_IMAGE: aef-loop-gate:${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
@@ -684,6 +683,12 @@ jobs:
           # Read-only checkout auth stays on the trusted host for private fetches.
           # git archive and the fresh evaluation repo exclude its configuration.
           persist-credentials: true
+
+      - name: Set up gate paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'AEF_GATE_ROOT=%s/aef-loop-gate\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
 
       - name: Build the trusted runtime image
         shell: bash
