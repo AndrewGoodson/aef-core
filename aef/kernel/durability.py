@@ -47,7 +47,12 @@ def _atomic_write_text(path: Path, text: str) -> None:
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
     try:
-        os.write(fd, text.encode("utf-8"))
+        pending = memoryview(text.encode("utf-8"))
+        while pending:
+            written = os.write(fd, pending)
+            if written <= 0:
+                raise OSError(f"atomic write to {path} made no progress")
+            pending = pending[written:]
         os.fsync(fd)
     finally:
         os.close(fd)
@@ -62,16 +67,44 @@ def _atomic_write_text(path: Path, text: str) -> None:
 
 
 class CorruptedCheckpointError(RuntimeError):
-    """A checkpoint file exists but its contents aren't valid JSON — a
-    truncated write (e.g. a crash mid-`write_text`), a zero-byte file, or a
-    hand-corrupted file. Reproduced directly: a genuinely truncated
-    checkpoint raises a bare `json.JSONDecodeError` with no indication of
-    which run_id/checkpoint_seq/path it came from. See docs/adr/0026."""
+    """Checkpoint data cannot establish a consistent resume state.
+
+    This includes malformed JSON, an inconsistent identity or cursor, and
+    an attempted replacement of an immutable checkpoint (ADRs 0026/0209).
+    """
+
+
+def _validate_checkpoint_retry(run_id: str, checkpoint_seq: int, *, identical: bool) -> None:
+    if not identical:
+        raise CorruptedCheckpointError(
+            f"checkpoint run_id={run_id!r}, checkpoint_seq={checkpoint_seq} is immutable; "
+            "cannot replace its state while an existing cursor may still refer to it"
+        )
+
+
+def _validate_cursor_checkpoint(
+    run_id: str, checkpoint_seq: object, latest_seq: int | None
+) -> None:
+    if checkpoint_seq is not None and (type(checkpoint_seq) is not int or checkpoint_seq < 0):
+        raise CorruptedCheckpointError(
+            f"cursor for run_id={run_id!r} has an invalid checkpoint_seq; "
+            "expected a non-negative integer or null"
+        )
+    if checkpoint_seq != latest_seq:
+        raise CorruptedCheckpointError(
+            f"cursor for run_id={run_id!r} is bound to checkpoint seq {checkpoint_seq!r}, "
+            f"but the latest checkpoint is seq {latest_seq!r}. "
+            "Cannot safely resume an incomplete or legacy checkpoint/cursor pair; "
+            "inspect the recorded state and repair the cursor before resuming."
+        )
 
 
 class DurabilityBackend(ABC):
     @abstractmethod
     def save_checkpoint(self, state: AEFState) -> None:
+        """Persist an immutable run/sequence identity. Identical retries may
+        succeed; changed state at an existing identity must raise before
+        replacing it. Cursor consistency depends on this guarantee (ADR 0209)."""
         raise NotImplementedError
 
     @abstractmethod
@@ -90,13 +123,16 @@ class DurabilityBackend(ABC):
     def save_cursor(self, run_id: str, next_node: str | None) -> None:
         """Record which node should run next for `run_id`, or `None` if the
         run has reached `END`. Called after every super-step, alongside
-        `save_checkpoint`."""
+        `save_checkpoint`. Implementations must bind the cursor to that
+        checkpoint and reject an inconsistent pair when loading (ADR 0209)."""
         raise NotImplementedError
 
     @abstractmethod
     def load_cursor(self, run_id: str) -> str | None:
         """The node id to resume at, or `None` if the run already completed.
-        Callers distinguish "never started" from "completed" via
+        A missing, unbound or stale cursor when checkpoints exist must raise
+        `CorruptedCheckpointError`, never imply completion. Callers distinguish
+        "never started" from "completed" via
         `load_latest`/`list_checkpoints` returning nothing at all — this
         method alone cannot tell those two cases apart."""
         raise NotImplementedError
@@ -109,11 +145,20 @@ class InMemoryDurabilityBackend(DurabilityBackend):
 
     def __init__(self) -> None:
         self._store: dict[str, dict[int, str]] = {}
-        self._cursors: dict[str, str | None] = {}
+        self._cursors: dict[str, tuple[str | None, int | None]] = {}
+        self._latest_written: dict[str, int] = {}
 
     def save_checkpoint(self, state: AEFState) -> None:
         run = self._store.setdefault(state.run_id, {})
-        run[state.checkpoint_seq] = state.model_dump_json()
+        payload = state.model_dump_json()
+        existing = run.get(state.checkpoint_seq)
+        if existing is not None:
+            _validate_checkpoint_retry(
+                state.run_id, state.checkpoint_seq, identical=existing == payload
+            )
+        else:
+            run[state.checkpoint_seq] = payload
+        self._latest_written[state.run_id] = state.checkpoint_seq
 
     def load_latest(self, run_id: str) -> AEFState | None:
         run = self._store.get(run_id)
@@ -132,10 +177,14 @@ class InMemoryDurabilityBackend(DurabilityBackend):
         return sorted(self._store.get(run_id, {}))
 
     def save_cursor(self, run_id: str, next_node: str | None) -> None:
-        self._cursors[run_id] = next_node
+        self._cursors[run_id] = (next_node, self._latest_written.get(run_id))
 
     def load_cursor(self, run_id: str) -> str | None:
-        return self._cursors.get(run_id)
+        next_node, checkpoint_seq = self._cursors.get(run_id, (None, None))
+        _validate_cursor_checkpoint(
+            run_id, checkpoint_seq, max(self._store.get(run_id, {}), default=None)
+        )
+        return next_node
 
 
 class FileDurabilityBackend(DurabilityBackend):
@@ -147,6 +196,7 @@ class FileDurabilityBackend(DurabilityBackend):
     def __init__(self, root_dir: Path) -> None:
         self._root = Path(root_dir)
         self._root.mkdir(parents=True, exist_ok=True)
+        self._latest_written: dict[str, int] = {}
 
     def _run_dir(self, run_id: str, *, create: bool = True) -> Path:
         # `run_id` was joined onto the root verbatim, so `../../escaped`
@@ -171,7 +221,20 @@ class FileDurabilityBackend(DurabilityBackend):
 
     def save_checkpoint(self, state: AEFState) -> None:
         path = self._run_dir(state.run_id, create=True) / f"{state.checkpoint_seq}.json"
-        _atomic_write_text(path, state.model_dump_json())
+        # Refuse changed or corrupt existing identities before any write.
+        # Rewriting them could leave a previously committed cursor pointing
+        # at different state even though its sequence binding still matches.
+        existing = self.load_checkpoint(state.run_id, state.checkpoint_seq)
+        payload = state.model_dump_json()
+        if existing is not None:
+            _validate_checkpoint_retry(
+                state.run_id,
+                state.checkpoint_seq,
+                identical=existing.model_dump_json() == payload,
+            )
+        else:
+            _atomic_write_text(path, payload)
+        self._latest_written[state.run_id] = state.checkpoint_seq
 
     def load_latest(self, run_id: str) -> AEFState | None:
         # Walk newest-first, falling back past any corrupt checkpoint to the
@@ -204,7 +267,14 @@ class FileDurabilityBackend(DurabilityBackend):
                 f"checkpoint {path} (run_id={run_id!r}, checkpoint_seq={checkpoint_seq}) "
                 f"is not valid JSON: {exc}"
             ) from exc
-        return load_state(raw)
+        state = load_state(raw)
+        if state.run_id != run_id or state.checkpoint_seq != checkpoint_seq:
+            raise CorruptedCheckpointError(
+                f"checkpoint {path} identity does not match the requested "
+                f"run_id={run_id!r}, checkpoint_seq={checkpoint_seq}; payload contains "
+                f"run_id={state.run_id!r}, checkpoint_seq={state.checkpoint_seq}"
+            )
+        return state
 
     def list_checkpoints(self, run_id: str) -> list[int]:
         run_dir = self._run_dir(run_id, create=False)
@@ -224,11 +294,22 @@ class FileDurabilityBackend(DurabilityBackend):
         # every super-step, so a torn write here corrupts the resume pointer
         # itself (not just one checkpoint). See _atomic_write_text / ADR 0031.
         cursor_path = self._run_dir(run_id, create=True) / "cursor.json"
-        _atomic_write_text(cursor_path, json.dumps({"next_node": next_node}))
+        # The executor just saved this checkpoint. Remember its sequence so
+        # recording N steps does not enumerate N growing histories. A fresh
+        # instance supporting a manual cursor repair reads the history once.
+        checkpoint_seq = self._latest_written.get(run_id)
+        if checkpoint_seq is None:
+            checkpoint_seq = max(self.list_checkpoints(run_id), default=None)
+        _atomic_write_text(
+            cursor_path, json.dumps({"next_node": next_node, "checkpoint_seq": checkpoint_seq})
+        )
 
     def load_cursor(self, run_id: str) -> str | None:
         cursor_path = self._run_dir(run_id, create=False) / "cursor.json"
         if not cursor_path.exists():
+            _validate_cursor_checkpoint(
+                run_id, None, max(self.list_checkpoints(run_id), default=None)
+            )
             return None
         # Same read-side corruption guard as load_checkpoint (ADR 0026):
         # atomic writes (ADR 0031) stop this backend producing a torn cursor,
@@ -252,6 +333,9 @@ class FileDurabilityBackend(DurabilityBackend):
                 f"cursor {cursor_path} (run_id={run_id!r}) has invalid next_node; "
                 "expected a string or null"
             )
+        _validate_cursor_checkpoint(
+            run_id, data.get("checkpoint_seq"), max(self.list_checkpoints(run_id), default=None)
+        )
         if isinstance(next_node, str):
             return next_node
         return None

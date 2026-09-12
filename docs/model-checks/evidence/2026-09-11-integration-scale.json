@@ -1,0 +1,14 @@
+{
+  "excluded_python_files_not_traversed": 1000,
+  "first_scanned_python_files": 0,
+  "first_seconds": 0.211,
+  "fixture_only": true,
+  "old_graphs_unchanged": 1000,
+  "personas_after_addition": 1020,
+  "personas_initial": 1000,
+  "python": "3.13.13",
+  "rerun_with_20_additions_seconds": 0.409,
+  "second_scanned_python_files": 1001,
+  "unchanged_rerun_seconds": 0.415,
+  "unique_graph_ids": 1020
+}

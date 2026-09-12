@@ -121,7 +121,7 @@ aef loop bless --repo . --state ~/.aef-loop-state --agent-root {wide_root} \\
     --agent-path {wide_path} --graph-id <agent-name>
 aef loop doctor --repo . --state ~/.aef-loop-state --corpus corpus \\
     --agent-root {wide_root} --agent-path {persona}
-aef loop cycle --repo . --state ~/.aef-loop-state --workdir /tmp/loop \\
+aef loop cycle --repo . --state ~/.aef-loop-state --workdir "$(mktemp -d)/run" \\
     --corpus corpus --entrypoint {wide_path}:build_graph \\
     --graph-id <agent-name> --proposer rule_based_prompt \\
     --agent-root {wide_root} --agent-path {persona} \\
@@ -330,7 +330,7 @@ aef loop bless --repo . --state ~/.aef-loop-state \\
     --agent-path agents/<yours>/graph.py
 aef loop doctor --repo . --state ~/.aef-loop-state --corpus corpus \\
     --agent-path agents/<yours>/graph.py
-aef loop cycle --repo . --state ~/.aef-loop-state --workdir /tmp/loop \\
+aef loop cycle --repo . --state ~/.aef-loop-state --workdir "$(mktemp -d)/run" \\
     --module <your.graph.module> --corpus corpus \\
     --entrypoint <your.graph.module>:build_graph \\
     --agent-path agents/<yours>/graph.py \\
@@ -529,10 +529,10 @@ aef loop status  --repo . --state ~/.aef-loop-state
 aef loop harvest <your.graph.module> --repo . --state ~/.aef-loop-state \\
                  --runs ~/.aef-loop-state/runs --corpus corpus
 aef loop gate    --repo . --state ~/.aef-loop-state --head <branch> \\
-                 --workdir /tmp/loop --corpus corpus \\
+                 --workdir "$(mktemp -d)/run" --corpus corpus \\
                  --entrypoint <your.graph.module>:build_graph \\
                  --build-command "python -m pytest -q"
-aef loop cycle   --repo . --state ~/.aef-loop-state --workdir /tmp/loop \\
+aef loop cycle   --repo . --state ~/.aef-loop-state --workdir "$(mktemp -d)/run" \\
                  --module <your.graph.module> --corpus corpus \\
                  --entrypoint <your.graph.module>:build_graph \\
                  --memory ~/.aef-loop-state/memory.jsonl \\
@@ -588,7 +588,7 @@ self-paces; it does not need an interval.
 ```
 /loop Run one self-rewiring cycle and report.
 
-  aef loop cycle --repo . --state ~/.aef-loop-state --workdir /tmp/loop \\
+  aef loop cycle --repo . --state ~/.aef-loop-state --workdir "$(mktemp -d)/run" \\
     --module <your.module> --corpus corpus \\
     --entrypoint <your.module>:build_graph \\
     --memory ~/.aef-loop-state/memory.jsonl \\
@@ -629,18 +629,30 @@ resuming is your decision.
 """
 
 
-def render_loop_gate_workflow(repo_name: str) -> str:
-    ref = "${{ inputs.head }}"
-    repo = "${{ github.repository }}"
-    run_id = "${{ github.run_id }}"
-    return f"""# Evaluate one self-rewiring candidate in {repo_name}.
-#
-# NO pull_request and NO pull_request_target, deliberately. `pull_request`
-# runs the workflow from the PR's merge commit, so a candidate editing
-# .github/workflows/ would supply the very workflow that judges it.
-# `pull_request_target` fixes that but carries full secrets into a job that
-# may execute candidate code. The loop is dispatched from the default branch
-# and fetches the candidate as DATA instead. See aef-core ADR 0057.
+def render_loop_gate_workflow(repo_name: str, *, core: bool = False) -> str:
+    """Render trusted preparation followed by a network-isolated evaluation.
+
+    The checked-in core workflow uses this same template. Candidate objects
+    enter a fresh repository only after the trusted runtime image is built;
+    neither the checkout credential nor its Git configuration crosses into it.
+    """
+    dependencies = (
+        'RUN pip install "/opt/aef-base[dev]"'
+        if core
+        else """RUN pip install aef-core pytest
+RUN if [ -f /opt/aef-base/pyproject.toml ] || [ -f /opt/aef-base/setup.py ]; then \\
+      pip install /opt/aef-base; \\
+    fi"""
+    )
+    selection = (
+        "--graph-id demo_agent --agent-path agents/demo/graph.py \\\n            " if core else ""
+    )
+    return (
+        r"""# Evaluate one self-rewiring candidate in __REPO_NAME__.
+# Dispatch from main only. Candidate branches are fetched as DATA, never
+# checked out or installed on the host. Keep owner review and Tier-1 off.
+# Adopters: configure main, the entrypoint and build command for your repo.
+# Add any private/runtime dependencies to the TRUSTED image build below.
 
 name: loop-gate
 
@@ -648,7 +660,7 @@ on:
   workflow_dispatch:
     inputs:
       head:
-        description: Candidate branch to evaluate
+        description: Candidate branch to evaluate (branch name, not a revision expression)
         required: true
         type: string
 
@@ -657,63 +669,112 @@ permissions:
 
 jobs:
   gate:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # A container is what makes --network-isolated true rather than a claim.
-    container:
-      image: python:3.13-slim
-      options: --network none
+    env:
+      AEF_GATE_ROOT: ${{ runner.temp }}/aef-loop-gate
+      AEF_GATE_IMAGE: aef-loop-gate:${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the harness (base ref only)
+        uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
+          # Read-only checkout auth stays on the trusted host for private fetches.
+          # git archive and the fresh evaluation repo exclude its configuration.
+          persist-credentials: true
 
-      # `pip install -e ".[dev]"` was the template's line and it installs
-      # THIS repo, not aef — it worked only in aef-core, where they are the
-      # same package. In an adopting repo it either fails outright (no
-      # pyproject.toml) or installs the adopter's own package and leaves
-      # `aef` missing. Install aef, then the repo if it is installable.
-      - run: |
-          pip install --upgrade pip
-          pip install aef-core
-          [ -f pyproject.toml ] && pip install -e . || true
+      - name: Build the trusted runtime image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir "$AEF_GATE_ROOT"
+          mkdir -p "$AEF_GATE_ROOT/image/source"
+          git archive refs/heads/main | tar -x -C "$AEF_GATE_ROOT/image/source"
+          cat > "$AEF_GATE_ROOT/image/Dockerfile" <<'DOCKERFILE'
+          FROM python:3.13-slim
+          RUN apt-get update && apt-get install -y --no-install-recommends git \
+              && rm -rf /var/lib/apt/lists/*
+          COPY source /opt/aef-base
+          __DEPENDENCIES__
+          DOCKERFILE
+          # Network is available for trusted dependency preparation only.
+          docker build --tag "$AEF_GATE_IMAGE" "$AEF_GATE_ROOT/image"
 
-      - run: git fetch --no-tags origin "{ref}:refs/loop/candidate"
+      - name: Fetch the candidate as data
+        shell: bash
+        env:
+          AEF_CANDIDATE_REF: ${{ inputs.head }}
+        run: |
+          set -euo pipefail
+          git check-ref-format "refs/heads/$AEF_CANDIDATE_REF"
+          git fetch --no-tags origin "refs/heads/$AEF_CANDIDATE_REF:refs/loop/candidate"
+          # A fresh repo transfers objects and refs, not credentials or hooks.
+          git init --initial-branch=gate-preparation "$AEF_GATE_ROOT/repo"
+          git -C "$AEF_GATE_ROOT/repo" fetch --no-tags "$GITHUB_WORKSPACE" \
+            refs/heads/main:refs/heads/main refs/loop/candidate:refs/loop/candidate
+          git -C "$AEF_GATE_ROOT/repo" checkout main
 
-      # Outside the checkout: state inside the tree is swept into candidate
-      # diffs by `git add -A`, and the driver refuses it.
-      #
-      # Run-scoped key, prefix restore. A constant key is an EXACT hit on every
-      # run after the first, and `actions/cache` skips the post-job save on an
-      # exact hit — so the ledger this gate appends to would be discarded at
-      # the end of every run but the first (aef-core ADR 0172).
-      - uses: actions/cache@v4
+      # Outside the checkout; run-scoped key permits each run's ledger save.
+      - name: Restore loop state
+        uses: actions/cache@v4
         with:
           path: ~/.aef-loop-state
-          key: loop-state-{repo}-{run_id}
+          key: loop-state-${{ github.repository }}-${{ github.run_id }}
           restore-keys: |
-            loop-state-{repo}-
+            loop-state-${{ github.repository }}-
 
       - name: Gate
+        shell: bash
         run: |
-          aef loop gate \\
-            --repo . --state ~/.aef-loop-state \\
-            --base main --head refs/loop/candidate \\
-            --workdir "$RUNNER_TEMP/loop" --corpus corpus \\
-            --entrypoint "$AEF_ENTRYPOINT" \\
-            --build-command "$AEF_BUILD_COMMAND" \\
+          set -euo pipefail
+          mkdir -p "$HOME/.aef-loop-state"
+          # No credentials, Docker socket, or writable source mount crosses here.
+          # Failure to start this isolated container fails the job; no host fallback.
+          docker run --rm --pull never --network none \
+            --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --user "$(id -u):$(id -g)" \
+            --tmpfs /tmp:rw,exec,mode=1777 --tmpfs /work:rw,exec,mode=1777 \
+            --mount "type=bind,src=$AEF_GATE_ROOT/repo,dst=/repo,readonly" \
+            --mount "type=bind,src=$HOME/.aef-loop-state,dst=/state" \
+            --workdir /repo --env HOME=/tmp "$AEF_GATE_IMAGE" \
+            aef loop gate --repo /repo --state /state \
+            --base main --head refs/loop/candidate \
+            --workdir /work/gate --corpus /repo/corpus \
+            __SELECTION__--entrypoint "$AEF_ENTRYPOINT" \
+            --build-command "$AEF_BUILD_COMMAND" \
             --network-isolated
         env:
-          # EDIT THESE TWO. Without --entrypoint, G2 and G3 cannot execute
-          # your corpus and refuse — three of six gates would be judging
-          # every candidate. --build-command is your green bar, not ours;
-          # the default is `pytest -q`, which exits 5 (and so fails G1) in a
-          # repo with no tests.
-          AEF_ENTRYPOINT: agents.mine.graph:build_graph
+          # EDIT for the adopting agent and its real green bar. No tests means
+          # pytest exits 5 and G1 rejects the candidate; failures are not ignored.
+          AEF_ENTRYPOINT: __ENTRYPOINT__
           AEF_BUILD_COMMAND: python -m pytest -q
-        # 0 = escalated to you · 1 = rejected · 2 = halted, do not retry
-"""
+        # exit 0 = passed and escalated to the owner (Tier-1 is off)
+        # exit 1 = a gate rejected it
+        # exit 2 = the loop halted; do not retry, inspect the kill switch
+        # exit 3 = the command CRASHED. Not a halt: inspect the invocation.
+
+      - name: Report
+        if: always()
+        shell: bash
+        run: |
+          # Use the same installed trusted runtime, never host imports.
+          docker run --rm --pull never --network none \
+            --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --user "$(id -u):$(id -g)" --tmpfs /tmp:rw,exec,mode=1777 \
+            --mount "type=bind,src=$AEF_GATE_ROOT/repo,dst=/repo,readonly" \
+            --mount "type=bind,src=$HOME/.aef-loop-state,dst=/state,readonly" \
+            --workdir /repo --env HOME=/tmp "$AEF_GATE_IMAGE" \
+            aef loop status --repo /repo --state /state || true
+""".replace("__REPO_NAME__", repo_name)
+        .replace("__DEPENDENCIES__", dependencies.replace("\n", "\n          "))
+        .replace("__SELECTION__", selection)
+        .replace(
+            "__ENTRYPOINT__",
+            "agents.demo.graph:build_graph" if core else "agents.mine.graph:build_graph",
+        )
+    )
 
 
 #: The module `aef migrate` writes when it finds NO wrappable call site — the
@@ -1064,7 +1125,7 @@ aef loop bless --repo . --state ~/.aef-loop-state \\
     --agent-path {DEFAULT_MIGRATED_OUT}
 aef loop doctor --repo . --state ~/.aef-loop-state --corpus corpus \\
     --agent-path {DEFAULT_MIGRATED_OUT}
-aef loop cycle --repo . --state ~/.aef-loop-state --workdir /tmp/loop \\
+aef loop cycle --repo . --state ~/.aef-loop-state --workdir "$(mktemp -d)/run" \\
     --module <your.graph.module> --corpus corpus \\
     --entrypoint <your.graph.module>:build_graph \\
     --memory ~/.aef-loop-state/memory.jsonl \\
@@ -1077,8 +1138,9 @@ the one gap no command closes, and section 2 says exactly how wide it is.
 Unless your agents are prompt files, in which case there are no node bodies to
 write and the sequence gains two flags — the next section is yours.
 
-**After today, the loop runs nightly once you have committed
-`.github/workflows/loop-monitor.yml`** — `aef adopt` writes it with an hourly
+**Scheduled workflows are opt-in.** Review the schedules first, then generate
+them with `aef adopt --dir . --profile model --with-workflows` if wanted.
+Once configured and committed, `.github/workflows/loop-monitor.yml` has an hourly
 `loop monitor`, a daily `loop cycle` at 03:00 UTC and a weekly digest, all
 `workflow_dispatch`-able. Until that file is committed, the loop runs when you
 type the command and at no other time. Edit the three `AEF_*` env values in
@@ -1096,9 +1158,10 @@ nothing writes nothing to it.
 {render_prompt_repo_sequence(prompt_agents)}
 ## 1. `aef adopt` — what you got, and what you did not
 
-It wrote 17 files and **never DESTROYS** one: an existing file of a name it
-would write is skipped and reported. Five are the exception, and appending is
-not overwriting: `CLAUDE.md`, `AGENTS.md`,
+The model profile writes 16 files in an empty repo, plus two workflows only
+with `--with-workflows`. It **never DESTROYS** an existing owner file: an existing
+file of a name it would write is skipped and reported. Six are the exception,
+and appending is not overwriting: `CLAUDE.md`, `AGENTS.md`, `GROK.md`,
 `.github/copilot-instructions.md`, `.cursor/rules/aef.mdc` and `.gitignore`
 get a **signed** block appended to whatever was already there —
 
@@ -1128,12 +1191,17 @@ returned **0**, so the contract never reached the file that repo's agents
 actually read (aef-core ADR 0153).
 
 ```
-CLAUDE.md  AGENTS.md  AGENT_INTEGRATION.md  AUTONOMY.md  FIRST_DAY.md
+CLAUDE.md  AGENTS.md  GROK.md  AGENT_INTEGRATION.md  AUTONOMY.md  FIRST_DAY.md
 LOOP.md  AEF_MIGRATION_CHECKLIST.md  aef.yaml  aef_adapter.py  .gitignore
 agents/README.md  corpus/README.md  .github/copilot-instructions.md
-.cursor/rules/aef.mdc  .github/workflows/loop-gate.yml
-.github/workflows/loop-monitor.yml  .claude/skills/new-model-check/SKILL.md
+.cursor/rules/aef.mdc  .claude/skills/new-model-check/SKILL.md
 ```
+
+Optional: `.github/workflows/loop-gate.yml` and `.github/workflows/loop-monitor.yml`.
+`GROK.md` is a portable guide to load explicitly; no autodiscovery is assumed.
+The `offline` profile instead generates providerless onboarding without a loop kit.
+Existing configuration, guides and workflows are preserved when re-running;
+selecting a profile is not a conversion or a way to disable an existing schedule.
 
 **What it explicitly did not do.** It read none of your code. It wrote no
 node, no graph, no test, and no scenario. `aef_adapter.py` is a stub whose
@@ -1476,7 +1544,7 @@ wait for six.
 ## 6. `aef loop cycle` — and the one requirement still yours
 
 ```
-$ aef loop cycle --repo . --state ~/.aef-loop-state --workdir /tmp/loop \\
+$ aef loop cycle --repo . --state ~/.aef-loop-state --workdir "$(mktemp -d)/run" \\
       --module {module} --corpus corpus \\
       --entrypoint {module}:build_graph \\
       --memory ~/.aef-loop-state/memory.jsonl \\

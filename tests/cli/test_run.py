@@ -170,8 +170,14 @@ def test_run_graph_module_finds_a_package_relative_to_cwd_alone(
     monkeypatch.delitem(sys.modules, "agents.my_agent", raising=False)
     monkeypatch.delitem(sys.modules, "agents.my_agent.graph", raising=False)
 
-    final_state = run_graph_module("agents.my_agent.graph", agent_id="a1", objective="x")
-    assert final_state.working_memory == {"greeted": True}
+    original_path = sys.path.copy()
+    try:
+        final_state = run_graph_module("agents.my_agent.graph", agent_id="a1", objective="x")
+        assert final_state.working_memory == {"greeted": True}
+    finally:
+        sys.path[:] = original_path
+        for name in ("agents.my_agent.graph", "agents.my_agent", "agents"):
+            sys.modules.pop(name, None)
 
 
 def test_run_without_checkpoints_dir_writes_no_files(
@@ -289,6 +295,60 @@ def test_run_with_durable_memory_retrieves_the_lesson_consolidated_by_earlier_ru
     assert signatures[0] == []  # nothing recorded yet
     assert signatures[1] == []  # one run's failure is an episode, not knowledge
     assert signatures[2] == ["failure:work"]
+
+
+def test_all_persistent_memory_runs_harvest_and_replay_without_touching_source(
+    wiki_graph_module: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import importlib
+    from datetime import UTC, datetime
+
+    from aef.harness.corpus import load_corpus
+    from aef.harness.harvest import harvest
+    from aef.harness.isolated_suite import run_corpus_isolated
+    from aef.harness.scenario_runner import run_scenario
+    from aef.harness.trace_codec import dumps, encode_trace
+    from aef.kernel import GraphExecutor
+
+    memory_path = tmp_path / "memory.jsonl"
+    for _ in range(5):
+        run_graph_module(
+            wiki_graph_module,
+            agent_id="mine",
+            objective="settle it",
+            memory_path=memory_path,
+            record_runs_dir=tmp_path / "runs",
+        )
+    before = memory_path.read_bytes()
+    graph = importlib.import_module(wiki_graph_module).build_graph()
+    outcome = harvest(tmp_path / "runs", tmp_path / "corpus", graph, now=datetime.now(UTC))
+    assert outcome.rejected_nondeterministic == ()
+    assert len(outcome.promoted) == 5
+    executions = []
+    original_run = GraphExecutor.run
+
+    def capture(self, *args, **kwargs):
+        result = original_run(self, *args, **kwargs)
+        executions.append(result)
+        return result
+
+    monkeypatch.setattr(GraphExecutor, "run", capture)
+    for scenario in load_corpus(tmp_path / "corpus").scenarios:
+        run_scenario(scenario, graph)
+        assert dumps(encode_trace(executions[-1].trace)) == dumps(encode_trace(scenario.trace))
+    scenarios = list(reversed(load_corpus(tmp_path / "corpus").scenarios))
+    offset = len(executions)
+    run_corpus_isolated(tmp_path, scenarios, entrypoint=f"{wiki_graph_module}:build_graph")
+    assert len(executions) == offset + 5
+    for actual, scenario in zip(executions[offset:], scenarios, strict=True):
+        observed, recorded = encode_trace(actual.trace), encode_trace(scenario.trace)
+        # The isolation proxy owns a different transport idempotency key.
+        # Every other input, output, clock and route must still match.
+        for trace in (observed, recorded):
+            for record in trace:
+                record["context"].pop("idempotency_key")
+        assert dumps(observed) == dumps(recorded)
+    assert memory_path.read_bytes() == before
 
 
 def test_run_without_a_context_block_does_not_retrieve_another_tenants_record(

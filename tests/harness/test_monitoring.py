@@ -406,3 +406,10 @@ def test_the_containment_count_reaches_the_json() -> None:
     assert payload["security_events"] == 1
     assert payload["containment_events"] == 1
     assert payload["containment_reasons"] == ["containment: off"]
+
+
+def test_unmeasured_harvest_count_is_unknown_not_zero() -> None:
+    digest = build_digest((), since=MERGED_AT, until=MERGED_AT, runs_recorded=5)
+    assert digest.scenarios_added is None
+    assert "Scenarios added to the corpus: unknown (not measured)" in digest.render()
+    assert "0 admitted" not in digest.render()

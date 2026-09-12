@@ -1,0 +1,31 @@
+{
+  "source": "/Users/raptor/aef-core",
+  "output": "/tmp/aef-shadow-storage-mutation-q3cu1xne",
+  "mutation": "reuse incumbent durability for candidate",
+  "loaded_module": "/private/tmp/aef-shadow-storage-mutation-q3cu1xne/aef/harness/shadow.py",
+  "command": [
+    "/Users/raptor/aef-core/.venv/bin/python",
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/harness/test_promotion_safety.py::test_shadow_checkpoints_do_not_read_or_replace_the_incumbents_store",
+    "--disable-warnings",
+    "--basetemp=/tmp/aef-shadow-storage-mutation-q3cu1xne/pytest-tmp"
+  ],
+  "exit_code": 1,
+  "source_unchanged": true,
+  "log": "docs/model-checks/evidence/2026-09-11-shadow-storage-mutant.log",
+  "summary": "1 failed in 0.11s",
+  "original_log": "/tmp/aef-shadow-storage-mutation-q3cu1xne/pytest.log",
+  "reproducer_script": "docs/model-checks/evidence/2026-09-11-shadow-storage-mutations.py",
+  "evidence_note": "Existing verified disposable-copy result retained unchanged; the standalone reproducer was extracted afterward and also includes a baseline pass.",
+  "validation": {
+    "result": "205 passed in 4.41s",
+    "log": "docs/model-checks/evidence/2026-09-11-shadow-focused-validation.log"
+  },
+  "before_fix": {
+    "result": "3 failed in 0.80s",
+    "log": "docs/model-checks/evidence/2026-09-11-shadow-comparison-regressions-before.log"
+  }
+}

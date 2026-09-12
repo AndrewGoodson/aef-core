@@ -1,0 +1,46 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-9.1.1, pluggy-1.6.0 -- /tmp/aef-python311-release-20260912/venv/bin/python
+cachedir: .pytest_cache
+rootdir: /private/tmp/aef-python311-release-20260912/source
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collecting ... collected 36 items
+
+tests/test_vendor_isolation.py::test_no_vendor_imports_in_banned_zones PASSED [  2%]
+tests/test_vendor_isolation.py::test_scanner_actually_detects_a_violation PASSED [  5%]
+tests/test_vendor_isolation.py::test_scanner_ignores_relative_imports PASSED [  8%]
+tests/test_vendor_isolation.py::test_scanner_catches_aliased_import PASSED [ 11%]
+tests/test_vendor_isolation.py::test_scanner_catches_import_nested_inside_a_function PASSED [ 13%]
+tests/test_vendor_isolation.py::test_scanner_catches_import_inside_try_except PASSED [ 16%]
+tests/test_vendor_isolation.py::test_scanner_catches_import_inside_type_checking_block PASSED [ 19%]
+tests/test_vendor_isolation.py::test_the_scanner_reports_which_vendor_and_where PASSED [ 22%]
+tests/test_vendor_isolation.py::test_model_sdk_roots_are_a_subset_of_the_vendor_list PASSED [ 25%]
+tests/test_vendor_isolation.py::test_an_unparseable_file_is_not_reported_as_a_vendor_import PASSED [ 27%]
+tests/test_vendor_isolation.py::test_scan_source_takes_text_so_generated_code_can_be_checked PASSED [ 30%]
+tests/test_vendor_isolation.py::test_the_two_lists_answer_different_questions_and_differ_by_fourteen PASSED [ 33%]
+tests/test_vendor_isolation.py::test_the_preflight_obligation_scans_model_sdks_and_nothing_wider PASSED [ 36%]
+tests/test_vendor_isolation.py::test_constraint_three_still_scans_the_whole_vendor_list PASSED [ 38%]
+tests/test_schema_compat.py::test_at_least_one_golden_fixture_exists PASSED [ 41%]
+tests/test_schema_compat.py::test_golden_checkpoint_still_loads[v1.0.0_golden] PASSED [ 44%]
+tests/test_schema_compat.py::test_golden_checkpoint_round_trips_after_load[v1.0.0_golden] PASSED [ 47%]
+tests/test_measurements_reproduce.py::test_the_registry_is_not_empty_and_every_runner_exists PASSED [ 50%]
+tests/test_measurements_reproduce.py::test_every_known_drift_note_names_an_adr PASSED [ 52%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[i12-arms] PASSED [ 55%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[i12b-arms] PASSED [ 58%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[i12d-arms] PASSED [ 61%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[i12e-arms] PASSED [ 63%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[i12c-arms] PASSED [ 66%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[i13-floor] PASSED [ 69%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[i14-judges] PASSED [ 72%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[i14-judges-v2] PASSED [ 75%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[j2-archive] PASSED [ 77%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[j4-selfpref] PASSED [ 80%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[j4-harm] PASSED [ 83%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[j4-tally] PASSED [ 86%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[pilot-marlin-control] PASSED [ 88%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[j2b-archive] PASSED [ 91%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[i14b-hardset] PASSED [ 94%]
+tests/test_measurements_reproduce.py::test_the_published_table_re_derives[j2c-staircase] PASSED [ 97%]
+tests/test_measurements_reproduce.py::test_a_perturbed_published_number_is_caught PASSED [100%]
+
+============================== 36 passed in 3.30s ==============================

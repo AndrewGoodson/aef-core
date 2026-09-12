@@ -38,6 +38,31 @@ name: marlin-accela
 Purpose: operate the Accela connector.
 """
 
+
+def test_codex_lessons_edit_only_instructions_and_remain_idempotent() -> None:
+    import tomllib
+
+    source = '''# owner configuration
+name = "reviewer"
+description = "Review evidence"
+developer_instructions = """Use evidence.\nPreserve owner's constraints."""
+sandbox_mode = "read-only" # preserve this comment
+[mcp_servers.example]
+command = "owner-command"
+'''
+    path = ".codex/agents/reviewer.toml"
+    proposer = make(zone_policy=ZonePolicy(agent_root=".codex/agents"))
+    ev = evidence(record(run_id="r1"), record(run_id="r2", minutes=5))
+    (proposal,) = propose(proposer, ev, source=source, path=path)
+    old, new = tomllib.loads(source), tomllib.loads(proposal.proposed)
+    assert DEFAULT_SECTION_HEADING in new["developer_instructions"]
+    assert new["developer_instructions"].startswith(old["developer_instructions"])
+    new["developer_instructions"] = old["developer_instructions"]
+    assert new == old
+    assert "# preserve this comment" in proposal.proposed
+    assert propose(proposer, ev, source=proposal.proposed, path=path) == ()
+
+
 _T0 = datetime(2026, 9, 4, 12, 0, tzinfo=UTC)
 
 

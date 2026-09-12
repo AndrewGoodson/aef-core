@@ -23,19 +23,21 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
+from aef.config.factory import build_retriever
 from aef.harness.checks import CheckError
 from aef.harness.corpus import Scenario, fixed_clock
 from aef.harness.evaluation import score_of, score_scenario
 from aef.harness.graph_loading import import_graph_module, split_entrypoint
 from aef.harness.outcome import classify
+from aef.harness.replay_inputs import RecordedIsolation, replay_memory
 from aef.kernel import GraphExecutor, HumanApprovalRequiredError
 from aef.kernel.graph import Graph
 from aef.providers.base import ModelProvider
 from aef.providers.cassette_provider import CassetteProvider
 from aef.security.tool import PolicyConfig
 from aef.services.memory.base import MemoryStore
-from aef.services.memory.in_memory import InMemoryMemoryStore
 from aef.services.runtime import agent_services
+from aef.state import AEFState
 
 # The same rubric `aef run` and `aef loop record` default to. A gate that
 # re-executed a recorded scenario under a different rubric would be comparing
@@ -81,6 +83,25 @@ def _error_type_chain(failure: str) -> tuple[str, ...]:
             continue
         break
     return tuple(names)
+
+
+def recorded_node_failure(state: AEFState) -> str | None:
+    """Diagnostic exception classes only; never a dead-call exemption.
+
+    A fallback preserves a node error in state instead of raising. Surface
+    its type without copying exception bodies (which may contain secrets).
+    State is candidate-controlled: this text must not excuse a regression.
+    """
+    names: list[str] = []
+    for error in state.errors:
+        kind = error.get("error_type")
+        if isinstance(kind, str) and kind.isidentifier() and kind[:1].isupper():
+            names.append(kind)
+        message = error.get("error")
+        if isinstance(message, str):
+            names.extend(_error_type_chain(message))
+    unique = list(dict.fromkeys(names))
+    return "recorded node failure: " + ", ".join(unique) if unique else None
 
 
 def is_dead_call(failure: str | None, *, cassette_miss: str, live_provider_present: bool) -> bool:
@@ -257,16 +278,29 @@ def run_scenario(
     # separate defects were "the gate path lacks a service the node needs"
     # (ADR 0073/0075/0079/0089); the cause each time was drift between two
     # lists nobody compared (ADR 0091).
-    cassette = CassetteProvider(live_provider, scenario.model_calls, on_miss=cassette_miss)
+    inner = live_provider
+    if inner is None and (scenario.provider_isolation or scenario.provider_name):
+        inner = RecordedIsolation(scenario.provider_isolation, scenario.provider_name)
+    cassette = CassetteProvider(inner, scenario.model_calls, on_miss=cassette_miss)
+    runtime_memory, knowledge = replay_memory(
+        scenario.initial_memory, scenario.initial_state.agent_id
+    )
     services = agent_services(
         clock=fixed_clock(scenario),
         policy=policy,
         # Memory is in-process and thrown away: writing to the adopter's
         # durable store would let a gate run mutate the evidence a later
         # proposal is built from.
-        memory=InMemoryMemoryStore(),
+        memory=runtime_memory,
+        knowledge=knowledge,
         agent_id=scenario.initial_state.agent_id,
         model_provider=cassette,
+        retriever=build_retriever(
+            scenario.context_config,
+            memory=runtime_memory,
+            knowledge=knowledge,
+            agent_id=scenario.initial_state.agent_id,
+        ),
     )
     started = time.monotonic()
     try:
@@ -382,6 +416,9 @@ def run_scenario(
         # failed). A score with misses > 0 under "live" is a LIVE score.
         "cassette": {"hits": cassette.hits, "misses": cassette.misses},
     }
+    node_failure = recorded_node_failure(result.final_state)
+    if node_failure is not None:
+        payload["failure"] = node_failure
     if "checks" in record.metadata:
         payload["checks"] = record.metadata["checks"]
     if record.metadata.get("budget_exceeded"):

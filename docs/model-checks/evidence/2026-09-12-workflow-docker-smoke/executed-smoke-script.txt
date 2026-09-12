@@ -1,0 +1,149 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import time
+
+import yaml
+
+SOURCE = Path('/Users/raptor/aef-core')
+ROOT = Path(tempfile.mkdtemp(prefix='aef-workflow-docker-smoke-')).resolve()
+FIXTURE = ROOT / 'trusted source'
+FIXTURE.mkdir()
+REPORT: dict[str, object] = {'root': str(ROOT), 'source': str(SOURCE), 'steps': {}}
+workflow_path = SOURCE / '.github/workflows/loop-gate.yml'
+workflow_text = workflow_path.read_text()
+REPORT['workflow_sha256'] = hashlib.sha256(workflow_text.encode()).hexdigest()
+(ROOT / 'workflow.yml').write_text(workflow_text)
+workflow = yaml.safe_load(workflow_text)
+steps = {step['name']: step for step in workflow['jobs']['gate']['steps'] if 'name' in step}
+
+
+def command(args: list[str], cwd: Path = FIXTURE) -> str:
+    return subprocess.check_output(args, cwd=cwd, text=True, stderr=subprocess.STDOUT)
+
+
+for name in ('pyproject.toml', 'README.md', 'LICENSE'):
+    if (SOURCE / name).exists():
+        shutil.copy2(SOURCE / name, FIXTURE / name)
+shutil.copytree(SOURCE / 'aef', FIXTURE / 'aef', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+(FIXTURE / 'agents/demo').mkdir(parents=True)
+shutil.copy2(SOURCE / 'agents/demo/graph.py', FIXTURE / 'agents/demo/graph.py')
+(FIXTURE / 'corpus').mkdir()
+(FIXTURE / 'corpus/README.md').write_text('Disposable offline fixture; no blessed baseline.\n')
+(FIXTURE / 'tests').mkdir()
+(FIXTURE / 'tests/test_workflow_smoke.py').write_text('''import errno
+import os
+from pathlib import Path
+import shutil
+import socket
+import subprocess
+import pytest
+
+
+def test_workflow_container_boundary():
+    import aef
+    assert aef.__file__
+    assert shutil.which("git")
+    assert "AEF_WORKFLOW_SMOKE_SECRET" not in os.environ
+    assert not Path("/var/run/docker.sock").exists()
+    assert os.getuid() != 0
+    assert subprocess.check_output(["git", "-C", "/repo", "rev-parse", "main"], text=True).strip()
+    config = subprocess.check_output(["git", "-C", "/repo", "config", "--local", "--list"], text=True)
+    assert "fixture-secret" not in config
+    assert "extraheader" not in config
+    for directory in (Path.cwd(), Path("/tmp"), Path("/work"), Path("/state")):
+        marker = directory / "workflow-smoke-write"
+        marker.write_text("writable")
+        assert marker.read_text() == "writable"
+        marker.unlink()
+    for directory in (Path("/repo"), Path("/opt/aef-base")):
+        with pytest.raises(OSError) as error:
+            (directory / "workflow-smoke-denied").write_text("should fail")
+        assert error.value.errno in (errno.EROFS, errno.EACCES)
+    with socket.socket() as sock:
+        sock.settimeout(2)
+        result = sock.connect_ex(("1.1.1.1", 443))
+    assert result in (errno.ENETUNREACH, errno.EHOSTUNREACH), result
+''')
+for args in (
+    ['git', 'init', '--initial-branch=main'],
+    ['git', 'config', 'user.name', 'Disposable workflow smoke'],
+    ['git', 'config', 'user.email', 'smoke@example.invalid'],
+    ['git', 'add', '.'],
+    ['git', 'commit', '-m', 'Disposable trusted base'],
+    ['git', 'checkout', '-b', 'candidate'],
+):
+    command(args)
+with (FIXTURE / 'agents/demo/graph.py').open('a') as stream:
+    stream.write('\n# Disposable candidate data only.\n')
+command(['git', 'add', 'agents/demo/graph.py'])
+command(['git', 'commit', '-m', 'Disposable Zone A candidate'])
+command(['git', 'checkout', 'main'])
+remote = ROOT / 'remote.git'
+command(['git', 'clone', '--bare', str(FIXTURE), str(remote)])
+command(['git', 'remote', 'add', 'origin', str(remote)])
+command(['git', 'config', 'http.https://example.invalid/.extraheader', 'fixture-secret'])
+(FIXTURE / '.git/hooks/post-checkout').write_text('#!/bin/sh\necho bad-hook > "$HOME/copied-hook-executed"\n')
+(FIXTURE / '.git/hooks/post-checkout').chmod(0o755)
+image_name = 'aef-workflow-smoke:' + str(int(time.time()))
+env = dict(os.environ)
+env.update({
+    'AEF_GATE_ROOT': str(ROOT / 'gate root'),
+    'AEF_GATE_IMAGE': image_name,
+    'AEF_CANDIDATE_REF': 'candidate',
+    'GITHUB_WORKSPACE': str(FIXTURE),
+    'HOME': str(ROOT / 'home'),
+    'DOCKER_CONFIG': os.environ.get('DOCKER_CONFIG', str(Path.home() / '.docker')),
+    'AEF_WORKFLOW_SMOKE_SECRET': 'fixture-value-never-real-credential',
+    **steps['Gate']['env'],
+})
+Path(env['HOME']).mkdir()
+REPORT['image'] = image_name
+REPORT['fixture_main'] = command(['git', 'rev-parse', 'main']).strip()
+REPORT['fixture_candidate'] = command(['git', 'rev-parse', 'candidate']).strip()
+
+
+def run_step(name: str, expected: int) -> None:
+    script = steps[name]['run']
+    slug = name.lower().replace(' ', '-')
+    (ROOT / (slug + '.sh')).write_text(script)
+    start = time.monotonic()
+    with (ROOT / (slug + '.log')).open('w') as output:
+        result = subprocess.run(['bash', '-c', script], cwd=FIXTURE, env=env, stdout=output, stderr=subprocess.STDOUT, timeout=360)
+    REPORT['steps'][name] = {'exit_code': result.returncode, 'expected': expected, 'duration_seconds': round(time.monotonic() - start, 2), 'log': str(ROOT / (slug + '.log'))}
+    (ROOT / 'report.json').write_text(json.dumps(REPORT, indent=2) + '\n')
+    print(name, result.returncode, 'log:', ROOT / (slug + '.log'), flush=True)
+    if result.returncode != expected:
+        print((ROOT / (slug + '.log')).read_text()[-12000:], flush=True)
+        raise RuntimeError(f'{name}: {result.returncode} != {expected}')
+
+
+print('OUTPUT', ROOT, flush=True)
+try:
+    run_step('Build the trusted runtime image', 0)
+    run_step('Fetch the candidate as data', 0)
+    sanitized = Path(env['AEF_GATE_ROOT']) / 'repo'
+    REPORT['sanitized_config'] = command(['git', 'config', '--local', '--list'], cwd=sanitized)
+    assert 'fixture-secret' not in REPORT['sanitized_config']
+    assert not (sanitized / '.git/hooks/post-checkout').exists()
+    assert not (Path(env['HOME']) / 'copied-hook-executed').exists()
+    run_step('Gate', 1)
+    run_step('Report', 0)
+    gate_log = (ROOT / 'gate.log').read_text()
+    assert 'G1' in gate_log and 'G5' in gate_log, gate_log
+    REPORT['boundary_checks'] = 'See G1 output and trusted fixture test'
+    REPORT['all_steps_expected'] = True
+finally:
+    REPORT['workflow_source_unchanged'] = workflow_path.read_text() == workflow_text
+    # Remove only the new tag created by this smoke; preserve shared images/cache.
+    removal = subprocess.run(['docker', 'image', 'rm', image_name], env=env, capture_output=True, text=True)
+    (ROOT / 'cleanup.log').write_text(removal.stdout + removal.stderr)
+    REPORT['new_image_cleanup_exit'] = removal.returncode
+    (ROOT / 'report.json').write_text(json.dumps(REPORT, indent=2) + '\n')
+    print('REPORT', ROOT / 'report.json', flush=True)

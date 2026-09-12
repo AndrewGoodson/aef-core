@@ -1,4 +1,20 @@
-# Handoff — 2026-09-08
+# Handoff
+
+The historical generated lesson made the real-repository agent worse:
+0.6667 without it, 0.4000 with it, and 0.8667 with placebo text. Infrastructure
+hardening has not established a learning-quality improvement. The arms were
+asymmetric live/replay comparisons with small samples; retain that limitation
+when interpreting the result.
+
+Start with the [September 11–12 repository review](docs/model-checks/2026-09-11-repository-review.md),
+then [AGENTS.md](AGENTS.md), [the integration guide](AGENT_INTEGRATION.md) and
+[the target command guide](docs/target-repo.md). The review includes the
+September 8 fixes, source-preserving target integration, subsequent durability
+and replay corrections, and current validation. It supersedes the Git state,
+test counts and unfixed-bug status in the historical handoff below. Use Git for
+the current release commit; the roadmap remains the implementation authority.
+
+## Historical handoff — 2026-09-08
 
 For the next agent, whichever harness it runs in. Written by the Claude
 session that took this repository from 68 to 92 on its own rubric and then

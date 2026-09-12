@@ -17,7 +17,7 @@ a `model_provider` at all (see docs/adr/0014).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, overload
 
 from aef.config.schema import (
     CONTEXT_IMPLS,
@@ -101,7 +101,15 @@ def _build_single(
     raise UnsupportedProviderImplError(impl)
 
 
-def build_model_provider(config: ModelProviderConfig) -> ModelProvider:
+@overload
+def build_model_provider(config: ModelProviderConfig) -> ModelProvider: ...
+
+
+@overload
+def build_model_provider(config: None) -> None: ...
+
+
+def build_model_provider(config: ModelProviderConfig | None) -> ModelProvider | None:
     """Builds the primary provider, and wraps it with `FallbackProvider` if
     `config.fallback` is non-empty. Every listed impl (primary and
     fallback) must be supported — an unbuildable fallback fails loudly at
@@ -110,6 +118,8 @@ def build_model_provider(config: ModelProviderConfig) -> ModelProvider:
     # `config.model` validated for months and nothing read it (the ADR 0100
     # shape). It is the provider's default now; a request naming its own
     # model still wins.
+    if config is None:
+        return None
     providers = [_build_single(config.impl, config.model, config.command)]
     providers.extend(_build_single(impl, config.model) for impl in config.fallback)
     if len(providers) == 1:

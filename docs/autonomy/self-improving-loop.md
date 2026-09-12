@@ -80,8 +80,10 @@ cover the irreversible and the outward-facing, nothing else.
   across runs — the rule-based critic/judge slice scoped in
   `docs/design/phase3-reflection-critic-judge-brainstorm.md` (grounded in
   already-recorded signals: tool errors, eval failures; deterministic;
-  replayable). LLM-judge reflection is a planned *later* slice, with the
-  known bias mitigations (position/verbosity/self-preference).
+  replayable). LLM-backed reflection is implemented with bias controls
+  (ADR 0115), but stays off by default. Its measured limits and later
+  evaluations are recorded in `docs/roadmap.md`; implementation alone does
+  not establish better lessons or task outcomes.
 - **Out of scope, permanently gated:** self-modification. `aef/evolution/`
   is disabled in code (ADR 0006/0010) and stays that way. The loop improves
   the *codebase* via reviewed commits, never rewrites *itself* at runtime.

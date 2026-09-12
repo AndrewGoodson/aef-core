@@ -761,7 +761,7 @@ def _live_provider_from_base_ref(config: LoopConfig) -> dict[str, Any] | None:
             "<path to aef.yaml, relative to the repository root> with gates.live_model_calls: "
             "true, or drop --cassette-miss live and score from the recorded cassettes."
         )
-    if not agent_config.gates.live_model_calls:
+    if not agent_config.gates.live_model_calls or agent_config.model_provider is None:
         raise LiveGatingDisabledError(
             f"live gating is off in {config.config_path or 'aef.yaml'}; a prompt candidate "
             f"cannot be scored from a cassette — set gates.live_model_calls: true, which "

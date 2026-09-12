@@ -1,0 +1,2 @@
+# Preserve raw, hash-indexed validation logs, including console whitespace.
+docs/model-checks/evidence/**/*.log -text -whitespace

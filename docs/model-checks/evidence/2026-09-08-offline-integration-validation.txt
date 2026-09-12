@@ -1,0 +1,254 @@
+Full suite: source .venv/bin/activate; python -B -m pytest -q --tb=short --basetemp=/tmp/aef-update-full-2
+........................................................................ [  2%]
+........................................................................ [  4%]
+........................................................................ [  6%]
+........................................................................ [  8%]
+........................................................................ [ 11%]
+........................................................................ [ 13%]
+........................................................................ [ 15%]
+........................................................................ [ 17%]
+.........................................................x....s......... [ 19%]
+........................................................................ [ 22%]
+........................................................................ [ 24%]
+........................................................................ [ 26%]
+........................................................................ [ 28%]
+........................................................................ [ 31%]
+........................................................................ [ 33%]
+........................................................................ [ 35%]
+........................................................................ [ 37%]
+........................................................................ [ 39%]
+........................................................................ [ 42%]
+........................................................................ [ 44%]
+........................................................................ [ 46%]
+........................................................................ [ 48%]
+........................................................................ [ 51%]
+........................................................................ [ 53%]
+........................................................................ [ 55%]
+........................................................................ [ 57%]
+........................................................................ [ 59%]
+........................................................................ [ 62%]
+........................................................................ [ 64%]
+........................................................................ [ 66%]
+........................................................................ [ 68%]
+........................................................................ [ 70%]
+........................................................................ [ 73%]
+........................................................................ [ 75%]
+........................................................................ [ 77%]
+........................................................................ [ 79%]
+.................................ss..................................... [ 82%]
+..........sssss......................................................... [ 84%]
+........................................................................ [ 86%]
+........................................................................ [ 88%]
+........................................................................ [ 90%]
+........................................................................ [ 93%]
+........................................................................ [ 95%]
+........................................................................ [ 97%]
+........................................................................ [ 99%]
+......                                                                   [100%]
+=============================== warnings summary ===============================
+tests/harness/test_check_patterns.py: 150 warnings
+  /opt/homebrew/Cellar/python@3.13/3.13.13/Frameworks/Python.framework/Versions/3.13/lib/python3.13/multiprocessing/popen_fork.py:67: DeprecationWarning: This process (pid=31126) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    self.pid = os.fork()
+
+tests/harness/test_container_sandbox.py: 9 warnings
+tests/harness/test_cycle_and_halt.py: 1 warning
+tests/harness/test_evidence_loop.py: 6 warnings
+tests/harness/test_gate_workspace_isolation.py: 2 warnings
+tests/harness/test_gates.py: 5 warnings
+tests/harness/test_llm_proposer.py: 3 warnings
+tests/harness/test_prompt_proposer_wiring.py: 1 warning
+tests/harness/test_proposer_spend.py: 2 warnings
+tests/harness/test_prose_gate_path.py: 2 warnings
+tests/harness/test_sandbox.py: 18 warnings
+tests/harness/test_service_parity.py: 1 warning
+tests/harness/test_structural_acceptance.py: 16 warnings
+  /Users/raptor/aef-core/aef/harness/sandbox.py:209: DeprecationWarning: This process (pid=31126) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    pid = os.fork()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+3237 passed, 8 skipped, 1 xfailed, 216 warnings in 175.82s (0:02:55)
+
+
+Focused: .venv/bin/python -B -m pytest -q tests/cli/test_adopt_profiles.py tests/cli/test_installed_offline_adoption.py tests/cli/test_target_repo.py --tb=short --basetemp=/tmp/aef-update-focused-2
+...................................                                      [100%]
+35 passed in 9.75s
+
+
+Strict types: .venv/bin/mypy --strict aef examples
+Success: no issues found in 139 source files
+
+
+Lint: .venv/bin/ruff check .
+All checks passed!
+
+
+Format: .venv/bin/ruff format --check aef tests examples
+329 files already formatted
+
+
+Measurements: make measure-ci PY='.venv/bin/python -B'
+PYTHONPATH=/Users/raptor/aef-core .venv/bin/python -B docs/research/measure.py --fast --against-expectations
+
+=== i12-arms — I12 — the four arms on the wired graph
+    ADR docs/adr/0155-a-caller-that-writes-state-nobody-reads.md
+    $ python docs/research/i12/aggregate.py --verify
+    ok    (a) no retrieve, mean                        0.8541
+    ok    (b) raw records, mean                        0.8541
+    ok    (c) + knowledge, mean                        0.8334
+    ok    (d) + LLM reflection, mean                   0.9166
+    ok    largest within-arm spread                    0.0833
+    ok    total live calls                             84
+    note: The runner raised FileNotFoundError on every invocation until this increment: `HERE` pointed at a `results/` subdirectory the raw JSON was flattened out of. ADR 0155's table had no working re-runner.
+
+=== i12b-arms — S1b — the four arms, ADR 0175's tables
+    ADR docs/adr/0175-the-arms-were-real-this-time-and-the-layer-still-did-not-pay.md
+    $ python docs/research/i12b/aggregate.py --verify
+    ok    (a) no retrieve, mean                        0.8941
+    ok    (b) raw records, mean                        0.9176
+    ok    (c) + knowledge, mean                        0.9059
+    ok    (d) + LLM reflection, mean                   0.9529
+    ok    delta (b) − (a), mean                        +0.0235
+    ok    delta (d) − (c), mean                        +0.0470
+
+=== i12d-arms — N2 — the four arms on the one-model corpus, ADR 0193's table
+    ADR docs/adr/0193-the-arms-re-run-on-the-corpus-that-exists.md
+    $ python docs/research/i12d/aggregate.py --verify
+    ok    (b) raw records, repeat 0                    0.9412
+    ok    (c) + knowledge, repeat 1                    1.0000
+    ok    (c) − (b) on the mean                        0.0470
+    note: Registered by the orchestrator after the merge: N2 and N5 were written blind to each other, and N2's aggregator took argv[1] as a results directory, so the driver's `--verify` became a path and the load came back empty (`KeyError: 'a'`). The re-runner caught a measurement that could not re-derive itself one increment after it was built, which is the whole claim of ADR 0196.
+
+=== i12e-arms — P2 — the four arms on a store where lessons compete, ADR 0201's table
+    ADR docs/adr/0201-the-second-lesson-and-the-knob-that-is-a-switch.md
+    $ python docs/research/i12e/aggregate.py --verify
+    ok    (b) raw records, mean of 2 repeats           0.9107
+    ok    (d) + knowledge @ 16.0, mean of 2 repeats    0.9547
+    ok    (d) − (b) on the mean                        0.0440
+    ok    the bar (larger repeat spread)               0.0191
+    ok    (d) − (b) on the negatives                   0.0975
+    ok    knowledge entries seeded                     3
+    ok    word-cap failures in arm (d) repeat 0        0
+
+=== i12c-arms — S1c — the four arms with repeats, ADR 0184's tables
+    ADR docs/adr/0184-the-lesson-was-fresh-and-the-layer-paid.md
+    $ python docs/research/i12c/aggregate.py --verify
+    ok    (b) raw records, mean of repeats             0.9059
+    ok    (b) repeat spread                            0.0353
+    ok    (c) + knowledge, mean of repeats             0.9588
+    ok    (c) − (b) on the mean                        +0.0529
+    ok    (c) − (b) on the negatives                   +0.0917
+    ok    the pre-registered branch                    12 -> 14
+    note: The arm table re-derives exactly: it reads arms.jsonl, which is committed. It is the SEED underneath it (i12c-seed) that moved, which is why ADR 0191 withdrew the +2 rather than the table.
+
+=== i13-floor — I13 — the live noise floor and the regression under it
+    ADR docs/adr/0156-the-live-noise-floor-and-a-regression-under-it.md
+    $ python docs/research/i13/verify.py --verify
+    ok    floor, mean of means                         0.7639
+    ok    regression, mean of means                    0.7361
+    ok    the fall                                     0.0278
+    ok    floor spread                                 0.1666
+    ok    floor stdev of the means                     0.0867
+    ok    fall ÷ floor stdev                           0.32
+    ok    floor repeat 3, sum-13                       0.00
+    note: I13 committed six raw `aef loop score --json` payloads and then typed ADR 0156's three tables by hand. `verify.py` is the arithmetic that was missing; every number reproduces.
+
+=== i14-judges — I14 — the judge A/B (v1, ADR 0159)
+    ADR docs/adr/0159-the-judge-ab-is-an-artifact-now.md
+    $ python docs/research/i14/run_i14.py --verify
+    ok    rule-based agrees with the owner checks      3
+    ok    LLM agrees with the owner checks             15
+    ok    the two judges agree with each other         0
+    XFAIL oracle B pass rate                           ADR says '18', re-derived '10'
+          expected: ADR 0196 — oracle B is the one block `--report` recomputes live from `corpus/`, and the corpus moved to one model (ADR 0186). ADR 0186 disclosed the same drift for v2 and missed v1.
+
+=== i14-judges-v2 — I14 — the judge A/B (v2, restated by ADR 0186)
+    ADR docs/adr/0186-one-model-across-the-corpus-and-what-it-cost.md
+    $ python docs/research/i14/run_i14.py --verify --out docs/research/i14/results-v2.jsonl
+    ok    oracle B pass count on today's corpus        9
+    note: ADR 0186 §'What this changes' already declared `report-v2.txt` stale and published the corrected split. This row proves the correction, and it is why the committed report-v2.txt is not byte-compared here.
+
+=== j2-archive — J2/S4 — greedy vs sampling over the archive
+    ADR docs/adr/0160-the-archive-is-real-and-has-not-yet-bought-anything.md
+    $ python docs/research/j2/run_j2.py --verify
+    ok    greedy: distinct parents                     1
+    ok    sampling: distinct parents                   5
+    ok    greedy: turns                                8
+
+=== j4-selfpref — J4 — judge self-preference
+    ADR docs/adr/0162-the-two-signals-and-which-one-came-apart.md
+    $ python docs/research/j4/run_j4_selfpref.py --verify
+    ok    P(prefers A), judge opus                     0.714
+    ok    P(prefers A), judge haiku                    0.444
+
+=== j4-harm — J4 — does the lesson harm the runs it did not come from
+    ADR docs/adr/0162-the-two-signals-and-which-one-came-apart.md
+    $ python docs/research/j4/run_j4_harm.py --verify
+    ok    sum-23-cransley-cut, baseline words          23
+    ok    sum-23-cransley-cut, with-lesson words       28
+    ok    sum-39-coldbeck-society, with-lesson words   41
+
+=== j4-tally — J4 — the helpful/harmful tally, as ADR 0180 corrected it
+    ADR docs/adr/0180-the-good-column-and-the-quotation.md
+    $ python docs/research/j4/run_j4_harm.py --tally
+    ok    helpful, after ADR 0180's `_tally` correction 6
+    ok    harmful                                      3
+    note: `docs/research/j4/report-tally.txt` still reads `helpful=7`: it is the artefact from BEFORE ADR 0180 corrected `_tally`, and was never regenerated. The ADR is right and the committed .txt is stale — which is the exact failure mode a re-runner exists to make visible.
+
+=== pilot-marlin-control — M6 — the redaction control ADR 0119 demands
+    ADR docs/adr/0163-the-pilot-on-the-clone-and-the-path-that-was-never-open.md
+    $ python docs/research/pilot-marlin/scan_control.py --verify
+    ok    email planted                                1
+    ok    api_key planted                              1
+    ok    bearer planted                               1
+    ok    aws_key planted                              1
+    ok    opaque_secret planted                        1
+    ok    working-memory keys dropped                  2
+    ok    marlin's own subscription UUID (0163 erratum) 1
+
+=== j2b-archive — N8 — does a stepping stone produce a better descendant?
+    ADR docs/adr/0198-the-tree-grew-from-the-rejections-and-none-of-it-was-better.md
+    $ python docs/research/j2b/run_j2b.py --verify
+    ok    llm/greedy: kept from a rejected member      0
+    ok    llm/sampling: kept from a rejected member    0
+    ok    llm/sampling: candidates from a rejected member 5
+    ok    llm/sampling: distinct parents               6
+    ok    llm/greedy: distinct parents                 2
+    ok    rule_based/sampling: turns before the repeated-tree stop 3
+
+=== i14b-hardset — P3 — the judge on a set a word count cannot grade
+    ADR docs/adr/0202-the-judge-on-a-set-a-word-count-cannot-grade.md
+    $ python docs/research/i14b/run_i14b.py --report
+    ok    llm-opus: agreement with the owner's labels  12
+    ok    llm-opus: AUC over the 36 pass/fail pairs    1.000
+    ok    llm-opus: matched pairs scored the right way round 6
+    ok    llm-opus: max position delta                 0.100
+    ok    llm-sonnet: agreement (the disinterested judge) 11
+    ok    baseline: answer 'pass' to everything        6
+    ok    baseline: word count against the cap only    6
+    ok    baseline: the corpus's own inherited regex checks 9
+
+=== j2c-staircase — P4 — a staircase the proposer can climb
+    ADR docs/adr/0203-the-stepping-stone-paid-once-the-ladder-was-on-the-proposers-axis.md
+    $ python docs/research/j2c/run_j2c.py --verify
+    ok    greedy: kept from a rejected member          0
+    ok    sampling: kept from a rejected member        8
+    ok    sampling: candidates from a rejected member  8
+    ok    sampling: runs that reached rung 5           8
+    ok    greedy: runs that reached rung 5             0
+
+----------------------------------------------------------------------------
+75 row(s) reproduce, 1 expected drift(s), 0 unexplained
+the drift set is exactly the one recorded in measure.py — no change
+
+
+Disposable mutations: source .venv/bin/activate; python -B /tmp/aef-update-mutations.py
+Baseline passed
+terminal_budget: detected=True exit=1
+budget_overrun: detected=True exit=1
+offline_schema: detected=True exit=1
+offline_llm_guard: detected=True exit=1
+offline_provider_construction: detected=True exit=1
+unsolicited_workflows: detected=True exit=1
+source_drift_ignored: detected=True exit=1
+source_mtime_ignored: detected=True exit=1
+/tmp/aef-update-mutations.json

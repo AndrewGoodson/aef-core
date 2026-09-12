@@ -1,0 +1,342 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 DONE 0.0s
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 230B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.13-slim
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/4] FROM docker.io/library/python:3.13-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285
+#4 resolve docker.io/library/python:3.13-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285 done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 1.93MB 0.0s done
+#5 DONE 0.0s
+
+#6 [2/4] RUN apt-get update && apt-get install -y --no-install-recommends git     && rm -rf /var/lib/apt/lists/*
+#6 0.262 Hit:1 http://deb.debian.org/debian trixie InRelease
+#6 0.274 Get:2 http://deb.debian.org/debian trixie-updates InRelease [47.3 kB]
+#6 0.303 Get:3 http://deb.debian.org/debian-security trixie-security InRelease [43.4 kB]
+#6 0.326 Get:4 http://deb.debian.org/debian trixie/main arm64 Packages [9607 kB]
+#6 0.584 Get:5 http://deb.debian.org/debian trixie-updates/main arm64 Packages [4424 B]
+#6 0.600 Get:6 http://deb.debian.org/debian-security trixie-security/main arm64 Packages [262 kB]
+#6 1.123 Fetched 9964 kB in 1s (9942 kB/s)
+#6 1.123 Reading package lists...
+#6 1.402 Reading package lists...
+#6 1.679 Building dependency tree...
+#6 1.770 Reading state information...
+#6 1.892 The following additional packages will be installed:
+#6 1.892   git-man libbrotli1 libcom-err2 libcurl3t64-gnutls liberror-perl libexpat1
+#6 1.892   libgdbm-compat4t64 libgnutls30t64 libgssapi-krb5-2 libidn2-0 libk5crypto3
+#6 1.892   libkeyutils1 libkrb5-3 libkrb5support0 libldap2 libnghttp2-14 libnghttp3-9
+#6 1.892   libngtcp2-16 libngtcp2-crypto-gnutls8 libp11-kit0 libperl5.40 libpsl5t64
+#6 1.892   librtmp1 libsasl2-2 libsasl2-modules-db libssh2-1t64 libtasn1-6
+#6 1.892   libunistring5 perl perl-modules-5.40
+#6 1.892 Suggested packages:
+#6 1.892   gettext-base git-doc git-email git-gui gitk gitweb git-cvs git-mediawiki
+#6 1.892   git-svn gnutls-bin krb5-doc krb5-user sensible-utils perl-doc
+#6 1.892   libterm-readline-gnu-perl | libterm-readline-perl-perl make
+#6 1.892   libtap-harness-archive-perl
+#6 1.892 Recommended packages:
+#6 1.892   patch less ssh-client krb5-locales libldap-common publicsuffix
+#6 1.892   libsasl2-modules
+#6 2.000 The following NEW packages will be installed:
+#6 2.000   git git-man libbrotli1 libcom-err2 libcurl3t64-gnutls liberror-perl
+#6 2.000   libexpat1 libgdbm-compat4t64 libgnutls30t64 libgssapi-krb5-2 libidn2-0
+#6 2.000   libk5crypto3 libkeyutils1 libkrb5-3 libkrb5support0 libldap2 libnghttp2-14
+#6 2.000   libnghttp3-9 libngtcp2-16 libngtcp2-crypto-gnutls8 libp11-kit0 libperl5.40
+#6 2.000   libpsl5t64 librtmp1 libsasl2-2 libsasl2-modules-db libssh2-1t64 libtasn1-6
+#6 2.001   libunistring5 perl perl-modules-5.40
+#6 2.047 0 upgraded, 31 newly installed, 0 to remove and 0 not upgraded.
+#6 2.047 Need to get 23.0 MB of archives.
+#6 2.047 After this operation, 122 MB of additional disk space will be used.
+#6 2.047 Get:1 http://deb.debian.org/debian-security trixie-security/main arm64 libexpat1 arm64 2.8.3-1~deb13u1 [109 kB]
+#6 2.087 Get:2 http://deb.debian.org/debian trixie/main arm64 perl-modules-5.40 all 5.40.1-6 [3019 kB]
+#6 2.198 Get:3 http://deb.debian.org/debian trixie/main arm64 libgdbm-compat4t64 arm64 1.24-2 [50.3 kB]
+#6 2.198 Get:4 http://deb.debian.org/debian trixie/main arm64 libperl5.40 arm64 5.40.1-6 [4142 kB]
+#6 2.322 Get:5 http://deb.debian.org/debian trixie/main arm64 perl arm64 5.40.1-6 [267 kB]
+#6 2.329 Get:6 http://deb.debian.org/debian trixie/main arm64 libbrotli1 arm64 1.1.0-2+b7 [308 kB]
+#6 2.332 Get:7 http://deb.debian.org/debian trixie/main arm64 libunistring5 arm64 1.3-2 [453 kB]
+#6 2.337 Get:8 http://deb.debian.org/debian trixie/main arm64 libidn2-0 arm64 2.3.8-2 [107 kB]
+#6 2.338 Get:9 http://deb.debian.org/debian trixie/main arm64 libp11-kit0 arm64 0.25.5-3 [409 kB]
+#6 2.360 Get:10 http://deb.debian.org/debian trixie/main arm64 libtasn1-6 arm64 4.20.0-2+deb13u1 [47.3 kB]
+#6 2.360 Get:11 http://deb.debian.org/debian trixie/main arm64 libgnutls30t64 arm64 3.8.9-3+deb13u4 [1379 kB]
+#6 2.389 Get:12 http://deb.debian.org/debian trixie/main arm64 libkrb5support0 arm64 1.21.3-5+deb13u1 [32.5 kB]
+#6 2.389 Get:13 http://deb.debian.org/debian trixie/main arm64 libcom-err2 arm64 1.47.2-3+b11 [24.9 kB]
+#6 2.389 Get:14 http://deb.debian.org/debian trixie/main arm64 libk5crypto3 arm64 1.21.3-5+deb13u1 [81.4 kB]
+#6 2.390 Get:15 http://deb.debian.org/debian trixie/main arm64 libkeyutils1 arm64 1.6.3-6 [9716 B]
+#6 2.408 Get:16 http://deb.debian.org/debian trixie/main arm64 libkrb5-3 arm64 1.21.3-5+deb13u1 [308 kB]
+#6 2.430 Get:17 http://deb.debian.org/debian trixie/main arm64 libgssapi-krb5-2 arm64 1.21.3-5+deb13u1 [128 kB]
+#6 2.432 Get:18 http://deb.debian.org/debian trixie/main arm64 libsasl2-modules-db arm64 2.1.28+dfsg1-9 [20.1 kB]
+#6 2.432 Get:19 http://deb.debian.org/debian trixie/main arm64 libsasl2-2 arm64 2.1.28+dfsg1-9 [55.6 kB]
+#6 2.452 Get:20 http://deb.debian.org/debian trixie/main arm64 libldap2 arm64 2.6.10+dfsg-1 [179 kB]
+#6 2.455 Get:21 http://deb.debian.org/debian trixie/main arm64 libnghttp2-14 arm64 1.64.0-1.1+deb13u1 [71.6 kB]
+#6 2.456 Get:22 http://deb.debian.org/debian trixie/main arm64 libnghttp3-9 arm64 1.8.0-1 [63.2 kB]
+#6 2.456 Get:23 http://deb.debian.org/debian trixie/main arm64 libngtcp2-16 arm64 1.11.0-1+deb13u1 [121 kB]
+#6 2.458 Get:24 http://deb.debian.org/debian trixie/main arm64 libngtcp2-crypto-gnutls8 arm64 1.11.0-1+deb13u1 [28.4 kB]
+#6 2.458 Get:25 http://deb.debian.org/debian trixie/main arm64 libpsl5t64 arm64 0.21.2-1.1+b1 [57.1 kB]
+#6 2.459 Get:26 http://deb.debian.org/debian trixie/main arm64 librtmp1 arm64 2.4+20151223.gitfa8646d.1-2+b5 [56.8 kB]
+#6 2.459 Get:27 http://deb.debian.org/debian trixie/main arm64 libssh2-1t64 arm64 1.11.1-1+deb13u1 [236 kB]
+#6 2.465 Get:28 http://deb.debian.org/debian trixie/main arm64 libcurl3t64-gnutls arm64 8.14.1-2+deb13u4 [354 kB]
+#6 2.470 Get:29 http://deb.debian.org/debian trixie/main arm64 liberror-perl all 0.17030-1 [26.9 kB]
+#6 2.470 Get:30 http://deb.debian.org/debian trixie/main arm64 git-man all 1:2.47.3-0+deb13u1 [2205 kB]
+#6 2.508 Get:31 http://deb.debian.org/debian trixie/main arm64 git arm64 1:2.47.3-0+deb13u1 [8666 kB]
+#6 2.769 debconf: unable to initialize frontend: Dialog
+#6 2.769 debconf: (TERM is not set, so the dialog frontend is not usable.)
+#6 2.769 debconf: falling back to frontend: Readline
+#6 2.769 debconf: unable to initialize frontend: Readline
+#6 2.769 debconf: (Can't locate Term/ReadLine.pm in @INC (you may need to install the Term::ReadLine module) (@INC entries checked: /etc/perl /usr/local/lib/aarch64-linux-gnu/perl/5.40.1 /usr/local/share/perl/5.40.1 /usr/lib/aarch64-linux-gnu/perl5/5.40 /usr/share/perl5 /usr/lib/aarch64-linux-gnu/perl-base /usr/lib/aarch64-linux-gnu/perl/5.40 /usr/share/perl/5.40 /usr/local/lib/site_perl) at /usr/share/perl5/Debconf/FrontEnd/Readline.pm line 8, <STDIN> line 31.)
+#6 2.769 debconf: falling back to frontend: Teletype
+#6 2.771 debconf: unable to initialize frontend: Teletype
+#6 2.771 debconf: (This frontend requires a controlling tty.)
+#6 2.771 debconf: falling back to frontend: Noninteractive
+#6 3.303 Fetched 23.0 MB in 1s (34.6 MB/s)
+#6 3.312 Selecting previously unselected package libexpat1:arm64.
+#6 3.312 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 5649 files and directories currently installed.)
+#6 3.315 Preparing to unpack .../00-libexpat1_2.8.3-1~deb13u1_arm64.deb ...
+#6 3.317 Unpacking libexpat1:arm64 (2.8.3-1~deb13u1) ...
+#6 3.332 Selecting previously unselected package perl-modules-5.40.
+#6 3.333 Preparing to unpack .../01-perl-modules-5.40_5.40.1-6_all.deb ...
+#6 3.334 Unpacking perl-modules-5.40 (5.40.1-6) ...
+#6 3.480 Selecting previously unselected package libgdbm-compat4t64:arm64.
+#6 3.481 Preparing to unpack .../02-libgdbm-compat4t64_1.24-2_arm64.deb ...
+#6 3.484 Unpacking libgdbm-compat4t64:arm64 (1.24-2) ...
+#6 3.497 Selecting previously unselected package libperl5.40:arm64.
+#6 3.498 Preparing to unpack .../03-libperl5.40_5.40.1-6_arm64.deb ...
+#6 3.499 Unpacking libperl5.40:arm64 (5.40.1-6) ...
+#6 3.673 Selecting previously unselected package perl.
+#6 3.674 Preparing to unpack .../04-perl_5.40.1-6_arm64.deb ...
+#6 3.675 Unpacking perl (5.40.1-6) ...
+#6 3.694 Selecting previously unselected package libbrotli1:arm64.
+#6 3.694 Preparing to unpack .../05-libbrotli1_1.1.0-2+b7_arm64.deb ...
+#6 3.695 Unpacking libbrotli1:arm64 (1.1.0-2+b7) ...
+#6 3.717 Selecting previously unselected package libunistring5:arm64.
+#6 3.717 Preparing to unpack .../06-libunistring5_1.3-2_arm64.deb ...
+#6 3.718 Unpacking libunistring5:arm64 (1.3-2) ...
+#6 3.747 Selecting previously unselected package libidn2-0:arm64.
+#6 3.748 Preparing to unpack .../07-libidn2-0_2.3.8-2_arm64.deb ...
+#6 3.749 Unpacking libidn2-0:arm64 (2.3.8-2) ...
+#6 3.763 Selecting previously unselected package libp11-kit0:arm64.
+#6 3.764 Preparing to unpack .../08-libp11-kit0_0.25.5-3_arm64.deb ...
+#6 3.765 Unpacking libp11-kit0:arm64 (0.25.5-3) ...
+#6 3.787 Selecting previously unselected package libtasn1-6:arm64.
+#6 3.788 Preparing to unpack .../09-libtasn1-6_4.20.0-2+deb13u1_arm64.deb ...
+#6 3.789 Unpacking libtasn1-6:arm64 (4.20.0-2+deb13u1) ...
+#6 3.801 Selecting previously unselected package libgnutls30t64:arm64.
+#6 3.802 Preparing to unpack .../10-libgnutls30t64_3.8.9-3+deb13u4_arm64.deb ...
+#6 3.803 Unpacking libgnutls30t64:arm64 (3.8.9-3+deb13u4) ...
+#6 3.849 Selecting previously unselected package libkrb5support0:arm64.
+#6 3.850 Preparing to unpack .../11-libkrb5support0_1.21.3-5+deb13u1_arm64.deb ...
+#6 3.851 Unpacking libkrb5support0:arm64 (1.21.3-5+deb13u1) ...
+#6 3.862 Selecting previously unselected package libcom-err2:arm64.
+#6 3.863 Preparing to unpack .../12-libcom-err2_1.47.2-3+b11_arm64.deb ...
+#6 3.864 Unpacking libcom-err2:arm64 (1.47.2-3+b11) ...
+#6 3.874 Selecting previously unselected package libk5crypto3:arm64.
+#6 3.875 Preparing to unpack .../13-libk5crypto3_1.21.3-5+deb13u1_arm64.deb ...
+#6 3.876 Unpacking libk5crypto3:arm64 (1.21.3-5+deb13u1) ...
+#6 3.890 Selecting previously unselected package libkeyutils1:arm64.
+#6 3.890 Preparing to unpack .../14-libkeyutils1_1.6.3-6_arm64.deb ...
+#6 3.891 Unpacking libkeyutils1:arm64 (1.6.3-6) ...
+#6 3.901 Selecting previously unselected package libkrb5-3:arm64.
+#6 3.902 Preparing to unpack .../15-libkrb5-3_1.21.3-5+deb13u1_arm64.deb ...
+#6 3.903 Unpacking libkrb5-3:arm64 (1.21.3-5+deb13u1) ...
+#6 3.927 Selecting previously unselected package libgssapi-krb5-2:arm64.
+#6 3.928 Preparing to unpack .../16-libgssapi-krb5-2_1.21.3-5+deb13u1_arm64.deb ...
+#6 3.929 Unpacking libgssapi-krb5-2:arm64 (1.21.3-5+deb13u1) ...
+#6 3.942 Selecting previously unselected package libsasl2-modules-db:arm64.
+#6 3.943 Preparing to unpack .../17-libsasl2-modules-db_2.1.28+dfsg1-9_arm64.deb ...
+#6 3.944 Unpacking libsasl2-modules-db:arm64 (2.1.28+dfsg1-9) ...
+#6 3.954 Selecting previously unselected package libsasl2-2:arm64.
+#6 3.955 Preparing to unpack .../18-libsasl2-2_2.1.28+dfsg1-9_arm64.deb ...
+#6 3.956 Unpacking libsasl2-2:arm64 (2.1.28+dfsg1-9) ...
+#6 3.969 Selecting previously unselected package libldap2:arm64.
+#6 3.970 Preparing to unpack .../19-libldap2_2.6.10+dfsg-1_arm64.deb ...
+#6 3.971 Unpacking libldap2:arm64 (2.6.10+dfsg-1) ...
+#6 3.989 Selecting previously unselected package libnghttp2-14:arm64.
+#6 3.990 Preparing to unpack .../20-libnghttp2-14_1.64.0-1.1+deb13u1_arm64.deb ...
+#6 3.991 Unpacking libnghttp2-14:arm64 (1.64.0-1.1+deb13u1) ...
+#6 4.003 Selecting previously unselected package libnghttp3-9:arm64.
+#6 4.004 Preparing to unpack .../21-libnghttp3-9_1.8.0-1_arm64.deb ...
+#6 4.006 Unpacking libnghttp3-9:arm64 (1.8.0-1) ...
+#6 4.018 Selecting previously unselected package libngtcp2-16:arm64.
+#6 4.018 Preparing to unpack .../22-libngtcp2-16_1.11.0-1+deb13u1_arm64.deb ...
+#6 4.020 Unpacking libngtcp2-16:arm64 (1.11.0-1+deb13u1) ...
+#6 4.032 Selecting previously unselected package libngtcp2-crypto-gnutls8:arm64.
+#6 4.033 Preparing to unpack .../23-libngtcp2-crypto-gnutls8_1.11.0-1+deb13u1_arm64.deb ...
+#6 4.034 Unpacking libngtcp2-crypto-gnutls8:arm64 (1.11.0-1+deb13u1) ...
+#6 4.045 Selecting previously unselected package libpsl5t64:arm64.
+#6 4.046 Preparing to unpack .../24-libpsl5t64_0.21.2-1.1+b1_arm64.deb ...
+#6 4.047 Unpacking libpsl5t64:arm64 (0.21.2-1.1+b1) ...
+#6 4.059 Selecting previously unselected package librtmp1:arm64.
+#6 4.059 Preparing to unpack .../25-librtmp1_2.4+20151223.gitfa8646d.1-2+b5_arm64.deb ...
+#6 4.062 Unpacking librtmp1:arm64 (2.4+20151223.gitfa8646d.1-2+b5) ...
+#6 4.075 Selecting previously unselected package libssh2-1t64:arm64.
+#6 4.076 Preparing to unpack .../26-libssh2-1t64_1.11.1-1+deb13u1_arm64.deb ...
+#6 4.077 Unpacking libssh2-1t64:arm64 (1.11.1-1+deb13u1) ...
+#6 4.093 Selecting previously unselected package libcurl3t64-gnutls:arm64.
+#6 4.094 Preparing to unpack .../27-libcurl3t64-gnutls_8.14.1-2+deb13u4_arm64.deb ...
+#6 4.095 Unpacking libcurl3t64-gnutls:arm64 (8.14.1-2+deb13u4) ...
+#6 4.116 Selecting previously unselected package liberror-perl.
+#6 4.116 Preparing to unpack .../28-liberror-perl_0.17030-1_all.deb ...
+#6 4.117 Unpacking liberror-perl (0.17030-1) ...
+#6 4.128 Selecting previously unselected package git-man.
+#6 4.128 Preparing to unpack .../29-git-man_1%3a2.47.3-0+deb13u1_all.deb ...
+#6 4.129 Unpacking git-man (1:2.47.3-0+deb13u1) ...
+#6 4.185 Selecting previously unselected package git.
+#6 4.186 Preparing to unpack .../30-git_1%3a2.47.3-0+deb13u1_arm64.deb ...
+#6 4.189 Unpacking git (1:2.47.3-0+deb13u1) ...
+#6 4.405 Setting up libexpat1:arm64 (2.8.3-1~deb13u1) ...
+#6 4.409 Setting up libkeyutils1:arm64 (1.6.3-6) ...
+#6 4.412 Setting up libgdbm-compat4t64:arm64 (1.24-2) ...
+#6 4.415 Setting up libbrotli1:arm64 (1.1.0-2+b7) ...
+#6 4.417 Setting up libnghttp2-14:arm64 (1.64.0-1.1+deb13u1) ...
+#6 4.420 Setting up libcom-err2:arm64 (1.47.2-3+b11) ...
+#6 4.423 Setting up libkrb5support0:arm64 (1.21.3-5+deb13u1) ...
+#6 4.425 Setting up libsasl2-modules-db:arm64 (2.1.28+dfsg1-9) ...
+#6 4.429 Setting up libp11-kit0:arm64 (0.25.5-3) ...
+#6 4.431 Setting up libunistring5:arm64 (1.3-2) ...
+#6 4.436 Setting up libk5crypto3:arm64 (1.21.3-5+deb13u1) ...
+#6 4.438 Setting up libsasl2-2:arm64 (2.1.28+dfsg1-9) ...
+#6 4.441 Setting up libnghttp3-9:arm64 (1.8.0-1) ...
+#6 4.444 Setting up perl-modules-5.40 (5.40.1-6) ...
+#6 4.447 Setting up libtasn1-6:arm64 (4.20.0-2+deb13u1) ...
+#6 4.450 Setting up git-man (1:2.47.3-0+deb13u1) ...
+#6 4.452 Setting up libngtcp2-16:arm64 (1.11.0-1+deb13u1) ...
+#6 4.456 Setting up libkrb5-3:arm64 (1.21.3-5+deb13u1) ...
+#6 4.458 Setting up libssh2-1t64:arm64 (1.11.1-1+deb13u1) ...
+#6 4.461 Setting up libldap2:arm64 (2.6.10+dfsg-1) ...
+#6 4.464 Setting up libidn2-0:arm64 (2.3.8-2) ...
+#6 4.467 Setting up libperl5.40:arm64 (5.40.1-6) ...
+#6 4.470 Setting up perl (5.40.1-6) ...
+#6 4.475 Setting up libgssapi-krb5-2:arm64 (1.21.3-5+deb13u1) ...
+#6 4.478 Setting up libgnutls30t64:arm64 (3.8.9-3+deb13u4) ...
+#6 4.481 Setting up libpsl5t64:arm64 (0.21.2-1.1+b1) ...
+#6 4.483 Setting up liberror-perl (0.17030-1) ...
+#6 4.485 Setting up librtmp1:arm64 (2.4+20151223.gitfa8646d.1-2+b5) ...
+#6 4.488 Setting up libngtcp2-crypto-gnutls8:arm64 (1.11.0-1+deb13u1) ...
+#6 4.490 Setting up libcurl3t64-gnutls:arm64 (8.14.1-2+deb13u4) ...
+#6 4.494 Setting up git (1:2.47.3-0+deb13u1) ...
+#6 4.499 Processing triggers for libc-bin (2.41-12+deb13u3) ...
+#6 DONE 4.6s
+
+#7 [3/4] COPY source /opt/aef-base
+#7 DONE 0.0s
+
+#8 [4/4] RUN pip install "/opt/aef-base[dev]"
+#8 0.894 Processing ./opt/aef-base
+#8 0.895   Installing build dependencies: started
+#8 1.680   Installing build dependencies: finished with status 'done'
+#8 1.680   Getting requirements to build wheel: started
+#8 1.741   Getting requirements to build wheel: finished with status 'done'
+#8 1.741   Preparing metadata (pyproject.toml): started
+#8 1.850   Preparing metadata (pyproject.toml): finished with status 'done'
+#8 1.921 Collecting opentelemetry-api<2,>=1.27 (from aef-core==0.1.0)
+#8 1.980   Downloading opentelemetry_api-1.44.0-py3-none-any.whl.metadata (1.4 kB)
+#8 2.009 Collecting opentelemetry-sdk<2,>=1.27 (from aef-core==0.1.0)
+#8 2.024   Downloading opentelemetry_sdk-1.44.0-py3-none-any.whl.metadata (1.6 kB)
+#8 2.106 Collecting pydantic<3,>=2.9 (from aef-core==0.1.0)
+#8 2.125   Downloading pydantic-2.13.5-py3-none-any.whl.metadata (110 kB)
+#8 2.179 Collecting pyyaml<7,>=6.0 (from aef-core==0.1.0)
+#8 2.195   Downloading pyyaml-6.0.3-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (2.4 kB)
+#8 2.202 Collecting hatchling (from aef-core==0.1.0)
+#8 2.203   Using cached hatchling-1.32.0-py3-none-any.whl.metadata (3.9 kB)
+#8 2.259 Collecting mypy<3,>=1.11 (from aef-core==0.1.0)
+#8 2.276   Downloading mypy-2.3.1-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (2.4 kB)
+#8 2.371 Collecting pytest<10,>=8.3 (from aef-core==0.1.0)
+#8 2.389   Downloading pytest-9.1.1-py3-none-any.whl.metadata (7.6 kB)
+#8 2.537 Collecting ruff<1,>=0.6 (from aef-core==0.1.0)
+#8 2.556   Downloading ruff-0.16.7-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl.metadata (20 kB)
+#8 2.581 Collecting types-pyyaml<7,>=6.0 (from aef-core==0.1.0)
+#8 2.597   Downloading types_pyyaml-6.0.12.20260906-py3-none-any.whl.metadata (1.8 kB)
+#8 2.621 Collecting typing_extensions>=4.6.0 (from mypy<3,>=1.11->aef-core==0.1.0)
+#8 2.638   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+#8 2.660 Collecting mypy_extensions>=1.0.0 (from mypy<3,>=1.11->aef-core==0.1.0)
+#8 2.677   Downloading mypy_extensions-1.1.0-py3-none-any.whl.metadata (1.1 kB)
+#8 2.683 Collecting pathspec>=1.0.0 (from mypy<3,>=1.11->aef-core==0.1.0)
+#8 2.684   Using cached pathspec-1.1.1-py3-none-any.whl.metadata (14 kB)
+#8 2.745 Collecting librt>=0.13.0 (from mypy<3,>=1.11->aef-core==0.1.0)
+#8 2.762   Downloading librt-0.15.0-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (1.3 kB)
+#8 2.796 Collecting ast-serialize<1.0.0,>=0.6.0 (from mypy<3,>=1.11->aef-core==0.1.0)
+#8 2.873   Downloading ast_serialize-0.11.1-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl.metadata (1.4 kB)
+#8 2.908 Collecting opentelemetry-semantic-conventions==0.65b0 (from opentelemetry-sdk<2,>=1.27->aef-core==0.1.0)
+#8 2.926   Downloading opentelemetry_semantic_conventions-0.65b0-py3-none-any.whl.metadata (2.4 kB)
+#8 2.951 Collecting annotated-types>=0.6.0 (from pydantic<3,>=2.9->aef-core==0.1.0)
+#8 2.968   Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+#8 3.236 Collecting pydantic-core==2.46.5 (from pydantic<3,>=2.9->aef-core==0.1.0)
+#8 3.253   Downloading pydantic_core-2.46.5-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl.metadata (6.6 kB)
+#8 3.276 Collecting typing-inspection>=0.4.2 (from pydantic<3,>=2.9->aef-core==0.1.0)
+#8 3.290   Downloading typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+#8 3.310 Collecting iniconfig>=1.0.1 (from pytest<10,>=8.3->aef-core==0.1.0)
+#8 3.325   Downloading iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)
+#8 3.331 Collecting packaging>=22 (from pytest<10,>=8.3->aef-core==0.1.0)
+#8 3.331   Using cached packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+#8 3.333 Collecting pluggy<2,>=1.5 (from pytest<10,>=8.3->aef-core==0.1.0)
+#8 3.334   Using cached pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
+#8 3.417 Collecting pygments>=2.7.2 (from pytest<10,>=8.3->aef-core==0.1.0)
+#8 3.432   Downloading pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+#8 3.441 Collecting tomlkit>=0.11.1 (from hatchling->aef-core==0.1.0)
+#8 3.442   Using cached tomlkit-0.15.1-py3-none-any.whl.metadata (3.3 kB)
+#8 3.448 Collecting trove-classifiers (from hatchling->aef-core==0.1.0)
+#8 3.449   Using cached trove_classifiers-2026.6.1.19-py3-none-any.whl.metadata (2.3 kB)
+#8 3.466 Downloading mypy-2.3.1-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (14.2 MB)
+#8 3.776    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 14.2/14.2 MB 48.2 MB/s  0:00:00
+#8 3.792 Downloading ast_serialize-0.11.1-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl (1.3 MB)
+#8 3.820    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 44.6 MB/s  0:00:00
+#8 3.846 Downloading opentelemetry_api-1.44.0-py3-none-any.whl (60 kB)
+#8 3.934 Downloading opentelemetry_sdk-1.44.0-py3-none-any.whl (137 kB)
+#8 3.957 Downloading opentelemetry_semantic_conventions-0.65b0-py3-none-any.whl (204 kB)
+#8 3.980 Downloading pydantic-2.13.5-py3-none-any.whl (472 kB)
+#8 4.010 Downloading pydantic_core-2.46.5-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl (2.0 MB)
+#8 4.061    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 38.3 MB/s  0:00:00
+#8 4.079 Downloading pytest-9.1.1-py3-none-any.whl (386 kB)
+#8 4.090 Using cached pluggy-1.6.0-py3-none-any.whl (20 kB)
+#8 4.108 Downloading pyyaml-6.0.3-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (767 kB)
+#8 4.126    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 767.1/767.1 kB 46.0 MB/s  0:00:00
+#8 4.147 Downloading ruff-0.16.7-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl (10.0 MB)
+#8 4.387    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.0/10.0 MB 41.2 MB/s  0:00:00
+#8 4.459 Downloading types_pyyaml-6.0.12.20260906-py3-none-any.whl (21 kB)
+#8 4.482 Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+#8 4.503 Downloading iniconfig-2.3.0-py3-none-any.whl (7.5 kB)
+#8 4.525 Downloading librt-0.15.0-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (502 kB)
+#8 4.561 Downloading mypy_extensions-1.1.0-py3-none-any.whl (5.0 kB)
+#8 4.568 Using cached packaging-26.3-py3-none-any.whl (129 kB)
+#8 4.569 Using cached pathspec-1.1.1-py3-none-any.whl (57 kB)
+#8 4.585 Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+#8 4.625    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 27.7 MB/s  0:00:00
+#8 4.642 Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+#8 4.662 Downloading typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+#8 4.665 Using cached hatchling-1.32.0-py3-none-any.whl (78 kB)
+#8 4.666 Using cached tomlkit-0.15.1-py3-none-any.whl (49 kB)
+#8 4.666 Using cached trove_classifiers-2026.6.1.19-py3-none-any.whl (14 kB)
+#8 4.702 Building wheels for collected packages: aef-core
+#8 4.703   Building wheel for aef-core (pyproject.toml): started
+#8 4.717   Building wheel for aef-core (pyproject.toml): finished with status 'done'
+#8 4.717   Created wheel for aef-core: filename=aef_core-0.1.0-py3-none-any.whl size=687293 sha256=08c9ebdd41af899f249329faac3cb52b43b4506a6448524c97f3909cbcc5221f
+#8 4.717   Stored in directory: /tmp/pip-ephem-wheel-cache-e8je45_5/wheels/5e/0c/b3/88c9a16fbb181fa9870534afdb022bcedea474423679245ab8
+#8 4.718 Successfully built aef-core
+#8 4.739 Installing collected packages: trove-classifiers, typing_extensions, types-pyyaml, tomlkit, ruff, pyyaml, pygments, pluggy, pathspec, packaging, mypy_extensions, librt, iniconfig, ast-serialize, annotated-types, typing-inspection, pytest, pydantic-core, opentelemetry-api, mypy, hatchling, pydantic, opentelemetry-semantic-conventions, opentelemetry-sdk, aef-core
+#8 6.533 
+#8 6.534 Successfully installed aef-core-0.1.0 annotated-types-0.8.0 ast-serialize-0.11.1 hatchling-1.32.0 iniconfig-2.3.0 librt-0.15.0 mypy-2.3.1 mypy_extensions-1.1.0 opentelemetry-api-1.44.0 opentelemetry-sdk-1.44.0 opentelemetry-semantic-conventions-0.65b0 packaging-26.3 pathspec-1.1.1 pluggy-1.6.0 pydantic-2.13.5 pydantic-core-2.46.5 pygments-2.21.0 pytest-9.1.1 pyyaml-6.0.3 ruff-0.16.7 tomlkit-0.15.1 trove-classifiers-2026.6.1.19 types-pyyaml-6.0.12.20260906 typing-inspection-0.4.4 typing_extensions-4.16.0
+#8 6.534 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+#8 DONE 6.7s
+
+#9 exporting to image
+#9 exporting layers
+#9 exporting layers 2.6s done
+#9 exporting manifest sha256:562b7e580a3603f2b61d8e40e486be4bb49bc8d27d539573ab8abed9aa9992ad 0.0s done
+#9 exporting config sha256:ac488be1d7d27f6bf64584847bcdca05ad4782a01377f62e1afa4354795b2114 done
+#9 exporting attestation manifest sha256:9a42d5fc5d85e7cf3cdca5e1b7e6872685d83ffccac3dfd475f070835df4a881 done
+#9 exporting manifest list sha256:ebf5c2f4cd40a1b8dc9408791bb4050af7da040e89ca800137b37b6e17f220c8 done
+#9 naming to docker.io/library/aef-workflow-smoke:1789187655 done
+#9 unpacking to docker.io/library/aef-workflow-smoke:1789187655
+#9 unpacking to docker.io/library/aef-workflow-smoke:1789187655 1.0s done
+#9 DONE 3.7s

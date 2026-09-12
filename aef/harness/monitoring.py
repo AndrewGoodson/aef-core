@@ -494,7 +494,7 @@ class Digest:
     # alarm firing on the normal case (ADR 0167).
     containment_events: int = 0
     containment_reasons: tuple[str, ...] = ()
-    scenarios_added: int = 0
+    scenarios_added: int | None = None
     drift: float = 0.0
     owner_edits: int = 0
     # Two ways this loop can be quietly inert. Both are reported every run,
@@ -556,7 +556,12 @@ class Digest:
             f"- Escalated to you: {self.escalated}",
             f"- Security events: {self.security_events}",
             f"- Halts: {self.halts}",
-            f"- Scenarios added to the corpus: {self.scenarios_added}",
+            "- Scenarios added to the corpus: "
+            + (
+                str(self.scenarios_added)
+                if self.scenarios_added is not None
+                else "unknown (not measured)"
+            ),
             f"- Drift from the blessed baseline: {self.drift:.3f}"
             + ("" if self.blessed else " (no baseline blessed in this window)"),
             f"- Out-performing you editing code directly: {benefit}",
@@ -683,7 +688,7 @@ def build_digest(
     since: datetime,
     until: datetime,
     drift: float = 0.0,
-    scenarios_added: int = 0,
+    scenarios_added: int | None = None,
     owner_edits: int = 0,
     halt_channel_configured: bool = False,
     halt_channel: str = "",

@@ -1,0 +1,55 @@
+{
+  "python": "3.11.15",
+  "uv": "0.11.28",
+  "platform": "macOS 26.4.1 arm64",
+  "original_repository": "/Users/raptor/aef-core",
+  "disposable_source": "/tmp/aef-python311-release-20260912/source",
+  "installed_extras": "dev,anthropic,mem0",
+  "commands": [
+    {
+      "cwd": "/Users/raptor/aef-core",
+      "command": "UV_CACHE_DIR=/tmp/aef-py311-uv-cache UV_PYTHON_INSTALL_DIR=/tmp/aef-py311-interpreters /opt/homebrew/bin/uv python install 3.11",
+      "log": "/tmp/aef-py311-install-interpreter.log"
+    },
+    {
+      "cwd": "/Users/raptor/aef-core",
+      "command": "UV_CACHE_DIR=/tmp/aef-py311-uv-cache /opt/homebrew/bin/uv venv --python /tmp/aef-py311-interpreters/cpython-3.11.15-macos-aarch64-none/bin/python3.11 --seed /tmp/aef-python311-release-20260912/venv",
+      "log": "/tmp/aef-python311-release-20260912/venv.log"
+    },
+    {
+      "cwd": "/tmp/aef-python311-release-20260912/source",
+      "command": "PYTHONDONTWRITEBYTECODE=1 /tmp/aef-python311-release-20260912/venv/bin/python -m pip install --upgrade pip",
+      "log": "/tmp/aef-python311-release-20260912/pip-upgrade.log"
+    },
+    {
+      "cwd": "/tmp/aef-python311-release-20260912/source",
+      "command": "PYTHONDONTWRITEBYTECODE=1 /tmp/aef-python311-release-20260912/venv/bin/python -m pip install -e '.[dev,anthropic,mem0]'",
+      "log": "/tmp/aef-python311-release-20260912/install.log"
+    }
+  ],
+  "source_capture": "1174 tracked and nonignored untracked paths copied, with content SHA256 and mode manifest; original Git metadata and caches omitted",
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PATH_prefix": "/tmp/aef-python311-release-20260912/venv/bin",
+    "VIRTUAL_ENV": "/tmp/aef-python311-release-20260912/venv",
+    "MYPY_CACHE_DIR": "/tmp/aef-python311-release-20260912/mypy-cache",
+    "RUFF_CACHE_DIR": "/tmp/aef-python311-release-20260912/ruff-cache",
+    "removed": [
+      "PYTHONPATH",
+      "PYTHONHOME",
+      "AEF_LIVE_HARNESS",
+      "ANTHROPIC_API_KEY",
+      "OPENAI_API_KEY",
+      "GROK_API_KEY",
+      "XAI_API_KEY",
+      "MEM0_API_KEY"
+    ]
+  },
+  "limitations": [
+    "Local macOS validation; does not prove GitHub Ubuntu CI passed.",
+    "No live model calls; eight live tests are skipped.",
+    "Optional mem0-integration extras absent, so the five fastembed/faiss integration tests skip as one collection module.",
+    "One pre-existing xfail remains.",
+    "Only source edit was the authorized exact-binary fixture correction in test_g3_dead_calls_and_pairing.py."
+  ]
+}

@@ -51,6 +51,7 @@ from aef.harness.loop import (
     LoopStateInsideRepoError,
     PolicyConfigError,
     _check_state_is_outside_the_repo,
+    _halt_channel,
     default_digest_window,
     require_base_ref,
     resolve_default_base_ref,
@@ -491,7 +492,10 @@ def _warn_unmet_obligations(args: argparse.Namespace, config: LoopConfig) -> Non
         # rather than the owner's answer (ADR 0167/0168).
         scan_all_graphs=_agent_path_is_defaulted(args),
         graph_id=config.graph_id,
-        halt_channel_configured=bool(getattr(_halt_notifier(), "configured", False)),
+        halt_channel_configured=(
+            _halt_channel(config) is not None
+            or bool(getattr(_halt_notifier(), "configured", False))
+        ),
         observations=config.paths.observations,
     )
     if result.ready:
@@ -1993,7 +1997,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             agent_root=args.agent_root,
             scan_all_graphs=_agent_path_is_defaulted(args),
             graph_id=graph_id(args),
-            halt_channel_configured=bool(getattr(_halt_notifier(), "configured", False)),
+            halt_channel_configured=(
+                _halt_channel(config) is not None
+                or bool(getattr(_halt_notifier(), "configured", False))
+            ),
             observations=Path(args.observations)
             if args.observations
             else config.paths.observations,
@@ -2952,6 +2959,9 @@ def add_loop_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPars
         "--base",
         default=None,
         help=_BASE_REF_HELP,
+    )
+    p_doctor.add_argument(
+        "--config", default=None, help="repo-relative config read from the base ref"
     )
     p_doctor.add_argument("--observations", default=None)
     p_doctor.add_argument(

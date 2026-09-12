@@ -126,8 +126,8 @@ class GraphExecutor:
 
         cursor = durability.load_cursor(run_id)
         if cursor is None:
-            # Either the run already reached END, or it crashed before its
-            # first super-step was ever checkpointed (nothing to resume).
+            # The backend verified the cursor belongs to this checkpoint.
+            # Missing/stale cursor data is an error, never evidence of END.
             return ExecutionResult(final_state=state, trace=() if record_trace else None)
 
         return self._run_from(state, cursor, record_trace=record_trace)
@@ -140,13 +140,18 @@ class GraphExecutor:
         trace: list[NodeExecutionRecord] = []
         durability = self._services.durability
 
-        for _ in range(self._max_steps):
+        for step in range(self._max_steps + 1):
             if isinstance(current, _End):
                 if durability is not None:
                     durability.save_cursor(state.run_id, None)
                 return ExecutionResult(
                     final_state=state, trace=tuple(trace) if record_trace else None
                 )
+
+            # END consumes no node budget. Inspect it after the last permitted
+            # execution, but never execute an (N+1)th node (ADR 0207).
+            if step == self._max_steps:
+                break
 
             node = self._graph.nodes.get(current)
             if node is None:

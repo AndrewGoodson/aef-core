@@ -1,0 +1,30 @@
+Target: /private/tmp/aef-launcher-release-final-20260912/aef-real-launcher-release-5728z3bu/fresh
+Source (read-only): /Users/raptor/aef-core
+created: CLAUDE.md
+created: aef.yaml
+created: aef_adapter.py
+created: .gitignore
+created: AGENT_INTEGRATION.md
+created: AUTONOMY.md
+created: AGENTS.md
+created: GROK.md
+created: .github/copilot-instructions.md
+created: .cursor/rules/aef.mdc
+created: AEF_MIGRATION_CHECKLIST.md
+created: FIRST_DAY.md
+scanned 1 Python file(s)
+found 0 call site(s): 0 wrapped, 0 skipped
+
+
+wrote /private/tmp/aef-launcher-release-final-20260912/aef-real-launcher-release-5728z3bu/fresh/agents/migrated/graph.py
+  Zone A (agents/**) — agent-writable, the only tree the self-rewiring loop may propose changes to
+
+This generated the PLUMBING, not the semantics. Every wrapper passes
+state.objective as a single prompt and stores the raw result; if your
+function takes more than that, the node body is yours to finish.
+
+found 0 prompt agent(s) under .claude/agents, .codex/agents, .grok/agents
+  none — this repo's agents are not markdown personas in that directory, or it does not exist
+Mechanical integration complete; runtime behavior and learning quality are not verified.
+Continue semantic integration inside /private/tmp/aef-launcher-release-final-20260912/aef-real-launcher-release-5728z3bu/fresh; follow AEF_MIGRATION_CHECKLIST.md.
+Source verified unchanged: 16402 entries; manifest sha256=223125c707885f4f0a51cbdc6bdccf304f0f24361c757f4ef7c28898d06c9d8f

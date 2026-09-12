@@ -1,0 +1,8 @@
+From /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-workflow-docker-smoke-m493cpqp/remote
+ * [new branch]      candidate  -> refs/loop/candidate
+ * [new branch]      candidate  -> origin/candidate
+Initialized empty Git repository in /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-workflow-docker-smoke-m493cpqp/gate root/repo/.git/
+From /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-workflow-docker-smoke-m493cpqp/trusted source
+ * [new branch]      main                -> main
+ * [new ref]         refs/loop/candidate -> refs/loop/candidate
+Switched to branch 'main'

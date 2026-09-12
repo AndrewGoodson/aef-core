@@ -45,7 +45,9 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from aef.config.schema import ContextConfig
 from aef.harness.checks import CheckError, TaskCheck
+from aef.harness.memory_store import memory_payload, memory_record
 from aef.harness.trace_codec import (
     TRACE_FORMAT_VERSION,
     TraceCodecError,
@@ -56,6 +58,7 @@ from aef.harness.trace_codec import (
 )
 from aef.kernel.executor import NodeExecutionRecord
 from aef.providers.cassette_provider import RecordedCall
+from aef.services.memory.base import MemoryRecord
 from aef.state import AEFState
 
 MANIFEST_FILENAME = "manifest.json"
@@ -151,6 +154,12 @@ class Scenario:
     # Which command admitted it (ADR 0141). Not a claim about the run — a fact
     # about how it got here, read only by harvest's rate limit.
     source: Source = Source.UNSPECIFIED
+    initial_memory: tuple[MemoryRecord, ...] | None = None
+    provider_isolation: tuple[str, ...] = ()
+    provider_name: str = ""
+    # Approved retrieval settings, not arbitrary services or live permissions.
+    # None preserves pre-ADR-0210 recordings' default retrieval behavior.
+    context_config: ContextConfig | None = None
 
     @property
     def clock_values(self) -> tuple[datetime, ...]:
@@ -173,6 +182,14 @@ class Scenario:
             "budget_ms": self.budget_ms,
             "model_calls": [call.to_payload() for call in self.model_calls],
             "source": self.source.value,
+            "initial_memory": None
+            if self.initial_memory is None
+            else [memory_payload(r) for r in self.initial_memory],
+            "provider_isolation": list(self.provider_isolation),
+            "provider_name": self.provider_name,
+            "context_config": None
+            if self.context_config is None
+            else self.context_config.model_dump(mode="json"),
         }
 
     @classmethod
@@ -200,6 +217,16 @@ class Scenario:
                 # Absent in every scenario recorded before ADR 0141, which is
                 # exactly what UNSPECIFIED means: nobody recorded who wrote it.
                 source=Source(payload.get("source", Source.UNSPECIFIED.value)),
+                initial_memory=None
+                if payload.get("initial_memory") is None
+                else tuple(memory_record(r) for r in payload["initial_memory"]),
+                provider_isolation=tuple(
+                    sorted(str(v) for v in payload.get("provider_isolation", ()))
+                ),
+                provider_name=str(payload.get("provider_name", "")),
+                context_config=None
+                if payload.get("context_config") is None
+                else ContextConfig.model_validate(payload["context_config"]),
             )
         except CheckError as exc:
             # `CheckError` is a `ValueError`, so it would otherwise be reported

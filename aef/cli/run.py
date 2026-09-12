@@ -43,6 +43,7 @@ from aef.harness.graph_loading import (
     looks_like_a_path,
 )
 from aef.harness.memory_store import FileMemoryStore
+from aef.harness.replay_inputs import recorded_context
 from aef.harness.shadow import ContainmentMode
 from aef.kernel import (
     DurabilityBackend,
@@ -142,7 +143,7 @@ def build_run_config(config_path: str | Path | None) -> RunConfig:
         policy_config=build_policy_config(config.tools, config.policies),
         context=config.context,
         reflection=config.reflection.impl,
-        reflection_model=config.model_provider.model,
+        reflection_model=config.model_provider.model if config.model_provider is not None else None,
         containment_mode=build_containment_mode(config.shadow),
     )
 
@@ -286,6 +287,11 @@ def run_graph_module(
     # equivalent to having stored it, with no second source of truth about
     # what has been seen. With an in-memory store there is nothing to rebuild
     # from — the run is a one-off — so this is skipped.
+    initial_memory = (
+        memory.snapshot(agent_id=agent_id)
+        if record_runs_dir is not None and isinstance(memory, FileMemoryStore)
+        else None
+    )
     knowledge = InMemoryKnowledgeStore()
     if memory_path is not None:
         RuleBasedConsolidator().consolidate(memory, knowledge, agent_id=agent_id)
@@ -318,6 +324,9 @@ def run_graph_module(
         working_memory=dict(working_memory or {}),
     )
     executor = GraphExecutor(graph.compile(), services)
+    # Bind the actual built-in retriever before execution; never serialize
+    # arbitrary configuration or grant replay a provider (ADR 0210).
+    context_snapshot = recorded_context(services.retriever) if record_runs_dir is not None else None
     # Tracing is on only when the run is being recorded: a trace costs memory
     # proportional to the run, and every other caller wants the final state.
     result = executor.run(state, record_trace=record_runs_dir is not None)
@@ -337,6 +346,8 @@ def run_graph_module(
                 trace=result.trace,
                 at=datetime.now(UTC),
                 model_calls=recording.recorded if recording is not None else (),
+                initial_memory=initial_memory,
+                context_config=context_snapshot,
                 # The provider's own containment declaration, read from the
                 # object that answered rather than from config, so the
                 # determinism re-check can reproduce ADR 0169's containment

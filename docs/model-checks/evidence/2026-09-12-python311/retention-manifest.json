@@ -1,0 +1,133 @@
+{
+  "source_workspace": "/tmp/aef-python311-release-20260912",
+  "retained_directory": "/tmp/aef-python311-release-20260912/release-evidence",
+  "files": [
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/results.json",
+      "retained_relative_path": "results.json",
+      "bytes": 4917,
+      "sha256": "6ca61aa010f1e833f128527d7d17d9516bb86b4434cc1b53ee5b910df84e025d"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/results-initial.json",
+      "retained_relative_path": "results-initial.json",
+      "bytes": 2868,
+      "sha256": "024fbd7681d38714d9d9fa394b12e94fbc1c5af4b0507da8a809a0d8748f69aa"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/pip-freeze.txt",
+      "retained_relative_path": "pip-freeze.txt",
+      "bytes": 1119,
+      "sha256": "a153081c0dec1c08d96c4d154411fedb8a7b2837603e9a8a9dcc1bf9c76a8006"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/failure-repro.log",
+      "retained_relative_path": "failure-repro.log",
+      "bytes": 1430,
+      "sha256": "5959790c5d589fb6a6a16470e405e61f8b01920aee1e3e16600327503474a71e"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/install-environment.json",
+      "retained_relative_path": "install-environment.json",
+      "bytes": 2512,
+      "sha256": "052187aeb4e56198976349b72a244c9e7ef0c5583329b3d0f0a9cf7ba11c195c"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/pip-check.log",
+      "retained_relative_path": "pip-check.log",
+      "bytes": 30,
+      "sha256": "9261363b733079a641c2e4cc9bc46ffa1d8336945a87f807b6cf68847dbc9b09"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/ruff-check.log",
+      "retained_relative_path": "ruff-check.log",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/ruff-format.log",
+      "retained_relative_path": "ruff-format.log",
+      "bytes": 28,
+      "sha256": "cd4c3f25cde6e3d86cb57a15980b234a37203af933497d84ce62d3714d7b3e54"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/mypy-strict.log",
+      "retained_relative_path": "mypy-strict.log",
+      "bytes": 45,
+      "sha256": "64c96f0977937d2df2f976678c5bbeec31b497dfe898fd22519bd9b47dcce20c"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/ci-explicit-pytest-gates.log",
+      "retained_relative_path": "ci-explicit-pytest-gates.log",
+      "bytes": 3997,
+      "sha256": "221d2f7e14bb1a12d72b2ce4fc28243744a05d1a545f740a06b754925a3d8a3a"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/measure-ci.log",
+      "retained_relative_path": "measure-ci.log",
+      "bytes": 9779,
+      "sha256": "9f269802351728a76ab7910dd52f35cae9ed230888deb1ff24773e0ea11c8c27"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/pytest-full.log",
+      "retained_relative_path": "pytest-full.log",
+      "bytes": 5157,
+      "sha256": "a2324633e42d18a72c81888f1d45ee750593fd1bbddecfc40501bf276c8a02aa"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/ruff-fixture-final.log",
+      "retained_relative_path": "ruff-fixture-final.log",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/ruff-format-fixture-final.log",
+      "retained_relative_path": "ruff-format-fixture-final.log",
+      "bytes": 25,
+      "sha256": "fd2299c9f1c6dc869070883e281051bfe93aacf66c1a3b0069f45b4aa410ca50"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/pytest-fixture-module-final.log",
+      "retained_relative_path": "pytest-fixture-module-final.log",
+      "bytes": 99,
+      "sha256": "f6ce3537e552856c89074e089ca651474ad60809a32a59ad5688b2f4b25bfa04"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/pytest-full-final.log",
+      "retained_relative_path": "pytest-full-final.log",
+      "bytes": 3815,
+      "sha256": "d00270c6d5c120b60d58496016eb6508942db1c06d58702784c693f328a8899d"
+    },
+    {
+      "original_path": "/tmp/aef-py311-install-interpreter.log",
+      "retained_relative_path": "aef-py311-install-interpreter.log",
+      "bytes": 211,
+      "sha256": "10dd56d20b333a3cc0c4da3b54887861cdb17632739c3f0d56be05b496c742d5"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/venv.log",
+      "retained_relative_path": "venv.log",
+      "bytes": 358,
+      "sha256": "165492b3690db1e01ba8a99a71508bf59a92f08f29a7458ba134ef35a92906e3"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/pip-upgrade.log",
+      "retained_relative_path": "pip-upgrade.log",
+      "bytes": 117,
+      "sha256": "7eeabe62c0a61193f29fcb829edffadeb60ab1bee0ecc313c4da1fb4f2627680"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/install.log",
+      "retained_relative_path": "install.log",
+      "bytes": 15733,
+      "sha256": "ad31837c98bab8be50d5f24ac059994c5e334006d878650ce3f3ce73ba55f6ac"
+    },
+    {
+      "original_path": "/tmp/aef-python311-release-20260912/release-evidence/snapshot-current-comparison.json",
+      "retained_relative_path": "snapshot-current-comparison.json",
+      "bytes": 2324,
+      "sha256": "a6c2660c5ec76bf1a9d8da28662eedb10fab960f3b41be9412bda0eeb23610ee"
+    }
+  ],
+  "excluded": "JUnit, full source manifests, source snapshot and virtual environment remain in original /tmp workspace; not part of retained bundle."
+}

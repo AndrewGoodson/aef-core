@@ -43,7 +43,7 @@ def _cmd_migrate(args: argparse.Namespace) -> int:
 
 
 def _cmd_adopt(args: argparse.Namespace) -> int:
-    result = run_adopt(Path(args.dir))
+    result = run_adopt(Path(args.dir), profile=args.profile, with_workflows=args.with_workflows)
     print(f"detected framework: {result.detection()}")
     for path in result.written_files:
         print(f"wrote {path}")
@@ -171,6 +171,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_adopt = subparsers.add_parser("adopt", help="migrate an existing repo onto AEF")
     p_adopt.add_argument("--dir", default=".")
+    p_adopt.add_argument("--profile", choices=("offline", "model"), default="model")
+    p_adopt.add_argument(
+        "--with-workflows",
+        action="store_true",
+        help="opt in to loop workflows (model profile only)",
+    )
     p_adopt.set_defaults(handler=_cmd_adopt)
 
     p_migrate = subparsers.add_parser(
@@ -266,7 +272,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="the run's objective; defaults to `objectives` from --config if given",
     )
     p_run.add_argument(
-        "--config", default=None, help="aef.yaml path; wires a real model_provider if given"
+        "--config",
+        default=None,
+        help="aef.yaml path; model_provider: null selects offline execution",
     )
     p_run.add_argument(
         "--checkpoints-dir",

@@ -272,7 +272,7 @@ def resolve_agent_source(
     reported as a problem rather than parsed: it is neither a graph nor a
     persona, and "no reflect node in the graph" is not what is wrong with it.
     """
-    if not agent_path.endswith(".md"):
+    if not agent_path.lower().endswith((".md", ".toml")):
         return AgentSource(path=agent_path)
 
     from aef.cli.migrate import discover_prompt_agents
@@ -640,7 +640,8 @@ def preflight(
             name="halt channel",
             met=halt_channel_configured,
             detail="configured" if halt_channel_configured else "none — a halt would tell nobody",
-            fix="set AEF_HALT_WEBHOOK in your environment (never in this repo)",
+            fix="commit halt_channel.argv in aef.yaml (or --config), or set "
+            "AEF_HALT_WEBHOOK in your environment (never in this repo)",
         )
     )
 
@@ -652,6 +653,7 @@ def preflight(
     # that refuses ("... is NOT inside the tree this would archive").
     bless_fix = (
         f"aef loop bless --repo . --state {state_root} --agent-path {source.path}{root_flag}"
+        f" --graph-id {graph_id}"
     )
     blessed_root = ""
     if versions:
@@ -683,7 +685,9 @@ def preflight(
         Obligation(
             name="blessed baseline",
             met=bool(versions) and not root_mismatch,
-            detail=detail,
+            detail=(
+                f"{detail}; archive namespace --graph-id {graph_id} (use it on every loop command)"
+            ),
             fix=(
                 f"the baseline and this invocation must name the SAME Zone A tree. Either "
                 f"re-run with --agent-root {blessed_root!r}, or start a new graph id and "

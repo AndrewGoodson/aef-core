@@ -112,8 +112,10 @@ from __future__ import annotations
 import ast
 import json
 import keyword
+import os
 import re
 import textwrap
+from collections.abc import Callable
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
@@ -131,7 +133,9 @@ from aef.providers.base import CompletionRequest
 from aef.reasoning.prompt_agent import (
     DEFAULT_PROMPT_AGENT_DIR,
     MIGRATED_DIR_NAME,
+    NATIVE_PROMPT_AGENT_DIRS,
     PromptAgentDefinition,
+    PromptAgentError,
     load_agent_file,
 )
 
@@ -271,6 +275,7 @@ class MigrateResult:
     # AST scan of Python, these from a directory the harness convention names.
     prompt_agents: list[PromptAgentSite] = field(default_factory=list)
     prompt_written: list[Path] = field(default_factory=list)
+    prompt_backups: list[Path] = field(default_factory=list)
     # Prompt graphs NOT written because a file was already there (no --force).
     prompt_existing: list[str] = field(default_factory=list)
     # `SKILL.md` files seen and deliberately not migrated — see
@@ -731,8 +736,33 @@ def _scan_module(path: Path, root: Path) -> tuple[list[CallSite], list[Skipped]]
 def scan(root: Path) -> MigrateResult:
     """Find every function in `root` whose body wraps a vendor SDK call."""
     result = MigrateResult()
-    for path in sorted(root.rglob("*.py")):
-        if _skip(path.relative_to(root)):
+    paths: list[Path] = []
+    for directory, dirs, files in os.walk(root, followlinks=False):
+        base = Path(directory)
+        # Prune before traversal: filtering rglob's results still enumerates
+        # every dependency in .venv/node_modules in large adopting repos.
+        dirs[:] = sorted(
+            name
+            for name in dirs
+            if not _skip((base / name).relative_to(root)) and not (base / name).is_symlink()
+        )
+        paths.extend(
+            base / name
+            for name in files
+            if name.endswith(".py") and not _skip((base / name).relative_to(root))
+        )
+    for path in sorted(paths):
+        if path.is_symlink():
+            result.skipped.append(
+                Skipped(
+                    ".".join(path.relative_to(root).with_suffix("").parts),
+                    "<module>",
+                    1,
+                    "symlink Python file — source must remain inside the selected repository",
+                )
+            )
+            continue
+        if not path.is_file():
             continue
         result.scanned_files += 1
         sites, skipped = _scan_module(path, root)
@@ -761,6 +791,7 @@ class PromptAgentSite:
     # `aef/harness/archive.py`, so it must be one safe path segment; the
     # persona name is whatever a markdown file's frontmatter says.
     unsafe_name_reason: str = ""
+    graph_id_override: str = ""
 
     @property
     def graph_id(self) -> str:
@@ -782,6 +813,8 @@ class PromptAgentSite:
         untouched: the persona's own name is what the model is told it is, and
         only the id that becomes a directory has to be a path segment.
         """
+        if self.graph_id_override:
+            return self.graph_id_override
         if self.unsafe_name_reason:
             return self.module
         return self.definition.name
@@ -846,6 +879,56 @@ def _module_name(name: str) -> str:
 PROMPT_AGENT_WIRING = "retrieve -> prompt_agent -> reflect -> consolidate -> END"
 
 
+def _existing_prompt_graphs(
+    root: Path, agent_root: str
+) -> tuple[dict[str, tuple[str, str]], set[str], set[str]]:
+    """Recover prior persona identities without importing any adopter code.
+
+    A new earlier-sorting persona must not steal an existing graph path. The
+    generated module already records its source and graph id as literals;
+    retain that mapping even when another persona has the same name.
+    """
+    base = root / agent_root / MIGRATED_DIR_NAME
+    if any(
+        part.is_symlink()
+        for part in (base, *base.parents)
+        if part != root and part.is_relative_to(root)
+    ):
+        raise PromptAgentError(f"refusing symlink migrated graph directory: {base}")
+    previous: dict[str, tuple[str, str]] = {}
+    used: set[str] = set()
+    graph_ids: set[str] = set()
+    for path in sorted(base.glob("*/graph.py")):
+        if path.is_symlink() or path.parent.is_symlink():
+            raise PromptAgentError(f"refusing symlink migrated graph: {path}")
+        if not path.is_file():
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, SyntaxError):
+            continue
+        constants: dict[str, str] = {}
+        for node in tree.body:
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                constants[node.targets[0].id] = node.value.value
+        source, graph_id = constants.get("AGENT_FILE"), constants.get("GRAPH_ID")
+        module = path.parent.name
+        if source and graph_id and not segment_refusal(graph_id) and module == _module_name(module):
+            previous.setdefault(source, (module, graph_id))
+            # Earlier versions could duplicate one source under several
+            # paths. Preserve all occupied identities, including those we
+            # no longer select as that persona's canonical mapping.
+            used.add(module)
+            graph_ids.add(graph_id)
+    return previous, used, graph_ids
+
+
 def discover_prompt_agents(
     root: Path,
     *,
@@ -870,39 +953,61 @@ def discover_prompt_agents(
     with no frontmatter gets its filename as its name (see
     `aef.reasoning.prompt_agent`), which is what the harness does too.
     """
-    base = root / Path(agents_dir)
-    if not base.is_dir():
-        return []
+    directories = (
+        NATIVE_PROMPT_AGENT_DIRS if agents_dir == DEFAULT_PROMPT_AGENT_DIR else (agents_dir,)
+    )
+    definitions: list[tuple[str, PromptAgentDefinition]] = []
+    for directory in directories:
+        base = root / directory
+        if any(
+            part.is_symlink()
+            for part in (base, *base.parents)
+            if part != root and part.is_relative_to(root)
+        ):
+            raise PromptAgentError(f"refusing symlink agent directory: {directory}")
+        if not base.is_dir():
+            continue
+        suffix = ".toml" if directory == ".codex/agents" else ".md"
+        for path in sorted(base.rglob(f"*{suffix}")):
+            rel = path.relative_to(root).as_posix()
+            if MIGRATED_DIR_NAME in path.relative_to(base).parts[:-1]:
+                continue
+            if any(
+                part.is_symlink()
+                for part in (path, *path.parents)
+                if part != root and part.is_relative_to(root)
+            ):
+                raise PromptAgentError(f"refusing symlink agent file: {rel}")
+            if not path.is_file():
+                raise PromptAgentError(f"refusing nonregular agent file: {rel}")
+            definitions.append((rel, load_agent_file(path, source=rel)))
 
     sites: list[PromptAgentSite] = []
-    used: dict[str, int] = {}
-    for path in sorted(base.rglob("*.md")):
-        rel = path.relative_to(root).as_posix()
-        if MIGRATED_DIR_NAME in path.relative_to(base).parts[:-1]:
-            continue
-        definition = load_agent_file(path, source=rel)
-        module = _module_name(definition.name)
-        # Two personas whose names sanitise to one module would otherwise have
-        # the second silently overwrite the first's graph. Disambiguate and
-        # keep going: refusing the whole run because two names collide would
-        # migrate none of the other six.
-        seen = used.get(module, 0) + 1
-        used[module] = seen
-        if seen > 1:
-            module = f"{module}_{seen}"
-        out = f"{agent_root}/{MIGRATED_DIR_NAME}/{module}/graph.py"
+    previous, used, graph_ids = _existing_prompt_graphs(root, agent_root)
+    reserved = {_module_name(definition.name) for _, definition in definitions}
+    reserved.update(definition.name for _, definition in definitions)
+    for rel, definition in definitions:
+        reason = segment_refusal(definition.name)
+        if rel in previous:
+            module, graph_id = previous[rel]
+        else:
+            stem = _module_name(definition.name)
+            module = stem
+            index = 1
+            while module in used or module in graph_ids or (module != stem and module in reserved):
+                index += 1
+                module = f"{stem}_{index}"
+            graph_id = module if reason or definition.name in graph_ids else definition.name
+        used.add(module)
+        graph_ids.add(graph_id)
         sites.append(
             PromptAgentSite(
                 definition=definition,
                 source=rel,
                 module=module,
-                out_relative=out,
-                # The module component was sanitised from the start; the GRAPH
-                # ID was not, and it is the one that becomes a directory under
-                # the archive root (ADR 0168). Recorded rather than applied
-                # silently: `PromptAgentSite.graph_id` falls back to `module`
-                # and the report names both.
-                unsafe_name_reason=segment_refusal(definition.name),
+                out_relative=f"{agent_root}/{MIGRATED_DIR_NAME}/{module}/graph.py",
+                unsafe_name_reason=reason,
+                graph_id_override=graph_id if graph_id != definition.name else "",
             )
         )
     return sites
@@ -1470,7 +1575,7 @@ def _backup_path(out: Path) -> Path:
     """
     candidate = out.with_suffix(out.suffix + ".bak")
     counter = 1
-    while candidate.exists():
+    while candidate.exists() or candidate.is_symlink():
         candidate = out.with_suffix(f"{out.suffix}.bak.{counter}")
         counter += 1
     return candidate
@@ -1496,20 +1601,33 @@ def _resolve_out(root: Path, out: str | Path | None) -> tuple[Path, str | None]:
     return absolute, relative
 
 
-def _write_prompt_agents(root: Path, result: MigrateResult, *, force: bool) -> None:
-    """Write one graph per discovered persona. Same never-overwrite rule.
-
-    No `.bak` dance here, unlike the call-site graph: these files name the
-    persona rather than embedding it, so there is nothing in one an adopter
-    would have hand-finished. An existing file is left alone and reported.
-    """
+def _write_prompt_agents(
+    root: Path,
+    result: MigrateResult,
+    *,
+    force: bool,
+    write_guard: Callable[[Path], None] | None = None,
+) -> None:
+    """Write graphs; preserve edited wrappers before an explicit forced update."""
     for site in result.prompt_agents:
         target = root / Path(site.out_relative)
+        if write_guard is not None:
+            write_guard(target)
         if target.exists() and not force:
             result.prompt_existing.append(site.out_relative)
             continue
+        rendered = render_prompt_agent(site, root.name).encode("utf-8")
+        if target.exists() and target.read_bytes() != rendered:
+            backup = _backup_path(target)
+            if write_guard is not None:
+                write_guard(backup)
+            # Preserve encoding and newlines, including owner code that is
+            # not valid UTF-8. Do not overwrite any prior backup.
+            with backup.open("xb") as stream:
+                stream.write(target.read_bytes())
+            result.prompt_backups.append(backup)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(render_prompt_agent(site, root.name), encoding="utf-8")
+        target.write_bytes(rendered)
         result.prompt_written.append(target)
 
 
@@ -1521,6 +1639,7 @@ def run_migrate(
     out: str | Path | None = None,
     agent_root: str = DEFAULT_AGENT_ROOT,
     prompt_agents_dir: str = DEFAULT_PROMPT_AGENT_DIR,
+    write_guard: Callable[[Path], None] | None = None,
 ) -> MigrateResult:
     """Scan `target_dir` and write the generated graph to `out`.
 
@@ -1554,9 +1673,11 @@ def run_migrate(
     # already existing is not a reason to leave eight personas unmigrated —
     # and on every repo this command was built for there are no call sites at
     # all, so an early return here would make the whole feature unreachable.
-    _write_prompt_agents(root, result, force=force)
+    _write_prompt_agents(root, result, force=force, write_guard=write_guard)
 
     target, result.out_relative = _resolve_out(root, out)
+    if write_guard is not None:
+        write_guard(target)
     if target.exists() and not force:
         # Same rule as `aef adopt`: never overwrite. A generated file the
         # operator has since edited is the expensive thing to lose.
@@ -1578,6 +1699,8 @@ def run_migrate(
             existing = None
         if existing is not None and existing != rendered:
             backup = _backup_path(target)
+            if write_guard is not None:
+                write_guard(backup)
             backup.write_text(existing, encoding="utf-8")
             result.backup = backup
 
@@ -1685,8 +1808,10 @@ def _blast_radius(result: MigrateResult) -> list[str]:
     comparison here.
     """
     policy = ZonePolicy(agent_root=result.agent_root)
-    persona = result.prompt_agents[0].source
-    verdict = inspect_path(persona, policy)
+    personas = [(site.source, inspect_path(site.source, policy)) for site in result.prompt_agents]
+    persona, verdict = personas[0]
+    all_inside = all(v.zone.value == "A" for _, v in personas)
+    some_inside = any(v.zone.value == "A" for _, v in personas)
     lines = [
         "",
         "BLAST RADIUS — what the self-rewiring loop may now propose changes to.",
@@ -1705,7 +1830,8 @@ def _blast_radius(result: MigrateResult) -> list[str]:
                 f"  The CALL-SITE graph is NOT ({result.out_relative} is Zone "
                 f"{call_site_zone}) — `--out` moves that one, not `--agent-root`."
             )
-    if verdict.zone.value == "A":
+    lines += [f"  {path} is Zone {v.zone.value}." for path, v in personas]
+    if all_inside:
         lines += [
             f"  The PERSONA FILES are inside it too ({persona} is Zone A).",
             "  This is the widened setting, and it is the point: a proposer can edit the",
@@ -1719,27 +1845,40 @@ def _blast_radius(result: MigrateResult) -> list[str]:
         ]
     else:
         lines += [
-            f"  The PERSONA FILES are NOT ({persona} is Zone {verdict.zone.value}).",
-            "  So the loop may improve the generated GRAPH and never the PROMPT: a",
-            f"  candidate touching a `.md` under {result.prompt_agents_dir} is rejected by G0 with",
-            "  `candidate touches paths outside Zone A`, and `aef loop bless` archives a",
-            "  baseline that does not contain the persona.",
-            "  This is the default on purpose — widening the tree an agent may rewrite is",
-            "  a scope decision an owner makes, not one a migration makes for them.",
-            "  To widen it, re-run as",
-            f"    aef migrate --dir . --agent-root {result.prompt_agents_dir}",
-            f"  and pass `--agent-root {result.prompt_agents_dir}` to every `aef loop`",
-            "  command as well. Verified before it was offered: the Claude Code CLI",
-            f"  enumerates only `*.md` under {result.prompt_agents_dir} — a `.py` written",
-            "  there is inert to it, so the graphs can live beside the personas.",
+            "  Only some persona files are inside Zone A."
+            if some_inside
+            else f"  The PERSONA FILES are NOT ({persona} is Zone {verdict.zone.value}).",
+            "  A candidate editing an outside persona is rejected by G0.",
+            "  Widening the tree an agent may rewrite is an explicit owner scope decision.",
+            "  Select one persona directory for a learning run; do not widen to the repo root.",
         ]
+        roots = sorted(
+            {
+                next(
+                    (root for root in NATIVE_PROMPT_AGENT_DIRS if path.startswith(root + "/")),
+                    result.prompt_agents_dir,
+                )
+                for path, v in personas
+                if v.zone.value != "A"
+            }
+        )
+        for root in roots:
+            lines += [
+                f"    aef migrate --dir . --agent-root {root}",
+                f"  Pass the SAME --agent-root {root} to every loop command.",
+            ]
     return lines
 
 
 def _prompt_agent_lines(result: MigrateResult) -> list[str]:
     lines = [
         "",
-        f"found {len(result.prompt_agents)} prompt agent(s) under {result.prompt_agents_dir}",
+        f"found {len(result.prompt_agents)} prompt agent(s) under "
+        + (
+            ", ".join(NATIVE_PROMPT_AGENT_DIRS)
+            if result.prompt_agents_dir == DEFAULT_PROMPT_AGENT_DIR
+            else result.prompt_agents_dir
+        ),
     ]
     if not result.prompt_agents:
         lines.append(
@@ -1798,6 +1937,9 @@ def _prompt_agent_lines(result: MigrateResult) -> list[str]:
     if result.prompt_written:
         lines += ["", f"wrote {len(result.prompt_written)} prompt agent graph(s):"]
         lines += [f"  {p}" for p in result.prompt_written]
+    if result.prompt_backups:
+        lines += ["", "preserved edited prompt graph(s) before --force:"]
+        lines += [f"  {p}" for p in result.prompt_backups]
     if result.prompt_existing:
         lines += [
             "",

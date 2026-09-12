@@ -1,0 +1,38 @@
+  preflight: 5 of 6 obligation(s) unmet (corpus + tripwire, reflect node routed to, observations, halt channel, blessed baseline). ADVISORY — this command does not refuse on them; run `aef loop doctor` for each fix.
+# Proposal refs/loop/candidate@4f733ff3cc6c
+
+## What is being asked
+
+**reject** — G5 rejected it: no owner-blessed baseline to measure drift against — without a reference point this gate has no signal, so the candidate escalates. Create one with `aef loop bless`.
+
+## Why it was proposed
+
+candidate branch refs/loop/candidate@4f733ff3cc6c
+
+## Evidence it was based on
+
+- none (control-cohort member)
+
+## What the checks found
+
+- **G0 PASS** — 1 file(s), 2 line(s), all Zone A; 1 Python file(s) statically scanned, no violations
+- **G1 PASS** — 1 build command(s) succeeded against the merged workspace
+    - python -m pytest -q: ok
+- **G4 PASS** — no owner-only safety metadata declared by the candidate
+- **G5 FAIL** — no owner-blessed baseline to measure drift against — without a reference point this gate has no signal, so the candidate escalates. Create one with `aef loop bless`.
+
+## The change itself
+
+```diff
+diff --git a/agents/demo/graph.py b/agents/demo/graph.py
+index f41ad40..0e5adca 100644
+--- a/agents/demo/graph.py
++++ b/agents/demo/graph.py
+@@ -73,3 +73,5 @@ def build_graph() -> Graph:
+         edges=[],
+         entry_node="work",
+     )
++
++# Disposable candidate data only.
+```
+

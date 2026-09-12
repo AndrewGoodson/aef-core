@@ -1,0 +1,17 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____________ test_credentials_are_only_used_after_a_push_to_main ______________
+
+    def test_credentials_are_only_used_after_a_push_to_main() -> None:
+        # A PR must never schedule work on a machine carrying a persistent CLI
+        # login: withholding repository secrets does not remove that login file.
+>       assert _job().get("if") == "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+E       assert None == "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+E        +  where None = <built-in method get of dict object at 0x105165600>('if')
+E        +    where <built-in method get of dict object at 0x105165600> = {'runs-on': "${{ vars.AEF_LIVE_RUNNER || 'ubuntu-latest' }}", 'steps': [{'uses': 'actions/checkout@v4'}, {'name': 'Set...e\'"\necho "installed and logged in, or supply OPENAI_API_KEY / ANTHROPIC_API_KEY"\necho "as repository secrets."\n'}]}.get
+E        +      where {'runs-on': "${{ vars.AEF_LIVE_RUNNER || 'ubuntu-latest' }}", 'steps': [{'uses': 'actions/checkout@v4'}, {'name': 'Set...e\'"\necho "installed and logged in, or supply OPENAI_API_KEY / ANTHROPIC_API_KEY"\necho "as repository secrets."\n'}]} = _job()
+
+tests/harness/test_ci_live_harness_job.py:36: AssertionError
+=========================== short test summary info ============================
+FAILED tests/harness/test_ci_live_harness_job.py::test_credentials_are_only_used_after_a_push_to_main
+1 failed in 0.06s

@@ -81,8 +81,12 @@ def test_the_gate_checks_out_main_never_the_candidate() -> None:
 def test_the_gate_runs_in_a_network_isolated_container() -> None:
     # The attestation passed to `--network-isolated` is only true if
     # something actually provides isolation.
-    container = _load("loop-gate.yml")["jobs"]["gate"]["container"]
-    assert "--network none" in container["options"]
+    job = _load("loop-gate.yml")["jobs"]["gate"]
+    assert "container" not in job, "checkout/dependency preparation needs network access"
+    gate = next(step for step in job["steps"] if step.get("name") == "Gate")
+    assert "docker run" in gate["run"]
+    assert "--network none" in gate["run"]
+    assert "--read-only" in gate["run"]
 
 
 def test_the_attestation_flag_is_only_passed_where_isolation_exists() -> None:

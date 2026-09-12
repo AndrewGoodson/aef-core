@@ -30,6 +30,16 @@ def _job() -> dict:
     return yaml.safe_load(CI.read_text())["jobs"][JOB]
 
 
+def test_credentials_are_only_used_after_a_push_to_main() -> None:
+    # A PR must never schedule work on a machine carrying a persistent CLI
+    # login: withholding repository secrets does not remove that login file.
+    assert _job().get("if") == "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    document = yaml.safe_load(CI.read_text())
+    assert "pull_request" in document[True]
+    assert document["jobs"]["test"]["runs-on"] == "ubuntu-latest"
+    assert "if" not in document["jobs"]["test"]
+
+
 def _step(name: str) -> dict:
     for step in _job()["steps"]:
         if step.get("name") == name:

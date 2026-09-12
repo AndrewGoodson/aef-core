@@ -9,9 +9,12 @@ in the target repo.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
-from collections.abc import Sequence
+import stat
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from fnmatch import fnmatchcase
 from importlib import resources
 from pathlib import Path
 
@@ -23,6 +26,13 @@ from aef.cli.adopt_loop import (
     render_loop_md,
     render_loop_monitor_workflow,
 )
+from aef.cli.adopt_offline import (
+    OFFLINE_CHECKLIST,
+    OFFLINE_CONFIG,
+    OFFLINE_ENTRY,
+    render_offline_guide,
+)
+from aef.cli.learning_prompt import EVIDENCE_LEARNING_PROTOCOL
 from aef.cli.migrate import (
     DEFAULT_MIGRATED_OUT,
     discover_prompt_agents,
@@ -129,8 +139,43 @@ _LEGACY_BODY_HEADS = ("## AEF scaffold (", "__pycache__/")
 _PROMPT_AGENT_OUT_SHAPE = f"{DEFAULT_MIGRATED_OUT.rsplit('/', 1)[0]}/<agent>/graph.py"
 
 
-def _is_ignored(path: Path, root: Path) -> bool:
-    return any(part in _IGNORED_DIR_NAMES for part in path.relative_to(root).parts)
+def _framework_files(repo_root: Path, max_files: int) -> tuple[list[Path], list[Path]]:
+    """Walk owned source once, pruning dependency trees before entering them.
+
+    File budgets apply separately to code and manifests. Sorting keeps the
+    sampled files stable across machines; links and special files cannot add
+    external imports or block the scan waiting for a FIFO writer.
+    """
+    python_files: list[Path] = []
+    manifests: list[Path] = []
+    if max_files <= 0:
+        return python_files, manifests
+    for directory, subdirectories, filenames in os.walk(repo_root, followlinks=False):
+        root = Path(directory)
+        subdirectories[:] = sorted(
+            name
+            for name in subdirectories
+            if name not in _IGNORED_DIR_NAMES and not (root / name).is_symlink()
+        )
+        for name in sorted(filenames):
+            if name.endswith(".py") and len(python_files) < max_files:
+                selected = python_files
+            elif (
+                any(fnmatchcase(name, pattern) for pattern in _MANIFEST_GLOBS)
+                and len(manifests) < max_files
+            ):
+                selected = manifests
+            else:
+                continue
+            path = root / name
+            try:
+                if stat.S_ISREG(path.lstat().st_mode):
+                    selected.append(path)
+            except OSError:
+                continue
+        if len(python_files) >= max_files and len(manifests) >= max_files:
+            break
+    return python_files, manifests
 
 
 def _read_all(paths: list[Path]) -> str:
@@ -231,7 +276,23 @@ def _is_adopt_generated(path: Path) -> bool:
         (line for line in text.splitlines() if line.startswith("# ")),
         "",
     )
-    return any(heading.rstrip().endswith(suffix) for suffix in _GENERATED_HEADINGS)
+    if any(heading.rstrip().endswith(suffix) for suffix in _GENERATED_HEADINGS):
+        return True
+    # Offline entry files have no model-profile heading. Recognize only the
+    # complete generated wrapper: owner instructions before or after our
+    # block must still count as the owner's prompt surface.
+    span = resolve_block_span(text, MD_MARKERS)
+    if span is None or span[0] == "append":
+        return False
+    _, start, stop = span
+    prefix = text[:start].strip()
+    if text[stop:].strip():
+        return False
+    return prefix in {"", "---\nalwaysApply: true\n---"} or (
+        "\n" not in prefix
+        and prefix.startswith("# ")
+        and prefix.endswith(" — AEF offline integration")
+    )
 
 
 def detect_prompt_surface(repo_root: Path) -> PromptSurface:
@@ -245,7 +306,7 @@ def detect_prompt_surface(repo_root: Path) -> PromptSurface:
 
     **The agents and skills are discovered by `aef migrate`'s own functions**,
     not by a second glob here (ADR 0172). They disagreed: `migrate` recurses
-    (`.claude/agents/**/*.md`, measured against the Claude Code CLI in ADR
+    (`.claude/agents/**/*.md`, `.grok/agents/**/*.md`, measured against the Claude Code CLI in ADR
     0152) and adopt globbed one level, so a repo with a single nested persona
     had adopt say `8 agents` in the detection line, the checklist AND the
     appended block while `aef migrate` wrote 9 graphs. One discovery, one
@@ -309,13 +370,7 @@ def _detect_code_framework(repo_root: Path, *, max_files: int = 2000) -> Framewo
     underneath, so those two are checked first and raw_sdk only matches
     when neither is present — across both signal sources combined, not
     just imports."""
-    py_files = [p for p in repo_root.rglob("*.py") if not _is_ignored(p, repo_root)][:max_files]
-    manifest_files = [
-        p
-        for pattern in _MANIFEST_GLOBS
-        for p in repo_root.rglob(pattern)
-        if not _is_ignored(p, repo_root)
-    ][:max_files]
+    py_files, manifest_files = _framework_files(repo_root, max_files)
 
     code_text = _read_all(py_files)
     manifest_text = _read_all(manifest_files)
@@ -416,8 +471,10 @@ def render_aef_block_body(
         # is a directory adopt never writes into.
         n = surface.agents
         prompt_line = (
-            f"- **Your agents are prompt files** ({n} under `.claude/agents/`). There is no call "
-            f"site to convert: `aef migrate` registers each `.claude/agents/**/*.md` as its "
+            f"- **Your agents are prompt files** ({n} across native agent directories). "
+            f"There is no call "
+            f"site to convert: `aef migrate` registers each supported Markdown or "
+            f"Codex TOML persona as its "
             f"own four-node graph at `{_PROMPT_AGENT_OUT_SHAPE}`, and the `prompt_agent` "
             f"node runs that persona as one model call. The persona's `tools:` frontmatter "
             f"is parsed, reported and never obeyed; what else the call may do is the "
@@ -455,7 +512,9 @@ and adopt will update it in place.
   publish; enabling `aef/evolution/`, weakening the deny-by-default
   `PolicyEngine`, or removing a HITL gate; deleting or overwriting a user
   file; a breaking public-contract change you are unsure of. Nothing
-  auto-merges: a candidate passing all six gates is escalated, never merged."""
+  auto-merges: a candidate passing all six gates is escalated, never merged.
+
+{EVIDENCE_LEARNING_PROTOCOL}"""
 
 
 def _wrap_in_markers(body: str, markers: tuple[str, str]) -> str:
@@ -941,15 +1000,16 @@ def prompt_agent_checklist_item(agents: int) -> str:
     count = f"{agents} prompt agent{'s' if agents != 1 else ''}" if agents else "your prompt agents"
     return (
         f"Run `aef migrate --dir .` — it registers {count} (`.claude/agents/**/*.md`, "
-        f"recursively) as graphs, one four-node graph per agent at "
+        f"`.grok/agents/**/*.md`, "
+        f"`.codex/agents/**/*.toml`) as graphs, one four-node graph per agent at "
         f"`{_PROMPT_AGENT_OUT_SHAPE}` (`retrieve -> prompt_agent -> reflect -> consolidate "
-        f"-> END`; the graph's `graph_id` is the agent's name), inside Zone A. There is no "
+        f"-> END`; the graph ID is the collision-safe agent name), inside Zone A. There is no "
         f"call site to convert: each `prompt_agent` node runs that agent's persona as one "
         f"model call, reading the file at execution time. The persona's `tools:` frontmatter "
         f"is parsed, reported and never obeyed — but WHAT ELSE the call may do is the "
         f"provider's answer and not migrate's, it differs per `model_provider.impl`, and "
         f"migrate's own report prints the measured table (aef-core ADR 0169). NOTE which "
-        f"file the loop may then edit: the GRAPH is Zone A, the PERSONA `.md` is Zone C by "
+        f"file the loop may then edit: the GRAPH is Zone A, the PERSONA file is Zone C by "
         f"default, so a candidate editing the prompt itself is rejected until you widen the "
         f"agent root — `aef migrate --agent-root ...` is opt-in per repo and its report says "
         f"what that adds to the loop's blast radius."
@@ -988,7 +1048,7 @@ def entry_file_checklist_item(entry_files: Sequence[str], reason: str = "") -> s
     if not entry_files:
         return _NO_ENTRY_FILE_STEP.format(reason=reason or "every candidate was skipped")
     named = entry_files[0] if len(entry_files) == 1 else " and ".join(entry_files)
-    plural = "" if len(entry_files) == 1 else " (they are byte-identical)"
+    plural = "" if len(entry_files) == 1 else " (owner instructions may differ)"
     return f"Read the generated {named}{plural} in full before writing any code."
 
 
@@ -1002,7 +1062,17 @@ def render_migration_checklist(
     common = [
         entry_file_checklist_item(entry_files, entry_skip_reason),
         "Fill in aef.yaml: objectives, tools.allow, policies, evaluator.suites.",
-        "Identify your current entrypoint(s) — the function(s) that start an agent run.",
+        (
+            (
+                "Define your first agent objective and implement its first graph; "
+                "no existing agent was detected."
+            )
+            if framework == "none" and not (surface and surface.agents)
+            else (
+                "Identify your current entrypoint(s) or native prompt definitions "
+                "that start an agent run."
+            )
+        ),
         # Derived from DEFAULT_AGENT_ROOT rather than spelled out, so a repo
         # that moves its agent root cannot be told the wrong directory. The
         # output path is migrate's default for a call site, and the
@@ -1249,6 +1319,8 @@ first** (generated alongside this file). It runs `adopt` -> `migrate` ->
 of every command, and it names the two `aef loop bootstrap` flags nothing
 else here mentions.
 
+{EVIDENCE_LEARNING_PROTOCOL}
+
 ## What you inherit (and what you don't)
 aef-core gives every agent, for free: a deterministic graph kernel, shared
 `AEFState`, checkpoint/replay durability, a deny-by-default security policy +
@@ -1409,7 +1481,7 @@ aef loop doctor --repo . --state ~/.aef-loop-state --corpus corpus \\
 
 ```
 aef loop gate --repo . --state ~/.aef-loop-state --head <branch> \\
-   --workdir /tmp/loop --corpus corpus \\
+   --workdir "$(mktemp -d)/run" --corpus corpus \\
    --entrypoint <your.module>:build_graph \\
    --build-command "<your green bar>"
 ```
@@ -1426,7 +1498,9 @@ agent ignore its inputs and always report success — gate it, and confirm G2
 rejects it as a SECURITY EVENT and the loop HALTS with exit 2. If it does
 not, your tripwire is not a tripwire. Revert the hack afterwards.
 
-Finally, edit `.github/workflows/loop-gate.yml` and set `AEF_ENTRYPOINT` and
+Scheduled workflows are optional. If wanted, review their schedules and run
+`aef adopt --dir . --profile model --with-workflows`, then edit
+`.github/workflows/loop-gate.yml` and set `AEF_ENTRYPOINT` and
 `AEF_BUILD_COMMAND` to your values. The generated ones are placeholders.
 
 ### Know what is and is not wired
@@ -1714,7 +1788,17 @@ def _entry_files_with_legacy_blocks(target_dir: Path) -> tuple[str, ...]:
     return tuple(found)
 
 
-def run_adopt(target_dir: Path) -> AdoptResult:
+def run_adopt(
+    target_dir: Path,
+    *,
+    write_guard: Callable[[Path], None] | None = None,
+    profile: str = "model",
+    with_workflows: bool = False,
+) -> AdoptResult:
+    if profile not in {"offline", "model"}:
+        raise ValueError("profile must be offline or model")
+    if with_workflows and profile != "model":
+        raise ValueError("workflows require the model profile")
     target_dir = target_dir.resolve()
     # BEFORE any write: the first thing adopt does is upgrade CLAUDE.md's block.
     legacy_blocks = _entry_files_with_legacy_blocks(target_dir)
@@ -1765,6 +1849,8 @@ def run_adopt(target_dir: Path) -> AdoptResult:
             _skip(path, "a symlink, or under one — adoption never writes through a link")
             return
         if not path.exists():
+            if write_guard is not None:
+                write_guard(path)
             path.parent.mkdir(parents=True, exist_ok=True)  # for .github/, .cursor/rules/
             # `write_bytes`, not `write_text`: `write_text` writes `os.linesep`,
             # so every generated file in this scaffold would be CRLF on Windows
@@ -1776,6 +1862,13 @@ def run_adopt(target_dir: Path) -> AdoptResult:
             _skip(path, "already exists")
             return
         try:
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode):
+                _skip(path, "exists but is not a regular file")
+                return
+            if info.st_nlink > 1:
+                _skip(path, "hardlink — adoption never modifies shared file contents")
+                return
             existing = path.read_bytes()
         except OSError as exc:
             _skip(path, f"exists but is not readable as text ({type(exc).__name__})")
@@ -1797,6 +1890,8 @@ def run_adopt(target_dir: Path) -> AdoptResult:
         if outcome.data == existing:
             _skip(path, _BLOCK_ALREADY_CURRENT)
             return
+        if write_guard is not None:
+            write_guard(path)
         path.write_bytes(outcome.data)
         appended.append(path)
         if outcome.action == "migrate":
@@ -1804,8 +1899,13 @@ def run_adopt(target_dir: Path) -> AdoptResult:
 
     entry_block = render_aef_block(repo_name, framework, surface)
     claude_md = render_claude_md(framework, repo_name, surface)
+    if profile == "offline":
+        entry_block = _wrap_in_markers(OFFLINE_ENTRY, MD_MARKERS)
+        claude_md = f"# {repo_name} — AEF offline integration\n\n{entry_block}\n"
     _write_if_absent("CLAUDE.md", claude_md, block=entry_block)
-    _write_if_absent("aef.yaml", render_aef_yaml(repo_name))
+    _write_if_absent(
+        "aef.yaml", OFFLINE_CONFIG if profile == "offline" else render_aef_yaml(repo_name)
+    )
     _write_if_absent("aef_adapter.py", render_adapter_shim(framework, repo_name))
 
     # Zone A hygiene (ADR 0142, amended by ADR 0153). Handled BEFORE the
@@ -1840,7 +1940,12 @@ def run_adopt(target_dir: Path) -> AdoptResult:
 
     # Onboarding kit: the ingest-and-start guide plus the inlined autonomy
     # safety contract, so a new repo agent inherits both (see docs/adr/0034).
-    _write_if_absent("AGENT_INTEGRATION.md", render_agent_integration_md(repo_name))
+    _write_if_absent(
+        "AGENT_INTEGRATION.md",
+        render_offline_guide(repo_name)
+        if profile == "offline"
+        else render_agent_integration_md(repo_name),
+    )
     _write_if_absent("AUTONOMY.md", render_autonomy_md(repo_name))
 
     # Cross-harness entry files (docs/adr/0040): every major coding-agent reads
@@ -1855,13 +1960,22 @@ def run_adopt(target_dir: Path) -> AdoptResult:
     # contract never reached the file that repo's agents actually read.
     _write_if_absent("AGENTS.md", claude_md, block=entry_block)
     _write_if_absent(
+        "GROK.md",
+        "# AEF portable guide (load explicitly)\n\n" + entry_block + "\n",
+        block=entry_block,
+    )
+    _write_if_absent(
         ".github/copilot-instructions.md",
-        render_harness_pointer(repo_name, framework, surface),
+        entry_block
+        if profile == "offline"
+        else render_harness_pointer(repo_name, framework, surface),
         block=entry_block,
     )
     _write_if_absent(
         ".cursor/rules/aef.mdc",
-        render_cursor_rule(repo_name, framework, surface),
+        ("---\nalwaysApply: true\n---\n\n" + entry_block)
+        if profile == "offline"
+        else render_cursor_rule(repo_name, framework, surface),
         block=entry_block,
     )
 
@@ -1890,6 +2004,10 @@ def run_adopt(target_dir: Path) -> AdoptResult:
     checklist = render_migration_checklist(
         framework, surface, entry_files=tuple(entry_files), entry_skip_reason=entry_skip_reason
     )
+    if profile == "offline":
+        checklist = list(OFFLINE_CHECKLIST)
+        if entry_skip_reason:
+            checklist.append("Entry instructions could not be updated: " + entry_skip_reason)
     if legacy_blocks:
         checklist.append(legacy_block_upgraded_note(legacy_blocks))
     if gitignore in appended:
@@ -1908,30 +2026,40 @@ def run_adopt(target_dir: Path) -> AdoptResult:
     # NOT work yet: an adopting repo whose agents produce candidates against an
     # empty corpus sees every one rejected, and that reads as "the loop is
     # broken" rather than "the loop has nothing to judge against".
-    _write_if_absent("LOOP.md", render_loop_md(repo_name, surface.agents))
+    if profile == "model":
+        _write_if_absent("LOOP.md", render_loop_md(repo_name, surface.agents))
     # The sequence, in the order an adopter meets it (ADR 0148). Separate from
     # LOOP.md deliberately: LOOP.md says what the loop NEEDS, and needed a
     # reader who already knew when to run each command. Every command in it
     # was executed against a fresh adoption and its real output pasted.
-    _write_if_absent("FIRST_DAY.md", render_first_day_md(repo_name, surface.agents))
-    _write_if_absent("agents/README.md", render_agents_zone_readme(repo_name))
-    _write_if_absent("corpus/README.md", render_corpus_readme(repo_name))
-    _write_if_absent(".github/workflows/loop-gate.yml", render_loop_gate_workflow(repo_name))
+    _write_if_absent(
+        "FIRST_DAY.md",
+        render_offline_guide(repo_name)
+        if profile == "offline"
+        else render_first_day_md(repo_name, surface.agents),
+    )
+    if profile == "model":
+        _write_if_absent("agents/README.md", render_agents_zone_readme(repo_name))
+        _write_if_absent("corpus/README.md", render_corpus_readme(repo_name))
+    if with_workflows:
+        _write_if_absent(".github/workflows/loop-gate.yml", render_loop_gate_workflow(repo_name))
     # The nightly cycle's `AEF_MODULE` must never default to the placeholder
     # `aef migrate` writes when it finds no call site — on a prompt-file repo
     # that module exists, raises, and the cycle's exit 1 reads as a healthy
     # rejection (ADR 0172). Where there are prompt agents, name the first
     # one's module: it is derived from migrate's own discovery and sanitiser,
     # so the workflow and `aef migrate` cannot disagree about it.
-    _write_if_absent(
-        ".github/workflows/loop-monitor.yml",
-        render_loop_monitor_workflow(repo_name, prompt_module=first_prompt_module(target_dir)),
-    )
+    if with_workflows:
+        _write_if_absent(
+            ".github/workflows/loop-monitor.yml",
+            render_loop_monitor_workflow(repo_name, prompt_module=first_prompt_module(target_dir)),
+        )
 
     # Per-model-release re-audit (docs/adr/0111). Without it an adopted
     # repo's prompts and call sites are checked against exactly one model:
     # whichever was current the day it adopted.
-    _write_if_absent(_ADOPT_SKILL_PATH, render_new_model_check_skill())
+    if profile == "model":
+        _write_if_absent(_ADOPT_SKILL_PATH, render_new_model_check_skill())
 
     return AdoptResult(
         framework=framework,

@@ -1,0 +1,21 @@
+{
+  "date": "2026-09-12",
+  "checks": [
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m ruff check --no-cache .",
+      "exit_code": 0,
+      "result": "All checks passed!"
+    },
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m ruff format --check --no-cache aef tests examples",
+      "exit_code": 0,
+      "result": "332 files already formatted"
+    },
+    {
+      "command": "PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m mypy --strict --cache-dir /tmp/aef-mypy-final-release-cache aef examples",
+      "exit_code": 0,
+      "result": "Success: no issues found in 139 source files"
+    }
+  ],
+  "scope": "Final runtime, tests and retained reproduction scripts, including workflow corrections; documentation and release evidence completion followed."
+}

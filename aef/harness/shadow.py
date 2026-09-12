@@ -57,6 +57,7 @@ from aef.kernel.contracts import Services, SideEffect
 from aef.kernel.executor import GraphExecutor
 from aef.kernel.graph import Graph
 from aef.security.tool import PolicyConfig, PolicyEngine
+from aef.services.runtime import _EphemeralDurability
 from aef.state import AEFState
 
 # Fields compared between the two final states. Deliberately not "everything":
@@ -220,7 +221,12 @@ def _suppressed_services(base: Services) -> Services:
         tools=base.tools,
         policy_engine=PolicyEngine(PolicyConfig()),
         optimizer=base.optimizer,
-        durability=base.durability,
+        # Each observation starts from the supplied state, not the live
+        # run's checkpoint history. Reusing that history either overwrites
+        # the incumbent or rejects a legitimate differing candidate under
+        # the immutable run/sequence contract (ADR 0209). Keep candidate
+        # checkpoints private and discard them after the comparison.
+        durability=_EphemeralDurability(),
         # NOT inherited. An approval the incumbent was granted is an approval
         # for the incumbent's call, and handing it to a candidate lets the
         # shadow cross a gate the owner opened for something else.

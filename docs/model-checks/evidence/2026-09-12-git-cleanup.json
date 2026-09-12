@@ -1,0 +1,14 @@
+{
+  "baseline_main": "6786c4a1d922f15ff1f1a398191ab9170838f51f",
+  "merged_remote_branch": "wikiskill/knowledge-layer",
+  "merged_remote_branch_sha": "78f9968c500d80e3ba5b09bdc5191b52c7cb42d3",
+  "local_branch": "codex/model-review-20260908",
+  "local_branch_sha": "6786c4a1d922f15ff1f1a398191ab9170838f51f",
+  "redundant_worktrees": 0,
+  "worktrees_before": "worktree /Users/raptor/aef-core\nHEAD 6786c4a1d922f15ff1f1a398191ab9170838f51f\nbranch refs/heads/codex/model-review-20260908",
+  "local_branch_deleted": true,
+  "merged_remote_branch_deleted": true,
+  "deletion_used_exact_ref_lease": true,
+  "worktrees_after": "worktree /Users/raptor/aef-core\nHEAD 6786c4a1d922f15ff1f1a398191ab9170838f51f\nbranch refs/heads/main",
+  "branches_after": "* main\n  remotes/origin/HEAD -> origin/main\n  remotes/origin/main"
+}

@@ -1,0 +1,136 @@
+COMMAND ["/Users/raptor/aef-core/.venv/bin/python", "-I", "-B", "-c", "\nimport sys\nfrom pathlib import Path\nroot = Path(sys.argv[1]).resolve()\nsys.path.insert(0, str(root))\nimport aef.cli.migrate\nassert Path(aef.cli.migrate.__file__).resolve() == root / \"aef/cli/migrate.py\"\nprint(\"Imported disposable module:\", aef.cli.migrate.__file__, flush=True)\nimport pytest\nraise SystemExit(pytest.main(sys.argv[2:]))\n", "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-native_nonregular_source_rejection-370ypa9o", "tests/cli/test_migrate_prompt_agents.py", "-q", "-k", "test_discovery_refuses_nonregular_personas_before_reading", "--basetemp", "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-native_nonregular_source_rejection-370ypa9o/pytest-mutated", "-p", "no:cacheprovider"]
+RETURN_CODE 1
+STDOUT
+Imported disposable module: /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-native_nonregular_source_rejection-370ypa9o/aef/cli/migrate.py
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_discovery_refuses_nonregular_personas_before_reading[.claude/agents/pipe.md] _
+
+tmp_path = PosixPath('/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-native_nonregular_source_rejection-370ypa9o/pytest-mutated/test_discovery_refuses_nonregu0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10bda4e90>
+relative = '.claude/agents/pipe.md'
+
+    @pytest.mark.parametrize(
+        "relative", [".claude/agents/pipe.md", ".codex/agents/pipe.toml", ".grok/agents/pipe.md"]
+    )
+    @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="requires POSIX named pipes")
+    def test_discovery_refuses_nonregular_personas_before_reading(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relative: str
+    ) -> None:
+        from aef.reasoning.prompt_agent import PromptAgentError
+    
+        pipe = tmp_path / relative
+        pipe.parent.mkdir(parents=True)
+        os.mkfifo(pipe)
+    
+        def must_not_load(*args: object, **kwargs: object) -> None:
+            raise AssertionError("discovery attempted to read a named pipe")
+    
+        monkeypatch.setattr("aef.cli.migrate.load_agent_file", must_not_load)
+        with pytest.raises(PromptAgentError, match="nonregular agent file"):
+>           discover_prompt_agents(tmp_path)
+
+tests/cli/test_migrate_prompt_agents.py:236: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+aef/cli/migrate.py:982: in discover_prompt_agents
+    definitions.append((rel, load_agent_file(path, source=rel)))
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (PosixPath('/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-native_nonregular_source_rejection-370ypa9o/pytest-mutated/test_discovery_refuses_nonregu0/.claude/agents/pipe.md'),)
+kwargs = {'source': '.claude/agents/pipe.md'}
+
+    def must_not_load(*args: object, **kwargs: object) -> None:
+>       raise AssertionError("discovery attempted to read a named pipe")
+E       AssertionError: discovery attempted to read a named pipe
+
+tests/cli/test_migrate_prompt_agents.py:232: AssertionError
+_ test_discovery_refuses_nonregular_personas_before_reading[.codex/agents/pipe.toml] _
+
+tmp_path = PosixPath('/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-native_nonregular_source_rejection-370ypa9o/pytest-mutated/test_discovery_refuses_nonregu1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b6576f0>
+relative = '.codex/agents/pipe.toml'
+
+    @pytest.mark.parametrize(
+        "relative", [".claude/agents/pipe.md", ".codex/agents/pipe.toml", ".grok/agents/pipe.md"]
+    )
+    @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="requires POSIX named pipes")
+    def test_discovery_refuses_nonregular_personas_before_reading(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relative: str
+    ) -> None:
+        from aef.reasoning.prompt_agent import PromptAgentError
+    
+        pipe = tmp_path / relative
+        pipe.parent.mkdir(parents=True)
+        os.mkfifo(pipe)
+    
+        def must_not_load(*args: object, **kwargs: object) -> None:
+            raise AssertionError("discovery attempted to read a named pipe")
+    
+        monkeypatch.setattr("aef.cli.migrate.load_agent_file", must_not_load)
+        with pytest.raises(PromptAgentError, match="nonregular agent file"):
+>           discover_prompt_agents(tmp_path)
+
+tests/cli/test_migrate_prompt_agents.py:236: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+aef/cli/migrate.py:982: in discover_prompt_agents
+    definitions.append((rel, load_agent_file(path, source=rel)))
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (PosixPath('/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-native_nonregular_source_rejection-370ypa9o/pytest-mutated/test_discovery_refuses_nonregu1/.codex/agents/pipe.toml'),)
+kwargs = {'source': '.codex/agents/pipe.toml'}
+
+    def must_not_load(*args: object, **kwargs: object) -> None:
+>       raise AssertionError("discovery attempted to read a named pipe")
+E       AssertionError: discovery attempted to read a named pipe
+
+tests/cli/test_migrate_prompt_agents.py:232: AssertionError
+_ test_discovery_refuses_nonregular_personas_before_reading[.grok/agents/pipe.md] _
+
+tmp_path = PosixPath('/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-native_nonregular_source_rejection-370ypa9o/pytest-mutated/test_discovery_refuses_nonregu2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b79fad0>
+relative = '.grok/agents/pipe.md'
+
+    @pytest.mark.parametrize(
+        "relative", [".claude/agents/pipe.md", ".codex/agents/pipe.toml", ".grok/agents/pipe.md"]
+    )
+    @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="requires POSIX named pipes")
+    def test_discovery_refuses_nonregular_personas_before_reading(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relative: str
+    ) -> None:
+        from aef.reasoning.prompt_agent import PromptAgentError
+    
+        pipe = tmp_path / relative
+        pipe.parent.mkdir(parents=True)
+        os.mkfifo(pipe)
+    
+        def must_not_load(*args: object, **kwargs: object) -> None:
+            raise AssertionError("discovery attempted to read a named pipe")
+    
+        monkeypatch.setattr("aef.cli.migrate.load_agent_file", must_not_load)
+        with pytest.raises(PromptAgentError, match="nonregular agent file"):
+>           discover_prompt_agents(tmp_path)
+
+tests/cli/test_migrate_prompt_agents.py:236: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+aef/cli/migrate.py:982: in discover_prompt_agents
+    definitions.append((rel, load_agent_file(path, source=rel)))
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (PosixPath('/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-native_nonregular_source_rejection-370ypa9o/pytest-mutated/test_discovery_refuses_nonregu2/.grok/agents/pipe.md'),)
+kwargs = {'source': '.grok/agents/pipe.md'}
+
+    def must_not_load(*args: object, **kwargs: object) -> None:
+>       raise AssertionError("discovery attempted to read a named pipe")
+E       AssertionError: discovery attempted to read a named pipe
+
+tests/cli/test_migrate_prompt_agents.py:232: AssertionError
+=========================== short test summary info ============================
+FAILED tests/cli/test_migrate_prompt_agents.py::test_discovery_refuses_nonregular_personas_before_reading[.claude/agents/pipe.md]
+FAILED tests/cli/test_migrate_prompt_agents.py::test_discovery_refuses_nonregular_personas_before_reading[.codex/agents/pipe.toml]
+FAILED tests/cli/test_migrate_prompt_agents.py::test_discovery_refuses_nonregular_personas_before_reading[.grok/agents/pipe.md]
+3 failed, 49 deselected in 0.10s
+
+STDERR

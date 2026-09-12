@@ -1,0 +1,32 @@
+  PASS  gate detects a required property with no backing field
+  PASS  gate detects a channel the spec never asked for
+  PASS  gate detects a renderer painting an unbacked property
+  PASS  gate detects a declared channel no painter uses
+  PASS  gate does NOT fire on an honest renderer
+  PASS  detects fetch(
+  PASS  detects XMLHttpRequest
+  PASS  detects WebSocket
+  PASS  detects sendBeacon
+  PASS  detects <form
+  PASS  detects localStorage
+  PASS  detects sessionStorage
+  PASS  detects indexedDB
+  PASS  detects src=http
+  PASS  detects href=http
+  PASS  detects @import
+  PASS  detects url(http
+  PASS  detects Math.random
+  PASS  detects css transition
+  PASS  detects css animation
+  PASS  detects keyframes
+  PASS  detects requestAnimationFrame
+  PASS  detects setInterval
+  PASS  detects forceSimulation
+  PASS  detects forceLink
+  PASS  detects forceManyBody
+  PASS  detects velocityDecay
+  PASS  detects simulation.tick
+  PASS  detects LIVE
+  PASS  no false positive on clean input
+
+SELF-TEST: PASS (24 planted tokens + 5 contract-gate checks = 29 detections, no false positives)

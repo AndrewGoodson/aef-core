@@ -1,0 +1,289 @@
+  PASS  fixture: repo that stopped reporting                                       
+  PASS  fixture: repo that never reported                                          
+  PASS  fixture: collection error distinct from no-data                            
+  PASS  fixture: uninstrumented node                                               
+  PASS  fixture: stale node                                                        
+  PASS  fixture: never-observed edge                                               
+  PASS  fixture: dormant (used-then-abandoned) edge                                
+  PASS  fixture: explicitly retired edge                                           
+  PASS  fixture: unknown-coverage edge                                             
+  PASS  fixture: pending human gate                                                
+  PASS  fixture: approved-then-rolled-back change                                  
+  PASS  dormant and never-observed are separable in the data                       
+  PASS  contract module importable                                                 
+  PASS  uninstrumented node forces the UNKNOWN construction                        
+  PASS  uninstrumented node gets hatched fill and broken border                    
+  PASS  unknown radius does not fall back to a normal size                         
+  PASS  control — an instrumented node resolves as measured                        
+  PASS  control — measured radius differs from the unknown radius                  
+  PASS  UNKNOWN and MEASURED are distinct constructions                            
+  PASS  unknown-coverage edge makes no zero-count claim                            
+  PASS  never-observed edge resolves its count (it is a real zero)                 
+  PASS  never-observed and unknown-coverage resolve differently                    
+  PASS  every declared channel names a backing field                               
+  PASS  UNKNOWN treatment cannot be mutated by a caller                            
+  PASS  UNKNOWN treatment's backing dict is not left bound                         
+  PASS  Stage 0 threshold — every visual property is backed                          10/10 required visual properties backed; 1 declared constant
+  PASS  preattentive load within budget (3)                                          load=3
+  PASS  traversal module importable                                                
+  PASS  derivation produces the active state                                       
+  PASS  derivation produces the dormant state                                      
+  PASS  derivation produces the never_observed state                               
+  PASS  derivation produces the retired state                                      
+  PASS  derivation produces the unknown state                                      
+  PASS  dormant carries a real history (count > 0)                                   count=57
+  PASS  never-observed is a real zero with no last traversal                       
+  PASS  dormant and never-observed derive to different states                      
+  PASS  unknown-coverage edge makes no count claim at all                            count=None
+  PASS  uninstrumented node reports None, not 0                                    
+  PASS  retired comes from config, not from inactivity                             
+  PASS  derivation is deterministic                                                
+  PASS  layout module importable                                                   
+  PASS  layout is deterministic across runs                                        
+  PASS  layout does not depend on input ordering                                   
+  PASS  pipeline/layout.py uses no RNG                                             
+  PASS  pipeline/traversal.py uses no RNG                                          
+  PASS  pipeline/contract.py uses no RNG                                           
+  PASS  carried nodes stay within the 52px displacement budget                     
+  PASS  a new node with positioned neighbours is seeded by centroid, not perimeter   seeded_centroid
+  PASS  layout_reason distinguishes carried from newly placed                      
+  PASS  coordinates are rounded so the artifact does not churn                     
+  PASS  non-finite carried position refused (inf)                                  
+  PASS  non-finite carried position refused (nan)                                  
+  PASS  build runs three times cleanly                                             
+  PASS  builds 2 and 3 are byte-identical over unchanged inputs                    
+  PASS  coordinates survive a second process                                       
+  PASS  layout_version does not bump when nothing changed                          
+  PASS  an unchanged rebuild reports every node as carried                         
+  PASS  build accepts a new node                                                   
+  PASS  existing nodes stay within the displacement budget when one is added         max 45.6px
+  PASS  the new node is seeded by centroid, not dropped on the perimeter             seeded_centroid
+  PASS  layout_version bumps when the topology DOES change                         
+  PASS  payload carries generated_at                                               
+  PASS  payload carries data_through                                               
+  PASS  payload carries expected_report_interval_seconds                           
+  PASS  emit module importable                                                     
+  PASS  script-block breakout does not survive                                     
+  PASS  raw onerror handler does not survive                                       
+  PASS  U+2028 is escaped (a JS line terminator)                                   
+  PASS  payload round-trips through the escaping intact                            
+  PASS  visible ages are computed in the page from embedded timestamps             
+  PASS  uninstrumented node is baked as UNKNOWN, not decided in the browser        
+  PASS  uninstrumented node carries no fill state at all                           
+  PASS  fillFor exists                                                             
+  PASS  fillFor returns null by default, never a colour                            
+  PASS  every measured node has a fill state the renderer recognises               
+  PASS  every radius matches the formula the legend prints                           []
+  PASS  no glow primitive: shadowBlur                                              
+  PASS  no glow primitive: shadowColor                                             
+  PASS  no glow primitive: createRadialGradient                                    
+  PASS  border encodes evidence quality, not health                                
+  PASS  coordinates are read from the payload, never computed                      
+  PASS  dormant rail is unmistakably wider than never-observed                       4.9x (4.86px vs 1.00px)
+  PASS  dormant draws a core (dark), never-observed draws none                     
+  PASS  unknown coverage claims neither width nor recency                          
+  PASS  renderer distinguishes null core strictly, not falsily                     
+  PASS  renderer distinguishes null rail strictly, not falsily                     
+  PASS  every rail width is exactly log1p(count), never decayed                      []
+  PASS  fixture exercises the never_observed state                                 
+  PASS  never_observed carries its own endpoint marker                               []
+  PASS  fixture exercises the retired state                                        
+  PASS  retired carries its own endpoint marker                                      []
+  PASS  fixture exercises the unknown state                                        
+  PASS  unknown carries its own endpoint marker                                      []
+  PASS  unknown coverage returns before any rail is drawn                          
+  PASS  legend is derived — prints the live RADIUS_MIN (6.0)                       
+  PASS  legend is derived — prints the live RADIUS_K (3.4)                         
+  PASS  legend is derived — prints the live RADIUS_CAP (26.0)                      
+  PASS  legend prints the transform, not a bare 'brighter = more active'           
+  PASS  worked examples cite real traversal counts from this graph                   cited ['15', '162', '57']
+  PASS  fixture exercises at least one gate                                          3 gates
+  PASS  gate disposition exercised: awaiting                                       
+  PASS  gate disposition exercised: approved                                       
+  PASS  gate disposition exercised: rejected                                       
+  PASS  gate is a RECTANGLE, not a diamond                                         
+  PASS  gate glyph is drawn unrotated so it stays readable at any edge angle       
+  PASS  an awaiting gate is drawn louder than a decided one                        
+  PASS  every gate carries a glyph                                                 
+  PASS  edges are drawn before nodes                                               
+  PASS  the page renders offline in a headless browser                             
+  PASS  zero coordinate drift between two opens (canvas pixels identical)            0 differing pixels
+  PASS  birth flag for 2026-08-05T17:30:00Z is 'NEW'                                 got 'NEW'
+  PASS  birth flag for 2026-08-05T14:00:00Z is '4h'                                  got '4h'
+  PASS  birth flag for 2026-08-03T18:00:00Z is '2d'                                  got '2d'
+  PASS  birth flag for 2026-06-01T00:00:00Z is None                                  got None
+  PASS  birth flag for None is None                                                  got None
+  PASS  a birthday after generated_at is refused, not drawn                        
+  PASS  the tab is read from the payload, never computed in the browser            
+  PASS  birth tab is visible in a render (not just in the source)                    503 pixels exist only because of the tab
+  PASS  exactly one live clock read in the whole page                                1 occurrences
+  PASS  the live clock read is inside age()                                        
+  PASS  the birth tab is baked, not clock-derived                                  
+  PASS  shifting the clock 27 days further ages the page by exactly 27 days          +3d -> 40d, +30d -> 67d
+  PASS  the reported age matches an independent computation from generated_at        page said 40d/67d, computed 40d/67d
+  PASS  the reported age actually changes with time                                
+  PASS  no stamp ever claims the file is live                                      
+  PASS  window lengths print without invented precision                            
+  PASS  every registry entry gets a row, always                                      4 rows for 4 registered
+  PASS  every non-reporting repo sorts ABOVE every fresh one                       
+  PASS  only 'fresh' maps to the healthy treatment                                 
+  PASS  a repo that never reported is distinct from one that went stale            
+  PASS  a collection error is distinct from no data                                
+  PASS  telemetry from an unregistered repo is surfaced, not dropped               
+  PASS  an empty registry is refused, not rendered as a calm fleet                 
+  PASS  nothing overdue reports None, not 0                                        
+  PASS  the coverage strip leads the page, above the graph                         
+  PASS  fleet row rendered for voltbot                                             
+  PASS  fleet row rendered for databento-ingestion                                 
+  PASS  fleet row rendered for marlin                                              
+  PASS  fleet row rendered for raptor                                              
+  PASS  no ordinary rejection reaches the queue                                    
+  PASS  a rollback does reach the queue                                            
+  PASS  a collapsed rejection rate is flagged (the gate stopped)                   
+  PASS  a surging rejection rate is flagged (the generator broke)                  
+  PASS  a decision pending 30h is flagged                                          
+  PASS  a decision pending 2h is not flagged                                       
+  PASS  an awaiting gate with no start time is still raised                        
+  PASS  a decided gate raises nothing                                              
+  PASS  the page states what the queue deliberately excluded                       
+  PASS  the page states what it cannot detect at all                               
+  PASS  the overdue-decision window is stated on the page                          
+  PASS  cohort builds                                                              
+  PASS  branches plus unclassified equal the cohort                                  412 vs 412
+  PASS  nothing is unaccounted for                                                   0
+  PASS  at most 6 top-level outcomes                                                 6
+  PASS  the fixture exercises rejection branches                                   
+  PASS  an in-band rejection branch is NEVER drawn abnormal                        
+  PASS  a rollback IS drawn abnormal                                               
+  PASS  a branch with no expected range reads unknown, not in-band                 
+  PASS  missing proposals are surfaced, not absorbed                                 unaccounted=5
+  PASS  a rejection rate outside its own band IS abnormal                          
+  PASS  empty cohort is refused                                                    
+  PASS  too many branches is refused                                               
+  PASS  the cohort flow is rendered                                                
+  PASS  the unclassified row is rendered even at zero                              
+  PASS  the page states that rejection branches are neutral by design              
+  PASS  the page states the per-stage durations it does not have                   
+  PASS  nothing claims a time series                                               
+  PASS  no metric claims a series                                                  
+  PASS  the payload names the chart kind                                           
+  PASS  the payload explains why it is not a control chart                         
+  PASS  the fixture exercises an unbanded metric                                   
+  PASS  a metric with no baseline NEVER reads as passing                           
+  PASS  90% against an 88-93% band reads healthy                                   
+  PASS  55% against an 88-93% band reads BELOW (the gate stopped)                  
+  PASS  100% against an 88-93% band reads ABOVE (the generator broke)              
+  PASS  a metric with no observation is not compared anyway                        
+  PASS  metrics the record does not carry are listed, not omitted                    ['human decision latency', 'gate evaluation duration and timeouts']
+  PASS  the band chart is rendered                                                 
+  PASS  the page says it is a band chart, not a control chart                      
+  PASS  the page names the metrics it cannot show                                  
+  PASS  no trend line is drawn anywhere                                            
+  PASS  a never-reported repo draws NO bar                                         
+  PASS  a never-reported repo reports no duration, not a duration of zero          
+  PASS  a never-reported repo carries no score                                     
+  PASS  a stale repo does not keep the healthy treatment                             stale
+  PASS  the longest-quiet repo has the longest bar                                   {'voltbot': 0.0, 'marlin': 100.0, 'raptor': 0.0}
+  PASS  the missing state timeline is disclosed                                    
+  PASS  no segment carries a series                                                
+  PASS  the fleet table renders rails                                              
+  PASS  the never-reported repo renders the no-bar treatment                       
+  PASS  the page states the timeline it cannot draw                                
+  PASS  with no counterfactual stored, it does NOT claim to be a comparison        
+  PASS  the payload denies a causal claim                                          
+  PASS  the payload explains why it stays observational                            
+  PASS  a 'CAUSAL' label is refused                                                
+  PASS  a 'proven' label is refused                                                
+  PASS  a 'blank' label is refused                                                 
+  PASS  a missing counterfactual with no explanation is refused                    
+  PASS  the panel contains no comparative language                                 
+  PASS  the panel renders no ratio                                                 
+  PASS  the panel discloses that no comparator was recorded                        
+  PASS  the OBSERVATIONAL label is rendered                                        
+  PASS  the panel names the supporting metrics it lacks                              ('median time from need to durable change', 'human minutes per durable change', 'post-change incident rate')
+  PASS  throughput is shown beside change-fail rate (the DORA pair)                
+  PASS  the current temporal mode is named                                         
+  PASS  available_count matches the declared modes                                 
+  PASS  every unavailable mode states what it would need                           
+  PASS  no prior topology is asserted                                              
+  PASS  with no nodes, no partial position data is claimed                         
+  PASS  the page names the temporal frame it is showing                            
+  PASS  the page explains it is not a snapshot of an instant                       
+  PASS  the page states it contains no animation at all                            
+  PASS  the difference map is not offered without a prior version                  
+  PASS  with nothing moved, the page says nothing was COMPARED                       no displacement either: every node's previous coordinate is 
+  PASS  no empty diff panel is rendered                                            
+  PASS  two builds run for the displacement probe                                  
+  PASS  a real topology change DOES register displacement                            7 moved
+  PASS  and the mode then reports displacement as answerable                       
+  PASS  the scrubber is not offered                                                
+  PASS  the declared topology retains no version history                           
+  PASS  the page names the missing version sequence                                
+  PASS  the page names motion as a second, independent blocker                     
+  PASS  a traffic-window sequence is independently measurable                        3 windows, sets vary: True
+  PASS  the pipeline's window measurement matches an independent one               
+  PASS  the page reports the window count it actually measured                       a DIFFERENT sequence does exist: the event log spans 3 windows and the set of ed
+  PASS  one window is refused as a sequence even when handed variance              
+  PASS  the page distinguishes traffic-over-time from wiring-over-time             
+  PASS  no scrubber control is rendered                                            
+  PASS  with no windows measured, no sequence is claimed                           
+  PASS  the reduced-motion flag is provably effective (control page differs)         control differed by 160000 pixels
+  PASS  the artifact renders identically under prefers-reduced-motion                0 differing pixels
+  PASS  the page states the static end-state is the only state                     
+  PASS  the toggle's dark palette is the same dark the media query gives           
+  PASS  the toggle's light palette is the same light the media query gives         
+  PASS  both polarities define every semantic token and surface                      10 dark / 10 light
+  PASS  the two polarities are actually different palettes                         
+  PASS  every state keeps its hue identity across themes                             worst drift --ok 6.2deg
+  PASS  every state stays readable against its own ground in both themes             dark min 5.03, light min 3.32
+  PASS  the recency alpha formula is readable from the artifact                      renderer changed shape — this check must be re-derived, not relaxed
+  PASS  dark theme: more recent is more salient, monotonically                       0.017 0.073 0.174 0.326 0.536
+  PASS  light theme: more recent is more salient, monotonically                      0.161 0.354 0.511 0.634 0.727
+  PASS  both polarities are reachable in this browser (control page flips)           light=(255, 0, 0) dark=(0, 0, 255)
+  PASS  the artifact honours prefers-color-scheme (renders differently)              light ground (246, 247, 249), dark ground (10, 13, 18)
+  PASS  the light theme really is the light one and the dark really is dark          light luminance 0.930, dark 0.004
+  PASS  the toggle is a real button with stable ids                                
+  PASS  the toggle reports its state to assistive tech                             
+  PASS  the toggle redraws the canvas rather than only restyling the DOM           
+  PASS  both polarities are reachable by explicit override, not just one           
+  PASS  the toggle follows the environment again while no explicit choice is set   
+  PASS  the toggle persists nothing                                                
+  PASS  clicking the toggle changes what is drawn                                    3336000 pixels changed
+  PASS  the toggle lands on the same picture the OS preference does (canvas redrew)  0 pixels differ between toggled-light and preferred-light
+  PASS  the canvas draws in the sheet's sans family, not a restated one            
+  PASS  the page keeps its measure — content does not reach either edge              left clear: True, right clear: True
+  PASS  code renders in the same family as body text (no monospace fallback)         code 139px vs span 139px
+  PASS  the width probe can distinguish a monospace face (control)                   forced-mono 141px vs sans 139px
+  PASS  artifact contains exactly the declared nodes                                 extra=[] missing=[]
+  PASS  artifact edge count matches the declared topology                            10 vs 10
+  PASS  dist/index.html exists                                                     
+  PASS  forbidden token absent — network: fetch                                    
+  PASS  forbidden token absent — network: XMLHttpRequest                           
+  PASS  forbidden token absent — network: WebSocket                                
+  PASS  forbidden token absent — network: sendBeacon                               
+  PASS  forbidden token absent — write: form element                               
+  PASS  forbidden token absent — storage: localStorage                             
+  PASS  forbidden token absent — storage: sessionStorage                           
+  PASS  forbidden token absent — storage: indexedDB                                
+  PASS  forbidden token absent — external ref: src=http                            
+  PASS  forbidden token absent — external ref: href=http                           
+  PASS  forbidden token absent — external ref: @import                             
+  PASS  forbidden token absent — external ref: url(http                            
+  PASS  forbidden token absent — non-determinism: Math.random                      
+  PASS  forbidden token absent — motion: css transition                            
+  PASS  forbidden token absent — motion: css animation                             
+  PASS  forbidden token absent — motion: keyframes                                 
+  PASS  forbidden token absent — motion: requestAnimationFrame                     
+  PASS  forbidden token absent — motion: setInterval                               
+  PASS  forbidden token absent — runtime layout: forceSimulation                   
+  PASS  forbidden token absent — runtime layout: forceLink                         
+  PASS  forbidden token absent — runtime layout: forceManyBody                     
+  PASS  forbidden token absent — runtime layout: velocityDecay                     
+  PASS  forbidden token absent — runtime layout: simulation.tick                   
+  PASS  honest staleness — not claims to be LIVE                                   
+  PASS  embedded JSON block parses                                                 
+  PASS  payload carries generated_at                                               
+  PASS  payload carries data_through                                               
+  PASS  single file — no sibling assets in dist/                                   
+
+VERIFY: PASS (287 checks)

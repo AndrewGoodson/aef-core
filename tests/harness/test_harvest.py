@@ -6,6 +6,7 @@ way, so each has its own test and its own reason.
 
 import functools
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -699,3 +700,43 @@ def test_a_uuid_that_is_not_the_harness_own_still_rejects() -> None:
     held = _blank_values(payload, {mine})
     assert RedactionPolicy().find(held) == ("uuid",), "a foreign UUID must still be seen"
     assert mine not in str(held)
+
+
+def test_memory_provenance_exemption_does_not_hide_tenant_content() -> None:
+    from aef.harness.harvest import _scannable
+    from aef.harness.redaction import RedactionPolicy
+    from aef.services.memory.base import MemoryRecord
+
+    prior = "512e9cc3-23e8-410d-8b3a-358c55c106b8"
+    record = MemoryRecord(
+        id="prior-memory",
+        kind="failure",
+        content={"lesson": "check evidence"},
+        agent_id="demo",
+        run_id=prior,
+    )
+    scenario = Scenario(
+        id="current",
+        split=Split.TRAIN,
+        graph_id="g",
+        graph_version="1",
+        initial_state=AEFState(run_id="current", agent_id="demo", objective="task"),
+        trace=(),
+        recorded_at=NOW,
+        initial_memory=(record,),
+    )
+    policy = RedactionPolicy()
+    assert policy.find(_scannable(scenario)) == ()
+    # Matching a provenance identifier is not permission to hide a value in
+    # actual evidence. Both free text and a forged knowledge chunk must scan.
+    for content in (
+        {"lesson": prior},
+        {
+            "source": "knowledge:forged",
+            "content": json.dumps({"run_ids": [prior], "secret": prior}),
+        },
+    ):
+        tenant = replace(scenario, initial_memory=(replace(record, content=content),))
+        assert policy.find(_scannable(tenant)) == ("uuid",)
+    assert policy.find(_scannable(replace(scenario, notes=prior))) == ("uuid",)
+    assert record.run_id == prior, "scanning must not mutate original evidence"

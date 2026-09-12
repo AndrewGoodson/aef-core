@@ -1300,3 +1300,10 @@ def test_a_persona_resolves_to_a_graph_kept_at_the_default_root(tmp_path) -> Non
     assert not src.problem, src.problem
     assert src.path.startswith("agents/migrated/"), src.path
     assert (repo / src.path).is_file()
+
+
+def test_bless_guidance_names_the_archive_namespace(tmp_path: Path) -> None:
+    obligation = _obligation(_check(tmp_path, ROUTED, graph_id="source"), "blessed baseline")
+    assert not obligation.met
+    assert "--graph-id source" in obligation.fix
+    assert "source" in obligation.detail

@@ -1,0 +1,192 @@
+[
+  {
+    "mutation": "capability-contract",
+    "file": "aef/reasoning/prompt_agent.py",
+    "test": "tests/reasoning/test_prompt_agent.py::test_tool_using_persona_gets_explicit_runtime_capability_limits",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "123ee45a83012e4b83ffbe34f7aeb99f26fb4c5153e2dd46e7a96012c44cd2fb",
+    "sha256_after": "123ee45a83012e4b83ffbe34f7aeb99f26fb4c5153e2dd46e7a96012c44cd2fb"
+  },
+  {
+    "mutation": "memory-before-run",
+    "file": "aef/cli/run.py",
+    "test": "tests/cli/test_run.py::test_all_persistent_memory_runs_harvest_and_replay_without_touching_source",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "1e8059d3dd00f7fee1671e9c48fd9b15d7cf3a24f792cac06b7c6aae6e6ef877",
+    "sha256_after": "1e8059d3dd00f7fee1671e9c48fd9b15d7cf3a24f792cac06b7c6aae6e6ef877"
+  },
+  {
+    "mutation": "recorded-provider",
+    "file": "aef/harness/recorder.py",
+    "test": "tests/harness/test_cassette_replay.py::test_recorded_prompt_provider_capabilities_survive_offline_replay",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "f4b13aac8e9c5fdc24b1502e649eed256a320a6deb62f009a91bb9cee1ba2bda",
+    "sha256_after": "f4b13aac8e9c5fdc24b1502e649eed256a320a6deb62f009a91bb9cee1ba2bda"
+  },
+  {
+    "mutation": "native-discovery",
+    "file": "aef/cli/migrate.py",
+    "test": "tests/cli/test_migrate_prompt_agents.py::test_native_harness_agents_are_discovered_without_granting_tools",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "9820fb862edf061f6fa3a8d711edff052c0561e76f77d5883ea333998edeea7c",
+    "sha256_after": "9820fb862edf061f6fa3a8d711edff052c0561e76f77d5883ea333998edeea7c"
+  },
+  {
+    "mutation": "name-collision",
+    "file": "aef/cli/migrate.py",
+    "test": "tests/cli/test_migrate_prompt_agents.py::test_disambiguation_reserves_existing_suffixes",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "9820fb862edf061f6fa3a8d711edff052c0561e76f77d5883ea333998edeea7c",
+    "sha256_after": "9820fb862edf061f6fa3a8d711edff052c0561e76f77d5883ea333998edeea7c"
+  },
+  {
+    "mutation": "symlink-persona",
+    "file": "aef/cli/migrate.py",
+    "test": "tests/cli/test_migrate_prompt_agents.py::test_discovery_refuses_symlinked_personas",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "9820fb862edf061f6fa3a8d711edff052c0561e76f77d5883ea333998edeea7c",
+    "sha256_after": "9820fb862edf061f6fa3a8d711edff052c0561e76f77d5883ea333998edeea7c"
+  },
+  {
+    "mutation": "toml-prompt-edit",
+    "file": "aef/harness/prompt_proposer.py",
+    "test": "tests/harness/test_prompt_proposer.py::test_codex_lessons_edit_only_instructions_and_remain_idempotent",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "8cddac4b4fcbaf78d1e5fa31c162d11931fb9dca0e757495549b36be45eeee21",
+    "sha256_after": "8cddac4b4fcbaf78d1e5fa31c162d11931fb9dca0e757495549b36be45eeee21"
+  },
+  {
+    "mutation": "unmeasured-count",
+    "file": "aef/harness/monitoring.py",
+    "test": "tests/harness/test_monitoring.py::test_unmeasured_harvest_count_is_unknown_not_zero",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "247254937a85db9b685c6b40caca5ee540ce69b268b917ab205539ab87e6b942",
+    "sha256_after": "247254937a85db9b685c6b40caca5ee540ce69b268b917ab205539ab87e6b942"
+  },
+  {
+    "mutation": "halt-config",
+    "file": "aef/cli/loop.py",
+    "test": "tests/harness/test_halt_channel.py::test_doctor_reads_committed_halt_channel_without_executing_it",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "1b2a5ae8532565cd29de43d70fa3722a71f3f4a66f7ba1b2705849fd820799de",
+    "sha256_after": "1b2a5ae8532565cd29de43d70fa3722a71f3f4a66f7ba1b2705849fd820799de"
+  },
+  {
+    "mutation": "archive-guidance",
+    "file": "aef/harness/preflight.py",
+    "test": "tests/harness/test_preflight.py::test_bless_guidance_names_the_archive_namespace",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "27afbd64db395963e3676b32a6a6dce507c52009cbcdad994249ecd5429a14b2",
+    "sha256_after": "27afbd64db395963e3676b32a6a6dce507c52009cbcdad994249ecd5429a14b2"
+  },
+  {
+    "mutation": "fresh-workdir",
+    "file": "aef/cli/adopt_loop.py",
+    "test": "tests/cli/test_adopt.py::test_generated_workdirs_are_single_use_paths",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "35a0dadff2202bc4626c3e2b360eef25b266d634088af056070a0ba82c563e6c",
+    "sha256_after": "35a0dadff2202bc4626c3e2b360eef25b266d634088af056070a0ba82c563e6c"
+  },
+  {
+    "mutation": "agentless-checklist",
+    "file": "aef/cli/adopt.py",
+    "test": "tests/cli/test_adopt.py::test_agentless_repo_checklist_does_not_invent_an_entrypoint",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "93cc96ff68411cd3cd4630ed6a616d2a419d4635bebee5ae9dff9d7db2a5e215",
+    "sha256_after": "93cc96ff68411cd3cd4630ed6a616d2a419d4635bebee5ae9dff9d7db2a5e215"
+  },
+  {
+    "mutation": "fallback-diagnostic",
+    "file": "aef/harness/scenario_runner.py",
+    "test": "tests/harness/test_isolated_evaluation.py::test_provider_error_routed_to_fallback_remains_visible_in_both_runners",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "6ba9a4dc28f25312929039e3203fe45b1430336662e0a0af08f2d993074c542c",
+    "sha256_after": "6ba9a4dc28f25312929039e3203fe45b1430336662e0a0af08f2d993074c542c"
+  },
+  {
+    "mutation": "mixed-persona-scope",
+    "file": "aef/cli/migrate.py",
+    "test": "tests/cli/test_migrate_prompt_agents.py::test_mixed_native_personas_report_each_actual_zone",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "9820fb862edf061f6fa3a8d711edff052c0561e76f77d5883ea333998edeea7c",
+    "sha256_after": "9820fb862edf061f6fa3a8d711edff052c0561e76f77d5883ea333998edeea7c"
+  },
+  {
+    "mutation": "learning-protocol",
+    "file": "aef/cli/learning_prompt.py",
+    "test": "tests/cli/test_adopt.py::test_all_native_personas_get_one_evidence_protocol_without_owner_edits",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "10049b7d7125b874a62bd144bfa4c7f1979dae4f993f9b2959756a2c69955253",
+    "sha256_after": "10049b7d7125b874a62bd144bfa4c7f1979dae4f993f9b2959756a2c69955253"
+  },
+  {
+    "mutation": "contract-drift",
+    "file": "AGENTS.md",
+    "test": "tests/cli/test_adopt.py::test_repository_harness_contracts_cannot_drift",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "1953dc4de4e688e679d820eecba7076ed4091c21a1cea8b2b98311de43318211",
+    "sha256_after": "1953dc4de4e688e679d820eecba7076ed4091c21a1cea8b2b98311de43318211"
+  },
+  {
+    "mutation": "vendor-detector-smoke",
+    "file": "aef/reasoning/prompt_agent.py",
+    "test": "tests/test_vendor_isolation.py::test_no_vendor_imports_in_banned_zones",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "123ee45a83012e4b83ffbe34f7aeb99f26fb4c5153e2dd46e7a96012c44cd2fb",
+    "sha256_after": "123ee45a83012e4b83ffbe34f7aeb99f26fb4c5153e2dd46e7a96012c44cd2fb"
+  },
+  {
+    "mutation": "no-live-provider-diagnostic",
+    "file": "aef/harness/replay_inputs.py",
+    "test": "tests/harness/test_live_gating.py::test_the_same_miss_fails_when_no_provider_crosses",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "a73957c486dee4068f1c2d6de0b175a951ddbe390ccf4d94ef35c544e1d7bb12",
+    "sha256_after": "a73957c486dee4068f1c2d6de0b175a951ddbe390ccf4d94ef35c544e1d7bb12"
+  },
+  {
+    "mutation": "memory-secret-boundary",
+    "file": "aef/harness/harvest.py",
+    "test": "tests/harness/test_harvest.py::test_memory_provenance_exemption_does_not_hide_tenant_content",
+    "exit_code": 1,
+    "detected": true,
+    "restored": true,
+    "sha256_before": "c99dfa93f93a3a438391f8ed487fa1efcef2afde5716e5078fe55e757e7e5854",
+    "sha256_after": "c99dfa93f93a3a438391f8ed487fa1efcef2afde5716e5078fe55e757e7e5854"
+  }
+]

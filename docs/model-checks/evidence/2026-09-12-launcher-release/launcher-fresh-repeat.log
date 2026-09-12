@@ -1,0 +1,27 @@
+Target: /private/tmp/aef-launcher-release-final-20260912/aef-real-launcher-release-5728z3bu/fresh
+Source (read-only): /Users/raptor/aef-core
+preserved: CLAUDE.md (already carries the current aef block)
+preserved: aef.yaml (already exists)
+preserved: aef_adapter.py (already exists)
+preserved: .gitignore (already carries the current aef block)
+preserved: AGENT_INTEGRATION.md (already exists)
+preserved: AUTONOMY.md (already exists)
+preserved: AGENTS.md (already carries the current aef block)
+preserved: GROK.md (already carries the current aef block)
+preserved: .github/copilot-instructions.md (already carries the current aef block)
+preserved: .cursor/rules/aef.mdc (already carries the current aef block)
+preserved: AEF_MIGRATION_CHECKLIST.md (already exists)
+preserved: FIRST_DAY.md (already exists)
+scanned 2 Python file(s)
+found 0 call site(s): 0 wrapped, 0 skipped
+
+
+This generated the PLUMBING, not the semantics. Every wrapper passes
+state.objective as a single prompt and stores the raw result; if your
+function takes more than that, the node body is yours to finish.
+
+found 0 prompt agent(s) under .claude/agents, .codex/agents, .grok/agents
+  none — this repo's agents are not markdown personas in that directory, or it does not exist
+Mechanical integration complete; runtime behavior and learning quality are not verified.
+Continue semantic integration inside /private/tmp/aef-launcher-release-final-20260912/aef-real-launcher-release-5728z3bu/fresh; follow AEF_MIGRATION_CHECKLIST.md.
+Source verified unchanged: 16402 entries; manifest sha256=223125c707885f4f0a51cbdc6bdccf304f0f24361c757f4ef7c28898d06c9d8f

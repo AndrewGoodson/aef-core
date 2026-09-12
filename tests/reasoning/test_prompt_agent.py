@@ -306,6 +306,36 @@ def _ctx():  # type: ignore[no-untyped-def]
     )
 
 
+def test_tool_using_persona_gets_explicit_runtime_capability_limits() -> None:
+    class NoTools(_Recorder):
+        @property
+        def isolation(self) -> frozenset[str]:
+            return frozenset({"no_tools", "system_role"})
+
+    provider = NoTools()
+    node = make_prompt_agent_node(
+        definition=parse_agent_file("Use Bash to inspect the repo and report its output."),
+        route=END,
+    )
+    node.fn(
+        AEFState(run_id="r1", agent_id="a", objective="Inspect files"), _ctx(), _services(provider)
+    )
+    prompt = provider.requests[0].messages[0].content
+    assert "No tools are available in this invocation" in prompt
+    assert "Never invent tool calls, tool results, file contents, or completed actions" in prompt
+    assert "state what evidence is missing" in prompt
+    assert prompt.index("Use Bash") < prompt.index("Runtime capability contract")
+
+
+def test_unknown_containment_does_not_claim_tools_are_disabled() -> None:
+    provider = _Recorder()
+    node = make_prompt_agent_node(definition=parse_agent_file("Use Bash."), route=END)
+    node.fn(
+        AEFState(run_id="r1", agent_id="a", objective="Inspect files"), _ctx(), _services(provider)
+    )
+    assert provider.requests[0].messages[0].content == "Use Bash."
+
+
 # ---------------------------------------------------------------------------
 # Containment is recorded per run, not stamped at migrate time (ADR 0169, F4)
 # ---------------------------------------------------------------------------

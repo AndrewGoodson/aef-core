@@ -132,6 +132,43 @@ def test_only_the_divergence_is_recorded_not_both_outputs() -> None:
     assert secret not in repr(divergence), "the shadow's output leaked into the divergence record"
 
 
+def test_shadow_checkpoints_do_not_read_or_replace_the_incumbents_store(tmp_path: Path) -> None:
+    """Both arms keep the input identity; their checkpoint stores must differ.
+
+    Reusing the live store either overwrites served state or, with immutable
+    checkpoint identities, reports a storage conflict as candidate behaviour.
+    A fresh store per observation also keeps prior shadow output unavailable.
+    """
+    from aef.kernel.durability import FileDurabilityBackend
+
+    backend = FileDurabilityBackend(tmp_path)
+    services = agent_services(durability=backend)
+    state = _state()
+
+    def candidate_work(state, ctx, services):  # type: ignore[no-untyped-def]
+        assert state.run_id == "live-1"
+        assert state.checkpoint_seq == 0
+        assert services.require_durability().load_latest(state.run_id) is None
+        return StateDelta(working_memory={"answer": "shadow-secret"}), END
+
+    candidate = Graph(
+        id="g",
+        version="1",
+        nodes={"work": Node(id="work", version="1", fn=candidate_work, deterministic=True)},
+        edges=[],
+        entry_node="work",
+    )
+    for _ in range(2):
+        observation = _uncontained(_graph("g", value="served"), candidate).observe(state, services)
+        assert observation.divergence.candidate_failed == ""
+        assert observation.divergence.fields == ("working_memory",)
+        persisted = FileDurabilityBackend(tmp_path)
+        assert persisted.load_latest(state.run_id) == observation.state
+        assert persisted.load_cursor(state.run_id) is None
+        assert persisted.list_checkpoints(state.run_id) == [1]
+        assert "shadow-secret" not in (tmp_path / state.run_id / "1.json").read_text()
+
+
 def test_a_mutating_candidate_is_refused_before_any_live_request() -> None:
     """The part that cannot be paraphrased away: shadowing runs the candidate
     on LIVE input, so a mutating node mutates — for real, a second time. The

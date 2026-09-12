@@ -1,0 +1,131 @@
+{
+  "recorded_at": "2026-09-12T04:36:40.674706+00:00",
+  "scope": "Late CI live-credential scheduling and loop-gate preparation/isolation fixes",
+  "status": "focused_checks_and_independent_docker_smoke_passed",
+  "files": {
+    ".github/workflows/ci.yml": "34a8203e4f56e7b30e9ae61217d2271b503699ade42371c21217f4367d2c5010",
+    ".github/workflows/loop-gate.yml": "b7d595cc7e26ce2171ad1cb783ce2becc50bbf47a1a1ddf8adc92775f0f3c0e3",
+    "aef/cli/adopt_loop.py": "8f265abdb3c302ba775f8c5eac914b8923fb1d9f5f10c886341ed97244663d00",
+    "tests/harness/test_ci_live_harness_job.py": "b7ff163e4ed77630839cecafcff832f2513e589f12d457a1b1e60fb3956c9a9c",
+    "tests/harness/test_loop_gate_preparation.py": "7c4f6922690a4e49e0a16b7b59b9f8524623e20bcc72928f10909706bf94dbdb",
+    "tests/harness/test_workflows.py": "84b4e1523d9ecbd8cafbb3a3ce92508895dbd3fe1025cb4db5ba47b22fbc30ce",
+    "tests/cli/test_adopt.py": "c6f883f990aaeb9d1887d2f91d6e146ee5207ee2542187260e0fa85e49ac0317"
+  },
+  "reproductions_before_fix": [
+    {
+      "command": ".venv/bin/python -B -m pytest tests/harness/test_ci_live_harness_job.py::test_credentials_are_only_used_after_a_push_to_main -q",
+      "exit_code": 1,
+      "finding": "live-harness job had no event/ref guard and could schedule ordinary PR code on a credentialed configured runner",
+      "log": "/tmp/aef-ci-before-main-guard.log"
+    },
+    {
+      "command": "docker run --rm --pull never --network none --mount type=bind,src=/Users/raptor/aef-core,dst=/repo,readonly --workdir /repo --env PIP_RETRIES=0 --env PIP_TIMEOUT=3 python:3.13-slim sh -e -c 'python -m pip install --upgrade pip\npip install -e \".[dev]\"'",
+      "exit_code": 1,
+      "finding": "fresh build dependency hatchling cannot be installed inside the old job-level network-none container",
+      "log": "/tmp/aef-loop-gate-before-network.log"
+    }
+  ],
+  "implementation": [
+    "Credentialed live job requires push to refs/heads/main; ordinary hosted PR test job remains enabled.",
+    "Gate remains manual workflow_dispatch with read-only contents permission and now requires dispatch from main.",
+    "Trusted main archive builds a runtime image with git and dependencies before fetching candidate data.",
+    "Dispatch head is a validated branch-name environment value, never interpolated into shell source.",
+    "Fresh Git repository receives main/candidate objects and refs without source auth config or hooks; only main is checked out on host.",
+    "Gate uses real Docker --network none, --pull never, read-only root and source, dropped capabilities, no-new-privileges, unprivileged UID, tmpfs scratch, writable external state, and no host fallback.",
+    "Report uses the same trusted installed image with network disabled and read-only source/state.",
+    "Core workflow is byte-identical to its shared renderer; core explicitly selects the same demo graph as monitor."
+  ],
+  "validation": [
+    {
+      "command": ".venv/bin/python -B -m pytest tests/harness/test_loop_gate_preparation.py tests/harness/test_ci_live_harness_job.py tests/harness/test_workflows.py tests/harness/test_adopter_runtime.py tests/cli/test_adopt.py -q --basetemp /tmp/aef-workflow-final-pytest",
+      "exit_code": 0,
+      "result": "188 passed in 5.26s",
+      "log": "/tmp/aef-workflow-focused.log"
+    },
+    {
+      "command": ".venv/bin/ruff check aef/cli/adopt_loop.py tests/harness/test_loop_gate_preparation.py tests/harness/test_ci_live_harness_job.py tests/harness/test_workflows.py tests/cli/test_adopt.py",
+      "exit_code": 0,
+      "result": "All checks passed",
+      "log": "/tmp/aef-workflow-ruff.log"
+    },
+    {
+      "command": ".venv/bin/ruff format --check aef/cli/adopt_loop.py tests/harness/test_loop_gate_preparation.py tests/harness/test_ci_live_harness_job.py tests/harness/test_workflows.py tests/cli/test_adopt.py",
+      "exit_code": 0,
+      "result": "5 files already formatted",
+      "log": "/tmp/aef-workflow-format.log"
+    },
+    {
+      "command": ".venv/bin/mypy aef/cli/adopt_loop.py",
+      "exit_code": 0,
+      "result": "Success: no issues found in 1 source file",
+      "log": "/tmp/aef-workflow-mypy.log"
+    }
+  ],
+  "independent_docker_smoke": {
+    "report": "/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-workflow-docker-smoke-m493cpqp/report.json",
+    "result": {
+      "root": "/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-workflow-docker-smoke-m493cpqp",
+      "source": "/Users/raptor/aef-core",
+      "steps": {
+        "Build the trusted runtime image": {
+          "exit_code": 0,
+          "expected": 0,
+          "duration_seconds": 15.56,
+          "log": "/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-workflow-docker-smoke-m493cpqp/build-the-trusted-runtime-image.log"
+        },
+        "Fetch the candidate as data": {
+          "exit_code": 0,
+          "expected": 0,
+          "duration_seconds": 0.29,
+          "log": "/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-workflow-docker-smoke-m493cpqp/fetch-the-candidate-as-data.log"
+        },
+        "Gate": {
+          "exit_code": 1,
+          "expected": 1,
+          "duration_seconds": 1.03,
+          "log": "/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-workflow-docker-smoke-m493cpqp/gate.log"
+        },
+        "Report": {
+          "exit_code": 0,
+          "expected": 0,
+          "duration_seconds": 0.34,
+          "log": "/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-workflow-docker-smoke-m493cpqp/report.log"
+        }
+      },
+      "workflow_sha256": "b7d595cc7e26ce2171ad1cb783ce2becc50bbf47a1a1ddf8adc92775f0f3c0e3",
+      "image": "aef-workflow-smoke:1789187655",
+      "fixture_main": "ed10a87cfe35cde6625871bdcd1c25c8566f3399",
+      "fixture_candidate": "4f733ff3cc6cf59fdd9c2eee80076802b8e8051c",
+      "sanitized_config": "core.repositoryformatversion=0\ncore.filemode=true\ncore.bare=false\ncore.logallrefupdates=true\ncore.ignorecase=true\ncore.precomposeunicode=true\n",
+      "boundary_checks": "See G1 output and trusted fixture test",
+      "all_steps_expected": true,
+      "workflow_source_unchanged": true,
+      "new_image_cleanup_exit": 0
+    },
+    "checks_observed": [
+      "Exact rendered Build/Fetch/Gate/Report scripts executed from disposable fixture, including source paths containing spaces.",
+      "Trusted image built successfully; git and installed AEF available.",
+      "G0/G1/G4 passed; G5 rejected absent baseline as expected; report verified three-entry ledger chain.",
+      "Candidate execution was nonroot; /repo and /opt/aef-base were read-only.",
+      "Candidate workspace, /tmp, /work and state were writable.",
+      "Fixture host credential environment and Docker socket were absent; fresh Git config/hooks excluded fixture auth/hook.",
+      "Actual network connect returned ENETUNREACH/EHOSTUNREACH.",
+      "Temporary image removed; source unchanged."
+    ]
+  },
+  "limitations": [
+    "No hosted GitHub Actions dispatch or authenticated/live model call was run; no hosted live-harness outcome is claimed.",
+    "A condition inside editable pull_request YAML alone cannot secure a credentialed self-hosted runner against malicious workflow edits. Owner must separately restrict allowed repositories/workflows/runner groups or use an isolated credential arrangement.",
+    "Adopter template still requires owner selection of main/default branch, real agent entrypoint, green-bar build command and any custom/private dependency setup. Existing owner workflow files remain preserved by adoption.",
+    "Real Docker smoke used a disposable fixture and deliberately stopped at G5 missing-baseline rejection; it does not establish a complete six-gate corpus result or learning improvement.",
+    "Shell recorder tests verify command construction and fail-closed status propagation; actual isolation evidence comes separately from the independent Docker smoke.",
+    "Full suite and repository-wide release validation are owned by parent; this subtask ran focused checks only."
+  ],
+  "boundaries": {
+    "live_model_calls": false,
+    "workflow_dispatch": false,
+    "repo_git_mutations": false,
+    "policy_hitl_tier1_changed": false,
+    "existing_owner_workflow_overwrite_changed": false
+  }
+}

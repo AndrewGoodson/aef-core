@@ -26,7 +26,7 @@ from aef.harness.evaluation import score_of, score_scenario
 from aef.harness.isolated import IsolationError, NodeWorkerSession, graph_from
 from aef.harness.outcome import Outcome, classify
 from aef.harness.sandbox import NetworkPolicy, SandboxPolicy
-from aef.harness.scenario_runner import is_dead_call, policy_payload
+from aef.harness.scenario_runner import is_dead_call, policy_payload, recorded_node_failure
 from aef.kernel import GraphExecutor
 from aef.security.tool import PolicyConfig
 from aef.services.runtime import agent_services
@@ -218,6 +218,12 @@ def _run_one(
                 "policy": policy_payload(policy),
                 "agent_id": scenario.initial_state.agent_id,
                 "clock_values": [v.isoformat() for v in scenario.clock_values],
+                "initial_memory": scenario.to_payload()["initial_memory"],
+                "context_config": None
+                if scenario.context_config is None
+                else scenario.context_config.model_dump(mode="json"),
+                "provider_isolation": list(scenario.provider_isolation),
+                "provider_name": scenario.provider_name,
             }
         )
     except IsolationError as exc:
@@ -260,6 +266,7 @@ def _run_one(
         outcome=outcome,
         score=score_of(record),
         cost_tokens=record.cost_tokens,
+        failure=recorded_node_failure(result.final_state),
     )
 
 

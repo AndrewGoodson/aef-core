@@ -1,0 +1,1879 @@
+{
+  "checked_at_utc": "2026-09-12T04:52:12.580530+00:00",
+  "repository": "/Users/raptor/aef-core",
+  "scope": "Read-only documentation links, corrections, byte equality and report claims compared with retained release logs/JSON. External URLs and fragment anchors are not fetched or validated. Runtime checks are not rerun. Only this external JSON is written.",
+  "files": [
+    "HANDOFF.md",
+    "README.md",
+    "docs/target-repo.md",
+    "AGENT_INTEGRATION.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/roadmap.md",
+    "docs/adr/README.md",
+    "docs/adr/0208-repeatable-existing-agent-integration.md",
+    "docs/adr/0209-checkpoint-cursor-consistency.md",
+    "docs/adr/0210-recorded-retriever-configuration.md",
+    "docs/model-checks/2026-09-11-repository-review.md",
+    "docs/adr/0211-prepare-workflows-before-isolated-evaluation.md"
+  ],
+  "skills": [
+    ".agents/skills/target-repo/SKILL.md",
+    ".claude/skills/target-repo/SKILL.md",
+    ".grok/skills/target-repo/SKILL.md"
+  ],
+  "source_sha256_before": {
+    "HANDOFF.md": "da6ddef73f139d4b7a6cb8d4fb8970c97cfce4f3ec85bd61f37b58f93f8b81a3",
+    "README.md": "8bec1d25dccc5f3c8b4dc13a7c711fab555cedae1516df659f2b472ea5cfe6da",
+    "docs/target-repo.md": "e1a534bdf3261075fd4b95efec49e212ce9a3eae0034418a5ee8b2f9ffb187be",
+    "AGENT_INTEGRATION.md": "50bccb590dea5eb956921d0f2fd364182b5d82e27fa90eaffab3489908aafba2",
+    "AGENTS.md": "adf3ee1e3c62e20a1150928deb3827eed0524d1d7c376703c211d6ca4cca5b17",
+    "CLAUDE.md": "adf3ee1e3c62e20a1150928deb3827eed0524d1d7c376703c211d6ca4cca5b17",
+    "docs/roadmap.md": "eb2af53f444eefa817a7500d342309be398ccd760bfbc02c2205736704bb2f6b",
+    "docs/adr/README.md": "0f0711afb88cb3258d0e2ecc0a175671308dbf1ace96801445f5b914de68efff",
+    "docs/adr/0208-repeatable-existing-agent-integration.md": "cde16688fc5a38bb12f6de1ae30b278fa869585593bfdd2065dc79a04cbff5a1",
+    "docs/adr/0209-checkpoint-cursor-consistency.md": "fb22cd9a5e07a1e010d47f401c3c18f01951fd222fa9af37d5c5dbb0362703a6",
+    "docs/adr/0210-recorded-retriever-configuration.md": "3b840d6fad5a3ffaf6d9575737979582864ec0f04246f3cc9b60f72e92c53531",
+    "docs/model-checks/2026-09-11-repository-review.md": "50fba17e87d2fbc84d63655c7e80cb14dab7f6ff555798aaed2ad7c3a8d837b6",
+    "docs/adr/0211-prepare-workflows-before-isolated-evaluation.md": "639ffbc3b20bc4be5c7641290a65f488f1898d9ad5563ee868113e256b96deab",
+    ".agents/skills/target-repo/SKILL.md": "ef22e62f5a22168727bbe57323a373c6db921380f888cf53d73a19885415d8dd",
+    ".claude/skills/target-repo/SKILL.md": "ef22e62f5a22168727bbe57323a373c6db921380f888cf53d73a19885415d8dd",
+    ".grok/skills/target-repo/SKILL.md": "ef22e62f5a22168727bbe57323a373c6db921380f888cf53d73a19885415d8dd"
+  },
+  "source_sha256_after": {
+    "HANDOFF.md": "da6ddef73f139d4b7a6cb8d4fb8970c97cfce4f3ec85bd61f37b58f93f8b81a3",
+    "README.md": "8bec1d25dccc5f3c8b4dc13a7c711fab555cedae1516df659f2b472ea5cfe6da",
+    "docs/target-repo.md": "e1a534bdf3261075fd4b95efec49e212ce9a3eae0034418a5ee8b2f9ffb187be",
+    "AGENT_INTEGRATION.md": "50bccb590dea5eb956921d0f2fd364182b5d82e27fa90eaffab3489908aafba2",
+    "AGENTS.md": "adf3ee1e3c62e20a1150928deb3827eed0524d1d7c376703c211d6ca4cca5b17",
+    "CLAUDE.md": "adf3ee1e3c62e20a1150928deb3827eed0524d1d7c376703c211d6ca4cca5b17",
+    "docs/roadmap.md": "eb2af53f444eefa817a7500d342309be398ccd760bfbc02c2205736704bb2f6b",
+    "docs/adr/README.md": "0f0711afb88cb3258d0e2ecc0a175671308dbf1ace96801445f5b914de68efff",
+    "docs/adr/0208-repeatable-existing-agent-integration.md": "cde16688fc5a38bb12f6de1ae30b278fa869585593bfdd2065dc79a04cbff5a1",
+    "docs/adr/0209-checkpoint-cursor-consistency.md": "fb22cd9a5e07a1e010d47f401c3c18f01951fd222fa9af37d5c5dbb0362703a6",
+    "docs/adr/0210-recorded-retriever-configuration.md": "3b840d6fad5a3ffaf6d9575737979582864ec0f04246f3cc9b60f72e92c53531",
+    "docs/model-checks/2026-09-11-repository-review.md": "50fba17e87d2fbc84d63655c7e80cb14dab7f6ff555798aaed2ad7c3a8d837b6",
+    "docs/adr/0211-prepare-workflows-before-isolated-evaluation.md": "639ffbc3b20bc4be5c7641290a65f488f1898d9ad5563ee868113e256b96deab",
+    ".agents/skills/target-repo/SKILL.md": "ef22e62f5a22168727bbe57323a373c6db921380f888cf53d73a19885415d8dd",
+    ".claude/skills/target-repo/SKILL.md": "ef22e62f5a22168727bbe57323a373c6db921380f888cf53d73a19885415d8dd",
+    ".grok/skills/target-repo/SKILL.md": "ef22e62f5a22168727bbe57323a373c6db921380f888cf53d73a19885415d8dd"
+  },
+  "source_files_unchanged_during_check": true,
+  "evidence_sha256_before": {
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-full-suite.log": "ed667a1e52d0558efd0655280946d42e69be6c6e043af855d66637e7e9cea7f9",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-static-validation.json": "3d6df67eed030a38781eed67f672e9e026af7a4ce0fb885e006707f494eb80d6",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-measurements.log": "75cdfda9e928aca95d5393912db776f6c65cbeae72f453526cae72c3548156d1",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-mindgraph-verify.log": "0a505b05c8bc3ad27379c16fe519db7a9efeb6a7ba409e8d28fa825f6cd17942",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-mindgraph-self-test.log": "9448e544862a97905a4ab540315ab27c91630aae63b51709ab75284069f0cecc",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-cache-cleanup.json": "a80438ee312d374c615d455c2598618af52c20870a5c2d28421ec09252748502",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-launcher-release/launcher-release-check.json": "be866ff7be543b35b571d8ee259d53a3bfd9bdc4380b37d4cf63b4da6c73d3e0",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-launcher-release/launcher-fresh-first.log": "acccb07d2f4304b0ed1d73ceb860104a2351379bee11a6991ee705bfffac62c7",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-launcher-release/launcher-fresh-repeat.log": "51366efb8c679632acc778d2209b3be709a48bb0e7b68a85802a90534c9ec590",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-launcher-release/launcher-mixed-first.log": "1772bd1816fa52008a9b3124a5b3828d4c9d1559cf573519b35f6f63a76484a0",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-launcher-release/launcher-mixed-repeat.log": "b51992bae45c19423cfe7691722d793a9979a931dfd31127c4a37e067330a7f5"
+  },
+  "evidence_sha256_after": {
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-full-suite.log": "ed667a1e52d0558efd0655280946d42e69be6c6e043af855d66637e7e9cea7f9",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-static-validation.json": "3d6df67eed030a38781eed67f672e9e026af7a4ce0fb885e006707f494eb80d6",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-measurements.log": "75cdfda9e928aca95d5393912db776f6c65cbeae72f453526cae72c3548156d1",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-mindgraph-verify.log": "0a505b05c8bc3ad27379c16fe519db7a9efeb6a7ba409e8d28fa825f6cd17942",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-mindgraph-self-test.log": "9448e544862a97905a4ab540315ab27c91630aae63b51709ab75284069f0cecc",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-cache-cleanup.json": "a80438ee312d374c615d455c2598618af52c20870a5c2d28421ec09252748502",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-launcher-release/launcher-release-check.json": "be866ff7be543b35b571d8ee259d53a3bfd9bdc4380b37d4cf63b4da6c73d3e0",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-launcher-release/launcher-fresh-first.log": "acccb07d2f4304b0ed1d73ceb860104a2351379bee11a6991ee705bfffac62c7",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-launcher-release/launcher-fresh-repeat.log": "51366efb8c679632acc778d2209b3be709a48bb0e7b68a85802a90534c9ec590",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-launcher-release/launcher-mixed-first.log": "1772bd1816fa52008a9b3124a5b3828d4c9d1559cf573519b35f6f63a76484a0",
+    "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-12-launcher-release/launcher-mixed-repeat.log": "b51992bae45c19423cfe7691722d793a9979a931dfd31127c4a37e067330a7f5"
+  },
+  "evidence_files_unchanged_during_check": true,
+  "relative_link_count": 269,
+  "fragment_link_count": 0,
+  "missing_destinations": [],
+  "relative_links": [
+    {
+      "source": "HANDOFF.md",
+      "line": 9,
+      "destination": "docs/model-checks/2026-09-11-repository-review.md",
+      "exists": true
+    },
+    {
+      "source": "HANDOFF.md",
+      "line": 10,
+      "destination": "AGENTS.md",
+      "exists": true
+    },
+    {
+      "source": "HANDOFF.md",
+      "line": 10,
+      "destination": "AGENT_INTEGRATION.md",
+      "exists": true
+    },
+    {
+      "source": "HANDOFF.md",
+      "line": 11,
+      "destination": "docs/target-repo.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 24,
+      "destination": "docs/adr/0204-the-loop-on-a-repo-somebody-uses-and-the-bullet-that-made-it-worse.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 28,
+      "destination": "docs/model-checks/2026-09-11-repository-review.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 30,
+      "destination": "REPOSITORY_REVIEW_GOAL.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 144,
+      "destination": "docs/target-repo.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 230,
+      "destination": "docs/roadmap.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 242,
+      "destination": "docs/adr/0211-prepare-workflows-before-isolated-evaluation.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 267,
+      "destination": "docs/adr/README.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 274,
+      "destination": "docs/autonomy/self-improving-loop.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 288,
+      "destination": "docs/autonomy/evidence-learning.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 321,
+      "destination": "docs/target-repo.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 322,
+      "destination": "AGENT_INTEGRATION.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 323,
+      "destination": "CLAUDE.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 323,
+      "destination": "AGENTS.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 324,
+      "destination": "docs/autonomy/self-improving-loop.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 325,
+      "destination": "docs/autonomy/new-repo-bootstrap-loop.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 326,
+      "destination": "docs/roadmap.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 327,
+      "destination": "docs/adr/README.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 328,
+      "destination": "docs/autonomy/evidence-learning.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 329,
+      "destination": "docs/trust/promotion-trust-case.md",
+      "exists": true
+    },
+    {
+      "source": "README.md",
+      "line": 330,
+      "destination": "docs/design/self-rewiring/03-roadmap.md",
+      "exists": true
+    },
+    {
+      "source": "docs/target-repo.md",
+      "line": 79,
+      "destination": "adr/0211-prepare-workflows-before-isolated-evaluation.md",
+      "exists": true
+    },
+    {
+      "source": "docs/target-repo.md",
+      "line": 105,
+      "destination": "../AGENT_INTEGRATION.md",
+      "exists": true
+    },
+    {
+      "source": "AGENT_INTEGRATION.md",
+      "line": 74,
+      "destination": "docs/target-repo.md",
+      "exists": true
+    },
+    {
+      "source": "docs/roadmap.md",
+      "line": 10,
+      "destination": "adr/0208-repeatable-existing-agent-integration.md",
+      "exists": true
+    },
+    {
+      "source": "docs/roadmap.md",
+      "line": 12,
+      "destination": "target-repo.md",
+      "exists": true
+    },
+    {
+      "source": "docs/roadmap.md",
+      "line": 14,
+      "destination": "adr/0209-checkpoint-cursor-consistency.md",
+      "exists": true
+    },
+    {
+      "source": "docs/roadmap.md",
+      "line": 17,
+      "destination": "adr/0210-recorded-retriever-configuration.md",
+      "exists": true
+    },
+    {
+      "source": "docs/roadmap.md",
+      "line": 19,
+      "destination": "model-checks/2026-09-11-repository-review.md",
+      "exists": true
+    },
+    {
+      "source": "docs/roadmap.md",
+      "line": 24,
+      "destination": "adr/0205-evidence-learning-and-cross-harness-replay.md",
+      "exists": true
+    },
+    {
+      "source": "docs/roadmap.md",
+      "line": 27,
+      "destination": "autonomy/evidence-learning.md",
+      "exists": true
+    },
+    {
+      "source": "docs/roadmap.md",
+      "line": 30,
+      "destination": "model-checks/2026-09-08-codex-review.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 10,
+      "destination": "0001-thin-graph-ir-not-a-framework.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 11,
+      "destination": "0002-durability-backend-in-memory-and-file-json.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 12,
+      "destination": "0003-knowledge-graph-backend-deferred.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 13,
+      "destination": "0004-memory-backend-mem0-default.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 14,
+      "destination": "0005-multi-agent-default-single-agent-with-readers.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 15,
+      "destination": "0006-evolution-engine-disabled-by-default.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 16,
+      "destination": "0007-fan-out-declared-not-executed.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 17,
+      "destination": "0008-otel-genai-attributes-pinned-locally.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 18,
+      "destination": "0009-checkpoint-resume-requires-a-cursor.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 19,
+      "destination": "0010-idempotency-key-is-exposed-not-enforced.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 20,
+      "destination": "0011-edge-and-node-observability-fields-wired-up.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 21,
+      "destination": "0012-toolcall-tool-name-must-match-the-tool-being-evaluated.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 22,
+      "destination": "0013-eval-record-unmeasured-fields-are-none-not-zero.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 23,
+      "destination": "0014-config-to-services-wiring-is-partial-by-design.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 24,
+      "destination": "0015-completion-request-metadata-now-passed-to-anthropic.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 25,
+      "destination": "0016-adopt-detects-frameworks-from-manifests-too.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 26,
+      "destination": "0017-otel-span-record-exception-accepts-baseexception.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 27,
+      "destination": "0018-aef-run-adds-cwd-to-syspath.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 28,
+      "destination": "0019-plan-replacement-footgun-in-the-shipped-example.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 29,
+      "destination": "0020-edge-equality-uses-condition-code-not-identity.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 30,
+      "destination": "0021-aef-run-checkpoints-dir-enables-eval-and-trace-chaining.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 31,
+      "destination": "0022-scores-must-be-finite.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 32,
+      "destination": "0023-replay-validates-trace-chain-integrity.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 33,
+      "destination": "0024-adopt-claude-md-doc-paths-fixed-for-pip-installs.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 34,
+      "destination": "0025-numeric-field-sweep-hitl-nan-bypass.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 35,
+      "destination": "0026-file-durability-backend-checkpoint-corruption-hardening.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 36,
+      "destination": "0027-otel-tracer-nested-spans-now-actually-parented.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 37,
+      "destination": "0028-graph-visualize-mermaid-injection-fix.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 38,
+      "destination": "0029-init-agent-name-path-traversal-fix.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 39,
+      "destination": "0030-mem0-adapter-get-no-longer-swallows-real-failures.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 40,
+      "destination": "0031-atomic-durability-writes-and-load-latest-recovery.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 41,
+      "destination": "0032-hitl-pause-is-always-resumable.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 42,
+      "destination": "0033-autonomy-protocol-is-a-versioned-artifact.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 43,
+      "destination": "0034-adopt-emits-the-onboarding-kit.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 44,
+      "destination": "0035-hitl-threshold-bounded-below-one.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 45,
+      "destination": "0036-fallback-routing-bypasses-edge-conditions.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 46,
+      "destination": "0037-anthropic-adapter-catches-the-true-base-exception.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 47,
+      "destination": "0038-eval-passed-requires-completion-and-gates.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 48,
+      "destination": "0039-replay-trusts-fallback-records.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 49,
+      "destination": "0040-adopt-emits-cross-harness-entry-files.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 50,
+      "destination": "0041-wiring-manifest-is-the-self-rewiring-artifact.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 51,
+      "destination": "0042-owner-merge-is-the-promotion-gate.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 52,
+      "destination": "0043-separation-of-powers-is-inviolable.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 53,
+      "destination": "0044-self-coding-with-a-structurally-isolated-harness.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 54,
+      "destination": "0045-tiered-auto-merge-replaces-per-change-review.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 55,
+      "destination": "0046-rule-based-reflection-slice.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 56,
+      "destination": "0047-the-trust-boundary-is-the-base-ref.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 56,
+      "destination": "0109-the-trust-boundary-is-the-launcher-not-the-library.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 57,
+      "destination": "0048-corpus-splits-are-fixed-at-record-time.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 58,
+      "destination": "0049-g0-uses-an-import-allowlist.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 59,
+      "destination": "0050-g2-compares-outcomes-not-paths.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 60,
+      "destination": "0051-g3-requires-a-null-hypothesis-cohort.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 61,
+      "destination": "0052-the-archive-stores-content-not-references.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 62,
+      "destination": "0053-drift-is-distance-and-rebaselining-is-rate-limited.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 63,
+      "destination": "0054-ungrounded-proposals-are-never-constructed.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 64,
+      "destination": "0055-the-ledger-is-a-hash-chain.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 65,
+      "destination": "0056-ambiguity-rolls-back-and-a-gated-rollback-halts.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 66,
+      "destination": "0057-the-loop-runs-from-main-never-from-a-candidate.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 67,
+      "destination": "0058-drift-is-line-level-and-the-cohort-mutates-the-incumbent.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 68,
+      "destination": "0059-the-adoption-kit-leads-with-what-does-not-work.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 69,
+      "destination": "0061-owner-ground-truth-and-tripwire-scenarios.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 70,
+      "destination": "0062-unmeasurable-denies-and-the-workspace-ignores-export-attributes.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 70,
+      "destination": "0065-the-loop-learns-from-its-own-recorded-failures.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 71,
+      "destination": "0063-a-floor-that-moves-is-not-a-floor.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 71,
+      "destination": "0066-harvest-promotes-failures-to-train-only.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 72,
+      "destination": "0064-numbers-for-three-known-weak-spots.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 72,
+      "destination": "0067-the-cycle-never-pushes-and-a-halt-reaches-you.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 72,
+      "destination": "0068-replay-verifies-the-fallback-route.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 73,
+      "destination": "0069-the-seams-between-cli-commands.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 74,
+      "destination": "0070-the-documented-adoption-workflow-could-not-be-followed.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 75,
+      "destination": "0071-the-development-pod-is-two-things.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 76,
+      "destination": "0072-three-defects-in-the-monitor-path.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 77,
+      "destination": "0073-the-five-obligations-contradicted-each-other.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 78,
+      "destination": "0074-the-gates-the-cli-could-not-reach.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 79,
+      "destination": "0075-obligation-2-broke-the-gates.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 80,
+      "destination": "0076-recovery-was-unrewardable.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 81,
+      "destination": "0077-two-halt-criteria-had-no-caller.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 82,
+      "destination": "0078-the-fix-that-broke-the-command-it-audited.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 83,
+      "destination": "0079-the-half-nobody-swept.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 84,
+      "destination": "0080-verifying-my-own-fixes.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 85,
+      "destination": "0081-a-pause-is-not-a-failure.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 86,
+      "destination": "0082-a-policy-you-can-configure-and-cannot-widen.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 87,
+      "destination": "0083-an-audit-trail-that-outlives-the-process.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 88,
+      "destination": "0084-the-six-things-that-were-written-down-and-left.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 89,
+      "destination": "0085-the-candidate-wrote-the-evidence.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 90,
+      "destination": "0086-resume-must-not-invent-a-state.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 91,
+      "destination": "0087-history-must-not-be-editable-by-what-it-records.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 92,
+      "destination": "0088-the-claim-that-was-not-verified.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 93,
+      "destination": "0089-two-corrections-to-last-nights-decisions.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 94,
+      "destination": "0090-four-ways-to-lose-a-verdict.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 95,
+      "destination": "0091-one-list-instead-of-four.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 96,
+      "destination": "0092-numbers-nobody-supplied.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 97,
+      "destination": "0093-the-control-that-has-now-failed-three-times.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 98,
+      "destination": "0094-the-candidate-is-not-asked.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 99,
+      "destination": "0095-confinement-and-honesty-are-different-jobs.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 100,
+      "destination": "0096-what-a-proposer-may-change.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 101,
+      "destination": "0097-the-marker-nothing-set.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 102,
+      "destination": "0098-milestone-1-was-wrong-at-the-design-level.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 103,
+      "destination": "0099-a-catalogue-derived-from-the-gates.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 104,
+      "destination": "0100-config-that-means-what-it-says.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 105,
+      "destination": "0101-triage-of-the-named-but-unbuilt.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 106,
+      "destination": "0102-containment-that-is-containment.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 107,
+      "destination": "0103-the-three-missing-criteria.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 108,
+      "destination": "0104-the-trust-case-recommends-against.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 109,
+      "destination": "0105-the-contained-shadow.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 110,
+      "destination": "0106-the-keyed-tenant-hash.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 111,
+      "destination": "0107-what-a-status-surface-may-claim.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 112,
+      "destination": "0108-the-graph-that-remembers.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 113,
+      "destination": "0109-the-trust-boundary-is-the-launcher-not-the-library.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 114,
+      "destination": "0110-consolidation-is-a-write-time-service.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 115,
+      "destination": "0111-a-model-release-is-a-scheduled-audit.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 116,
+      "destination": "0112-the-harness-is-the-model.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 117,
+      "destination": "0113-a-metric-that-can-fail-without-an-error.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 118,
+      "destination": "0114-keep-on-a-branch-never-on-main.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 119,
+      "destination": "0115-the-model-writes-prose-code-keeps-score.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 120,
+      "destination": "0116-demote-never-delete.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 121,
+      "destination": "0117-skills-are-proposed-never-installed.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 122,
+      "destination": "0118-the-retriever-gets-a-caller.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 123,
+      "destination": "0119-redact-the-input-then-re-execute.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 124,
+      "destination": "0120-the-prompt-surface-is-under-test.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 125,
+      "destination": "0121-an-archive-not-a-ladder.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 126,
+      "destination": "0122-a-proposer-with-a-repertoire.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 127,
+      "destination": "0123-a-task-a-model-can-fail-replayed-without-a-key.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 128,
+      "destination": "0125-the-seams-the-assembled-paths-left-open.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 129,
+      "destination": "0126-the-seams-the-wave-b-round-found.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 130,
+      "destination": "0127-the-scoreboard-is-under-test.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 131,
+      "destination": "0131-the-codex-path-measured.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 132,
+      "destination": "0137-an-adopted-repos-model-call-must-be-visible.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 133,
+      "destination": "0138-a-corpus-on-day-one.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 134,
+      "destination": "0139-an-adopted-repo-gates-a-candidate.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 135,
+      "destination": "0140-the-routed-form-drops-the-request.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 136,
+      "destination": "0141-the-obligation-and-the-guards.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 137,
+      "destination": "0142-zone-a-hygiene-the-adopter-pays-for-what-adopt-did-not-write.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 138,
+      "destination": "0143-migrate-writes-into-zone-a-and-wires-the-loop.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 139,
+      "destination": "0145-bootstrap-leaves-the-evidence-it-produced.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 140,
+      "destination": "0147-bless-must-archive-the-tree-that-contains-the-agent.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 141,
+      "destination": "0148-the-first-day-document-written-from-a-terminal.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 142,
+      "destination": "0149-the-recorder-the-defaults-and-the-tree-that-is-not-there.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 143,
+      "destination": "0150-a-flag-shape-is-not-a-flag-value.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 144,
+      "destination": "0151-the-independent-score-is-the-score.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 145,
+      "destination": "0152-a-prompt-file-agent-is-a-graph.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 146,
+      "destination": "0153-appending-is-not-overwriting.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 147,
+      "destination": "0154-grok-and-any-harness-after-it.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 148,
+      "destination": "0155-a-caller-that-writes-state-nobody-reads.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 149,
+      "destination": "0156-the-live-noise-floor-and-a-regression-under-it.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 150,
+      "destination": "0157-a-lesson-appended-to-a-prompt.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 151,
+      "destination": "0158-a-prompt-repo-goes-all-the-way-through.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 152,
+      "destination": "0159-the-judge-ab-is-an-artifact-now.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 153,
+      "destination": "0160-the-archive-is-real-and-has-not-yet-bought-anything.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 154,
+      "destination": "0161-the-container-is-what-you-get-without-asking.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 155,
+      "destination": "0162-the-two-signals-and-which-one-came-apart.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 156,
+      "destination": "0163-the-pilot-on-the-clone-and-the-path-that-was-never-open.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 157,
+      "destination": "0164-real-signal-bounded-and-the-falsification-that-fired.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 158,
+      "destination": "0165-the-scheduled-loop-that-ran-every-night-and-did-nothing.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 159,
+      "destination": "0166-a-word-cap-that-did-not-terminate.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 160,
+      "destination": "0167-the-unfixed-twin-and-the-tree-the-baseline-was-of.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 161,
+      "destination": "0168-the-diagnostic-that-never-opened-the-agents.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 162,
+      "destination": "0169-a-containment-claim-is-per-provider-evidence.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 163,
+      "destination": "0170-the-gates-could-not-judge-a-prompt.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 164,
+      "destination": "0171-a-corpus-that-can-tell-two-judges-apart.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 165,
+      "destination": "0172-the-bytes-the-marker-and-the-nightly-green-tick.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 166,
+      "destination": "0173-the-containment-field-that-was-read-by-nothing.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 167,
+      "destination": "0174-a-failed-check-is-what-the-run-did.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 168,
+      "destination": "0175-the-arms-were-real-this-time-and-the-layer-still-did-not-pay.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 169,
+      "destination": "0176-two-spellings-of-which-graph-and-no-way-back.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 170,
+      "destination": "0177-one-loader-and-a-backstop-that-over-fired.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 171,
+      "destination": "0178-one-flag-two-meanings-and-a-crash-announced-as-a-halt.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 172,
+      "destination": "0179-a-provider-property-is-not-the-agents-failure.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 173,
+      "destination": "0180-the-good-column-and-the-quotation.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 174,
+      "destination": "0181-the-login-that-never-reached-the-one-place-candidates-run.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 175,
+      "destination": "0182-a-crash-a-spelling-a-namespace-and-a-fact-nobody-printed.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 176,
+      "destination": "0183-the-documents-say-what-is-now-true.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 177,
+      "destination": "0184-the-lesson-was-fresh-and-the-layer-paid.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 178,
+      "destination": "0185-a-dead-call-is-not-a-wrong-answer.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 179,
+      "destination": "0186-one-model-across-the-corpus-and-what-it-cost.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 180,
+      "destination": "0187-two-more-repos-and-what-the-second-one-broke.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 181,
+      "destination": "0188-the-second-independent-score.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 182,
+      "destination": "0189-the-branch-nobody-named-and-two-reports-wrong-about-themselves.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 183,
+      "destination": "0190-the-ingestion-path-opens.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 184,
+      "destination": "0191-a-mode-string-a-flag-for-one-proposer-and-the-nightly-that-still-could-not-propose.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 185,
+      "destination": "0192-the-cold-start-repo-and-the-first-harvested-candidate.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 186,
+      "destination": "0193-the-arms-re-run-on-the-corpus-that-exists.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 187,
+      "destination": "0194-the-round-becomes-a-suite.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 188,
+      "destination": "0195-a-halt-that-reaches-someone.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 189,
+      "destination": "0196-a-re-runner-that-is-red-on-purpose.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 190,
+      "destination": "0197-the-shapes-this-repo-actually-carries.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 191,
+      "destination": "0198-the-tree-grew-from-the-rejections-and-none-of-it-was-better.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 192,
+      "destination": "0199-the-codex-path-runs-here-and-in-ci-where-it-can.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 193,
+      "destination": "0200-the-night-nobody-watched.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 194,
+      "destination": "0201-the-second-lesson-and-the-knob-that-is-a-switch.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 195,
+      "destination": "0202-the-judge-on-a-set-a-word-count-cannot-grade.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 196,
+      "destination": "0203-the-stepping-stone-paid-once-the-ladder-was-on-the-proposers-axis.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 197,
+      "destination": "0204-the-loop-on-a-repo-somebody-uses-and-the-bullet-that-made-it-worse.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 198,
+      "destination": "0205-evidence-learning-and-cross-harness-replay.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 199,
+      "destination": "0206-target-repo-command.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 200,
+      "destination": "0207-offline-adoption-and-source-integrity.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 201,
+      "destination": "0208-repeatable-existing-agent-integration.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 202,
+      "destination": "0209-checkpoint-cursor-consistency.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 203,
+      "destination": "0210-recorded-retriever-configuration.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/README.md",
+      "line": 204,
+      "destination": "0211-prepare-workflows-before-isolated-evaluation.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/0208-repeatable-existing-agent-integration.md",
+      "line": 47,
+      "destination": "../target-repo.md",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/0208-repeatable-existing-agent-integration.md",
+      "line": 56,
+      "destination": "../model-checks/2026-09-11-repository-review.md",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 6,
+      "destination": "../adr/0204-the-loop-on-a-repo-somebody-uses-and-the-bullet-that-made-it-worse.md",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 12,
+      "destination": "../../REPOSITORY_REVIEW_GOAL.md",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 42,
+      "destination": "../adr/0208-repeatable-existing-agent-integration.md",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 43,
+      "destination": "../adr/0209-checkpoint-cursor-consistency.md",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 45,
+      "destination": "../adr/0210-recorded-retriever-configuration.md",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 47,
+      "destination": "../adr/0211-prepare-workflows-before-isolated-evaluation.md",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 60,
+      "destination": "evidence/2026-09-11-integration-mutations.json",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 61,
+      "destination": "evidence/2026-09-11-durability-mutations.json",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 63,
+      "destination": "evidence/2026-09-11-shadow-storage-mutations.json",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 69,
+      "destination": "2026-09-08-codex-review.md",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 70,
+      "destination": "2026-09-08-offline-integration-update.md",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 84,
+      "destination": "evidence/2026-09-12-workflow-review.json",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 85,
+      "destination": "evidence/2026-09-12-workflow-docker-smoke/report.json",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 113,
+      "destination": "evidence/2026-09-11-integration-scale.py",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 114,
+      "destination": "evidence/2026-09-11-integration-scale.json",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 128,
+      "destination": "../../README.md",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 128,
+      "destination": "../target-repo.md",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 191,
+      "destination": "evidence/2026-09-12-full-suite.log",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 192,
+      "destination": "evidence/2026-09-12-static-validation.json",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 193,
+      "destination": "evidence/2026-09-12-python311/results.json",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 194,
+      "destination": "evidence/2026-09-12-python311/pytest-full-final.log",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 195,
+      "destination": "evidence/2026-09-12-python311/artifact-index.json",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 196,
+      "destination": "evidence/2026-09-12-measurements.log",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 197,
+      "destination": "evidence/2026-09-12-mindgraph-verify.log",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 198,
+      "destination": "evidence/2026-09-12-mindgraph-self-test.log",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 199,
+      "destination": "evidence/2026-09-12-launcher-release/launcher-release-check.json",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 207,
+      "destination": "evidence/2026-09-12-python311/snapshot-current-comparison.json",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 220,
+      "destination": "evidence/2026-09-12-python313-pairing-final.log",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 232,
+      "destination": "evidence/2026-09-12-cache-cleanup.json",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 233,
+      "destination": "evidence/2026-09-12-git-cleanup.json",
+      "exists": true
+    },
+    {
+      "source": "docs/model-checks/2026-09-11-repository-review.md",
+      "line": 236,
+      "destination": "evidence/2026-09-12-github-runner-blocker.json",
+      "exists": true
+    },
+    {
+      "source": "docs/adr/0211-prepare-workflows-before-isolated-evaluation.md",
+      "line": 56,
+      "destination": "../model-checks/2026-09-11-repository-review.md",
+      "exists": true
+    }
+  ],
+  "fragment_links": [],
+  "corrections": {
+    "migrate_uses_explicit_target": true,
+    "first_day_in_shared_kit": true,
+    "graph_identity_uses_report": true,
+    "handoff_current_review_banner": true,
+    "green_bar_instruction_present": true
+  },
+  "byte_equality": {
+    "AGENTS_CLAUDE_byte_equal": true,
+    "three_target_skills_byte_equal": true
+  },
+  "release_evidence_checks": [
+    {
+      "check": "full_suite",
+      "claimed": [
+        3315,
+        8,
+        1,
+        216,
+        337.09
+      ],
+      "observed": [
+        3315,
+        8,
+        1,
+        216,
+        337.09
+      ],
+      "matches": true,
+      "detail": "passed, skipped, expected failures, warnings, seconds"
+    },
+    {
+      "check": "static_lint",
+      "claimed": true,
+      "observed": true,
+      "matches": true,
+      "detail": "Ruff lint claim and successful exit"
+    },
+    {
+      "check": "static_format",
+      "claimed": {
+        "count": 332,
+        "exit_code": 0
+      },
+      "observed": {
+        "count": 332,
+        "exit_code": 0
+      },
+      "matches": true,
+      "detail": "format"
+    },
+    {
+      "check": "static_mypy",
+      "claimed": {
+        "count": 139,
+        "exit_code": 0
+      },
+      "observed": {
+        "count": 139,
+        "exit_code": 0
+      },
+      "matches": true,
+      "detail": "mypy"
+    },
+    {
+      "check": "measurements",
+      "claimed": [
+        75,
+        1,
+        0
+      ],
+      "observed": [
+        75,
+        1,
+        0
+      ],
+      "matches": true,
+      "detail": "reproduced, expected differences, unexplained"
+    },
+    {
+      "check": "mindgraph",
+      "claimed": 287,
+      "observed": 287,
+      "matches": true,
+      "detail": "Mindgraph checks"
+    },
+    {
+      "check": "mindgraph_self_test",
+      "claimed": [
+        24,
+        5,
+        29,
+        true
+      ],
+      "observed": [
+        24,
+        5,
+        29,
+        true
+      ],
+      "matches": true,
+      "detail": "planted tokens, contract faults, combined detections, no false positives"
+    },
+    {
+      "check": "cache_cleanup",
+      "claimed": [
+        52,
+        52,
+        52
+      ],
+      "observed": [
+        52,
+        52,
+        52
+      ],
+      "matches": true,
+      "detail": "reported removed count, audited entries, safely removed entries"
+    },
+    {
+      "check": "launcher",
+      "claimed": {
+        "sizes": [
+          16402,
+          16402,
+          16402,
+          16402
+        ],
+        "same_manifest": true,
+        "passed": true,
+        "exact_reruns": true,
+        "logs_match": true,
+        "fixture_only": true,
+        "external_targets_modified": false
+      },
+      "observed": {
+        "sizes": [
+          16402,
+          16402,
+          16402,
+          16402
+        ],
+        "same_manifest": true,
+        "passed": true,
+        "exact_reruns": true,
+        "logs_match": true,
+        "fixture_only": true,
+        "external_targets_modified": false
+      },
+      "matches": true,
+      "detail": "source identity, log corroboration, target reruns and disposable scope"
+    },
+    {
+      "check": "launcher_owner_preservation",
+      "claimed": [
+        9,
+        3,
+        3
+      ],
+      "observed": [
+        9,
+        3,
+        3
+      ],
+      "matches": true,
+      "detail": "owner files, instruction prefixes, unique graph IDs"
+    }
+  ],
+  "release_evidence_mismatches": [],
+  "errors": [],
+  "passed": true
+}

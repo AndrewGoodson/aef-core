@@ -1,0 +1,30 @@
+[
+  {
+    "path": ".claude/agents/pipe.md",
+    "exit_code": 1,
+    "seconds": 0.153,
+    "fifo_preserved": true,
+    "error": "target-repo: refusing nonregular agent file: .claude/agents/pipe.md\nNo source writes requested. Inspect the target for any earlier outputs."
+  },
+  {
+    "path": ".codex/agents/pipe.toml",
+    "exit_code": 1,
+    "seconds": 0.137,
+    "fifo_preserved": true,
+    "error": "target-repo: refusing nonregular agent file: .codex/agents/pipe.toml\nNo source writes requested. Inspect the target for any earlier outputs."
+  },
+  {
+    "path": ".grok/agents/pipe.md",
+    "exit_code": 1,
+    "seconds": 0.145,
+    "fifo_preserved": true,
+    "error": "target-repo: refusing nonregular agent file: .grok/agents/pipe.md\nNo source writes requested. Inspect the target for any earlier outputs."
+  },
+  {
+    "path": ".codex/config.toml",
+    "exit_code": 0,
+    "seconds": 0.147,
+    "fifo_preserved": true,
+    "error": ""
+  }
+]

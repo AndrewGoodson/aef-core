@@ -475,3 +475,28 @@ def test_the_json_digest_carries_the_channel_too() -> None:
     payload = json.loads(report.to_json())
     assert payload["halt_channel_configured"] is True
     assert payload["halt_channel"].startswith("/usr/bin/logger")
+
+
+def test_doctor_reads_committed_halt_channel_without_executing_it(tmp_path, capsys) -> None:
+    from aef.cli.main import main
+
+    paged = tmp_path / "paged.txt"
+    config = _repo(tmp_path, BASE_YAML + _sh_append(paged), branch_yaml=BASE_YAML)
+    main(
+        [
+            "loop",
+            "doctor",
+            "--repo",
+            str(config.repo.root),
+            "--base",
+            "main",
+            "--state",
+            str(config.paths.root),
+            "--corpus",
+            str(tmp_path / "corpus"),
+        ]
+    )
+    report = capsys.readouterr().out
+    halt_line = next(line for line in report.splitlines() if "halt channel" in line)
+    assert "[ok]" in halt_line.lower(), report
+    assert not paged.exists()

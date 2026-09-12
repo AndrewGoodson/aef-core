@@ -18,7 +18,12 @@ same shape so CI keeps it.
 
 from __future__ import annotations
 
+import json
+import os
+import runpy
 import subprocess
+import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -30,6 +35,7 @@ from aef.cli.migrate import (
     render_prompt_agent,
     report,
     run_migrate,
+    scan,
 )
 from aef.harness.gates.g0_static_safety import scan_source
 from aef.harness.zones import DEFAULT_AGENT_ROOT, Zone, ZonePolicy, inspect_path
@@ -55,6 +61,179 @@ tools: Read, Write, Bash
 
 Never invent credentials. Work only inside assigned paths.
 """
+
+
+def test_native_harness_agents_are_discovered_without_granting_tools(tmp_path: Path) -> None:
+    for harness in ("claude", "grok"):
+        path = tmp_path / f".{harness}/agents/reviewer.md"
+        path.parent.mkdir(parents=True)
+        path.write_text(PERSONA.format(name="reviewer"))
+    codex = tmp_path / ".codex/agents/reviewer.toml"
+    codex.parent.mkdir(parents=True)
+    codex.write_text(
+        'name = "reviewer"\ndescription = "Review"\n'
+        'developer_instructions = "Use supplied evidence."\n'
+        'sandbox_mode = "danger-full-access"\n'
+    )
+    sites = discover_prompt_agents(tmp_path)
+    assert len(sites) == 3
+    assert len({site.out_relative for site in sites}) == 3
+    assert len({site.graph_id for site in sites}) == 3
+    definition = next(site.definition for site in sites if site.source.endswith(".toml"))
+    assert definition.body == "Use supplied evidence."
+    assert definition.unhonoured_keys == ("sandbox_mode",)
+    for site in sites:
+        compile(render_prompt_agent(site, "fixture"), site.out_relative, "exec")
+
+
+def test_disambiguation_reserves_existing_suffixes(tmp_path: Path) -> None:
+    base = tmp_path / ".claude/agents"
+    base.mkdir(parents=True)
+    for i, name in enumerate(("a", "a", "a_2")):
+        (base / f"{i}.md").write_text(PERSONA.format(name=name))
+    sites = discover_prompt_agents(tmp_path)
+    assert len({site.out_relative for site in sites}) == 3
+    assert len({site.graph_id for site in sites}) == 3
+
+
+@pytest.mark.parametrize("old_harness", ["claude", "grok"])
+def test_adding_a_colliding_persona_preserves_prior_graph_identity(
+    tmp_path: Path, old_harness: str
+) -> None:
+    original = tmp_path / f".{old_harness}/agents/z.md"
+    original.parent.mkdir(parents=True)
+    original.write_text(PERSONA.format(name="reviewer"))
+    first = run_migrate(tmp_path)
+    old_site = first.prompt_agents[0]
+    old_bytes = (tmp_path / old_site.out_relative).read_bytes()
+
+    added = tmp_path / ".claude/agents/a.md"
+    added.parent.mkdir(parents=True, exist_ok=True)
+    added.write_text(PERSONA.format(name="reviewer"))
+    second = run_migrate(tmp_path)
+    assert len(second.prompt_written) == 1
+    sites = {site.source: site for site in second.prompt_agents}
+    assert sites[old_site.source].out_relative == old_site.out_relative
+    assert sites[old_site.source].graph_id == old_site.graph_id
+    assert (tmp_path / old_site.out_relative).read_bytes() == old_bytes
+    for site in sites.values():
+        namespace = runpy.run_path(str(tmp_path / site.out_relative))
+        assert namespace["AGENT_FILE"] == site.source
+        assert namespace["build_graph"]().id == site.graph_id
+    assert len({site.graph_id for site in sites.values()}) == 2
+    assert run_migrate(tmp_path).prompt_written == []
+
+
+def test_prior_duplicate_graph_does_not_steal_a_new_persona(tmp_path: Path) -> None:
+    root = _prompt_repo(tmp_path, names=("reviewer",), skills=0)
+    original = run_migrate(root).prompt_agents[0]
+    duplicate = replace(
+        original,
+        module="reviewer_2",
+        out_relative="agents/migrated/reviewer_2/graph.py",
+        graph_id_override="reviewer_2",
+    )
+    duplicate_path = root / duplicate.out_relative
+    duplicate_path.parent.mkdir()
+    duplicate_bytes = render_prompt_agent(duplicate, root.name).encode()
+    duplicate_path.write_bytes(duplicate_bytes)
+    (root / ".claude/agents/a.md").write_text(PERSONA.format(name="reviewer"))
+    result = run_migrate(root)
+    added = next(site for site in result.prompt_agents if site.source.endswith("/a.md"))
+    assert runpy.run_path(str(root / added.out_relative))["AGENT_FILE"] == added.source
+    assert duplicate_path.read_bytes() == duplicate_bytes
+
+
+def test_prior_graph_identity_is_read_without_executing_owner_code(tmp_path: Path) -> None:
+    root = _prompt_repo(tmp_path, names=("reviewer",), skills=0)
+    original = run_migrate(root).prompt_agents[0]
+    graph = root / original.out_relative
+    content = graph.read_bytes() + b"\nraise RuntimeError('do not import owner code')\n"
+    graph.write_bytes(content)
+    (root / ".claude/agents/a.md").write_text(PERSONA.format(name="reviewer"))
+    result = run_migrate(root)
+    retained = next(site for site in result.prompt_agents if site.source == original.source)
+    assert retained.out_relative == original.out_relative
+    assert graph.read_bytes() == content
+
+
+def test_sdk_scan_prunes_excluded_trees_before_visiting_them(tmp_path: Path) -> None:
+    excluded = tmp_path / ".venv/large/nested"
+    excluded.mkdir(parents=True)
+    (excluded / "vendor.py").write_text("raise RuntimeError('not project code')")
+    (tmp_path / "owned.py").write_text("def owned(): return 1")
+    # A subprocess confines the audit hook to this check. Watching the public
+    # filesystem event works for both pathlib's cached scandir and os.walk.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-c",
+            "import json, sys\n"
+            "from pathlib import Path\n"
+            "from aef.cli.migrate import scan\n"
+            "visited = []\n"
+            "sys.addaudithook(lambda event, args: "
+            "visited.append(str(args[0])) if event == 'os.scandir' else None)\n"
+            "result = scan(Path(sys.argv[1]))\n"
+            "print(json.dumps([result.scanned_files, visited]))\n",
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    scanned, paths = json.loads(result.stdout)
+    visited = [Path(path) for path in paths]
+    assert scanned == 1
+    assert visited
+    assert not any(path.is_relative_to(tmp_path / ".venv") for path in visited)
+
+
+def test_sdk_scan_does_not_follow_python_file_symlinks(tmp_path: Path) -> None:
+    outside = tmp_path / "private.txt"
+    outside.write_text(
+        "def hidden():\n"
+        "    import anthropic\n"
+        "    return anthropic.Anthropic().messages.create(model='x', messages=[])\n"
+    )
+    (tmp_path / "linked.py").symlink_to(outside)
+    result = scan(tmp_path)
+    assert result.sites == []
+    assert any("symlink" in item.reason for item in result.skipped)
+
+
+def test_discovery_refuses_symlinked_personas(tmp_path: Path) -> None:
+    from aef.reasoning.prompt_agent import PromptAgentError
+
+    outside = tmp_path / "private.md"
+    outside.write_text("Private material")
+    base = tmp_path / ".grok/agents"
+    base.mkdir(parents=True)
+    (base / "linked.md").symlink_to(outside)
+    with pytest.raises(PromptAgentError, match="symlink"):
+        discover_prompt_agents(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "relative", [".claude/agents/pipe.md", ".codex/agents/pipe.toml", ".grok/agents/pipe.md"]
+)
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="requires POSIX named pipes")
+def test_discovery_refuses_nonregular_personas_before_reading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relative: str
+) -> None:
+    from aef.reasoning.prompt_agent import PromptAgentError
+
+    pipe = tmp_path / relative
+    pipe.parent.mkdir(parents=True)
+    os.mkfifo(pipe)
+
+    def must_not_load(*args: object, **kwargs: object) -> None:
+        raise AssertionError("discovery attempted to read a named pipe")
+
+    monkeypatch.setattr("aef.cli.migrate.load_agent_file", must_not_load)
+    with pytest.raises(PromptAgentError, match="nonregular agent file"):
+        discover_prompt_agents(tmp_path)
 
 
 def _prompt_repo(root: Path, *, names: tuple[str, ...] = AGENT_NAMES, skills: int = 5) -> Path:
@@ -288,6 +467,31 @@ def test_an_existing_graph_is_never_overwritten_without_force(tmp_path: Path) ->
     third = run_migrate(root, force=True)
     assert len(third.prompt_written) == 1
     assert "hand edited" not in target.read_text(encoding="utf-8")
+
+
+def test_forcing_prompt_graph_updates_preserves_each_edited_version(tmp_path: Path) -> None:
+    root = _prompt_repo(tmp_path, names=("reviewer",), skills=0)
+    first = run_migrate(root)
+    out = first.prompt_written[0]
+    # Owner code may use a non-UTF-8 encoding. A backup must preserve bytes.
+    edited = b"# coding: latin-1\r\n# owner caf\xe9\r\n"
+    out.write_bytes(edited)
+    second = run_migrate(root, force=True)
+    backup = out.with_suffix(".py.bak")
+    assert backup.read_bytes() == edited
+    assert str(backup) in report(second)
+    out.write_bytes(b"# second edit\n")
+    third = run_migrate(root, force=True)
+    assert backup.read_bytes() == edited
+    assert out.with_suffix(".py.bak.1").read_bytes() == b"# second edit\n"
+    assert str(out.with_suffix(".py.bak.1")) in report(third)
+
+
+def test_forcing_unchanged_prompt_graph_does_not_create_backup(tmp_path: Path) -> None:
+    root = _prompt_repo(tmp_path, names=("reviewer",), skills=0)
+    first = run_migrate(root)
+    run_migrate(root, force=True)
+    assert not list(first.prompt_written[0].parent.glob("*.bak*"))
 
 
 # ---------------------------------------------------------------------------
@@ -815,3 +1019,16 @@ def test_the_report_wiring_string_is_the_rendered_modules_node_order(tmp_path: P
     rendered = report(result)
     text = rendered if isinstance(rendered, str) else "\n".join(rendered)
     assert PROMPT_AGENT_WIRING in text
+
+
+def test_mixed_native_personas_report_each_actual_zone(tmp_path: Path) -> None:
+    for rel in (".claude/agents/source.md", ".grok/agents/checker.md"):
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("Read supplied evidence.\n")
+    result = run_migrate(tmp_path, agent_root=".claude/agents")
+    text = report(result)
+    assert ".claude/agents/source.md is Zone A" in text
+    assert ".grok/agents/checker.md is Zone C" in text
+    assert "Only some persona files are inside Zone A" in text
+    assert "The PERSONA FILES are inside it too" not in text

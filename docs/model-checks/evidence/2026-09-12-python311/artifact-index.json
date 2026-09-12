@@ -1,0 +1,28 @@
+{
+  "original_execution_directory": "/tmp/aef-python311-release-20260912",
+  "retained_files": [
+    "aef-py311-install-interpreter.log",
+    "ci-explicit-pytest-gates.log",
+    "failure-repro.log",
+    "install-environment.json",
+    "install.log",
+    "measure-ci.log",
+    "mypy-strict.log",
+    "pip-check.log",
+    "pip-freeze.txt",
+    "pip-upgrade.log",
+    "pytest-fixture-module-final.log",
+    "pytest-full-final.log",
+    "pytest-full.log",
+    "results-initial.json",
+    "results.json",
+    "retention-manifest.json",
+    "ruff-check.log",
+    "ruff-fixture-final.log",
+    "ruff-format-fixture-final.log",
+    "ruff-format.log",
+    "snapshot-current-comparison.json",
+    "venv.log"
+  ],
+  "note": "Original paths in results.json record execution locations. Their basename identifies the adjacent retained artifact. Large JUnit reports and source snapshots remain outside this repository."
+}

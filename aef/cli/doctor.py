@@ -322,8 +322,8 @@ def _config_advisories(path: Path, config: AgentConfig) -> list[DoctorCheck]:
     genuinely want e.g. two same-vendor endpoints, which pydantic can't
     judge."""
     out: list[DoctorCheck] = []
-    primary = config.model_provider.impl
-    fallback = config.model_provider.fallback
+    primary = config.model_provider.impl if config.model_provider is not None else None
+    fallback = config.model_provider.fallback if config.model_provider is not None else []
 
     if primary in fallback:
         out.append(

@@ -1,0 +1,7 @@
+Using CPython 3.11.15 interpreter at: /tmp/aef-py311-interpreters/cpython-3.11.15-macos-aarch64-none/bin/python3.11
+Creating virtual environment with seed packages at: /tmp/aef-python311-release-20260912/venv
+ + packaging==26.3
+ + pip==26.2.1
+ + setuptools==84.0.0
+ + wheel==0.48.0
+Activate with: source /tmp/aef-python311-release-20260912/venv/bin/activate

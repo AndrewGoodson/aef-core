@@ -26,6 +26,8 @@ mem0 = ["mem0ai>=0.1,<3"]
 # and run tests/services/memory/test_mem0_adapter_integration.py directly.
 mem0-integration = ["fastembed>=0.4,<1", "faiss-cpu>=1.8,<2"]
 dev = [
+    # Already the build backend; needed by the offline installed-wheel regression (ADR 0207).
+    "hatchling",
     "pytest>=8.3,<10",
     "ruff>=0.6,<1",
     "mypy>=1.11,<3",

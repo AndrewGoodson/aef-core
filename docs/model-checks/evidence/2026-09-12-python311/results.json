@@ -1,0 +1,176 @@
+{
+  "started_at": "2026-09-12T04:37:20.233389+00:00",
+  "python": "3.11.15 (main, Jun 23 2026, 15:46:51) [Clang 22.1.3 ]",
+  "executable": "/tmp/aef-python311-release-20260912/venv/bin/python",
+  "platform": "macOS-26.4.1-arm64-arm-64bit",
+  "workspace": "/tmp/aef-python311-release-20260912",
+  "cwd": "/tmp/aef-python311-release-20260912/source",
+  "environment": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PATH_first": "/tmp/aef-python311-release-20260912/venv/bin",
+    "AEF_LIVE_HARNESS": "unset"
+  },
+  "steps": [
+    {
+      "name": "pip-check",
+      "command": [
+        "/tmp/aef-python311-release-20260912/venv/bin/python",
+        "-m",
+        "pip",
+        "check"
+      ],
+      "returncode": 0,
+      "seconds": 0.327,
+      "log": "/tmp/aef-python311-release-20260912/pip-check.log"
+    },
+    {
+      "name": "ruff-check",
+      "command": [
+        "ruff",
+        "check",
+        "."
+      ],
+      "returncode": 0,
+      "seconds": 0.603,
+      "log": "/tmp/aef-python311-release-20260912/ruff-check.log"
+    },
+    {
+      "name": "ruff-format",
+      "command": [
+        "ruff",
+        "format",
+        "--check",
+        "aef",
+        "tests",
+        "examples"
+      ],
+      "returncode": 0,
+      "seconds": 0.026,
+      "log": "/tmp/aef-python311-release-20260912/ruff-format.log"
+    },
+    {
+      "name": "mypy-strict",
+      "command": [
+        "mypy",
+        "--strict",
+        "aef",
+        "examples"
+      ],
+      "returncode": 0,
+      "seconds": 4.235,
+      "log": "/tmp/aef-python311-release-20260912/mypy-strict.log"
+    },
+    {
+      "name": "ci-explicit-pytest-gates",
+      "command": [
+        "/tmp/aef-python311-release-20260912/venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "tests/test_vendor_isolation.py",
+        "tests/test_schema_compat.py",
+        "tests/test_measurements_reproduce.py",
+        "-v",
+        "--basetemp",
+        "/tmp/aef-python311-release-20260912/gate-tests"
+      ],
+      "returncode": 0,
+      "seconds": 3.659,
+      "log": "/tmp/aef-python311-release-20260912/ci-explicit-pytest-gates.log"
+    },
+    {
+      "name": "measure-ci",
+      "command": [
+        "make",
+        "measure-ci"
+      ],
+      "returncode": 0,
+      "seconds": 2.719,
+      "log": "/tmp/aef-python311-release-20260912/measure-ci.log"
+    },
+    {
+      "name": "pytest-full",
+      "command": [
+        "/tmp/aef-python311-release-20260912/venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "--basetemp",
+        "/tmp/aef-python311-release-20260912/full-tests",
+        "--junitxml",
+        "/tmp/aef-python311-release-20260912/pytest-full.xml"
+      ],
+      "returncode": 1,
+      "seconds": 319.709,
+      "log": "/tmp/aef-python311-release-20260912/pytest-full.log"
+    }
+  ],
+  "initial_finished_at": "2026-09-12T04:42:51.961189+00:00",
+  "rerun_started_at": "2026-09-12T04:45:14.395007+00:00",
+  "fixture_fix": {
+    "path": "tests/harness/test_g3_dead_calls_and_pairing.py",
+    "before": "falling lows 0.55, rising 0.775",
+    "after": "falling lows 0.5, rising 0.75",
+    "purpose": "exactly representable binary values preserve equal mean and differing paired directions on Python 3.11 and 3.13"
+  },
+  "final_steps": [
+    {
+      "name": "ruff-fixture-final",
+      "command": [
+        "ruff",
+        "check",
+        "tests/harness/test_g3_dead_calls_and_pairing.py"
+      ],
+      "returncode": 0,
+      "seconds": 0.044,
+      "log": "/tmp/aef-python311-release-20260912/ruff-fixture-final.log"
+    },
+    {
+      "name": "ruff-format-fixture-final",
+      "command": [
+        "ruff",
+        "format",
+        "--check",
+        "tests/harness/test_g3_dead_calls_and_pairing.py"
+      ],
+      "returncode": 0,
+      "seconds": 0.011,
+      "log": "/tmp/aef-python311-release-20260912/ruff-format-fixture-final.log"
+    },
+    {
+      "name": "pytest-fixture-module-final",
+      "command": [
+        "/tmp/aef-python311-release-20260912/venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "tests/harness/test_g3_dead_calls_and_pairing.py",
+        "-q",
+        "--basetemp",
+        "/tmp/aef-python311-release-20260912/fixture-module-final"
+      ],
+      "returncode": 0,
+      "seconds": 0.307,
+      "log": "/tmp/aef-python311-release-20260912/pytest-fixture-module-final.log"
+    },
+    {
+      "name": "pytest-full-final",
+      "command": [
+        "/tmp/aef-python311-release-20260912/venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "--basetemp",
+        "/tmp/aef-python311-release-20260912/full-tests-final",
+        "--junitxml",
+        "/tmp/aef-python311-release-20260912/pytest-full-final.xml"
+      ],
+      "returncode": 0,
+      "seconds": 303.914,
+      "log": "/tmp/aef-python311-release-20260912/pytest-full-final.log"
+    }
+  ],
+  "finished_at": "2026-09-12T04:50:18.673301+00:00"
+}

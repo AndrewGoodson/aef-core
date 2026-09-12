@@ -1,0 +1,8 @@
+COMMAND ["/Users/raptor/aef-core/.venv/bin/python", "-I", "-B", "-c", "\nimport sys\nfrom pathlib import Path\nroot = Path(sys.argv[1]).resolve()\nsys.path.insert(0, str(root))\nimport aef.cli.migrate\nassert Path(aef.cli.migrate.__file__).resolve() == root / \"aef/cli/migrate.py\"\nprint(\"Imported disposable module:\", aef.cli.migrate.__file__, flush=True)\nimport pytest\nraise SystemExit(pytest.main(sys.argv[2:]))\n", "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-existing_prompt_graph_identity_recovery-qgx8m8gw", "tests/cli/test_migrate_prompt_agents.py", "-q", "-k", "test_adding_a_colliding_persona_preserves_prior_graph_identity", "--basetemp", "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-existing_prompt_graph_identity_recovery-qgx8m8gw/pytest-baseline", "-p", "no:cacheprovider"]
+RETURN_CODE 0
+STDOUT
+Imported disposable module: /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-existing_prompt_graph_identity_recovery-qgx8m8gw/aef/cli/migrate.py
+..                                                                       [100%]
+2 passed, 50 deselected in 0.05s
+
+STDERR

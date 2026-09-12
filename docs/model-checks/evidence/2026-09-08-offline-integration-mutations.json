@@ -1,0 +1,242 @@
+{
+  "baseline": {
+    "command": [
+      "/Users/raptor/aef-core/.venv/bin/python",
+      "-B",
+      "-m",
+      "pytest",
+      "-q",
+      "--tb=short",
+      "tests/kernel/test_executor.py::test_exact_step_budget_finishes_and_persists_terminal_cursor",
+      "tests/cli/test_installed_offline_adoption.py::test_installed_wheel_offline_adoption",
+      "tests/kernel/test_executor.py::test_insufficient_budget_stops_before_next_node_and_can_resume",
+      "tests/config/test_offline.py::test_explicit_offline_config_builds_without_provider",
+      "tests/config/test_offline.py::test_offline_config_rejects_settings_that_need_a_provider",
+      "tests/cli/test_adopt_profiles.py::test_default_adoption_writes_no_workflows",
+      "tests/cli/test_target_repo.py::test_launcher_detects_source_drift_even_when_child_fails[0-content]",
+      "tests/cli/test_target_repo.py::test_launcher_detects_source_drift_even_when_child_fails[0-mtime]",
+      "--basetemp",
+      "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/baseline-pytest"
+    ],
+    "exit_code": 0,
+    "failures": [],
+    "log": "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/baseline.log",
+    "output": ".........                                                                [100%]\n9 passed in 3.02s\n"
+  },
+  "source_files_unchanged": true,
+  "mutation_count": 8,
+  "detected_count": 8,
+  "results": [
+    {
+      "command": [
+        "/Users/raptor/aef-core/.venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/kernel/test_executor.py::test_exact_step_budget_finishes_and_persists_terminal_cursor",
+        "tests/cli/test_installed_offline_adoption.py::test_installed_wheel_offline_adoption",
+        "--basetemp",
+        "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/terminal_budget-pytest"
+      ],
+      "exit_code": 1,
+      "failures": [
+        "FAILED tests/kernel/test_executor.py::test_exact_step_budget_finishes_and_persists_terminal_cursor",
+        "FAILED tests/cli/test_installed_offline_adoption.py::test_installed_wheel_offline_adoption"
+      ],
+      "log": "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/terminal_budget.log",
+      "name": "terminal_budget",
+      "file": "aef/kernel/executor.py",
+      "original_sha256": "e586d954bdeec4ddc5aefe03ad8666f11b89df24660e79007dbf3d82b43860e8",
+      "mutated_sha256": "240af4b457d1b80e2ef80dd334e096da3026dae12dc6100a52f1ab6c6a44f0d9",
+      "detected": true,
+      "needle": "range(self._max_steps + 1)",
+      "replacement": "range(self._max_steps)",
+      "output": "FF                                                                       [100%]\n=================================== FAILURES ===================================\n_________ test_exact_step_budget_finishes_and_persists_terminal_cursor _________\ntests/kernel/test_executor.py:69: in test_exact_step_budget_finishes_and_persists_terminal_cursor\n    result = executor.run(_make_state(), record_trace=True)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\naef/kernel/executor.py:94: in run\n    return self._run_from(initial_state, self._graph.entry_node, record_trace=record_trace)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\naef/kernel/executor.py:230: in _run_from\n    raise GraphExecutionError(f\"exceeded max_steps={self._max_steps} without reaching END\")\nE   aef.kernel.executor.GraphExecutionError: exceeded max_steps=2 without reaching END\n____________________ test_installed_wheel_offline_adoption _____________________\ntests/cli/test_installed_offline_adoption.py:290: in test_installed_wheel_offline_adoption\n    _run(target, [sys.executable, \"-I\", \"-B\", \"-c\", bootstrap + PROBE])\ntests/cli/test_installed_offline_adoption.py:159: in _run\n    assert result.returncode == expected_exit, result.stdout + result.stderr\nE   AssertionError: Traceback (most recent call last):\nE       File \"<string>\", line 71, in <module>\nE         result = GraphExecutor(compiled, services, max_steps=3).run(state, record_trace=True)\nE       File \"/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/terminal_budget-pytest/test_installed_wheel_offline_a0/installed/aef/kernel/executor.py\", line 94, in run\nE         return self._run_from(initial_state, self._graph.entry_node, record_trace=record_trace)\nE                ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE       File \"/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/terminal_budget-pytest/test_installed_wheel_offline_a0/installed/aef/kernel/executor.py\", line 230, in _run_from\nE         raise GraphExecutionError(f\"exceeded max_steps={self._max_steps} without reaching END\")\nE     aef.kernel.executor.GraphExecutionError: exceeded max_steps=3 without reaching END\nE     \nE   assert 1 == 0\nE    +  where 1 = CompletedProcess(args=['/Users/raptor/aef-core/.venv/bin/python', '-I', '-B', '-c', 'import sys, json, socket\\nfrom pa...x_steps} without reaching END\")\\naef.kernel.executor.GraphExecutionError: exceeded max_steps=3 without reaching END\\n').returncode\n=========================== short test summary info ============================\nFAILED tests/kernel/test_executor.py::test_exact_step_budget_finishes_and_persists_terminal_cursor\nFAILED tests/cli/test_installed_offline_adoption.py::test_installed_wheel_offline_adoption\n2 failed in 2.29s\n"
+    },
+    {
+      "command": [
+        "/Users/raptor/aef-core/.venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/kernel/test_executor.py::test_insufficient_budget_stops_before_next_node_and_can_resume",
+        "--basetemp",
+        "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/budget_overrun-pytest"
+      ],
+      "exit_code": 1,
+      "failures": [
+        "FAILED tests/kernel/test_executor.py::test_insufficient_budget_stops_before_next_node_and_can_resume"
+      ],
+      "log": "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/budget_overrun.log",
+      "name": "budget_overrun",
+      "file": "aef/kernel/executor.py",
+      "original_sha256": "e586d954bdeec4ddc5aefe03ad8666f11b89df24660e79007dbf3d82b43860e8",
+      "mutated_sha256": "0830d10f23fa703d1ffc3f483dac3cdf8f2f4d7a0b4d78dab28728ae44a2fe99",
+      "detected": true,
+      "needle": "if step == self._max_steps:",
+      "replacement": "if False:",
+      "output": "F                                                                        [100%]\n=================================== FAILURES ===================================\n________ test_insufficient_budget_stops_before_next_node_and_can_resume ________\ntests/kernel/test_executor.py:86: in test_insufficient_budget_stops_before_next_node_and_can_resume\n    assert [r.node_id for r in resumed.trace] == [\"finish\"]\nE   AssertionError: assert [] == ['finish']\nE     \nE     Right contains one more item: 'finish'\nE     Use -v to get more diff\n=========================== short test summary info ============================\nFAILED tests/kernel/test_executor.py::test_insufficient_budget_stops_before_next_node_and_can_resume\n1 failed in 0.07s\n"
+    },
+    {
+      "command": [
+        "/Users/raptor/aef-core/.venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/config/test_offline.py::test_explicit_offline_config_builds_without_provider",
+        "--basetemp",
+        "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/offline_schema-pytest"
+      ],
+      "exit_code": 1,
+      "failures": [
+        "FAILED tests/config/test_offline.py::test_explicit_offline_config_builds_without_provider"
+      ],
+      "log": "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/offline_schema.log",
+      "name": "offline_schema",
+      "file": "aef/config/schema.py",
+      "original_sha256": "03ffdf4bd0eb7f8ded51ee0b37aa38decbb51c27f63dd969bb5da046a1a7e9ca",
+      "mutated_sha256": "1c2418d57cdd3e90242f70ce4f821312c9923ea65a02d8a88e4c11d2f73d089d",
+      "detected": true,
+      "needle": "model_provider: ModelProviderConfig | None",
+      "replacement": "model_provider: ModelProviderConfig",
+      "output": "F                                                                        [100%]\n=================================== FAILURES ===================================\n_____________ test_explicit_offline_config_builds_without_provider _____________\ntests/config/test_offline.py:21: in test_explicit_offline_config_builds_without_provider\n    config = AgentConfig.model_validate(OFFLINE)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   pydantic_core._pydantic_core.ValidationError: 1 validation error for AgentConfig\nE   model_provider\nE     Input should be a valid dictionary or instance of ModelProviderConfig [type=model_type, input_value=None, input_type=NoneType]\nE       For further information visit https://errors.pydantic.dev/2.13/v/model_type\n=========================== short test summary info ============================\nFAILED tests/config/test_offline.py::test_explicit_offline_config_builds_without_provider\n1 failed in 0.15s\n"
+    },
+    {
+      "command": [
+        "/Users/raptor/aef-core/.venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/config/test_offline.py::test_offline_config_rejects_settings_that_need_a_provider",
+        "--basetemp",
+        "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/offline_llm_guard-pytest"
+      ],
+      "exit_code": 1,
+      "failures": [
+        "FAILED tests/config/test_offline.py::test_offline_config_rejects_settings_that_need_a_provider[extra0]"
+      ],
+      "log": "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/offline_llm_guard.log",
+      "name": "offline_llm_guard",
+      "file": "aef/config/schema.py",
+      "original_sha256": "03ffdf4bd0eb7f8ded51ee0b37aa38decbb51c27f63dd969bb5da046a1a7e9ca",
+      "mutated_sha256": "fd7e3b6c03b19b951177782903016a678c150b3b24ce8359fe8fb0bfb29e4537",
+      "detected": true,
+      "needle": "if self.reflection.impl == \"llm\":",
+      "replacement": "if False:",
+      "output": "F.                                                                       [100%]\n=================================== FAILURES ===================================\n______ test_offline_config_rejects_settings_that_need_a_provider[extra0] _______\ntests/config/test_offline.py:36: in test_offline_config_rejects_settings_that_need_a_provider\n    with pytest.raises(ValidationError, match=\"model_provider\"):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   Failed: DID NOT RAISE ValidationError\n=========================== short test summary info ============================\nFAILED tests/config/test_offline.py::test_offline_config_rejects_settings_that_need_a_provider[extra0]\n1 failed, 1 passed in 0.15s\n"
+    },
+    {
+      "command": [
+        "/Users/raptor/aef-core/.venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/config/test_offline.py::test_explicit_offline_config_builds_without_provider",
+        "--basetemp",
+        "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/offline_provider_construction-pytest"
+      ],
+      "exit_code": 1,
+      "failures": [
+        "FAILED tests/config/test_offline.py::test_explicit_offline_config_builds_without_provider"
+      ],
+      "log": "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/offline_provider_construction.log",
+      "name": "offline_provider_construction",
+      "file": "aef/config/factory.py",
+      "original_sha256": "db4cd26f8306d0c8ec21f8752018a62e2b933ce7297a37ada6500c061c864ee5",
+      "mutated_sha256": "3dd03266a4950cd7066b137e9bff48241cd2d4ddf4f3578695fe576b5c655378",
+      "detected": true,
+      "needle": "if config is None:\n        return None\n    providers =",
+      "replacement": "if config is None:\n        return _build_single(\"anthropic\", \"offline\")\n    providers =",
+      "output": "F                                                                        [100%]\n=================================== FAILURES ===================================\n_____________ test_explicit_offline_config_builds_without_provider _____________\ntests/config/test_offline.py:22: in test_explicit_offline_config_builds_without_provider\n    assert build_model_provider(config.model_provider) is None\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\naef/config/factory.py:122: in build_model_provider\n    return _build_single(\"anthropic\", \"offline\")\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntests/config/test_offline.py:18: in forbidden\n    raise AssertionError(\"Offline construction attempted to build a provider\")\nE   AssertionError: Offline construction attempted to build a provider\n=========================== short test summary info ============================\nFAILED tests/config/test_offline.py::test_explicit_offline_config_builds_without_provider\n1 failed in 0.15s\n"
+    },
+    {
+      "command": [
+        "/Users/raptor/aef-core/.venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/cli/test_adopt_profiles.py::test_default_adoption_writes_no_workflows",
+        "--basetemp",
+        "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/unsolicited_workflows-pytest"
+      ],
+      "exit_code": 1,
+      "failures": [
+        "FAILED tests/cli/test_adopt_profiles.py::test_default_adoption_writes_no_workflows"
+      ],
+      "log": "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/unsolicited_workflows.log",
+      "name": "unsolicited_workflows",
+      "file": "aef/cli/adopt.py",
+      "original_sha256": "fc755e267c972b1c6773592bcf219c927edf2d745cb49ac6d20d9d801c9f9168",
+      "mutated_sha256": "e2147108906b7b81be08ed3564cb4cd5664564d70474c92af8c25ab3ba5423d6",
+      "detected": true,
+      "needle": "with_workflows: bool = False,",
+      "replacement": "with_workflows: bool = True,",
+      "output": "F                                                                        [100%]\n=================================== FAILURES ===================================\n__________________ test_default_adoption_writes_no_workflows ___________________\ntests/cli/test_adopt_profiles.py:13: in test_default_adoption_writes_no_workflows\n    assert not (tmp_path / \".github/workflows\").exists()\nE   AssertionError: assert not True\nE    +  where True = exists()\nE    +    where exists = (PosixPath('/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/unsolicited_workflows-pytest/test_default_adoption_writes_n0') / '.github/workflows').exists\n=========================== short test summary info ============================\nFAILED tests/cli/test_adopt_profiles.py::test_default_adoption_writes_no_workflows\n1 failed in 0.16s\n"
+    },
+    {
+      "command": [
+        "/Users/raptor/aef-core/.venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/cli/test_target_repo.py::test_launcher_detects_source_drift_even_when_child_fails[0-content]",
+        "--basetemp",
+        "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/source_drift_ignored-pytest"
+      ],
+      "exit_code": 1,
+      "failures": [
+        "FAILED tests/cli/test_target_repo.py::test_launcher_detects_source_drift_even_when_child_fails[0-content]"
+      ],
+      "log": "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/source_drift_ignored.log",
+      "name": "source_drift_ignored",
+      "file": "scripts/target_repo.py",
+      "original_sha256": "67921b7958b761de620cfeaea60db0232761cdd6255425896884f134332a4e55",
+      "mutated_sha256": "735b74549611fe58a808b3760e0d13d2a31c061251f5dcafc562f4f4b13f9a84",
+      "detected": true,
+      "needle": "if before.get(path) != after.get(path)",
+      "replacement": "if False",
+      "output": "F                                                                        [100%]\n=================================== FAILURES ===================================\n_____ test_launcher_detects_source_drift_even_when_child_fails[0-content] ______\ntests/cli/test_target_repo.py:249: in test_launcher_detects_source_drift_even_when_child_fails\n    assert result.returncode != 0\nE   AssertionError: assert 0 != 0\nE    +  where 0 = CompletedProcess(args=['/Users/raptor/aef-core/.venv/bin/python', '-I', '-B', '/private/var/folders/vl/p1qfg3h510q771q...unchanged: 201 entries; manifest sha256=3f168a28a1376a2e4cc6f1422575f1f987a0d7afc5ff90a6d625224551ada1f3\\n', stderr='').returncode\n=========================== short test summary info ============================\nFAILED tests/cli/test_target_repo.py::test_launcher_detects_source_drift_even_when_child_fails[0-content]\n1 failed in 0.27s\n"
+    },
+    {
+      "command": [
+        "/Users/raptor/aef-core/.venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "--tb=short",
+        "tests/cli/test_target_repo.py::test_launcher_detects_source_drift_even_when_child_fails[0-mtime]",
+        "--basetemp",
+        "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/source_mtime_ignored-pytest"
+      ],
+      "exit_code": 1,
+      "failures": [
+        "FAILED tests/cli/test_target_repo.py::test_launcher_detects_source_drift_even_when_child_fails[0-mtime]"
+      ],
+      "log": "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-update-mutations-eq6pyvxm/source_mtime_ignored.log",
+      "name": "source_mtime_ignored",
+      "file": "scripts/target_repo.py",
+      "original_sha256": "67921b7958b761de620cfeaea60db0232761cdd6255425896884f134332a4e55",
+      "mutated_sha256": "ea92ad797d24d74e4136cae525b565f4ae32de39f68b5f8de2919ca91eae6dbb",
+      "detected": true,
+      "needle": "\"mtime_ns\": before.st_mtime_ns",
+      "replacement": "\"mtime_ns\": 0",
+      "output": "F                                                                        [100%]\n=================================== FAILURES ===================================\n______ test_launcher_detects_source_drift_even_when_child_fails[0-mtime] _______\ntests/cli/test_target_repo.py:249: in test_launcher_detects_source_drift_even_when_child_fails\n    assert result.returncode != 0\nE   AssertionError: assert 0 != 0\nE    +  where 0 = CompletedProcess(args=['/Users/raptor/aef-core/.venv/bin/python', '-I', '-B', '/private/var/folders/vl/p1qfg3h510q771q...unchanged: 201 entries; manifest sha256=5d3c94afa416c101d9f0e3920964580cf34d1e560e635583ea195d72c2739f6d\\n', stderr='').returncode\n=========================== short test summary info ============================\nFAILED tests/cli/test_target_repo.py::test_launcher_detects_source_drift_even_when_child_fails[0-mtime]\n1 failed in 0.27s\n"
+    }
+  ],
+  "method": "Fresh bytecode-free source copy per mutation; the unmodified selected tests passed in a separate copy first. No live source mutation."
+}

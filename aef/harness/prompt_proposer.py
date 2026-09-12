@@ -56,7 +56,11 @@ from dataclasses import dataclass, field
 from aef.harness.corpus import Corpus
 from aef.harness.proposer import MemoryEvidence, Proposal, ProposalError
 from aef.harness.zones import ZonePolicy, inspect_path
-from aef.reasoning.prompt_agent import PROVIDER_FACT_TYPE_PREFIX
+from aef.reasoning.prompt_agent import (
+    PROVIDER_FACT_TYPE_PREFIX,
+    parse_codex_agent,
+    replace_codex_instructions,
+)
 from aef.services.knowledge.base import KnowledgeEntry
 from aef.services.knowledge.consolidate import (
     DEFAULT_MIN_OCCURRENCES,
@@ -86,7 +90,7 @@ MAX_BULLET_CHARS = 400
 # `--proposer rule_based_prompt` is a configuration mistake — appending a
 # markdown heading to Python is a syntax error, and G1 would find it, but the
 # proposer should not be the thing that emits it.
-PROMPT_SUFFIXES = (".md", ".markdown", ".txt")
+PROMPT_SUFFIXES = (".md", ".markdown", ".txt", ".toml")
 
 _MARKER_RE = re.compile(r"^-\s+<!--\s*aef\s+sig=(?P<sig>\S+)\s+runs=(?P<runs>\d+)\s*-->")
 _BULLET_RE = re.compile(r"^\s*[-*+]\s+")
@@ -247,7 +251,12 @@ class RuleBasedPromptProposer:
         if not entries:
             return _Decision((), f"{note}{self._recurrence_reason(records)}")
 
-        section = _Section.find(source, self.heading)
+        body = (
+            parse_codex_agent(source, source=path).body
+            if path.lower().endswith(".toml")
+            else source
+        )
+        section = _Section.find(body, self.heading)
         present = section.signatures()
         fresh = [e for e in entries if e.signature not in present]
         if not fresh:
@@ -274,13 +283,16 @@ class RuleBasedPromptProposer:
         staleness = {e.signature: e.runs_since_last_seen for e in entries}
         try:
             proposed = section.append(
-                source,
+                body,
                 _render_bullet(entry, self.max_bullet_chars),
                 max_bullets=self.max_bullets,
                 staleness=staleness,
             )
         except _SectionFull as exc:
             return _Decision((), f"{note}{exc}")
+
+        if path.lower().endswith(".toml"):
+            proposed = replace_codex_instructions(source, proposed)
 
         if proposed == source:  # pragma: no cover - `append` never returns the input
             return _Decision((), f"{note}the rendered bullet changed nothing")

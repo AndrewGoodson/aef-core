@@ -1,0 +1,47 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_shadow_checkpoints_do_not_read_or_replace_the_incumbents_store ______
+
+tmp_path = PosixPath('/private/tmp/aef-shadow-storage-mutation-q3cu1xne/pytest-tmp/test_shadow_checkpoints_do_not0')
+
+    def test_shadow_checkpoints_do_not_read_or_replace_the_incumbents_store(tmp_path: Path) -> None:
+        """Both arms keep the input identity; their checkpoint stores must differ.
+    
+        Reusing the live store either overwrites served state or, with immutable
+        checkpoint identities, reports a storage conflict as candidate behaviour.
+        A fresh store per observation also keeps prior shadow output unavailable.
+        """
+        from aef.kernel.durability import FileDurabilityBackend
+    
+        backend = FileDurabilityBackend(tmp_path)
+        services = agent_services(durability=backend)
+        state = _state()
+    
+        def candidate_work(state, ctx, services):  # type: ignore[no-untyped-def]
+            assert state.run_id == "live-1"
+            assert state.checkpoint_seq == 0
+            assert services.require_durability().load_latest(state.run_id) is None
+            return StateDelta(working_memory={"answer": "shadow-secret"}), END
+    
+        candidate = Graph(
+            id="g",
+            version="1",
+            nodes={"work": Node(id="work", version="1", fn=candidate_work, deterministic=True)},
+            edges=[],
+            entry_node="work",
+        )
+        for _ in range(2):
+            observation = _uncontained(_graph("g", value="served"), candidate).observe(state, services)
+>           assert observation.divergence.candidate_failed == ""
+E           AssertionError: assert 'AssertionErr...ce=[]).run_id' == ''
+E             
+E             + AssertionError: assert AEFState(schema_version='1.0.0', run_id='live-1', agent_id='a', objective='serve a real request', messages=[], plan=No...ens=8000, retrieved_context=[], tool_results=[], reflections=[], scores={}, errors=[], checkpoint_seq=1, provenance=[]) is None
+E             +  +  where AEFState(schema_version='1.0.0', run_id='live-1', agent_id='a', objective='serve a real request', messages=[], plan=No...ens=8000, retrieved_context=[], tool_results=[], reflections=[], scores={}, errors=[], checkpoint_seq=1, provenance=[]) = load_latest('live-1')
+E             +  +    where load_latest = <aef.kernel.durability.File...
+E             
+E             ...Full output truncated (4 lines hidden), use '-vv' to show
+
+tests/harness/test_promotion_safety.py:163: AssertionError
+=========================== short test summary info ============================
+FAILED tests/harness/test_promotion_safety.py::test_shadow_checkpoints_do_not_read_or_replace_the_incumbents_store
+1 failed in 0.11s

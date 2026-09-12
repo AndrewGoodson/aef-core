@@ -62,7 +62,7 @@ def test_detect_ignores_venv_directory(tmp_path: Path) -> None:
 
 def test_run_adopt_writes_all_artifacts(tmp_path: Path) -> None:
     (tmp_path / "agent.py").write_text("import openai\n")
-    result = run_adopt(tmp_path)
+    result = run_adopt(tmp_path, with_workflows=True)
 
     assert result.framework == "raw_sdk"
     # Relative paths, not bare names: the loop kit adds two files both called
@@ -78,6 +78,7 @@ def test_run_adopt_writes_all_artifacts(tmp_path: Path) -> None:
         "AUTONOMY.md",
         # cross-harness entry files (ADR 0040)
         "AGENTS.md",
+        "GROK.md",
         ".github/copilot-instructions.md",
         ".cursor/rules/aef.mdc",
         # self-rewiring loop kit (ADR 0057/0058)
@@ -243,7 +244,7 @@ def test_run_adopt_does_not_write_through_a_symlinked_parent(tmp_path: Path) -> 
     outside.mkdir()
     (tmp_path / ".github").symlink_to(outside, target_is_directory=True)
 
-    result = run_adopt(tmp_path)
+    result = run_adopt(tmp_path, with_workflows=True)
 
     assert list(outside.iterdir()) == []
     skipped = {str(path.relative_to(tmp_path)) for path in result.skipped_files}
@@ -263,13 +264,13 @@ def test_run_adopt_never_overwrites_existing_aef_yaml(tmp_path: Path) -> None:
 def test_run_adopt_is_idempotent_on_second_run(tmp_path: Path) -> None:
     first = run_adopt(tmp_path)
     second = run_adopt(tmp_path)
-    # 15 -> 16 with the `.gitignore` of ADR 0142, 16 -> 17 with `FIRST_DAY.md`
-    # of ADR 0148. Updated deliberately each time: this count is the pin that
+    # ADR 0207 adds GROK.md and makes the two workflows opt-in: 17 + 1 - 2.
+    # Updated deliberately each time: this count is the pin that
     # makes "adopt quietly started writing something" a test failure rather
     # than a discovery.
-    assert len(first.written_files) == 17
+    assert len(first.written_files) == 16
     assert len(second.written_files) == 0
-    assert len(second.skipped_files) == 17
+    assert len(second.skipped_files) == 16
 
 
 def test_the_checklist_says_so_when_no_entry_file_could_take_the_block(tmp_path: Path) -> None:
@@ -360,7 +361,7 @@ def test_detect_code_signal_and_manifest_signal_combine_not_override(tmp_path: P
 
 def _adopt(tmp_path: Path) -> AdoptResult:
     (tmp_path / "README.md").write_text("# target\n")
-    return run_adopt(tmp_path)
+    return run_adopt(tmp_path, with_workflows=True)
 
 
 LOOP_KIT = (
@@ -436,7 +437,11 @@ def test_the_emitted_workflows_keep_state_outside_the_checkout(tmp_path: Path) -
     _adopt(tmp_path)
     for name in (".github/workflows/loop-gate.yml", ".github/workflows/loop-monitor.yml"):
         text = (tmp_path / name).read_text()
-        assert "--state ~/" in text
+        if name.endswith("loop-gate.yml"):
+            assert "--state /state" in text
+            assert "src=$HOME/.aef-loop-state,dst=/state" in text
+        else:
+            assert "--state ~/" in text
         assert "--state ." not in text
 
 
@@ -1399,7 +1404,7 @@ def test_adopt_and_migrate_agree_on_the_number_of_prompt_agents(tmp_path: Path) 
     result = run_adopt(tmp_path)
     assert "3 agents" in result.detection(), result.detection()
     assert [i for i in result.checklist if "3 prompt agents" in i], result.checklist
-    assert "3 under `.claude/agents/`" in (tmp_path / "AGENTS.md").read_text()
+    assert "3 across native agent directories" in (tmp_path / "AGENTS.md").read_text()
 
 
 def test_adopt_still_does_not_count_its_own_skill_after_reusing_migrates_discovery(
@@ -1837,3 +1842,81 @@ def test_the_failure_step_does_not_call_a_crash_a_halt(tmp_path: Path) -> None:
     assert "fix" in printed["3"] and "invocation" in printed["3"], printed["3"]
     # A failure with no cycle code is neither — some other step broke.
     assert "HALTED" not in printed[""] and "FAILED" in printed[""], printed[""]
+
+
+def test_agentless_repo_checklist_does_not_invent_an_entrypoint(tmp_path: Path) -> None:
+    run_adopt(tmp_path)
+    checklist = (tmp_path / "AEF_MIGRATION_CHECKLIST.md").read_text()
+    assert "Identify your current entrypoint" not in checklist
+    assert "Define your first agent objective" in checklist
+
+
+def test_owner_entry_files_are_not_claimed_identical_and_workdirs_are_fresh(tmp_path: Path) -> None:
+
+    (tmp_path / "CLAUDE.md").write_text("Claude owner instructions\n")
+    (tmp_path / "AGENTS.md").write_text("Codex owner instructions\n")
+    run_adopt(tmp_path)
+    checklist = (tmp_path / "AEF_MIGRATION_CHECKLIST.md").read_text()
+    assert "they are byte-identical" not in checklist
+
+
+def test_generated_workdirs_are_single_use_paths(tmp_path: Path) -> None:
+    import subprocess
+
+    run_adopt(tmp_path)
+    for name in ("LOOP.md", "FIRST_DAY.md", "AGENT_INTEGRATION.md"):
+        assert "--workdir /tmp/loop" not in (tmp_path / name).read_text()
+    command = 'printf "%s" "$(mktemp -d)/run"'
+    paths = [Path(subprocess.check_output(command, shell=True, text=True)) for _ in range(2)]
+    try:
+        assert paths[0] != paths[1]
+        assert all(p.parent.is_dir() and not p.exists() for p in paths)
+    finally:
+        for path in paths:
+            path.parent.rmdir()
+
+
+def test_all_native_personas_get_one_evidence_protocol_without_owner_edits(tmp_path: Path) -> None:
+    definitions = {
+        ".claude/agents/source.md": (
+            "---\nname: source\ndescription: Source review\n---\nRead supplied evidence.\n"
+        ),
+        ".codex/agents/reviewer.toml": (
+            'name = "reviewer"\ndescription = "Review evidence"\n'
+            'developer_instructions = "Read supplied evidence."\n'
+        ),
+        ".grok/agents/checker.md": (
+            "---\nname: checker\ndescription: Check evidence\n---\nRead supplied evidence.\n"
+        ),
+    }
+    for rel, content in definitions.items():
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content)
+    for name in ("CLAUDE.md", "AGENTS.md"):
+        (tmp_path / name).write_text("Owner instructions: preserve this exact line.\n")
+    run_adopt(tmp_path)
+    snapshot = {p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    for name in ("CLAUDE.md", "AGENTS.md", "AGENT_INTEGRATION.md"):
+        text = (tmp_path / name).read_text()
+        assert "Evidence learning protocol" in text
+        assert "Never invent tool results" in text
+        assert ".codex/agents" in text and ".grok/agents" in text
+    for rel, content in definitions.items():
+        assert (tmp_path / rel).read_text() == content
+    run_adopt(tmp_path)
+    assert snapshot == {
+        p.relative_to(tmp_path): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()
+    }
+
+
+def test_repository_harness_contracts_cannot_drift() -> None:
+    root = Path(__file__).resolve().parents[2]
+    assert (root / "AGENTS.md").read_bytes() == (root / "CLAUDE.md").read_bytes()
+
+
+def test_shipped_learning_protocol_matches_reference() -> None:
+    from aef.cli.learning_prompt import EVIDENCE_LEARNING_PROTOCOL
+
+    root = Path(__file__).resolve().parents[2]
+    assert (root / "docs/autonomy/evidence-learning.md").read_text() == EVIDENCE_LEARNING_PROTOCOL

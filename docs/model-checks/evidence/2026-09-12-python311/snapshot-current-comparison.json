@@ -1,0 +1,38 @@
+{
+  "checked_at": "2026-09-12T04:51:12.902138+00:00",
+  "snapshot_path": "/tmp/aef-python311-release-20260912/source",
+  "original_path": "/Users/raptor/aef-core",
+  "files_checked": 1174,
+  "changed": [
+    "docs/model-checks/2026-09-11-repository-review.md",
+    "docs/model-checks/evidence/2026-09-12-cache-cleanup.json",
+    "docs/model-checks/evidence/2026-09-12-full-suite.log",
+    "docs/model-checks/evidence/2026-09-12-static-validation.json"
+  ],
+  "added": [
+    "docs/model-checks/evidence/2026-09-12-github-runner-blocker.json",
+    "docs/model-checks/evidence/2026-09-12-python313-pairing-final.log",
+    "docs/model-checks/evidence/2026-09-12-workflow-checks/aef-ci-before-main-guard.log",
+    "docs/model-checks/evidence/2026-09-12-workflow-checks/aef-loop-gate-before-network.log",
+    "docs/model-checks/evidence/2026-09-12-workflow-checks/aef-workflow-focused.log",
+    "docs/model-checks/evidence/2026-09-12-workflow-checks/aef-workflow-format.log",
+    "docs/model-checks/evidence/2026-09-12-workflow-checks/aef-workflow-mypy.log",
+    "docs/model-checks/evidence/2026-09-12-workflow-checks/aef-workflow-ruff.log",
+    "docs/model-checks/evidence/2026-09-12-workflow-docker-smoke/build-the-trusted-runtime-image.log",
+    "docs/model-checks/evidence/2026-09-12-workflow-docker-smoke/build-the-trusted-runtime-image.sh",
+    "docs/model-checks/evidence/2026-09-12-workflow-docker-smoke/cleanup.log",
+    "docs/model-checks/evidence/2026-09-12-workflow-docker-smoke/executed-smoke-script.txt",
+    "docs/model-checks/evidence/2026-09-12-workflow-docker-smoke/fetch-the-candidate-as-data.log",
+    "docs/model-checks/evidence/2026-09-12-workflow-docker-smoke/fetch-the-candidate-as-data.sh",
+    "docs/model-checks/evidence/2026-09-12-workflow-docker-smoke/gate.log",
+    "docs/model-checks/evidence/2026-09-12-workflow-docker-smoke/gate.sh",
+    "docs/model-checks/evidence/2026-09-12-workflow-docker-smoke/report.json",
+    "docs/model-checks/evidence/2026-09-12-workflow-docker-smoke/report.log",
+    "docs/model-checks/evidence/2026-09-12-workflow-docker-smoke/report.sh",
+    "docs/model-checks/evidence/2026-09-12-workflow-docker-smoke/workflow.yml",
+    "docs/model-checks/evidence/2026-09-12-workflow-review.json"
+  ],
+  "removed": [],
+  "non_report_differences": [],
+  "fixture_identical": true
+}

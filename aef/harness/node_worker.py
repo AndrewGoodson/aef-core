@@ -169,7 +169,8 @@ def _configure(services: Any, settings: Any) -> Any:
     cohort member scored the same 0.0. That is the ADR 0073/0075/0079/0091
     shape for a sixth time, one process boundary further out (ADR 0125).
 
-    `memory` and `knowledge` are CARRIED OVER rather than rebuilt: one worker
+    Legacy scenarios carry `memory` and `knowledge` over. Recorded snapshots
+    instead reset both per scenario (ADR 0205). One worker
     serves the whole corpus so that store-level agent state behaves as it does
     in production, and a fresh store per scenario would quietly undo that.
     Everything else is rebuilt, from `agent_services` — the same one list
@@ -185,6 +186,10 @@ def _configure(services: Any, settings: Any) -> Any:
     """
     from datetime import datetime
 
+    from aef.config.factory import build_retriever
+    from aef.config.schema import ContextConfig
+    from aef.harness.memory_store import memory_record
+    from aef.harness.replay_inputs import RecordedIsolation, replay_memory
     from aef.harness.scenario_runner import policy_config_from_payload
     from aef.providers.cassette_provider import CassetteProvider, RecordedCall
     from aef.services.runtime import agent_services as build_services
@@ -210,13 +215,36 @@ def _configure(services: Any, settings: Any) -> Any:
         # G2 reported as a behavioural regression (ADR 0158's F-M5-2, closed
         # in ADR 0181).
         inner = build_model_provider(ModelProviderConfig.model_validate(live))
+    elif settings.get("provider_isolation") or settings.get("provider_name"):
+        inner = RecordedIsolation(
+            settings.get("provider_isolation", ()), settings.get("provider_name", "")
+        )
 
     agent_id = settings.get("agent_id")
+    memory, knowledge = services.memory, services.knowledge
+    if settings.get("initial_memory") is not None:
+        # Every captured scenario starts at its own recorded boundary. The
+        # previous scenario's writes must not become this one's inputs.
+        memory, knowledge = replay_memory(
+            tuple(memory_record(r) for r in settings["initial_memory"]),
+            str(agent_id),
+        )
     clock_values = [datetime.fromisoformat(v) for v in settings.get("clock_values", ())]
+    context_config = (
+        None
+        if settings.get("context_config") is None
+        else ContextConfig.model_validate(settings["context_config"])
+    )
     return build_services(
-        memory=services.memory,
-        knowledge=services.knowledge,
+        memory=memory,
+        knowledge=knowledge,
         model_provider=CassetteProvider(inner, calls, on_miss=on_miss),
+        retriever=build_retriever(
+            context_config,
+            memory=memory,
+            knowledge=knowledge,
+            agent_id=str(agent_id) if agent_id is not None else None,
+        ),
         policy=policy_config_from_payload(settings.get("policy")),
         agent_id=str(agent_id) if agent_id is not None else None,
         **({"clock": _pinned_clock(clock_values)} if clock_values else {}),

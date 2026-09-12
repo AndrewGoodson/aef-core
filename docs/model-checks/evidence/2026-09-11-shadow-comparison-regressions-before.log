@@ -1,0 +1,87 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+____________ test_only_the_divergence_is_recorded_not_both_outputs _____________
+
+    def test_only_the_divergence_is_recorded_not_both_outputs() -> None:
+        """A shadow log holding every candidate output is a second copy of
+        production data with none of its access controls."""
+        secret = "SHADOW-ONLY-VALUE-Q7X"
+        runner = _uncontained(_graph("g", value="served"), _graph("g", value=secret))
+        divergence = runner.observe(_state(), agent_services()).divergence
+>       assert divergence.fields == ("working_memory",)
+E       AssertionError: assert () == ('working_memory',)
+E         
+E         Right contains one more item: 'working_memory'
+E         Use -v to get more diff
+
+tests/harness/test_promotion_safety.py:131: AssertionError
+_______________ test_the_report_accumulates_which_fields_diverge _______________
+
+    def test_the_report_accumulates_which_fields_diverge() -> None:
+        runner = _uncontained(_graph("g", value="a"), _graph("g", value="b"))
+        report = ShadowReport()
+        for _ in range(3):
+            report = report.with_observation(runner.observe(_state(), agent_services()))
+        assert report.observations == 3
+        assert report.divergences == 3
+        assert report.divergence_rate == 1.0
+>       assert report.diverging_fields == {"working_memory": 3}
+E       AssertionError: assert {} == {'working_memory': 3}
+E         
+E         Right contains 1 more item:
+E         {'working_memory': 3}
+E         Use -v to get more diff
+
+tests/harness/test_promotion_safety.py:211: AssertionError
+_ test_the_parent_keeps_the_state_so_a_contained_candidate_cannot_forge_agreement _
+
+tmp_path = PosixPath('/private/tmp/aef-shadow-immutable-red2/test_the_parent_keeps_the_stat0')
+
+    @needs_worker_image
+    def test_the_parent_keeps_the_state_so_a_contained_candidate_cannot_forge_agreement(
+        tmp_path: Path,
+    ) -> None:
+        """Why this uses the inverted-control worker rather than just sandboxing
+        the whole run (ADR 0094).
+    
+        A candidate that reported its own final state could report the
+        incumbent's and hide a divergence — making itself look SAFER than it is,
+        which matters more here than in the gate. The parent applies every delta,
+        so the only thing the worker can lie about is one node's output, and that
+        IS its behaviour.
+        """
+        workdir = tmp_path / "work"
+        workdir.mkdir()
+        (workdir / "diverging.py").write_text(
+            "from aef.kernel import END, Graph, Node\n"
+            "from aef.state import StateDelta\n\n\n"
+            "def w(state, ctx, services):\n"
+            "    return StateDelta(working_memory={'answer': 'CANDIDATE'}), END\n\n\n"
+            "def build_graph():\n"
+            "    return Graph(id='d', version='1',\n"
+            "        nodes={'w': Node(id='w', version='1', fn=w, deterministic=True)},\n"
+            "        edges=[], entry_node='w')\n"
+        )
+        graph, session = contained_candidate_graph(
+            "diverging:build_graph",
+            workdir=workdir,
+            runtime=ContainerRuntime(binary=_RUNTIMES[0], image=IMAGE),
+        )
+        try:
+            observation = ShadowRunner(
+                incumbent=_incumbent(), candidate=graph, session=session
+            ).observe(_state(), agent_services())
+        finally:
+            session.close()
+>       assert observation.divergence.fields == ("working_memory",)
+E       AssertionError: assert () == ('working_memory',)
+E         
+E         Right contains one more item: 'working_memory'
+E         Use -v to get more diff
+
+tests/harness/test_contained_shadow.py:248: AssertionError
+=========================== short test summary info ============================
+FAILED tests/harness/test_promotion_safety.py::test_only_the_divergence_is_recorded_not_both_outputs
+FAILED tests/harness/test_promotion_safety.py::test_the_report_accumulates_which_fields_diverge
+FAILED tests/harness/test_contained_shadow.py::test_the_parent_keeps_the_state_so_a_contained_candidate_cannot_forge_agreement
+3 failed in 0.80s

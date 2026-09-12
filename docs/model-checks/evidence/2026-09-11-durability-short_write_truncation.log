@@ -1,0 +1,90 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___________________ test_atomic_write_completes_short_writes ___________________
+
+self = <aef.kernel.durability.FileDurabilityBackend object at 0x10b592cf0>
+run_id = 'r1', checkpoint_seq = 0
+
+    def load_checkpoint(self, run_id: str, checkpoint_seq: int) -> AEFState | None:
+        path = self._run_dir(run_id, create=False) / f"{checkpoint_seq}.json"
+        if not path.exists():
+            return None
+        try:
+>           raw = json.loads(path.read_text())
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+aef/kernel/durability.py:259: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/homebrew/Cellar/python@3.13/3.13.13/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/__init__.py:352: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.13/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:345: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.decoder.JSONDecoder object at 0x109def770>
+s = '{"schema_version":"1.0.0","run_id":"r1","agent_id":"a1","objective":"test","messages":[],"plan":null,"working_memory":{},"context_bud'
+idx = 0
+
+    def raw_decode(self, s, idx=0):
+        """Decode a JSON document from ``s`` (a ``str`` beginning with
+        a JSON document) and return a 2-tuple of the Python
+        representation and the index in ``s`` where the document ended.
+    
+        This can be used to decode a JSON document from a string that may
+        have extraneous data at the end.
+    
+        """
+        try:
+>           obj, end = self.scan_once(s, idx)
+                       ^^^^^^^^^^^^^^^^^^^^^^
+E           json.decoder.JSONDecodeError: Unterminated string starting at: line 1 column 122 (char 121)
+
+/opt/homebrew/Cellar/python@3.13/3.13.13/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: JSONDecodeError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/private/tmp/aef-durability-mutations-final/short_write_truncation/pytest-tmp/test_atomic_write_completes_sh0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b678c30>
+
+    def test_atomic_write_completes_short_writes(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import os
+    
+        real_write = os.write
+    
+        def short_write(fd: int, data: bytes | memoryview) -> int:
+            return real_write(fd, data[: max(1, len(data) // 2)])
+    
+        monkeypatch.setattr(os, "write", short_write)
+        backend = FileDurabilityBackend(tmp_path)
+        backend.save_checkpoint(_state())
+        backend.save_cursor("r1", "node_b")
+>       assert backend.load_checkpoint("r1", 0) == _state()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/kernel/test_durability.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <aef.kernel.durability.FileDurabilityBackend object at 0x10b592cf0>
+run_id = 'r1', checkpoint_seq = 0
+
+    def load_checkpoint(self, run_id: str, checkpoint_seq: int) -> AEFState | None:
+        path = self._run_dir(run_id, create=False) / f"{checkpoint_seq}.json"
+        if not path.exists():
+            return None
+        try:
+            raw = json.loads(path.read_text())
+        except json.JSONDecodeError as exc:
+>           raise CorruptedCheckpointError(
+                f"checkpoint {path} (run_id={run_id!r}, checkpoint_seq={checkpoint_seq}) "
+                f"is not valid JSON: {exc}"
+            ) from exc
+E           aef.kernel.durability.CorruptedCheckpointError: checkpoint /private/tmp/aef-durability-mutations-final/short_write_truncation/pytest-tmp/test_atomic_write_completes_sh0/r1/0.json (run_id='r1', checkpoint_seq=0) is not valid JSON: Unterminated string starting at: line 1 column 122 (char 121)
+
+aef/kernel/durability.py:261: CorruptedCheckpointError
+=========================== short test summary info ============================
+FAILED tests/kernel/test_durability.py::test_atomic_write_completes_short_writes
+1 failed in 0.09s

@@ -498,7 +498,8 @@ class AgentConfig(_StrictModel):
             )
         return value
 
-    model_provider: ModelProviderConfig
+    # Required choice: null explicitly selects an offline, tool-only runtime.
+    model_provider: ModelProviderConfig | None
     memory: MemoryConfig
     knowledge_graph: KnowledgeGraphConfig | None = None
     context: ContextConfig | None = None
@@ -514,3 +515,12 @@ class AgentConfig(_StrictModel):
     halt_channel: HaltChannelConfig | None = None
     objectives: str
     evolution: EvolutionSettings = EvolutionSettings()
+
+    @model_validator(mode="after")
+    def _offline_settings_are_consistent(self) -> AgentConfig:
+        if self.model_provider is None:
+            if self.reflection.impl == "llm":
+                raise ValueError("reflection.impl=llm requires a non-null model_provider")
+            if self.gates.live_model_calls:
+                raise ValueError("gates.live_model_calls=true requires a non-null model_provider")
+        return self

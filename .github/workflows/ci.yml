@@ -66,6 +66,10 @@ jobs:
   # are facts about the runner, not about the code. It DOES fail when a CLI is
   # present and its adapter is broken, which is the whole point (ADR 0199).
   live-harness:
+    # Persistent CLI logins are credentials too. Keep ordinary PRs hosted.
+    # Owners must also restrict self-hosted runner access outside this YAML:
+    # a PR author can edit a pull_request workflow, including this condition.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ${{ vars.AEF_LIVE_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4

@@ -1,9 +1,13 @@
+from pathlib import Path
+
 import pytest
 
 from aef.kernel import (
     END,
+    CorruptedCheckpointError,
     Edge,
     ExecutionResult,
+    FileDurabilityBackend,
     Graph,
     GraphExecutionError,
     GraphExecutor,
@@ -59,6 +63,31 @@ def test_run_records_trace_when_requested() -> None:
     result = executor.run(_make_state(), record_trace=True)
     assert result.trace is not None
     assert [r.node_id for r in result.trace] == ["start", "finish"]
+
+
+def test_exact_step_budget_finishes_and_persists_terminal_cursor() -> None:
+    durability = InMemoryDurabilityBackend()
+    executor = GraphExecutor(
+        _two_node_graph().compile(), Services(durability=durability), max_steps=2
+    )
+    result = executor.run(_make_state(), record_trace=True)
+    assert result.final_state.checkpoint_seq == 2
+    assert [r.node_id for r in result.trace] == ["start", "finish"]
+    resumed = executor.resume("run-1", record_trace=True)
+    assert resumed.final_state == result.final_state
+    assert resumed.trace == ()
+
+
+def test_insufficient_budget_stops_before_next_node_and_can_resume() -> None:
+    durability = InMemoryDurabilityBackend()
+    executor = GraphExecutor(
+        _two_node_graph().compile(), Services(durability=durability), max_steps=1
+    )
+    with pytest.raises(GraphExecutionError, match="max_steps=1"):
+        executor.run(_make_state())
+    resumed = executor.resume("run-1", record_trace=True)
+    assert resumed.final_state.checkpoint_seq == 2
+    assert [r.node_id for r in resumed.trace] == ["finish"]
 
 
 def test_routing_to_undeclared_edge_raises() -> None:
@@ -475,6 +504,39 @@ def test_resume_unknown_run_id_raises_clearly() -> None:
     executor = GraphExecutor(_three_node_graph().compile(), Services(durability=durability))
     with pytest.raises(GraphExecutionError, match="no checkpoints found"):
         executor.resume("never-existed")
+
+
+@pytest.mark.parametrize("fail_at", [1, 2, 3])
+def test_resume_refuses_checkpoint_written_before_cursor_commit(
+    tmp_path: Path, fail_at: int
+) -> None:
+    """A process death between the two atomic files must never invent progress.
+
+    Previously the first step looked complete; a later step ran twice against
+    its own output. Even a terminal checkpoint cannot prove END without its
+    corresponding cursor.
+    """
+
+    class InterruptedCursor(FileDurabilityBackend):
+        writes = 0
+
+        def save_cursor(self, run_id: str, next_node: str | None) -> None:
+            self.writes += 1
+            if self.writes == fail_at:
+                raise RuntimeError("simulated process death before cursor commit")
+            super().save_cursor(run_id, next_node)
+
+    graph = _three_node_graph().compile()
+    with pytest.raises(RuntimeError, match="simulated process death"):
+        GraphExecutor(graph, Services(durability=InterruptedCursor(tmp_path))).run(
+            _make_state("interrupted")
+        )
+
+    backend = FileDurabilityBackend(tmp_path)
+    before = backend.load_latest("interrupted")
+    with pytest.raises(CorruptedCheckpointError, match="cursor.*checkpoint"):
+        GraphExecutor(graph, Services(durability=backend)).resume("interrupted")
+    assert backend.load_latest("interrupted") == before
 
 
 def test_resume_without_durability_configured_raises() -> None:

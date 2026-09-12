@@ -1,0 +1,72 @@
+COMMAND ["/Users/raptor/aef-core/.venv/bin/python", "-I", "-B", "-c", "\nimport sys\nfrom pathlib import Path\nroot = Path(sys.argv[1]).resolve()\nsys.path.insert(0, str(root))\nimport aef.cli.migrate\nassert Path(aef.cli.migrate.__file__).resolve() == root / \"aef/cli/migrate.py\"\nprint(\"Imported disposable module:\", aef.cli.migrate.__file__, flush=True)\nimport pytest\nraise SystemExit(pytest.main(sys.argv[2:]))\n", "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-existing_prompt_graph_identity_recovery-qgx8m8gw", "tests/cli/test_migrate_prompt_agents.py", "-q", "-k", "test_adding_a_colliding_persona_preserves_prior_graph_identity", "--basetemp", "/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-existing_prompt_graph_identity_recovery-qgx8m8gw/pytest-mutated", "-p", "no:cacheprovider"]
+RETURN_CODE 1
+STDOUT
+Imported disposable module: /private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-existing_prompt_graph_identity_recovery-qgx8m8gw/aef/cli/migrate.py
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+____ test_adding_a_colliding_persona_preserves_prior_graph_identity[claude] ____
+
+tmp_path = PosixPath('/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-existing_prompt_graph_identity_recovery-qgx8m8gw/pytest-mutated/test_adding_a_colliding_person0')
+old_harness = 'claude'
+
+    @pytest.mark.parametrize("old_harness", ["claude", "grok"])
+    def test_adding_a_colliding_persona_preserves_prior_graph_identity(
+        tmp_path: Path, old_harness: str
+    ) -> None:
+        original = tmp_path / f".{old_harness}/agents/z.md"
+        original.parent.mkdir(parents=True)
+        original.write_text(PERSONA.format(name="reviewer"))
+        first = run_migrate(tmp_path)
+        old_site = first.prompt_agents[0]
+        old_bytes = (tmp_path / old_site.out_relative).read_bytes()
+    
+        added = tmp_path / ".claude/agents/a.md"
+        added.parent.mkdir(parents=True, exist_ok=True)
+        added.write_text(PERSONA.format(name="reviewer"))
+        second = run_migrate(tmp_path)
+        assert len(second.prompt_written) == 1
+        sites = {site.source: site for site in second.prompt_agents}
+>       assert sites[old_site.source].out_relative == old_site.out_relative
+E       AssertionError: assert 'agents/migra...er_2/graph.py' == 'agents/migra...ewer/graph.py'
+E         
+E         - agents/migrated/reviewer/graph.py
+E         + agents/migrated/reviewer_2/graph.py
+E         ?                         ++
+
+tests/cli/test_migrate_prompt_agents.py:116: AssertionError
+_____ test_adding_a_colliding_persona_preserves_prior_graph_identity[grok] _____
+
+tmp_path = PosixPath('/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-mutation-existing_prompt_graph_identity_recovery-qgx8m8gw/pytest-mutated/test_adding_a_colliding_person1')
+old_harness = 'grok'
+
+    @pytest.mark.parametrize("old_harness", ["claude", "grok"])
+    def test_adding_a_colliding_persona_preserves_prior_graph_identity(
+        tmp_path: Path, old_harness: str
+    ) -> None:
+        original = tmp_path / f".{old_harness}/agents/z.md"
+        original.parent.mkdir(parents=True)
+        original.write_text(PERSONA.format(name="reviewer"))
+        first = run_migrate(tmp_path)
+        old_site = first.prompt_agents[0]
+        old_bytes = (tmp_path / old_site.out_relative).read_bytes()
+    
+        added = tmp_path / ".claude/agents/a.md"
+        added.parent.mkdir(parents=True, exist_ok=True)
+        added.write_text(PERSONA.format(name="reviewer"))
+        second = run_migrate(tmp_path)
+        assert len(second.prompt_written) == 1
+        sites = {site.source: site for site in second.prompt_agents}
+>       assert sites[old_site.source].out_relative == old_site.out_relative
+E       AssertionError: assert 'agents/migra...er_2/graph.py' == 'agents/migra...ewer/graph.py'
+E         
+E         - agents/migrated/reviewer/graph.py
+E         + agents/migrated/reviewer_2/graph.py
+E         ?                         ++
+
+tests/cli/test_migrate_prompt_agents.py:116: AssertionError
+=========================== short test summary info ============================
+FAILED tests/cli/test_migrate_prompt_agents.py::test_adding_a_colliding_persona_preserves_prior_graph_identity[claude]
+FAILED tests/cli/test_migrate_prompt_agents.py::test_adding_a_colliding_persona_preserves_prior_graph_identity[grok]
+2 failed, 50 deselected in 0.07s
+
+STDERR

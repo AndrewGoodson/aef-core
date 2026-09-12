@@ -5,6 +5,31 @@ directional context, not commitments). Each phase lists what's real
 (working, tested code) vs. what's an interface stub (typed contract,
 `NotImplementedError`, no fake behavior).
 
+## Current review — 2026-09-11
+
+[ADR 0208](adr/0208-repeatable-existing-agent-integration.md) hardens repeat
+adoption and existing-agent identity, owner-file preservation, traversal and
+installed-wheel resources. The [target command](target-repo.md) supports fresh
+and existing-agent repositories; its source stays read-only during invocation.
+[ADR 0209](adr/0209-checkpoint-cursor-consistency.md) binds runtime cursors to
+immutable checkpoint identities and handles short writes. Legacy unbound cursors
+remain readable as evidence but cannot resume automatically.
+[ADR 0210](adr/0210-recorded-retriever-configuration.md) preserves typed retrieval
+settings across harvest and both replay runners. See the
+[repository review](model-checks/2026-09-11-repository-review.md) for validation,
+scale measurements, compatibility and remaining limitations.
+
+## Earlier review — 2026-09-08
+
+[ADR 0205](adr/0205-evidence-learning-and-cross-harness-replay.md) records
+native Claude/Grok Markdown and Codex TOML migration, explicit runtime
+capability instructions, and pre-run memory snapshots for reproducible
+harvest/replay. The shared [evidence-learning protocol](autonomy/evidence-learning.md)
+is shipped with adoption. These are tested mechanisms, not evidence that
+learned advice improves real work: ADR 0204's negative result remains the
+baseline. See the [current audit](model-checks/2026-09-08-codex-review.md)
+for fixed, partial and open findings. Evolution and Tier-1 remain disabled.
+
 ## Phase 0 — Foundation — **DONE**
 
 - [x] Graph kernel: `Node`/`Edge`/`Context`/`Services` contracts (fixed
@@ -91,10 +116,12 @@ what is structural, is in `AGENT_INTEGRATION.md`.
 The ordinary case rather than the exception: an adopting repo whose "agents"
 are `.md` personas a coding harness runs, with no SDK call site to convert.
 `aef adopt` labels it `prompt_files` with counts; `aef migrate` discovers
-`.claude/agents/**/*.md` recursively and writes **one four-node graph per
-persona** (`retrieve -> prompt_agent -> reflect -> consolidate -> END`,
-`graph_id` = the agent's name), reading the persona at execution time so an
-edit takes effect with no regeneration step (ADR 0152, 0179). Skills are
+Claude/Grok Markdown and Codex TOML agent directories recursively and writes
+**one four-node graph per persona**
+(`retrieve -> prompt_agent -> reflect -> consolidate -> END`). Graph IDs and
+paths are disambiguated and retained across reruns; the persona is read at
+execution time so prompt edits take effect without regeneration
+(ADR 0152, 0179, 0205, 0208). Skills are
 found, counted and deliberately not migrated, with the reason printed.
 
 Zone A stays `agents/` by default, so the loop may edit the wrapper and not

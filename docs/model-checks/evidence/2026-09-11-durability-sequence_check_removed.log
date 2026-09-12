@@ -1,0 +1,121 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+________ test_resume_refuses_checkpoint_written_before_cursor_commit[1] ________
+
+tmp_path = PosixPath('/private/tmp/aef-durability-mutations-final/sequence_check_removed/pytest-tmp/test_resume_refuses_checkpoint0')
+fail_at = 1
+
+    @pytest.mark.parametrize("fail_at", [1, 2, 3])
+    def test_resume_refuses_checkpoint_written_before_cursor_commit(
+        tmp_path: Path, fail_at: int
+    ) -> None:
+        """A process death between the two atomic files must never invent progress.
+    
+        Previously the first step looked complete; a later step ran twice against
+        its own output. Even a terminal checkpoint cannot prove END without its
+        corresponding cursor.
+        """
+    
+        class InterruptedCursor(FileDurabilityBackend):
+            writes = 0
+    
+            def save_cursor(self, run_id: str, next_node: str | None) -> None:
+                self.writes += 1
+                if self.writes == fail_at:
+                    raise RuntimeError("simulated process death before cursor commit")
+                super().save_cursor(run_id, next_node)
+    
+        graph = _three_node_graph().compile()
+        with pytest.raises(RuntimeError, match="simulated process death"):
+            GraphExecutor(graph, Services(durability=InterruptedCursor(tmp_path))).run(
+                _make_state("interrupted")
+            )
+    
+        backend = FileDurabilityBackend(tmp_path)
+        before = backend.load_latest("interrupted")
+>       with pytest.raises(CorruptedCheckpointError, match="cursor.*checkpoint"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE CorruptedCheckpointError
+
+tests/kernel/test_executor.py:537: Failed
+________ test_resume_refuses_checkpoint_written_before_cursor_commit[2] ________
+
+tmp_path = PosixPath('/private/tmp/aef-durability-mutations-final/sequence_check_removed/pytest-tmp/test_resume_refuses_checkpoint1')
+fail_at = 2
+
+    @pytest.mark.parametrize("fail_at", [1, 2, 3])
+    def test_resume_refuses_checkpoint_written_before_cursor_commit(
+        tmp_path: Path, fail_at: int
+    ) -> None:
+        """A process death between the two atomic files must never invent progress.
+    
+        Previously the first step looked complete; a later step ran twice against
+        its own output. Even a terminal checkpoint cannot prove END without its
+        corresponding cursor.
+        """
+    
+        class InterruptedCursor(FileDurabilityBackend):
+            writes = 0
+    
+            def save_cursor(self, run_id: str, next_node: str | None) -> None:
+                self.writes += 1
+                if self.writes == fail_at:
+                    raise RuntimeError("simulated process death before cursor commit")
+                super().save_cursor(run_id, next_node)
+    
+        graph = _three_node_graph().compile()
+        with pytest.raises(RuntimeError, match="simulated process death"):
+            GraphExecutor(graph, Services(durability=InterruptedCursor(tmp_path))).run(
+                _make_state("interrupted")
+            )
+    
+        backend = FileDurabilityBackend(tmp_path)
+        before = backend.load_latest("interrupted")
+>       with pytest.raises(CorruptedCheckpointError, match="cursor.*checkpoint"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE CorruptedCheckpointError
+
+tests/kernel/test_executor.py:537: Failed
+________ test_resume_refuses_checkpoint_written_before_cursor_commit[3] ________
+
+tmp_path = PosixPath('/private/tmp/aef-durability-mutations-final/sequence_check_removed/pytest-tmp/test_resume_refuses_checkpoint2')
+fail_at = 3
+
+    @pytest.mark.parametrize("fail_at", [1, 2, 3])
+    def test_resume_refuses_checkpoint_written_before_cursor_commit(
+        tmp_path: Path, fail_at: int
+    ) -> None:
+        """A process death between the two atomic files must never invent progress.
+    
+        Previously the first step looked complete; a later step ran twice against
+        its own output. Even a terminal checkpoint cannot prove END without its
+        corresponding cursor.
+        """
+    
+        class InterruptedCursor(FileDurabilityBackend):
+            writes = 0
+    
+            def save_cursor(self, run_id: str, next_node: str | None) -> None:
+                self.writes += 1
+                if self.writes == fail_at:
+                    raise RuntimeError("simulated process death before cursor commit")
+                super().save_cursor(run_id, next_node)
+    
+        graph = _three_node_graph().compile()
+        with pytest.raises(RuntimeError, match="simulated process death"):
+            GraphExecutor(graph, Services(durability=InterruptedCursor(tmp_path))).run(
+                _make_state("interrupted")
+            )
+    
+        backend = FileDurabilityBackend(tmp_path)
+        before = backend.load_latest("interrupted")
+>       with pytest.raises(CorruptedCheckpointError, match="cursor.*checkpoint"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE CorruptedCheckpointError
+
+tests/kernel/test_executor.py:537: Failed
+=========================== short test summary info ============================
+FAILED tests/kernel/test_executor.py::test_resume_refuses_checkpoint_written_before_cursor_commit[1]
+FAILED tests/kernel/test_executor.py::test_resume_refuses_checkpoint_written_before_cursor_commit[2]
+FAILED tests/kernel/test_executor.py::test_resume_refuses_checkpoint_written_before_cursor_commit[3]
+3 failed in 0.10s

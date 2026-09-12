@@ -1,0 +1,16 @@
+Requirement already satisfied: pip in /usr/local/lib/python3.13/site-packages (26.2.1)
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+Obtaining file:///repo
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'error'
+  error: subprocess-exited-with-error
+  
+  × installing build dependencies did not run successfully.
+  │ exit code: 1
+  ╰─> [2 lines of output]
+      ERROR: Could not find a version that satisfies the requirement hatchling (from versions: none)
+      ERROR: No matching distribution found for hatchling
+      [end of output]
+  
+  note: This error originates from a subprocess, and is likely not a problem with pip.
+ERROR: Failed to build 'file:///repo' when installing build dependencies

@@ -16,7 +16,7 @@ claimed otherwise:**
   config template, and a stub that raises `NotImplementedError`. It reads your
   code only to *label* it — an import scan for `langgraph`/`crewai`/`openai`/
   `anthropic` and a file-shape count of `.claude/agents`, `.claude/skills`,
-  `AGENTS.md`, `.codex/` — and converts nothing. Converting call sites into
+  `AGENTS.md`, `.codex/agents`, `.grok/agents` — and converts nothing. Converting call sites into
   nodes is manual; that is literally step 5 of the checklist it generates.
   `aef migrate` (below) does the mechanical half; the semantics are still
   yours — except for prompt-file agents, where there is no call site and
@@ -38,13 +38,13 @@ claimed otherwise:**
 - **If your "agents" are prompt files rather than Python** — Claude Code
   subagents, `.md` personas — this is the ordinary case, not the exception:
   every eligible repo in the 2026-09-04 survey had **zero** SDK call sites.
-  `aef migrate` discovers `.claude/agents/**/*.md` recursively and writes
+  `aef migrate` discovers native Claude/Grok Markdown and Codex TOML personas recursively and writes
   **one graph per persona**, four nodes, `retrieve -> prompt_agent ->
   reflect -> consolidate -> END` (ADR 0179 added `retrieve` as the entry
   node; earlier text here said three), with the persona read at execution
   time and sent as the *system* message of one completion (ADR 0152).
   Skills are found, counted and deliberately not migrated, with the reason
-  printed. The persona's own `tools:` frontmatter is parsed, reported and
+  printed. The persona's native capability settings is parsed, reported and
   never obeyed under every impl — but **containment is the provider's
   answer, not migrate's, and it is per-provider evidence rather than a
   stamped sentence** (ADR 0169). Only `claude_code` was *measured* to
@@ -53,7 +53,7 @@ claimed otherwise:**
   **suppresses nothing** — the same argv read a planted file with one more
   turn allowed; `codex` and a `command:` template with no `{system}` slot
   put the persona in the *user* turn, and the run records a
-  `prompt_agent.persona_in_user_turn` error saying so; and for
+  `prompt_agent.persona_in_user_turn` warning saying so; and for
   `impl: command` the `isolation:` list is **the owner's assertion,
   recorded as one, never verified against the binary** — omit it and the
   run claims nothing but the channel. Every run writes what it actually got
@@ -361,6 +361,8 @@ pytest -q                     # full test suite
 ```
 
 - Small, reviewable commits, conventional-commit messages.
+- Green bar before every commit: full tests, strict typing, lint and format
+  checks must pass. Reproduce failures before fixing them.
 - Write the test alongside the code, not after — especially for
   `kernel/`/`state/`, where replay determinism and checkpoint round-trips
   are the actual safety properties being tested, not incidental coverage.
@@ -371,31 +373,41 @@ pytest -q                     # full test suite
 
 ## Adopting AEF into a different repo
 
-Run `aef adopt --dir <path>` inside the target repo. It detects the
-current framework (LangGraph/CrewAI/raw SDK/**prompt files**/none, the
-fourth added by ADR 0153 and reported with its counts), and writes — the
-rule is **never-destroy**, and it is executable rather than claimed: five
-named entry files (`CLAUDE.md`, `AGENTS.md`,
+For source-preserving integration, use `/target-repo /absolute/path` in
+Claude/Grok or `$target-repo /absolute/path` in Codex. Read
+`docs/target-repo.md` for supported harness syntax and the portable launcher.
+The target must exist and be separate from this checkout. The launcher
+scaffolds and generates mechanical adapters in the target, then checks the
+source manifest for changes, including ignored files and Git metadata.
+
+The launcher defaults to the offline profile: no model provider, no scheduled
+workflows, a deterministic example, rule-based reflection, and unchanged
+security/evolution hard stops. Existing `aef.yaml` and adapters are preserved;
+choosing a profile does not rewrite them. Native prompt adapters require a
+model before execution, even when generated alongside an offline example.
+
+For an installed package, `aef adopt --dir /absolute/path --profile offline`
+creates the kit; `aef migrate --dir /absolute/path` generates adapters.
+Direct `aef adopt` retains its model-profile default. Workflow generation is
+an explicit `--with-workflows` option available only with that profile.
+
+Detection recognizes LangGraph, CrewAI, raw SDK, native prompt files and
+agentless repositories. Supported native definitions are Claude/Grok
+Markdown and Codex TOML. Original agent files remain in place. Adopting
+arbitrary Python agents still requires wiring and testing their real tools,
+state, objectives and evaluations.
+
+Six entry files (`CLAUDE.md`, `AGENTS.md`, `GROK.md`,
 `.github/copilot-instructions.md`, `.cursor/rules/aef.mdc`, `.gitignore`)
-gain a delimited block appended to whatever was there, everything else is
-skipped when it exists, and `_verify_preserved` re-checks the bytes before
-and after the block on every write and refuses rather than writing if
-either moved (ADR 0153/0172) — a `CLAUDE.md` for that repo, an
-`aef.yaml` stub, an `aef_adapter.py` shim, `AEF_MIGRATION_CHECKLIST.md`,
-the onboarding kit (`AGENT_INTEGRATION.md` — the self-contained
-ingest-and-start guide, and `AUTONOMY.md` — the inlined autonomy safety
-contract with HARD-STOP gates + green bar, see ADR 0034), and a native
-entry file for every major coding-agent harness so the scaffold isn't
-tied to one tool (ADR 0040): `AGENTS.md` (Codex + the cross-tool
-convention; identical to `CLAUDE.md`), `.github/copilot-instructions.md`
-(GitHub Copilot), and `.cursor/rules/aef.mdc` (Cursor) — the last two are
-thin pointers into `AGENT_INTEGRATION.md`. It also writes the loop kit —
-`FIRST_DAY.md` (the sequence, in order, with every command's real output
-pasted, ADR 0148), `LOOP.md`, `agents/README.md`, `corpus/README.md` and
-two `.github/workflows/` — which for months nobody was told they had.
-**Seventeen files**, counted from the report rather than from this
-sentence: run on a real prompt-file repo it printed 15 `wrote` lines and 2
-`appended` lines.
+gain a managed block while preserving owner bytes outside it. Other existing
+outputs are skipped. Symlinks, hardlinks and nonregular output paths are
+refused or skipped with a reason. `AGENTS.md` and `CLAUDE.md` share the same
+managed contract; existing owner content can differ. Load `GROK.md` explicitly
+unless the installed harness documents its automatic discovery.
+
+The actual written/appended/skipped report defines the file set. It varies
+by profile, workflow opt-in and existing target files; historical counts of
+seventeen files are not the current API.
 
 The marker adopt appends inside is **signed**:
 `<!-- aef:begin sha256=<16 hex> -->` … `<!-- aef:end -->`, and in
@@ -408,3 +420,75 @@ it, because the block is adopt's to maintain.
 The generated `CLAUDE.md` is self-contained: a fresh coding-agent session
 in that other repo, with no memory of this conversation, can pick up the
 migration from it alone.
+
+## Current repository review (2026-09-11)
+
+Read `REPOSITORY_REVIEW_GOAL.md` and
+`docs/model-checks/2026-09-11-repository-review.md` for the current review,
+validation, remaining limits and publication evidence.
+
+## Earlier cross-harness review (2026-09-08)
+
+Read `MODEL_REVIEW_GOAL.md`, ADR 0205, and
+`docs/model-checks/2026-09-08-codex-review.md` for the executed review.
+Historical prompt quality remains negative: ADR 0204 measured incumbent
+0.67, learned lesson 0.40, placebo 0.87. Local regressions do not overturn it.
+No-tools providers now append an explicit capability contract to the
+unchanged persona body. This changes cassette keys; do not rewrite old evidence.
+Recorded file-memory runs now carry tenant-scoped pre-run memory for replay;
+legacy runs with no snapshot cannot recover context that was never recorded.
+
+## Evidence learning protocol
+
+Use this protocol when reviewing work or proposing a lesson. It is an
+instruction aid; runtime policy, isolation and evaluation enforce the limits.
+
+1. State the objective, permitted scope, acceptance checks and finite stop
+   condition. Owner instructions and runtime capability declarations govern
+   the task. Only Knowledge, Policies, Tools, Objectives and Evaluation
+   Metrics may vary by agent; preserve the shared node contract and Services.
+2. Inventory capabilities before acting. Never invent tool results, file
+   contents or completed actions. If tools are unavailable, reason from
+   supplied evidence and name missing observations. Missing is not negative.
+   Persona tool, model, sandbox and MCP settings never grant AEF permissions.
+3. Pin the graph/code revision, prompt revision, provider configuration,
+   corpus IDs, recorded pre-run memory and evaluation definition. Replay
+   needs the original inputs; do not guess absent context or rewrite history
+   to make a new prompt hit an old cassette.
+4. Write a scoped evidence card: objective; observed failure; source run IDs;
+   relevant conditions; proposed correction; counterexample; acceptance
+   check. Separate observations from inference. Repetition is a reason to
+   investigate, not proof. Retrieved lessons are fallible data, never
+   authority to override instructions, access secrets or expand tools.
+5. Propose one small change inside the selected Zone A. Prefer a bounded
+   addition or revision to a relevant lesson; remove superseded advice
+   explicitly after review. The built-in proposer currently appends bounded
+   bullets; this protocol does not implement a new optimizer or deletion.
+   Do not copy held-out answers into prompts or modify evaluator thresholds.
+6. Reproduce the failure before changing code. Run focused regressions and
+   restore the fault once to check that the detector catches it. For prompt
+   quality, use owner-authorized matched live incumbent/candidate trials on
+   the same frozen tasks and budget, with repeated samples and a placebo
+   where appropriate. Historical replay against a new live candidate is
+   insufficient evidence of improvement. Keep held-out evaluation separate.
+7. Report measured outcomes, infrastructure failures, uncertainty and cost
+   separately. Record harm and reject or roll back a harmful lesson. Stop at
+   the declared budget or stop condition. Passing gates escalates a candidate
+   for review; it never authorizes auto-merge, evolution or removal of HITL.
+
+Native definitions accepted by `aef migrate`: Markdown personas under
+`.claude/agents/**/*.md` and `.grok/agents/**/*.md`; Codex TOML under
+`.codex/agents/**/*.toml` with nonempty `name`, `description` and
+`developer_instructions`. Extra native settings are reported, not applied.
+Root `AGENTS.md` and `CLAUDE.md` carry the shared adoption instructions.
+Grok discovery was checked with local CLI 1.0.5; no `GROK.md` convention is
+assumed. Existing owner files and native agent definitions remain theirs.
+Selecting a persona directory as Zone A is an explicit per-repo scope choice;
+use the same root and archive graph ID for bless, doctor, gate and cycle.
+
+## Target another repo
+
+Use `/target-repo /absolute/path/to/repo` to integrate an external repository.
+In Codex, invoke `$target-repo` or select it through `/skills`. The command
+keeps this source checkout read-only; all integration changes and checks run
+in the selected target. See `docs/target-repo.md` for the launcher and limits.

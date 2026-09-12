@@ -1,0 +1,83 @@
+{
+  "source": "/Users/raptor/aef-core",
+  "interpreter": "/Users/raptor/aef-core/.venv/bin/python",
+  "script": "/private/tmp/aef-runtime-durability-mutations.py",
+  "source_hashes_before": {
+    "aef/kernel/durability.py": "393d603ee98c0ccb18e4ae47e6cfde841d3927cfe3dc3a4e5c1b3ffd593b1bb7",
+    "tests/kernel/test_durability.py": "eda689c55f6e5f9bbe571506f53b804a42552dd99049217da204dcff942808e3",
+    "tests/kernel/test_executor.py": "51f1bf73b2973b96ccd0f450728e59366ab18a69414e0b562f3c5ffe11e0bd76"
+  },
+  "source_hashes_after": {
+    "aef/kernel/durability.py": "393d603ee98c0ccb18e4ae47e6cfde841d3927cfe3dc3a4e5c1b3ffd593b1bb7",
+    "tests/kernel/test_durability.py": "eda689c55f6e5f9bbe571506f53b804a42552dd99049217da204dcff942808e3",
+    "tests/kernel/test_executor.py": "51f1bf73b2973b96ccd0f450728e59366ab18a69414e0b562f3c5ffe11e0bd76"
+  },
+  "source_unchanged": true,
+  "cases": [
+    {
+      "name": "baseline",
+      "cwd": "/private/tmp/aef-durability-mutations-final/baseline",
+      "command": [
+        "/Users/raptor/aef-core/.venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/kernel/test_executor.py::test_resume_refuses_checkpoint_written_before_cursor_commit",
+        "tests/kernel/test_durability.py::test_atomic_write_completes_short_writes",
+        "--disable-warnings",
+        "--basetemp=/private/tmp/aef-durability-mutations-final/baseline/pytest-tmp"
+      ],
+      "loaded_module": "/private/tmp/aef-durability-mutations-final/baseline/aef/kernel/durability.py",
+      "mutated_file_sha256": "393d603ee98c0ccb18e4ae47e6cfde841d3927cfe3dc3a4e5c1b3ffd593b1bb7",
+      "exit_code": 0,
+      "seconds": 0.25,
+      "log": "/private/tmp/aef-durability-mutations-final/baseline/pytest.log",
+      "summary": "4 passed in 0.09s",
+      "outcome": "baseline_passed"
+    },
+    {
+      "name": "sequence_check_removed",
+      "cwd": "/private/tmp/aef-durability-mutations-final/sequence_check_removed",
+      "command": [
+        "/Users/raptor/aef-core/.venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/kernel/test_executor.py::test_resume_refuses_checkpoint_written_before_cursor_commit",
+        "--disable-warnings",
+        "--basetemp=/private/tmp/aef-durability-mutations-final/sequence_check_removed/pytest-tmp"
+      ],
+      "loaded_module": "/private/tmp/aef-durability-mutations-final/sequence_check_removed/aef/kernel/durability.py",
+      "mutated_file_sha256": "dfdec2492d88e71a93ef7c063434eee0ff5a2d042780e5daf43a40873f3e7526",
+      "exit_code": 1,
+      "seconds": 0.252,
+      "log": "/private/tmp/aef-durability-mutations-final/sequence_check_removed/pytest.log",
+      "summary": "3 failed in 0.10s",
+      "outcome": "mutant_killed"
+    },
+    {
+      "name": "short_write_truncation",
+      "cwd": "/private/tmp/aef-durability-mutations-final/short_write_truncation",
+      "command": [
+        "/Users/raptor/aef-core/.venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/kernel/test_durability.py::test_atomic_write_completes_short_writes",
+        "--disable-warnings",
+        "--basetemp=/private/tmp/aef-durability-mutations-final/short_write_truncation/pytest-tmp"
+      ],
+      "loaded_module": "/private/tmp/aef-durability-mutations-final/short_write_truncation/aef/kernel/durability.py",
+      "mutated_file_sha256": "061e68ea5923e2cc8c89c298aec5417c2c04ac6fa7d0b5f4a31ff55ff2017096",
+      "exit_code": 1,
+      "seconds": 0.261,
+      "log": "/private/tmp/aef-durability-mutations-final/short_write_truncation/pytest.log",
+      "summary": "1 failed in 0.09s",
+      "outcome": "mutant_killed"
+    }
+  ],
+  "all_expected": true
+}

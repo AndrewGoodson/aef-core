@@ -23,6 +23,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from aef.kernel import DurabilityBackend, Services
+from aef.kernel.durability import _validate_checkpoint_retry, _validate_cursor_checkpoint
 from aef.observability.base import Tracer
 from aef.observability.in_memory import InMemoryTracer
 from aef.providers.base import ModelProvider
@@ -49,10 +50,19 @@ class _EphemeralDurability(DurabilityBackend):
 
     def __init__(self) -> None:
         self._states: dict[str, dict[int, AEFState]] = {}
-        self._cursors: dict[str, str | None] = {}
+        self._cursors: dict[str, tuple[str | None, int | None]] = {}
+        self._latest_written: dict[str, int] = {}
 
     def save_checkpoint(self, state: AEFState) -> None:
-        self._states.setdefault(state.run_id, {})[state.checkpoint_seq] = state
+        run = self._states.setdefault(state.run_id, {})
+        existing = run.get(state.checkpoint_seq)
+        if existing is not None:
+            _validate_checkpoint_retry(
+                state.run_id, state.checkpoint_seq, identical=existing == state
+            )
+        else:
+            run[state.checkpoint_seq] = state
+        self._latest_written[state.run_id] = state.checkpoint_seq
 
     def load_latest(self, run_id: str) -> AEFState | None:
         run = self._states.get(run_id)
@@ -65,10 +75,14 @@ class _EphemeralDurability(DurabilityBackend):
         return sorted(self._states.get(run_id, {}))
 
     def save_cursor(self, run_id: str, next_node: str | None) -> None:
-        self._cursors[run_id] = next_node
+        self._cursors[run_id] = (next_node, self._latest_written.get(run_id))
 
     def load_cursor(self, run_id: str) -> str | None:
-        return self._cursors.get(run_id)
+        next_node, checkpoint_seq = self._cursors.get(run_id, (None, None))
+        _validate_cursor_checkpoint(
+            run_id, checkpoint_seq, max(self._states.get(run_id, {}), default=None)
+        )
+        return next_node
 
 
 def agent_services(

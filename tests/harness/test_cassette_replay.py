@@ -435,3 +435,31 @@ def test_the_score_paths_failure_record_is_stamped_with_execution_time() -> None
     (rec,) = [r for r in store.query("failure", limit=5) if r.kind == "failure"]
     assert rec.created_at >= before, (rec.created_at, before, scenario.recorded_at)
     assert rec.created_at > scenario.recorded_at
+
+
+def test_recorded_prompt_provider_capabilities_survive_offline_replay() -> None:
+    from aef.reasoning.prompt_agent import PromptAgentDefinition, make_prompt_agent_node
+
+    class NoTools(_Scripted):
+        isolation = frozenset({"no_tools"})
+
+    live = NoTools("supplied evidence only")
+    node = make_prompt_agent_node(
+        definition=PromptAgentDefinition(
+            name="a", description="probe", body="Use tools to inspect the repo."
+        ),
+        route=END,
+    )
+    graph = Graph(id="prompt", version="1", nodes={node.id: node}, edges=[], entry_node=node.id)
+    scenario = record_run(
+        graph,
+        AEFState(run_id="prompt-1", agent_id="a", objective="inspect"),
+        agent_services(model_provider=live),
+        scenario_id="prompt-1",
+        recorded_at=RECORDED_AT,
+    )
+    assert scenario.provider_isolation == ("no_tools",)
+    assert "No tools are available" in scenario.model_calls[0].request.messages[0].content
+    replayed = run_scenario(scenario, graph)
+    assert replayed["outcome"]["error_count"] == 0
+    assert live.calls == 1

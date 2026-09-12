@@ -582,3 +582,38 @@ def test_policy_payload_round_trips_through_the_configure_frame() -> None:
     # `None` is not an empty policy: it must stay distinguishable on the wire.
     assert policy_payload(None) is None
     assert policy_config_from_payload(None) == PolicyConfig()
+
+
+def test_provider_error_routed_to_fallback_remains_visible_in_both_runners(corpus) -> None:
+    from aef.harness.scenario_runner import load_graph, run_scenario
+
+    root, scenarios = corpus
+    source = """from aef.kernel import END, Graph, Node
+from aef.providers.base import ModelProviderError
+from aef.state import StateDelta
+
+def work(state, ctx, services):
+    raise ModelProviderError("harness executable not found: private-launch-detail")
+
+def fallback(state, ctx, services):
+    return StateDelta(), END
+
+def build_graph():
+    nodes = [Node(id="do", version="1", fn=work, deterministic=True, fallback_node_id="fallback"),
+             Node(id="fallback", version="1", fn=fallback, deterministic=True)]
+    return Graph(id="g", version="1", nodes={n.id: n for n in nodes}, edges=[], entry_node="do")
+"""
+    path = root / "agents" / "failure.py"
+    path.write_text(source)
+    from dataclasses import replace
+
+    # Both the failed node and its fallback need a recorded clock value.
+    scenario = replace(scenarios[0], trace=scenarios[0].trace * 2)
+    local = run_scenario(scenario, load_graph(f"{path}:build_graph"))
+    isolated = run_corpus_isolated(root, [scenario], entrypoint="agents.failure:build_graph")
+    other = isolated[scenarios[0].id]
+    for failure in (local.get("failure", ""), other.failure or ""):
+        assert "ModelProviderError" in failure
+        assert "private-launch-detail" not in failure
+    assert not local.get("dead_call", False)
+    assert not other.dead_call

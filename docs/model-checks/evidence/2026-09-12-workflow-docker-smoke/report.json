@@ -1,0 +1,39 @@
+{
+  "root": "/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-workflow-docker-smoke-m493cpqp",
+  "source": "/Users/raptor/aef-core",
+  "steps": {
+    "Build the trusted runtime image": {
+      "exit_code": 0,
+      "expected": 0,
+      "duration_seconds": 15.56,
+      "log": "/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-workflow-docker-smoke-m493cpqp/build-the-trusted-runtime-image.log"
+    },
+    "Fetch the candidate as data": {
+      "exit_code": 0,
+      "expected": 0,
+      "duration_seconds": 0.29,
+      "log": "/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-workflow-docker-smoke-m493cpqp/fetch-the-candidate-as-data.log"
+    },
+    "Gate": {
+      "exit_code": 1,
+      "expected": 1,
+      "duration_seconds": 1.03,
+      "log": "/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-workflow-docker-smoke-m493cpqp/gate.log"
+    },
+    "Report": {
+      "exit_code": 0,
+      "expected": 0,
+      "duration_seconds": 0.34,
+      "log": "/private/var/folders/vl/p1qfg3h510q771qyx188xc1w0000gn/T/aef-workflow-docker-smoke-m493cpqp/report.log"
+    }
+  },
+  "workflow_sha256": "b7d595cc7e26ce2171ad1cb783ce2becc50bbf47a1a1ddf8adc92775f0f3c0e3",
+  "image": "aef-workflow-smoke:1789187655",
+  "fixture_main": "ed10a87cfe35cde6625871bdcd1c25c8566f3399",
+  "fixture_candidate": "4f733ff3cc6cf59fdd9c2eee80076802b8e8051c",
+  "sanitized_config": "core.repositoryformatversion=0\ncore.filemode=true\ncore.bare=false\ncore.logallrefupdates=true\ncore.ignorecase=true\ncore.precomposeunicode=true\n",
+  "boundary_checks": "See G1 output and trusted fixture test",
+  "all_steps_expected": true,
+  "workflow_source_unchanged": true,
+  "new_image_cleanup_exit": 0
+}

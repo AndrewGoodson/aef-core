@@ -1,0 +1,69 @@
+{
+  "source": "/Users/raptor/aef-core",
+  "source_revision": "6786c4a1d922f15ff1f1a398191ab9170838f51f",
+  "fixture_only": true,
+  "real_external_targets_modified": false,
+  "fixtures": [
+    {
+      "fixture": "fresh",
+      "owner_files_byte_preserved": 0,
+      "owner_prefixes_preserved": 0,
+      "repeat_exact": true,
+      "target_entry_count": 18,
+      "personas": {},
+      "runs": [
+        {
+          "phase": "first",
+          "return_code": 0,
+          "seconds": 3.051,
+          "source_manifest": "Source verified unchanged: 16402 entries; manifest sha256=223125c707885f4f0a51cbdc6bdccf304f0f24361c757f4ef7c28898d06c9d8f",
+          "log": "launcher-fresh-first.log"
+        },
+        {
+          "phase": "repeat",
+          "return_code": 0,
+          "seconds": 1.445,
+          "source_manifest": "Source verified unchanged: 16402 entries; manifest sha256=223125c707885f4f0a51cbdc6bdccf304f0f24361c757f4ef7c28898d06c9d8f",
+          "log": "launcher-fresh-repeat.log"
+        }
+      ]
+    },
+    {
+      "fixture": "mixed agents with spaces",
+      "owner_files_byte_preserved": 9,
+      "owner_prefixes_preserved": 3,
+      "repeat_exact": true,
+      "target_entry_count": 38,
+      "personas": {
+        "agents/migrated/reviewer/graph.py": {
+          "AGENT_FILE": ".claude/agents/reviewer.md",
+          "GRAPH_ID": "reviewer"
+        },
+        "agents/migrated/reviewer_2/graph.py": {
+          "AGENT_FILE": ".codex/agents/reviewer.toml",
+          "GRAPH_ID": "reviewer_2"
+        },
+        "agents/migrated/reviewer_3/graph.py": {
+          "AGENT_FILE": ".grok/agents/reviewer.md",
+          "GRAPH_ID": "reviewer_3"
+        }
+      },
+      "runs": [
+        {
+          "phase": "first",
+          "return_code": 0,
+          "seconds": 1.365,
+          "source_manifest": "Source verified unchanged: 16402 entries; manifest sha256=223125c707885f4f0a51cbdc6bdccf304f0f24361c757f4ef7c28898d06c9d8f",
+          "log": "launcher-mixed-first.log"
+        },
+        {
+          "phase": "repeat",
+          "return_code": 0,
+          "seconds": 1.445,
+          "source_manifest": "Source verified unchanged: 16402 entries; manifest sha256=223125c707885f4f0a51cbdc6bdccf304f0f24361c757f4ef7c28898d06c9d8f",
+          "log": "launcher-mixed-repeat.log"
+        }
+      ]
+    }
+  ]
+}

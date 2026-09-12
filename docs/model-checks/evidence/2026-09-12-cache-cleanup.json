@@ -1,0 +1,523 @@
+{
+  "root": "/Users/raptor/aef-core",
+  "removed_directory_count": 52,
+  "directories": [
+    {
+      "path": ".pytest_cache",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": ".ruff_cache",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": ".mypy_cache",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "build",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/adversarial/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/config/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/security/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/providers/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/agents/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/cli/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/observability/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/state/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/reasoning/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/harness/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/examples/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/dash/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/services/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/services/memory/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/services/knowledge/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/services/eval/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "tests/kernel/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "agents/demo/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "agents/ladder/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "agents/summary/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "docs/research/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "docs/research/i14b/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "examples/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "examples/hello_agent/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "mindgraph/pipeline/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/coordination/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/config/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/security/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/providers/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/cli/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/observability/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/state/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/reasoning/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/harness/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/harness/gates/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/evolution/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/dash/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/services/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/services/context/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/services/memory/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/services/memory/adapters/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/services/optimizers/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/services/knowledge/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/services/knowledge/adapters/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/services/eval/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    },
+    {
+      "path": "aef/kernel/__pycache__",
+      "tracked_files": 0,
+      "ignored": true,
+      "symlink": false,
+      "removed": true
+    }
+  ],
+  "preserved": [
+    ".venv",
+    "node_modules",
+    ".claude/state",
+    ".scratch",
+    "all tracked files"
+  ],
+  "post_validation_cleanup": {
+    "removed_directory_count": 20,
+    "directories": [
+      {
+        "path": ".pytest_cache",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": ".ruff_cache",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": ".mypy_cache",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "build",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "agents/demo/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/config/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/security/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/providers/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/observability/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/state/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/reasoning/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/harness/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/services/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/services/context/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/services/memory/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/services/optimizers/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/services/knowledge/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/services/eval/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      },
+      {
+        "path": "aef/kernel/__pycache__",
+        "tracked_files": 0,
+        "ignored": true,
+        "symlink": false,
+        "removed": true
+      }
+    ],
+    "reason": "Remove only verified ignored caches recreated by final validation; preserve dependencies, agent state and tracked files."
+  }
+}

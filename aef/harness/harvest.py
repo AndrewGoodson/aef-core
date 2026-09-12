@@ -54,12 +54,15 @@ replayed; nothing live is ever reached (ADR 0190).
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
+from aef.config.factory import build_retriever
+from aef.config.schema import ContextConfig
 from aef.harness.corpus import (
     Expected,
     Scenario,
@@ -69,20 +72,17 @@ from aef.harness.corpus import (
     save_scenario,
 )
 from aef.harness.corpus import fixed_clock as _fixed_clock
+from aef.harness.memory_store import memory_payload, memory_record
 from aef.harness.outcome import is_recovered
 from aef.harness.redaction import RedactionPolicy
+from aef.harness.replay_inputs import RecordedIsolation as _RecordedIsolation
+from aef.harness.replay_inputs import replay_memory
 from aef.harness.trace_codec import decode_trace, dumps, encode_trace, loads
 from aef.kernel import GraphExecutor, Services
 from aef.kernel.executor import NodeExecutionRecord
 from aef.kernel.graph import Graph
-from aef.providers.base import (
-    CompletionRequest,
-    CompletionResult,
-    ModelProvider,
-    ModelProviderError,
-)
 from aef.providers.cassette_provider import CassetteProvider, RecordedCall
-from aef.services.memory.in_memory import InMemoryMemoryStore
+from aef.services.memory.base import MemoryRecord
 from aef.services.runtime import agent_services
 from aef.state import AEFState
 
@@ -149,6 +149,10 @@ class RecordedRun:
     # here, the replay shim answers with the same name the recording had,
     # whichever of the two `CassetteProvider` decides to report.
     provider_name: str = ""
+    # Tenant-scoped durable memory BEFORE this run; None for legacy captures.
+    initial_memory: tuple[MemoryRecord, ...] | None = None
+    # The built-in retriever's approved scalar settings, captured before execution.
+    context_config: ContextConfig | None = None
 
     @property
     def failed(self) -> bool:
@@ -176,6 +180,12 @@ class RecordedRun:
             "model_calls": [call.to_payload() for call in self.model_calls],
             "provider_isolation": list(self.provider_isolation),
             "provider_name": self.provider_name,
+            "initial_memory": None
+            if self.initial_memory is None
+            else [memory_payload(r) for r in self.initial_memory],
+            "context_config": None
+            if self.context_config is None
+            else self.context_config.model_dump(mode="json"),
         }
 
     @classmethod
@@ -201,6 +211,12 @@ class RecordedRun:
                     sorted(str(s) for s in payload.get("provider_isolation", ()))
                 ),
                 provider_name=str(payload.get("provider_name", "")),
+                initial_memory=None
+                if payload.get("initial_memory") is None
+                else tuple(memory_record(r) for r in payload["initial_memory"]),
+                context_config=None
+                if payload.get("context_config") is None
+                else ContextConfig.model_validate(payload["context_config"]),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise HarvestError(f"malformed recorded run: {exc}") from exc
@@ -288,52 +304,6 @@ class HarvestOutcome:
         return tuple(out)
 
 
-class _RecordedIsolation(ModelProvider):
-    """The recording provider's own `isolation` declaration, replayed.
-
-    Not a provider: it answers nothing and cannot. It exists so the replay
-    cassette has something to forward an `isolation` set from, because
-    `CassetteProvider.isolation` forwards its inner provider's declaration
-    and reports nothing when there is none — which is right, and which made
-    ADR 0169's containment record unreproducible (ADR 0163's F-M6-2).
-
-    **Why this is not "inventing the provider's properties", which is the
-    failure mode ADR 0169 exists to close.** 0169's rule is that a claim about
-    containment must never be *inherited unverified*: a replay must not assert
-    isolation it did not observe. The set here was observed — by the recorder,
-    at capture time, from the provider that actually answered — and stored on
-    the run. Replaying a recorded fact is the opposite of manufacturing one.
-    What would be unsound is `CassetteProvider` reporting a set of its own, or
-    a set defaulted from config; neither happens. The alternative considered
-    and rejected was to exclude `*__containment` keys from the trace
-    comparison, which would delete a recorded fact from the definition of
-    "behaviour unchanged" and let a run recorded under `no_tools` be admitted
-    on the strength of a re-execution that never checked (ADR 0190).
-
-    `complete` raises rather than returning: nothing may reach a live model to
-    decide whether a run was deterministic, and a shim that answered would be
-    a way for that to happen quietly.
-    """
-
-    #: Used only when the run recorded no provider name (a legacy run).
-    DEFAULT_NAME = "recorded-isolation"
-
-    def __init__(self, isolation: Iterable[str], name: str = "") -> None:
-        self._isolation = frozenset(isolation)
-        self.name = name or self.DEFAULT_NAME
-
-    @property
-    def isolation(self) -> frozenset[str]:
-        return self._isolation
-
-    def complete(self, request: CompletionRequest) -> CompletionResult:
-        raise ModelProviderError(
-            "the determinism re-check has no live provider by design: this object carries "
-            "the recorded provider's isolation declaration and answers nothing. A request "
-            "reaching it means the cassette missed, which is a behavioural difference."
-        )
-
-
 def _reexecution_services(
     scenario: Scenario, isolation: tuple[str, ...] = (), provider_name: str = ""
 ) -> Services:
@@ -359,10 +329,19 @@ def _reexecution_services(
         scenario.model_calls,
         on_miss="fail",
     )
+    memory, knowledge = replay_memory(scenario.initial_memory, scenario.initial_state.agent_id)
     return agent_services(
         clock=_fixed_clock(scenario),
-        memory=InMemoryMemoryStore(),
+        memory=memory,
+        knowledge=knowledge,
+        agent_id=scenario.initial_state.agent_id,
         model_provider=cassette,
+        retriever=build_retriever(
+            scenario.context_config,
+            memory=memory,
+            knowledge=knowledge,
+            agent_id=scenario.initial_state.agent_id,
+        ),
     )
 
 
@@ -382,6 +361,10 @@ def _reexecutes_identically(run: RecordedRun, graph: Graph) -> bool:
         trace=run.trace,
         recorded_at=run.at,
         model_calls=run.model_calls,
+        initial_memory=run.initial_memory,
+        context_config=run.context_config,
+        provider_isolation=run.provider_isolation,
+        provider_name=run.provider_name,
     )
     try:
         # The same services the gate runner supplies. A bare `Services()`
@@ -413,6 +396,10 @@ def _reexecute(
         trace=run.trace,
         recorded_at=run.at,
         model_calls=run.model_calls,
+        initial_memory=run.initial_memory,
+        context_config=run.context_config,
+        provider_isolation=run.provider_isolation,
+        provider_name=run.provider_name,
     )
     try:
         result = GraphExecutor(
@@ -502,6 +489,45 @@ def _scannable(scenario: Scenario) -> dict[str, Any]:
         for call in calls:
             if isinstance(call, dict):
                 call.pop("key", None)
+    # A pre-run snapshot has provenance from earlier CLI runs. Exempt only
+    # their UUID4 metadata field, never matching values inside lesson content
+    # or the trace. Those still carry tenant evidence and must be scanned.
+    for record in payload.get("initial_memory") or ():
+        run_id = record.get("run_id")
+        try:
+            generated_id = UUID(run_id) if isinstance(run_id, str) else None
+        except ValueError:
+            generated_id = None
+        if generated_id is not None and generated_id.version == 4 and str(generated_id) == run_id:
+            record.pop("run_id", None)
+    # Consolidation repeats those provenance ids in structured knowledge
+    # chunks. Scan the rest of each chunk, and the original memory content,
+    # normally. Do not blank matching values in objectives or free text.
+    prior_ids = {r.run_id for r in scenario.initial_memory or () if r.run_id}
+
+    def scan_chunks(value: Any) -> None:
+        if isinstance(value, list):
+            for child in value:
+                scan_chunks(child)
+        elif isinstance(value, dict):
+            if str(value.get("source", "")).startswith("knowledge:"):
+                content = value.get("content")
+                if isinstance(content, str):
+                    try:
+                        structured = json.loads(content)
+                    except (ValueError, TypeError):
+                        structured = None
+                    if isinstance(structured, dict):
+                        ids = structured.get("run_ids")
+                        if isinstance(ids, list) and all(
+                            isinstance(i, str) and i in prior_ids for i in ids
+                        ):
+                            structured.pop("run_ids")
+                            value["content"] = json.dumps(structured, sort_keys=True)
+            for child in value.values():
+                scan_chunks(child)
+
+    scan_chunks(payload)
     return payload
 
 
@@ -608,6 +634,10 @@ def harvest(
             # The cassette travels with the scenario, or the gates that
             # re-execute it hit the same wall harvest just cleared.
             model_calls=run.model_calls,
+            initial_memory=run.initial_memory,
+            context_config=run.context_config,
+            provider_isolation=run.provider_isolation,
+            provider_name=run.provider_name,
             # Harvested runs carry NO owner claim. Only a human can say a
             # task should have failed, and a MUST_FAIL label invented by
             # the system would be a tripwire the system set for itself.

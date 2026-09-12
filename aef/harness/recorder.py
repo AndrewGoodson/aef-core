@@ -31,7 +31,9 @@ from aef.harness.corpus import (
     load_corpus,
     save_scenario,
 )
+from aef.harness.memory_store import FileMemoryStore
 from aef.harness.outcome import classify
+from aef.harness.replay_inputs import recorded_context
 from aef.kernel import GraphExecutor, Services
 from aef.kernel.graph import Graph
 from aef.providers.cassette_provider import CassetteProvider
@@ -123,7 +125,14 @@ def record_run(
     # answers and needs no credential. Wrapped ALWAYS, not only when a
     # provider is configured — a graph that calls a model with none
     # configured fails naming the miss, which is the same errored run it was.
-    recording = CassetteProvider(services.model_provider, on_miss="live")
+    provider = services.model_provider
+    context_snapshot = recorded_context(services.retriever)
+    initial_memory = (
+        services.memory.snapshot(agent_id=initial_state.agent_id)
+        if isinstance(services.memory, FileMemoryStore)
+        else None
+    )
+    recording = CassetteProvider(provider, on_miss="live")
     services = replace(services, model_provider=recording)
 
     result = GraphExecutor(graph.compile(), services).run(initial_state, record_trace=True)
@@ -162,6 +171,10 @@ def record_run(
         checks=checks,
         budget_ms=budget_ms,
         model_calls=recording.recorded,
+        initial_memory=initial_memory,
+        context_config=context_snapshot,
+        provider_isolation=tuple(sorted(provider.isolation)) if provider is not None else (),
+        provider_name=provider.name if provider is not None else "",
         # Which command admitted it (ADR 0141). RECORD by default because
         # this function IS `aef loop record`; `bootstrap` and `harvest` say
         # so, and `harvest`'s daily limit charges only its own.

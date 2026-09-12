@@ -1,0 +1,41 @@
+{
+  "disposable_source_copies_only": true,
+  "mutations": [
+    {
+      "baseline": {
+        "log": "/private/tmp/aef-integration-review/mutation_native_nonregular_source_rejection_baseline.log",
+        "return_code": 0,
+        "timeout_seconds": 30
+      },
+      "expected_test_count": 3,
+      "mutated": {
+        "log": "/private/tmp/aef-integration-review/mutation_native_nonregular_source_rejection_mutated.log",
+        "return_code": 1,
+        "timeout_seconds": 30
+      },
+      "mutation_detected": true,
+      "name": "native_nonregular_source_rejection",
+      "selected_regression": "test_discovery_refuses_nonregular_personas_before_reading"
+    },
+    {
+      "baseline": {
+        "log": "/private/tmp/aef-integration-review/mutation_existing_prompt_graph_identity_recovery_baseline.log",
+        "return_code": 0,
+        "timeout_seconds": 30
+      },
+      "expected_test_count": 2,
+      "mutated": {
+        "log": "/private/tmp/aef-integration-review/mutation_existing_prompt_graph_identity_recovery_mutated.log",
+        "return_code": 1,
+        "timeout_seconds": 30
+      },
+      "mutation_detected": true,
+      "name": "existing_prompt_graph_identity_recovery",
+      "selected_regression": "test_adding_a_colliding_persona_preserves_prior_graph_identity"
+    }
+  ],
+  "source": "/Users/raptor/aef-core",
+  "source_inputs_unchanged": true,
+  "source_module_sha256": "9699780347a3b039c68196ec05a6b218b39714d21f8c4fa3fe70753c0bd1d801",
+  "source_test_sha256": "3b57ace52a30b79aee7978ef07976833d714833e7881ca4070445dc1301e13e1"
+}

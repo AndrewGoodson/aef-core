@@ -1,0 +1,58 @@
+{
+  "source": "/Users/raptor/aef-core",
+  "script": "/Users/raptor/aef-core/docs/model-checks/evidence/2026-09-11-shadow-storage-mutations.py",
+  "source_hashes_before": {
+    "aef/harness/shadow.py": "8c72eaf67cb3f0f14d4205a807c316e034eb9237ae52f2679d976bdabc872a4c",
+    "tests/harness/test_promotion_safety.py": "0b00f06425209ae8f58cd34756907af32992a01b36df8d248ed07f80144f151e"
+  },
+  "source_hashes_after": {
+    "aef/harness/shadow.py": "8c72eaf67cb3f0f14d4205a807c316e034eb9237ae52f2679d976bdabc872a4c",
+    "tests/harness/test_promotion_safety.py": "0b00f06425209ae8f58cd34756907af32992a01b36df8d248ed07f80144f151e"
+  },
+  "source_unchanged": true,
+  "cases": [
+    {
+      "name": "baseline",
+      "command": [
+        "/Users/raptor/aef-core/.venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/harness/test_promotion_safety.py::test_shadow_checkpoints_do_not_read_or_replace_the_incumbents_store",
+        "--disable-warnings",
+        "--basetemp=/private/tmp/aef-shadow-storage-retained-script/baseline/pytest-tmp"
+      ],
+      "cwd": "/private/tmp/aef-shadow-storage-retained-script/baseline",
+      "loaded_module": "/private/tmp/aef-shadow-storage-retained-script/baseline/aef/harness/shadow.py",
+      "copied_file_sha256": "8c72eaf67cb3f0f14d4205a807c316e034eb9237ae52f2679d976bdabc872a4c",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "matched_expected_exit": true,
+      "log": "/private/tmp/aef-shadow-storage-retained-script/baseline/pytest.log",
+      "summary": "1 passed in 0.10s"
+    },
+    {
+      "name": "shared_storage_mutant",
+      "command": [
+        "/Users/raptor/aef-core/.venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/harness/test_promotion_safety.py::test_shadow_checkpoints_do_not_read_or_replace_the_incumbents_store",
+        "--disable-warnings",
+        "--basetemp=/private/tmp/aef-shadow-storage-retained-script/shared_storage_mutant/pytest-tmp"
+      ],
+      "cwd": "/private/tmp/aef-shadow-storage-retained-script/shared_storage_mutant",
+      "loaded_module": "/private/tmp/aef-shadow-storage-retained-script/shared_storage_mutant/aef/harness/shadow.py",
+      "copied_file_sha256": "fc4fac4206049679a86591688adc80b0d51c64210bbd95a3741697ef5b87b5b3",
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "matched_expected_exit": true,
+      "log": "/private/tmp/aef-shadow-storage-retained-script/shared_storage_mutant/pytest.log",
+      "summary": "1 failed in 0.11s"
+    }
+  ],
+  "all_expected": true
+}

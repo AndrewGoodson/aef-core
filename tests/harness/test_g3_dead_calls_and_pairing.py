@@ -360,8 +360,8 @@ def test_the_paired_direction_changes_no_verdict() -> None:
     reason string."""
     cohort = _cohort([0.5] * 6, n=4)
     incumbent = _scores("inc", dict.fromkeys(("s1", "s2", "s3", "s4"), 0.6))
-    falling = _scores("cand", {"s1": 1.0, "s2": 1.0, "s3": 0.55, "s4": 0.55})
-    rising = _scores("cand", dict.fromkeys(("s1", "s2", "s3", "s4"), 0.775))
+    falling = _scores("cand", {"s1": 1.0, "s2": 1.0, "s3": 0.5, "s4": 0.5})
+    rising = _scores("cand", dict.fromkeys(("s1", "s2", "s3", "s4"), 0.75))
     assert falling.mean == rising.mean
 
     assert len(paired_sign_test(falling, incumbent).down) == 2
