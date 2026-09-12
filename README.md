@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="site/logo.png" width="144" alt="AEF learning loop logo">
+
 # aef-core
 
 ### Agent Engineering Foundation — graph runtime and repository integration toolkit
@@ -54,6 +56,130 @@ behavior. **Only five things differ per agent:**
 
 If you find yourself adding an agent-specific branch anywhere else, the
 abstraction is wrong, not the agent.
+
+---
+
+## Enhance a repository with `/target-repo`
+
+### 1. Prepare AEF once
+
+Use Python 3.11 or newer. Clone and prepare this toolkit before starting a
+target integration:
+
+```sh
+git clone https://github.com/AndrewGoodson/aef-core.git
+cd aef-core
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[dev]'
+```
+
+Already have a checkout? Prepare its environment there. This setup step writes
+to AEF; the target command that follows keeps the AEF checkout **read-only**.
+
+### 2. Point the command at the repo to enhance
+
+Open your coding agent in the prepared **aef-core checkout**, then enter:
+
+```text
+/target-repo "/absolute/path/to/your repo"
+```
+
+The argument identifies the **target repository**: an existing local directory,
+including a newly initialized repo or one with agents already. Use its full
+absolute path and quote it. For a repository on GitHub, clone it locally first
+and pass the clone's directory. The target must be separate from the AEF source;
+neither directory may contain the other.
+
+| Harness | Invoke |
+|---|---|
+| Claude Code / Grok | `/target-repo "/absolute/path/to/your repo"` ([Claude skill](.claude/skills/target-repo/SKILL.md), [Grok skill](.grok/skills/target-repo/SKILL.md)) |
+| Codex | `$target-repo "/absolute/path/to/your repo"`, or select `target-repo` through `/skills` where supported ([Codex skill](.agents/skills/target-repo/SKILL.md)) |
+
+If the command is missing, refresh the coding-agent session in the AEF checkout
+so it discovers the repository skills. Codex uses the skill syntax shown above;
+slash-command availability depends on the harness.
+
+### 3. Complete and verify the target integration
+
+The skill scaffolds the target, discovers eligible existing agents, then guides
+the coding agent through the applicable wiring and tests **in that target**.
+All implementation, environments, logs and reports stay there. It checks the
+AEF source before and after the invocation to detect changes.
+
+| What your target already has | What AEF adds | What the coding agent must verify |
+|---|---|---|
+| No agents | Configuration, onboarding guides and an adapter stub | Implement and test a graph for the repository's actual task |
+| Claude / Grok Markdown personas or eligible Codex TOML personas | Graph registrations that read the native personas | Wire the provider and real tools; preserve the agents' intended behavior |
+| Instructions and native skills | Managed AEF guidance alongside owner instructions; a skills inventory | Preserve owner text outside managed blocks; skills remain native workflows |
+| An earlier AEF integration | Missing outputs and refreshed valid managed instruction blocks | Review preserved configuration, graphs and dependencies before upgrading |
+
+A generated file or graph registration alone does not prove a working
+integration. The agent should establish the target's existing test baseline,
+wire one bounded workflow, exercise success and failure paths, and report the
+results and unresolved limits. Use the [continuation prompt](#hand-it-to-your-ai)
+to resume that work in a fresh target session.
+
+The default is **offline**: no model provider and no generated scheduled
+workflows. Model-backed personas need explicit provider setup and authorized
+model execution. Tool-dependent personas need actual tool results.
+
+### Terminal alternative
+
+The mechanical phase also works without a coding agent:
+
+```sh
+python3 -I -B /absolute/path/to/aef-core/scripts/target_repo.py '/absolute/path/to/your repo'
+```
+
+The launcher uses AEF's prepared environment and installs nothing into the source.
+It scaffolds and registers agents; the coding agent still completes semantic
+wiring, target runtime installation and tests. Model configuration requires
+`--profile model`; scheduled workflows require the additional `--with-workflows`
+flag. Existing target configuration
+and workflows are preserved, so these flags do not convert an old installation.
+
+See the **[target-repo guide](docs/target-repo.md)** for setup, supported agent
+formats, source-integrity checks, and updating an already integrated repo.
+
+```mermaid
+flowchart LR
+    A["target-repo<br/>explicit target directory"] --> B["adopt + migrate<br/>scaffold and register agents"]
+    B --> C["Target environment<br/>install a pinned AEF wheel"]
+    C --> D["aef.yaml<br/>define the 5 surfaces"]
+    D --> E["Wire graph + services<br/>preserve existing behavior"]
+    E --> F["aef doctor / aef run<br/>check setup + execute"]
+    F --> G["aef eval / aef trace<br/>score + inspect provenance"]
+    G --> H{"target checks pass?"}
+    H -->|yes| I["review / iterate"]
+    H -->|no| E
+
+    classDef step fill:#eef2f7,stroke:#5b6b7f,color:#1c2733;
+    class A,B,C,D,E,F,G,I step;
+```
+
+### Return to the same target
+
+Update and prepare the AEF source in a separate setup session, then invoke the
+same command with the same explicit target path. Review the report's created,
+updated and preserved files. Reruns preserve existing configuration, guides,
+workflows and graphs, including hand edits; they do not upgrade the installed
+AEF package or convert the target's profile. Follow the
+[update procedure](docs/target-repo.md#preservation-and-updates) to install a
+chosen pinned wheel in the target and rerun its checks.
+
+### Learning from the target's work
+
+Native persona graphs connect retrieval, the agent prompt, reflection and
+evidence consolidation. To turn their output into useful candidate lessons:
+
+1. Record actual outcomes, tool results and failure evidence with provenance.
+2. Propose a bounded lesson tied to an observed failure.
+3. Compare it against the incumbent and a placebo on independent held-out tasks.
+4. Keep, revise or reject the lesson based on measured results and human review.
+
+Memory and reflection supply evidence; improvement still needs measurement.
+See the [graph and learning methodology](docs/graph-and-learning.md) and
+[evidence-learning instructions](docs/autonomy/evidence-learning.md).
 
 ---
 
@@ -114,66 +240,15 @@ an `idempotency_key_fn`).
 
 ---
 
-## How to use it
-
-### Point the command at your target
-
-Open your coding agent in this AEF checkout, then name an **existing absolute
-directory**. Quote paths containing spaces:
-
-| Harness | Invoke |
-|---|---|
-| Claude Code / Grok | `/target-repo "/absolute/path/to/your repo"` |
-| Codex | `$target-repo "/absolute/path/to/your repo"`, or select `target-repo` through `/skills` where supported |
-
-The skill scaffolds the target, discovers eligible existing agents, then guides
-the coding agent through the applicable wiring and tests **in that target**.
-The source checkout stays read-only during the invocation. A fresh repo gets
-an adapter stub; a repo with native Claude/Grok Markdown or Codex TOML personas
-gets graph registrations. Neither result alone proves a working integration.
-
-The mechanical phase also works from a terminal:
-
-```sh
-python3 -I -B /absolute/path/to/aef-core/scripts/target_repo.py '/absolute/path/to/your repo'
-```
-
-Prepare AEF's Python environment once, before invoking the command. The launcher
-uses that existing environment and does not install dependencies into the source.
-Its default is **offline**: no model provider and no generated scheduled
-workflows. Model configuration requires `--profile model`; scheduled workflows
-require the additional `--with-workflows` flag. Existing target configuration
-and workflows are preserved, so these flags do not convert an old installation.
-
-See the **[target-repo guide](docs/target-repo.md)** for setup, supported agent
-formats, source-integrity checks, and updating an already integrated repo.
-
-```mermaid
-flowchart LR
-    A["target-repo<br/>explicit target directory"] --> B["adopt + migrate<br/>scaffold and register agents"]
-    B --> C["Target environment<br/>install a pinned AEF wheel"]
-    C --> D["aef.yaml<br/>define the 5 surfaces"]
-    D --> E["Wire graph + services<br/>preserve existing behavior"]
-    E --> F["aef doctor / aef run<br/>check setup + execute"]
-    F --> G["aef eval / aef trace<br/>score + inspect provenance"]
-    G --> H{"target checks pass?"}
-    H -->|yes| I["review / iterate"]
-    H -->|no| E
-
-    classDef step fill:#eef2f7,stroke:#5b6b7f,color:#1c2733;
-    class A,B,C,D,E,F,G,I step;
-```
+## Develop and explore AEF
 
 ### Try the runtime locally
 
-Run these commands in the AEF checkout as a separate setup/development step.
+After setup, run this command in the AEF checkout as a separate development step.
 The included example uses a local echo provider; it needs no model credentials.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e ".[dev]"
-python -m examples.hello_agent.main
+.venv/bin/python -m examples.hello_agent.main
 ```
 
 For a target repository, install a pinned wheel into its own environment as
