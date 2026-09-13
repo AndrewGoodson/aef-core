@@ -83,7 +83,9 @@ try {
     page.on('pageerror', error => errors.push(`${profile}: ${error.message}`));
     await page.goto(base, { waitUntil: 'networkidle' });
     await step('Load page and logo', 'Both logos decode; motion starts paused for reduced-motion preference', async () => {
-      assert.equal(await page.title(), 'AEF · A learning loop for your agents');
+      assert.equal(await page.title(), 'AEF — A foundation for your agents');
+      assert.deepEqual(await page.locator('.brand').allTextContents().then(labels => labels.map(label => label.trim())), ['AEF', 'AEF']);
+      assert.equal(await page.locator('h1').innerText(), 'Your agents.\nA shared\nfoundation.');
       assert.equal(await page.locator('img.brand-mark').count(), 2);
       assert.ok(await page.locator('img.brand-mark').evaluateAll(els => els.every(el => el.complete && el.naturalWidth === 1254)));
       assert.equal(await page.locator('#motion').getAttribute('aria-pressed'), 'true');

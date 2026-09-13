@@ -1,11 +1,11 @@
-# AEF public showcase
+# AEF product website
 
 Public URL: <https://andrewgoodson.github.io/aef-core-site/>
 
 The canonical source is this directory in aef-core. The separate public
 [`AndrewGoodson/aef-core-site`](https://github.com/AndrewGoodson/aef-core-site)
-repository hosts only the curated website. aef-core itself remains private:
-its current GitHub plan does not enable Pages for the private repository.
+repository hosts only the curated website. Runtime source and website have
+separate publication paths; a source commit does not deploy the site.
 
 ## Preview and check
 
@@ -45,7 +45,8 @@ hide an earlier failure.
 
 ## Saved click-by-click browser tests
 
-[Latest verified results and complete action ledger](../docs/model-checks/2026-09-12-site-drilldowns.md).
+[Latest product presentation verification and complete action ledger](../docs/model-checks/2026-09-12-aef-product-presentation.md).
+[Original defect reproductions](../docs/model-checks/2026-09-12-site-drilldowns.md).
 
 [`tests/drilldowns.mjs`](tests/drilldowns.mjs) drives a real Chromium browser
 through every website link and control at 1440, 768, 390 and 320 CSS pixels.

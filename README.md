@@ -1,70 +1,48 @@
 <div align="center">
 
-<img src="site/logo.png" width="144" alt="AEF learning loop logo">
+<img src="site/logo.png" width="128" alt="AEF learning loop logo">
 
-# aef-core
+# AEF
 
-### Agent Engineering Foundation — graph runtime and repository integration toolkit
+### Your agents. A shared foundation.
 
-*Integrate graph execution, memory, evaluation, security, and observability into a new repository or one with existing agents. Keep the repository's instructions; wire and test its behavior explicitly.*
+Bring memory, control, and a measured learning loop to the agents you already use.
 
-![python](https://img.shields.io/badge/python-3.11%2B-3776AB)
-[![CI](https://github.com/AndrewGoodson/aef-core/actions/workflows/ci.yml/badge.svg)](https://github.com/AndrewGoodson/aef-core/actions/workflows/ci.yml)
-![license](https://img.shields.io/badge/license-MIT-blue)
-![status](https://img.shields.io/badge/status-experimental-orange)
+**[Explore AEF ↗](https://andrewgoodson.github.io/aef-core-site/)** &nbsp; · &nbsp; **[Connect your repository](#connect-your-repository)** &nbsp; · &nbsp; **[Documentation](AGENT_INTEGRATION.md)**
 
-For **Claude · Codex · Grok · Cursor · GitHub Copilot** workflows and Python agents.
+Claude · Codex · Grok · Cursor · GitHub Copilot
 
-[**Explore the public showcase ↗**](https://andrewgoodson.github.io/aef-core-site/) ·
-[Graph and learning methodology](docs/graph-and-learning.md) ·
-[Target a repository](docs/target-repo.md)
+[![Explore the AEF platform: a connected workflow in three dimensions](docs/assets/aef-product-preview.png)](https://andrewgoodson.github.io/aef-core-site/)
+
+Agent Engineering Foundation · Developer preview · Python 3.11+ · MIT
 
 </div>
 
----
+## A foundation for the way your agents work
 
-## What it is
+AEF connects agent workflows through a shared graph runtime. Routing, state,
+checkpoints and audit stay explicit. Model calls happen inside nodes with
+clearly declared boundaries. Each repository supplies its own knowledge,
+policies, tools, objectives and evaluation metrics.
 
-**Learning quality is not proven.** In one measured owner-repository trial,
-the generated lesson made an agent worse, while a placebo performed better.
-The [trial and its limitations](docs/adr/0204-the-loop-on-a-repo-somebody-uses-and-the-bullet-that-made-it-worse.md)
-are part of this project's evidence. Passing infrastructure tests does not
-establish that advice improves a target agent.
+| Keep work connected | Stay in control | Learn with evidence |
+|---|---|---|
+| Bring relevant memory into a run. Checkpoint progress, resume interrupted work and replay deterministic steps. | Define tool permissions, require human approval for risky calls and retain an audit trail. | Capture outcomes, propose bounded lessons and compare them against independent checks before human review. |
 
-The [2026-09-11 repository review](docs/model-checks/2026-09-11-repository-review.md)
-records integration fixes, validation, scale measurements and compatibility
-limits. Its [executable goal](REPOSITORY_REVIEW_GOAL.md) defines the release scope.
+AEF provides the components and integration workflow. Your target's graph must
+use those components, connect real tools and pass domain tests. Setup alone
+does not establish agent behavior or learning gains.
 
-Most agent code tangles two very different things together: the **deterministic
-plumbing** (routing, state, retries, checkpoints, audit) and the
-**non-deterministic reasoning** (the LLM calls). aef-core separates them into
-two planes and never lets them mix:
+## Connect your repository
 
-- **Control plane** — a small, pure graph kernel. Sequencing, routing,
-  checkpointing, and replay are ordinary bookkeeping with zero model calls.
-  Fully deterministic and replayable.
-- **Reasoning plane** — every LLM / non-deterministic call is quarantined
-  inside a node explicitly declared `deterministic=False`.
-
-The runtime supplies a shared state schema, checkpoint/resume durability,
-a deny-by-default tool policy with human-in-the-loop gates, memory,
-OpenTelemetry tracing, and an evaluation harness. Adoption writes the setup;
-the target's graph and services must use those components to receive their
-behavior. **Only five things differ per agent:**
-
-> **Knowledge · Policies · Tools · Objectives · Evaluation Metrics**
-
-If you find yourself adding an agent-specific branch anywhere else, the
-abstraction is wrong, not the agent.
-
----
-
-## Enhance a repository with `/target-repo`
+Start with a new project or a repository that already has agents.
+**`/target-repo` selects where the integration happens.** Your existing owner
+instructions stay in place; the prepared AEF source stays read-only during
+invocation.
 
 ### 1. Prepare AEF once
 
-Use Python 3.11 or newer. Clone and prepare this toolkit before starting a
-target integration:
+Clone the repository and install its development environment:
 
 ```sh
 git clone https://github.com/AndrewGoodson/aef-core.git
@@ -73,345 +51,162 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
 ```
 
-Already have a checkout? Prepare its environment there. This setup step writes
-to AEF; the target command that follows keeps the AEF checkout **read-only**.
+The product is **AEF**. Its repository and Python distribution retain the
+technical name `aef-core`. This initial setup writes to the AEF checkout.
 
-### 2. Point the command at the repo to enhance
+### 2. Point AEF at your target
 
-Open your coding agent in the prepared **aef-core checkout**, then enter:
+Open Claude Code or Grok in the prepared AEF checkout, then run:
 
 ```text
 /target-repo "/absolute/path/to/your repo"
 ```
 
-The argument identifies the **target repository**: an existing local directory,
-including a newly initialized repo or one with agents already. Use its full
-absolute path and quote it. For a repository on GitHub, clone it locally first
-and pass the clone's directory. The target must be separate from the AEF source;
-neither directory may contain the other.
+In **Codex**, invoke the same repository skill with:
 
-| Harness | Invoke |
-|---|---|
-| Claude Code / Grok | `/target-repo "/absolute/path/to/your repo"` ([Claude skill](.claude/skills/target-repo/SKILL.md), [Grok skill](.grok/skills/target-repo/SKILL.md)) |
-| Codex | `$target-repo "/absolute/path/to/your repo"`, or select `target-repo` through `/skills` where supported ([Codex skill](.agents/skills/target-repo/SKILL.md)) |
+```text
+$target-repo "/absolute/path/to/your repo"
+```
 
-If the command is missing, refresh the coding-agent session in the AEF checkout
-so it discovers the repository skills. Codex uses the skill syntax shown above;
-slash-command availability depends on the harness.
+Codex also exposes skills through `/skills` where supported. If a skill is
+missing, refresh your agent session in the AEF checkout.
 
-### 3. Complete and verify the target integration
+Use an existing local directory and quote its full absolute path. To enhance a
+repository hosted on GitHub, clone it first and pass that directory. The target
+must be separate from the AEF source; neither directory may contain the other.
 
-The skill scaffolds the target, discovers eligible existing agents, then guides
-the coding agent through the applicable wiring and tests **in that target**.
-All implementation, environments, logs and reports stay there. It checks the
-AEF source before and after the invocation to detect changes.
+### 3. Wire one workflow. Verify the result.
 
-| What your target already has | What AEF adds | What the coding agent must verify |
-|---|---|---|
-| No agents | Configuration, onboarding guides and an adapter stub | Implement and test a graph for the repository's actual task |
-| Claude / Grok Markdown personas or eligible Codex TOML personas | Graph registrations that read the native personas | Wire the provider and real tools; preserve the agents' intended behavior |
-| Instructions and native skills | Managed AEF guidance alongside owner instructions; a skills inventory | Preserve owner text outside managed blocks; skills remain native workflows |
-| An earlier AEF integration | Missing outputs and refreshed valid managed instruction blocks | Review preserved configuration, graphs and dependencies before upgrading |
+The skill scaffolds configuration, discovers eligible agents and guides the
+coding agent through integration and tests in the target. All implementation,
+environments, logs and reports belong there. Source-integrity checks compare
+the AEF checkout before and after invocation.
 
-A generated file or graph registration alone does not prove a working
-integration. The agent should establish the target's existing test baseline,
-wire one bounded workflow, exercise success and failure paths, and report the
-results and unresolved limits. Use the [continuation prompt](#hand-it-to-your-ai)
-to resume that work in a fresh target session.
+Install a pinned AEF wheel into the target's own environment. Connect actual
+services and tools, establish the target's test baseline, then exercise success,
+failure, policy denial and durability where applicable. A graph registration
+is the starting point; these checks establish what works.
 
-The default is **offline**: no model provider and no generated scheduled
-workflows. Model-backed personas need explicit provider setup and authorized
-model execution. Tool-dependent personas need actual tool results.
+**Offline by default.** No model provider or scheduled workflows are generated
+by the default profile. Model-backed personas need explicit provider setup and
+authorized execution. Tool-dependent personas need real tool results.
 
-### Terminal alternative
+[Full integration guide →](docs/target-repo.md)
 
-The mechanical phase also works without a coding agent:
+<details>
+<summary><strong>Use AEF from the terminal</strong></summary>
+
+Run the mechanical phase from any directory:
 
 ```sh
 python3 -I -B /absolute/path/to/aef-core/scripts/target_repo.py '/absolute/path/to/your repo'
 ```
 
-The launcher uses AEF's prepared environment and installs nothing into the source.
-It scaffolds and registers agents; the coding agent still completes semantic
-wiring, target runtime installation and tests. Model configuration requires
-`--profile model`; scheduled workflows require the additional `--with-workflows`
-flag. Existing target configuration
-and workflows are preserved, so these flags do not convert an old installation.
+The launcher uses AEF's prepared environment and installs nothing into the
+source. It scaffolds and registers eligible agents; semantic wiring and target
+tests still require a coding agent or developer. Model configuration requires
+`--profile model`; scheduled workflows also require `--with-workflows`.
+These flags preserve existing configuration rather than converting an older
+installation. Review it before upgrading.
 
-See the **[target-repo guide](docs/target-repo.md)** for setup, supported agent
-formats, source-integrity checks, and updating an already integrated repo.
+</details>
 
-```mermaid
-flowchart LR
-    A["target-repo<br/>explicit target directory"] --> B["adopt + migrate<br/>scaffold and register agents"]
-    B --> C["Target environment<br/>install a pinned AEF wheel"]
-    C --> D["aef.yaml<br/>define the 5 surfaces"]
-    D --> E["Wire graph + services<br/>preserve existing behavior"]
-    E --> F["aef doctor / aef run<br/>check setup + execute"]
-    F --> G["aef eval / aef trace<br/>score + inspect provenance"]
-    G --> H{"target checks pass?"}
-    H -->|yes| I["review / iterate"]
-    H -->|no| E
+## Designed to fit the agents already in your repo
 
-    classDef step fill:#eef2f7,stroke:#5b6b7f,color:#1c2733;
-    class A,B,C,D,E,F,G,I step;
-```
+| Your starting point | The integration |
+|---|---|
+| A new repository | Configuration, onboarding guides and an adapter stub for your first graph. |
+| Claude / Grok Markdown or eligible Codex TOML personas | Graph registrations that read native personas. Provider, tool semantics and domain behavior require explicit wiring. |
+| Existing owner instructions and skills | Managed AEF guidance alongside preserved owner text; native skills are inventoried and remain native workflows. |
+| An existing AEF integration | Missing outputs and refreshed valid managed blocks. Existing configuration, graphs and dependencies require review before an upgrade. |
 
-### Return to the same target
+Generated entry files support Claude, Codex, Grok, Cursor and GitHub Copilot.
+Grok's portable `GROK.md` guide must be loaded explicitly unless the harness
+documents automatic discovery. [Agent entry points →](AGENT_INTEGRATION.md#which-file-your-agent-reads)
 
-Update and prepare the AEF source in a separate setup session, then invoke the
-same command with the same explicit target path. Review the report's created,
-updated and preserved files. Reruns preserve existing configuration, guides,
-workflows and graphs, including hand edits; they do not upgrade the installed
-AEF package or convert the target's profile. Follow the
-[update procedure](docs/target-repo.md#preservation-and-updates) to install a
-chosen pinned wheel in the target and rerun its checks.
+## A learning loop you can inspect
 
-### Learning from the target's work
+**Observe → Propose → Compare → Review**
 
-Native persona graphs connect retrieval, the agent prompt, reflection and
-evidence consolidation. To turn their output into useful candidate lessons:
+Record actual outcomes and failure evidence. Propose one bounded correction.
+Compare it against the incumbent on independent held-out tasks, with placebo
+controls where appropriate. Record harm, uncertainty and cost before a human
+decides whether to keep the lesson.
 
-1. Record actual outcomes, tool results and failure evidence with provenance.
-2. Propose a bounded lesson tied to an observed failure.
-3. Compare it against the incumbent and a placebo on independent held-out tasks.
-4. Keep, revise or reject the lesson based on measured results and human review.
+**Learning quality remains unproven.** In one owner-repository trial, a generated
+lesson reduced the score from **0.67 to 0.40**, while a meaningless placebo
+scored **0.87**. These are historical task-specific results, not product
+benchmarks. [Read the trial and its limitations →](docs/adr/0204-the-loop-on-a-repo-somebody-uses-and-the-bullet-that-made-it-worse.md)
 
-Memory and reflection supply evidence; improvement still needs measurement.
-See the [graph and learning methodology](docs/graph-and-learning.md) and
-[evidence-learning instructions](docs/autonomy/evidence-learning.md).
+AEF implements memory, retrieval, rule-based reflection and a gated candidate
+review loop. Optional LLM reflection is off by default. The system does not
+train model weights. **Evolution and automatic merging remain disabled.**
 
----
+[Learning methodology](docs/graph-and-learning.md) ·
+[Reusable learning instructions](docs/autonomy/evidence-learning.md) ·
+[Autonomy boundaries](docs/autonomy/self-improving-loop.md)
 
-## Architecture at a glance
+## Clear about what ships
 
-```mermaid
-flowchart TB
-    subgraph CP["🟦 Control plane — deterministic, replayable"]
-        direction TB
-        G["Graph<br/>versioned Nodes + Edges"]
-        EX["GraphExecutor<br/>one node per super-step"]
-        DUR["DurabilityBackend<br/>separate atomic writes,<br/>sequence-bound cursor"]
-        RP["ReplayEngine<br/>re-runs deterministic nodes,<br/>asserts identical output"]
-        G --> EX --> DUR
-        DUR -.->|resume| EX
-        EX -.->|trace| RP
-    end
+**Available:** graph execution, shared state, checkpoint/resume, deterministic
+replay, policy and audit services, memory, context retrieval, evaluation,
+OpenTelemetry tracing, rule-based reflection and gated candidate review.
 
-    subgraph RN["🟨 Reasoning plane — quarantined non-determinism"]
-        direction TB
-        NODE["Node fn<br/>(AEFState, Context, Services)<br/>→ (StateDelta, Route)"]
-        LLM["deterministic=False node<br/>the only place a model is called"]
-        NODE --> LLM
-    end
+**Requires target wiring:** domain behavior, real tool containment, model
+providers, durable services and meaningful evaluations. Diff validation alone
+does not isolate arbitrary candidate code; execution needs a configured sandbox.
 
-    subgraph SVC["🟩 Services — dependency injection (no globals)"]
-        direction TB
-        MP["ModelProvider<br/>+ Fallback"]
-        MEM["MemoryStore"]
-        POL["PolicyEngine<br/>deny-by-default + HITL"]
-        TR["Tracer (OTel)"]
-        EV["Evaluator"]
-    end
+**Unavailable or disabled:** executed fan-out, multi-agent coordination,
+knowledge-graph service, general planner and token optimizer. Offline
+optimization remains a typed interface; evolution and automatic promotion are
+disabled.
 
-    EX -->|invokes| NODE
-    SVC -->|injected into every node| NODE
-    NODE -->|StateDelta| ST["AEFState<br/>one shared schema + migrations"]
-    ST -->|checkpointed| DUR
+[Component status and roadmap →](docs/roadmap.md)
 
-    classDef cp fill:#e6efff,stroke:#3b6fb0,color:#12233a;
-    classDef rn fill:#fff6de,stroke:#c79a2a,color:#3a2f12;
-    classDef sv fill:#e7f6ea,stroke:#3f9d54,color:#123a1e;
-    class G,EX,DUR,RP cp;
-    class NODE,LLM rn;
-    class MP,MEM,POL,TR,EV sv;
-```
+## Go deeper
 
-**The node contract is fixed and non-negotiable:**
+| Guide | Start here to… |
+|---|---|
+| [Agent integration](AGENT_INTEGRATION.md) | Install AEF, wire nodes and continue in a target repository. |
+| [Target a repository](docs/target-repo.md) | Use the command, understand supported formats and review safe reruns. |
+| [Graph and learning design](docs/graph-and-learning.md) | Understand the runtime, research references and evidence limits. |
+| [New repository bootstrap](docs/autonomy/new-repo-bootstrap-loop.md) | Give a fresh coding agent a bounded integration prompt. |
+| [Promotion trust case](docs/trust/promotion-trust-case.md) | Understand why candidate promotion requires human review. |
+| [Architecture decisions](docs/adr/README.md) | Inspect the decisions and experiments behind AEF. |
 
-```python
-(AEFState, Context, Services) -> tuple[StateDelta, Route]
-```
+<details>
+<summary><strong>Develop AEF locally</strong></summary>
 
-Nodes take everything via `Services` (dependency injection) — no globals, no
-env reads, no self-constructed clients. Each node declares `deterministic`
-(the replay engine *enforces* it) and `side_effects` (anything non-pure needs
-an `idempotency_key_fn`).
+After setup, run the included example with its local echo provider. No model
+credentials are needed:
 
----
-
-## Develop and explore AEF
-
-### Try the runtime locally
-
-After setup, run this command in the AEF checkout as a separate development step.
-The included example uses a local echo provider; it needs no model credentials.
-
-```bash
+```sh
 .venv/bin/python -m examples.hello_agent.main
 ```
 
-For a target repository, install a pinned wheel into its own environment as
-described in its generated guide. An editable install pointing back to this
-checkout does not provide source isolation.
+For changes to AEF itself, use its virtual environment and run:
 
-### The five per-agent surfaces (`aef.yaml`)
-
-| Surface | Where | What it is |
-|---|---|---|
-| **Objectives** | `objectives:` | what the agent is for |
-| **Tools** | `tools.allow` | which capabilities it may call |
-| **Policies** | `policies:` | risk threshold + HITL + forbidden tools |
-| **Knowledge / Memory** | `memory:` | which memory backend |
-| **Evaluation Metrics** | `evaluator.suites` | how a run is scored |
-
-### AEF development checks
-
-Use AEF's virtual environment. Adopting repositories run their own checks and
-graph regressions; these source-tree commands are for changes to AEF itself.
-
-```bash
-pytest -q                          # tests
-mypy --strict aef                  # types
-ruff check .                       # lint
-ruff format --check aef tests examples   # format
+```sh
+source .venv/bin/activate
+pytest -q
+mypy --strict aef
+ruff check .
+ruff format --check aef tests examples
 ```
 
----
+Read [AGENTS.md](AGENTS.md) for the node contract, vendor isolation and security
+invariants. Target repositories run their own domain checks and graph
+regressions. See the [website guide](site/README.md) for browser tests and the
+separate publication workflow.
 
-## Cross-harness support
-
-aef-core is harness-agnostic — the scaffold is plain Python + the `aef` CLI.
-`aef adopt` emits a native entry file for each major coding agent, all
-resolving to one canonical guide (`AGENT_INTEGRATION.md`):
-
-| Agent | Reads |
-|---|---|
-| Claude / Claude Code | `CLAUDE.md` |
-| OpenAI Codex | `AGENTS.md` |
-| Grok | `GROK.md` (portable guide; load it explicitly unless your harness documents automatic discovery) |
-| GitHub Copilot | `.github/copilot-instructions.md` |
-| Cursor | `.cursor/rules/aef.mdc` |
-
----
-
-## What is implemented
-
-| Phase | Status | Contents |
-|---|---|---|
-| **Phase 0 — Foundation** | ✅ Real & tested | Graph kernel, `AEFState` + migrations, checkpoint/replay, provider + fallback, OTel tracing |
-| **Phase 1 — Durability & Services** | ✅ Real & tested | File durability, memory (`InMemory` + Mem0), security policy engine, eval harness, the CLI |
-| **Retrieval and reflection** | Implemented; quality requires measurement | Memory-backed context retrieval, rule-based reflection and evidence consolidation. LLM reflection exists but is off by default; prior A/Bs have not shown a task-metric gain |
-| **Integration** | Scaffolding + mechanical migration | Preserved owner instructions, profile-specific setup, native persona registrations, and supported Python call-site wrappers. Tool semantics, domain checks and complex call sites require target-specific work |
-| **Planning and optimization** | Limited / absent | No knowledge-graph service, planner or token-optimizer implementation. Offline optimization remains a typed interface raising `NotImplementedError` |
-| **Phase 4 — Evolution** | 🔒 Built but gated | Self-modification interfaces exist and are hard-disabled in code (`EvolutionConfig(enabled=True)` raises) |
-
-See [the roadmap](docs/roadmap.md) for the authoritative component status.
-
-## What improves itself, and what does not
-
-**The built-in loop does not automatically merge changes to AEF or its agents.**
-
-The self-rewiring loop proposes changes to the agents aef-core **hosts**.
-Its gates limit accepted candidate changes to `agents/**` (Zone A) by default;
-the harness and kernel belong to protected Zones B and C. Diff validation is
-not filesystem isolation for arbitrary candidate code: execution containment
-needs a separately configured sandbox. The supplied CI workflow prepares AEF
-from trusted `main`, fetches the candidate as data, then evaluates inside a
-container with networking disabled. See [ADR 0211](docs/adr/0211-prepare-workflows-before-isolated-evaluation.md)
-for setup and runner restrictions. Local callers
-must provide the same trusted-launch provenance; `BaseRefHarness` is an
-explicit-read utility, not the loop driver's loader (ADR 0047).
-
-Letting the loop improve its own harness would mean letting it rewrite its
-own judge. That is the one thing the entire safety design exists to prevent.
-
-The model profile can add an owner-configured loop kit. Scheduled workflows
-are generated only with `--with-workflows`; adopting a repo does not start
-a learning service or establish that its evaluation corpus is adequate.
-Candidate merges, harness changes and corpus tripwire labels require a human.
-
-**Tier-1 auto-merge is off and cannot be turned on from a flag, a config key,
-or an environment variable.** Enabling it is a deliberate source change. Every
-candidate that passes all six gates is escalated to a human, phrased as a
-decision rather than a diff.
-
-So aef-core gets better the way any repo does: a person runs it. What
-compounds over time is not autonomy but **evidence** — a hash-chained ledger,
-a corpus with tripwires that a future model cannot quietly regress past, and
-ADRs recording what was tried and what was wrong. A new model can inspect that
-evidence and test whether a proposed change helps.
-
-Every design decision and deviation is recorded as a numbered ADR in
-[`docs/adr/`](docs/adr/README.md).
-
----
-
-## Autonomous self-improving loop
-
-aef-core is developed with, and ships, a codified autonomy protocol
-([`docs/autonomy/self-improving-loop.md`](docs/autonomy/self-improving-loop.md)):
-**audit by adversarial construction → reproduce → fix → verify → ADR → commit →
-repeat until a bounded work-list is done.** It runs unattended, pausing only at
-explicit **HARD-STOP gates**:
-
-1. Any push to another repo, or any external publish.
-2. Enabling `aef/evolution/`, weakening the `PolicyEngine`, or removing a HITL gate.
-3. Deleting or overwriting an existing user file.
-4. A breaking public-contract change the agent isn't confident about.
-
-Learning starts with recorded outcomes and reflections. A lesson is a candidate
-claim until independent target checks support it. Prompt changes need controlled
-evaluation against the incumbent and a placebo; tool-dependent personas need
-real tool execution, never imagined tool results. The evolution engine stays
-gated by design. See the [evidence-learning protocol](docs/autonomy/evidence-learning.md).
-
----
-
-## Hand it to your AI
-
-Use the target command above for integration. To continue inside an already
-integrated target, give your coding agent this bounded request:
-
-```text
-Read this target's owner instructions, AGENT_INTEGRATION.md, AUTONOMY.md,
-and AEF_MIGRATION_CHECKLIST.md. Review preserved configuration before changing
-it. Keep all implementation, environments, logs and reports in this target;
-leave the AEF source checkout unchanged.
-
-Establish the target's existing test baseline, then complete one applicable
-graph integration using its real tools and independent domain checks. Use an
-installed, pinned AEF wheel. Keep the offline profile unless model execution
-is needed and authorized. Preserve native agent instructions and behavior.
-
-Prove success, failure, tool-policy denial, checkpoint/resume and deterministic
-replay where applicable. Record evidence and remaining limits. Do not infer
-learning gains from a passing scaffold or promote untested advice. Keep HITL,
-evolution disablement and human candidate promotion intact. Stop once the
-bounded integration and verification are done; report the actual result.
-```
-
----
-
-## Documentation map
-
-| File | Purpose |
-|---|---|
-| [`docs/target-repo.md`](docs/target-repo.md) | Target command, existing-agent support, safe reruns and source preservation |
-| [`AGENT_INTEGRATION.md`](AGENT_INTEGRATION.md) | Canonical ingest-and-start guide for any agent |
-| [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) | The scaffold contract + non-negotiable constraints |
-| [`docs/autonomy/self-improving-loop.md`](docs/autonomy/self-improving-loop.md) | The autonomy protocol + HARD-STOP gates |
-| [`docs/autonomy/new-repo-bootstrap-loop.md`](docs/autonomy/new-repo-bootstrap-loop.md) | Copy-paste prompt to bootstrap a new adopting repo |
-| [`docs/roadmap.md`](docs/roadmap.md) | Authoritative real-vs-stubbed status, phase by phase |
-| [`docs/adr/README.md`](docs/adr/README.md) | Every design decision, with rationale |
-| [`docs/autonomy/evidence-learning.md`](docs/autonomy/evidence-learning.md) | Evidence, lessons and the checks needed before reuse |
-| [`docs/trust/promotion-trust-case.md`](docs/trust/promotion-trust-case.md) | Why automatic promotion remains disabled |
-| [`docs/design/self-rewiring/`](docs/design/self-rewiring/03-roadmap.md) | Design rationale for the implemented loop and its remaining evidence gaps |
+</details>
 
 ---
 
 <div align="center">
 
-**License:** MIT · **Python:** 3.11+ · Built two planes at a time.
+**Bring it all together with AEF.**
+
+[Connect your repository](#connect-your-repository) &nbsp; · &nbsp; [Explore the platform ↗](https://andrewgoodson.github.io/aef-core-site/)
 
 </div>

@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="AEF connects existing agents to shared memory, replayable workflows, and a review process for new instructions.">
   <meta name="theme-color" content="#061d23">
-  <meta property="og:title" content="AEF · A learning loop for your agents">
+  <meta property="og:title" content="AEF — A foundation for your agents">
   <meta property="og:description" content="Shared memory, replayable workflows, and a review process for new agent instructions.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://andrewgoodson.github.io/aef-core-site/">
   <link rel="canonical" href="https://andrewgoodson.github.io/aef-core-site/">
-  <title>AEF · A learning loop for your agents</title>
+  <title>AEF — A foundation for your agents</title>
   <link rel="icon" href="logo.png" type="image/png">
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" defer></script>
@@ -19,22 +19,23 @@
 <body>
   <a class="skip" href="#main">Skip to content</a>
   <header class="header wrap">
-    <a class="brand" href="#" aria-label="AEF home"><img class="brand-mark" src="logo.png" width="56" height="56" alt=""> aef<span class="brand-core">/ core</span></a>
-    <nav aria-label="Main navigation"><a href="#architecture">The graph</a><a href="#learning">Learning</a><a href="#research">Research</a><a class="nav-cta" href="#integrate">Get started <span aria-hidden="true">↗</span></a></nav>
+    <a class="brand" href="#" aria-label="AEF home"><img class="brand-mark" src="logo.png" width="56" height="56" alt=""> <span>AEF</span></a>
+    <nav aria-label="Main navigation"><a href="#architecture">Platform</a><a href="#learning">Learning</a><a href="#research">Research</a><a class="nav-cta" href="#integrate">Connect a repo <span aria-hidden="true">↗</span></a></nav>
   </header>
   <main id="main">
+    <div class="hero-shell">
     <section class="hero wrap">
       <div class="hero-copy">
         <p class="eyebrow"><span class="dot"></span> Agent Engineering Foundation</p>
-        <h1>A learning loop<br><em>for your agents.</em></h1>
-        <p class="lead">Connect your existing agents to shared memory, replayable workflows, and a review process for new instructions.</p>
+        <h1>Your agents.<br><em>A shared<br>foundation.</em></h1>
+        <p class="lead">Bring memory, control, and a measured learning loop to the agents you already use.</p>
         <div class="actions"><a class="button primary" href="#integrate">Connect your repository <span aria-hidden="true">↗</span></a><a class="text-link" href="#architecture">See how it works <span aria-hidden="true">↓</span></a></div>
-        <ul class="hero-benefits"><li>Replayable runs</li><li>Tool permissions</li><li>Tested instructions</li></ul>
-        <p class="hero-note">Python 3.11+ <span>·</span> Experimental <span>·</span> Offline onboarding by default</p>
+        <ul class="hero-benefits"><li>Replayable runs</li><li>Tool permissions</li><li>Reviewed lessons</li></ul>
+        <p class="hero-note">Developer preview <span>·</span> Python 3.11+ <span>·</span> Local-first setup</p>
       </div>
       <div class="hero-graphic">
-        <div class="graphic-top"><span class="tiny-label">Inside an AEF workflow</span><span class="orbit-badge">Interactive 3D</span></div>
-        <h2 class="orbit-title">How a run works.</h2>
+        <div class="graphic-top"><span class="tiny-label">One connected workflow</span><span class="orbit-badge">Interactive 3D</span></div>
+        <h2 class="orbit-title">Context. Action. Reflection.</h2>
         <canvas id="orbit" tabindex="0" role="img" aria-label="Interactive 3D AEF workflow graph with perspective and depth. Retrieve to prompt agent to reflect to consolidate to END, with shared state at the center." aria-describedby="orbit-help">Retrieve → Prompt agent → Reflect → Consolidate → END. Every workflow node uses shared AEFState.</canvas>
         <div class="orbit-legend"><span>→ Execution route</span><span>┄ Shared state</span></div>
         <p id="orbit-help">Drag to explore 3D · Arrow keys rotate · Home resets</p>
@@ -49,10 +50,11 @@
         <noscript><p class="orbit-fallback">Retrieve → Prompt agent → Reflect → Consolidate → END.<br>Enable JavaScript for motion, or explore each step below.</p></noscript>
       </div>
     </section>
-    <div class="harness-strip"><div class="wrap"><span>WORKS WITH EXISTING AGENT REPOSITORIES</span><p>Claude <b>·</b> Codex <b>·</b> Grok <b>·</b> Cursor <b>·</b> GitHub Copilot</p></div></div>
+    <div class="harness-strip"><div class="wrap"><span>BUILT FOR THE AGENTS YOU ALREADY USE</span><p>Claude <b>·</b> Codex <b>·</b> Grok <b>·</b> Cursor <b>·</b> GitHub Copilot</p></div></div>
+    </div>
 
     <section class="section wrap" id="architecture">
-      <div class="section-heading"><p class="eyebrow">01 / A workflow you can inspect</p><h2>Follow each step<br>of an agent run.</h2><p>A small graph kernel handles routing and execution. Model calls live inside explicitly nondeterministic nodes. Select a step to explore the generated persona graph.</p></div>
+      <div class="section-heading"><p class="eyebrow">The AEF platform</p><h2>Every step connected.<br>Every run inspectable.</h2><p>Give your agents a consistent way to retrieve context, act, reflect, and retain useful knowledge. Explore the four steps of an AEF persona workflow.</p></div>
       <div class="graph-explorer">
         <div class="node-list" aria-label="Graph steps">
           <button class="node active" data-node="retrieve" aria-pressed="true"><span>01</span> Retrieve <b aria-hidden="true">→</b></button>
@@ -70,7 +72,7 @@
     </section>
 
     <section class="learning-section" id="learning"><div class="wrap section">
-      <div class="section-heading"><p class="eyebrow">02 / Evidence before advice</p><h2>Test a lesson<br><em>before using it.</em></h2><p>Self-learning here means proposing and evaluating changes to instructions and knowledge. It does not mean retraining model weights or granting an agent permission to rewrite itself.</p></div>
+      <div class="section-heading"><p class="eyebrow">Learning, with evidence</p><h2>Build a learning loop.<br><em>Keep your judgment.</em></h2><p>Self-learning here means proposing and evaluating changes to instructions and knowledge. It does not mean retraining model weights or granting an agent permission to rewrite itself.</p></div>
       <ol class="learning-steps"><li><span>01</span><h3>Observe</h3><p>Capture real failures with run IDs, tool results and the conditions that produced them.</p></li><li><span>02</span><h3>Propose</h3><p>Write one bounded correction with a counterexample and an acceptance check.</p></li><li><span>03</span><h3>Compare</h3><p>Test against the incumbent on frozen tasks. Separate held-out evaluation; include placebo controls where appropriate.</p></li><li><span>04</span><h3>Review</h3><p>Record harm, uncertainty and cost. Reject harmful advice. Passing gates escalates to a human.</p></li></ol>
       <div class="evidence-panel"><div><span class="tag">A LESSON THAT FAILED</span><h3>More advice is not always better.</h3><p>In one owner-repository trial, the learned lesson reduced the measured score. A meaningless placebo bullet scored higher than both. This trial does not establish a general effect; it makes the case for testing advice before adopting it.</p><p class="small">Historical trial · ADR 0204 · task-specific scores, not a product benchmark. Learning quality remains unproven.</p></div><dl class="scores"><div><dt>Incumbent</dt><dd>0.67</dd><span style="--score:67%"></span></div><div class="harm"><dt>Learned lesson</dt><dd>0.40</dd><span style="--score:40%"></span></div><div><dt>Placebo</dt><dd>0.87</dd><span style="--score:87%"></span></div></dl></div>
       <div class="prompt-card"><div><p class="eyebrow">Take the protocol with you</p><h3>Reusable learning instructions</h3><p>A reusable instruction template for scoped work, capability checks, reproducible failures and reviewed lessons. Fill in the task-specific fields before use.</p></div><a class="button light" href="learning-protocol.txt" download>Download learning instructions <span aria-hidden="true">↓</span></a></div>
@@ -78,19 +80,19 @@
     </div></section>
 
     <section class="section wrap" id="integrate">
-      <div class="section-heading"><p class="eyebrow">03 / Bring your own repository</p><h2>Add AEF to<br>your repository.</h2><p>Prepare an AEF checkout once. Then point its native skill at an existing absolute directory. Existing owner instructions are preserved; integration work belongs in the target.</p></div>
+      <div class="section-heading"><p class="eyebrow">Connect your repository</p><h2>Your repo.<br>Your agents. AEF.</h2><p>Start with a new project or the agents already in your repo. One command selects the target. AEF preserves your instructions and guides the integration there.</p></div>
       <div class="integration-grid"><div class="command-card">
         <label for="harness">Choose your coding agent</label><select id="harness"><option value="claude">Claude Code</option><option value="codex">Codex</option><option value="grok">Grok</option></select>
         <label for="target">Target directory</label><input id="target" type="text" value="/absolute/path/to/your repo" spellcheck="false" autocomplete="off" aria-describedby="path-note">
         <p class="small" id="path-note">Local command preview only. Your path is not sent or stored. Use a macOS or Linux absolute path.</p>
         <div class="command-output"><code id="command">/target-repo "/absolute/path/to/your repo"</code><button id="copy" aria-label="Copy target-repo command">Copy</button></div><p id="command-status" role="status" class="small">Run in a coding-agent session opened in your AEF checkout.</p>
         <noscript><p>JavaScript is off. Claude Code / Grok: <code>/target-repo "/absolute/path/to/your repo"</code>. Codex: <code>$target-repo "/absolute/path/to/your repo"</code>.</p></noscript>
-      </div><div class="integration-steps"><article><span>1</span><div><h3>Prepare the source</h3><p>Obtain access to aef-core, create its Python environment, then install <code>.[dev]</code>. This is a separate setup step.</p><pre><code>python3 -m venv .venv
+      </div><div class="integration-steps"><article><span>1</span><div><h3>Set up AEF once</h3><p>Clone the AEF repository, create its Python environment, then install <code>.[dev]</code>. This is a separate setup step.</p><pre><code>python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'</code></pre></div></article><article><span>2</span><div><h3>Point and preserve</h3><p>The skill scaffolds configuration and guides mechanical migration. Native Claude/Grok Markdown and eligible Codex TOML personas get graph registrations. The AEF source stays read-only during invocation.</p></div></article><article><span>3</span><div><h3>Wire and verify</h3><p>Install a pinned AEF wheel into the target's own environment. Connect real services, tools and evaluations; run doctor and domain tests. A scaffold alone is not a working agent.</p></div></article></div></div>
       <details class="terminal-guide"><summary>Prefer the terminal? Run the mechanical phase directly.</summary><pre><code>python3 -I -B /absolute/path/to/aef-core/scripts/target_repo.py '/absolute/path/to/your repo'</code></pre><p>Offline by default: no model provider or generated scheduled workflows. This command does not perform semantic wiring. Prompt personas need an explicitly configured model provider before execution. Codex also exposes the skill through <code>/skills</code> where supported.</p></details>
     </section>
 
-    <section class="research-section section" id="research"><div class="wrap"><div class="section-heading"><p class="eyebrow">04 / Learn from the field</p><h2>The research<br>behind the approach.</h2><p>Primary research and engineering references worth understanding. These connections explain design choices; AEF does not claim to implement every method or reproduce their results.</p></div>
+    <section class="research-section section" id="research"><div class="wrap"><div class="section-heading"><p class="eyebrow">Research-informed engineering</p><h2>Built with a view<br>of the bigger picture.</h2><p>Primary research and engineering references worth understanding. These connections explain design choices; AEF does not claim to implement every method or reproduce their results.</p></div>
       <div class="research-grid">
         <article><p class="eyebrow">Graph engineering</p><h3>Durable stateful execution</h3><p>LangGraph documents checkpointed state and stores for persistent agent workflows. AEF has its own graph kernel, checkpoint/resume and deterministic replay contracts.</p><a href="https://docs.langchain.com/oss/python/langgraph/persistence">Read the LangGraph documentation ↗</a><span class="research-status">AEF: independent implementation</span></article>
         <article><p class="eyebrow">Reflection + memory</p><h3>Reflexion</h3><p>The paper explores verbal feedback retained across attempts. AEF offers reflection and memory components, but their presence is not evidence of improved task performance.</p><a href="https://arxiv.org/abs/2303.11366">Read the paper ↗</a><span class="research-status">AEF: related components; gains unproven</span></article>
@@ -99,9 +101,9 @@
       </div><p class="small research-date">References reviewed September 12, 2026. No cross-framework ranking or third-party benchmark result is claimed for AEF.</p>
     </div></section>
 
-    <section class="section wrap status-section"><div><p class="eyebrow">Implementation status</p><h2>Know what you’re adopting.</h2></div><div class="status-list"><p><strong>Implemented</strong> Graph execution, state, checkpoint/replay, policy and audit, memory, context retrieval, evaluation, OTel tracing, rule-based reflection and gated candidate review.</p><p><strong>Requires target wiring</strong> Domain behavior, actual tool containment, provider configuration, durable services and meaningful evaluation.</p><p><strong>Unavailable or disabled</strong> Multi-agent coordination is stubbed; fan-out is not executed. There is no knowledge-graph service or general planner. Evolution and automatic merging are disabled.</p></div></section>
-    <section class="closing wrap"><p class="eyebrow">Start with an existing repository</p><h2>Connect your agents.</h2><a class="button primary" href="#integrate">Start with your repository ↗</a></section>
+    <section class="section wrap status-section"><div><p class="eyebrow">Product availability</p><h2>Clear about what ships.</h2></div><div class="status-list"><p><strong>Implemented</strong> Graph execution, state, checkpoint/replay, policy and audit, memory, context retrieval, evaluation, OTel tracing, rule-based reflection and gated candidate review.</p><p><strong>Requires target wiring</strong> Domain behavior, actual tool containment, provider configuration, durable services and meaningful evaluation.</p><p><strong>Unavailable or disabled</strong> Multi-agent coordination is stubbed; fan-out is not executed. There is no knowledge-graph service or general planner. Evolution and automatic merging are disabled.</p></div></section>
+    <section class="closing wrap"><p class="eyebrow">Meet your next workflow</p><h2>Bring it all together<br>with AEF.</h2><a class="button primary" href="#integrate">Start with your repository ↗</a></section>
   </main>
-  <footer class="wrap"><a class="brand" href="#"><img class="brand-mark" src="logo.png" width="56" height="56" alt="">aef<span class="brand-core">/ core</span></a><p>Agent Engineering Foundation <span>·</span> Experimental software</p><a href="https://github.com/AndrewGoodson/aef-core">Source &amp; technical evidence (access required) ↗</a></footer>
+  <footer class="wrap"><a class="brand" href="#"><img class="brand-mark" src="logo.png" width="56" height="56" alt=""><span>AEF</span></a><p>Agent Engineering Foundation <span>·</span> Developer preview</p><a href="https://github.com/AndrewGoodson/aef-core">Source &amp; technical evidence (access required) ↗</a></footer>
 </body>
 </html>
