@@ -8,11 +8,11 @@
 
 Bring memory, control, and a measured learning loop to the agents you already use.
 
-**[Explore AEF ↗](https://andrewgoodson.github.io/aef-core-site/)** &nbsp; · &nbsp; **[Connect your repository](#connect-your-repository)** &nbsp; · &nbsp; **[Documentation](AGENT_INTEGRATION.md)**
+**[Explore AEF ↗](https://andrewgoodson.github.io/aef-core/)** &nbsp; · &nbsp; **[Connect your repository](#connect-your-repository)** &nbsp; · &nbsp; **[Documentation](AGENT_INTEGRATION.md)**
 
 Claude · Codex · Grok · Cursor · GitHub Copilot
 
-[![Explore the AEF platform: a connected workflow in three dimensions](docs/assets/aef-product-preview.png)](https://andrewgoodson.github.io/aef-core-site/)
+[![Explore the AEF platform: a connected workflow in three dimensions](docs/assets/aef-product-preview.png)](https://andrewgoodson.github.io/aef-core/)
 
 Agent Engineering Foundation · Developer preview · Python 3.11+ · MIT
 
@@ -196,8 +196,8 @@ ruff format --check aef tests examples
 
 Read [AGENTS.md](AGENTS.md) for the node contract, vendor isolation and security
 invariants. Target repositories run their own domain checks and graph
-regressions. See the [website guide](site/README.md) for browser tests and the
-separate publication workflow.
+regressions. See the [website guide](site/README.md) for browser tests and
+automatic GitHub Pages publication from this repository.
 
 </details>
 
@@ -207,6 +207,6 @@ separate publication workflow.
 
 **Bring it all together with AEF.**
 
-[Connect your repository](#connect-your-repository) &nbsp; · &nbsp; [Explore the platform ↗](https://andrewgoodson.github.io/aef-core-site/)
+[Connect your repository](#connect-your-repository) &nbsp; · &nbsp; [Explore the platform ↗](https://andrewgoodson.github.io/aef-core/)
 
 </div>

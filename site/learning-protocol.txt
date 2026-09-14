@@ -49,4 +49,4 @@ owner-repository trial scored incumbent 0.67, learned lesson 0.40, placebo 0.87
 
 This template follows the evidence learning protocol in aef-core/AGENTS.md.
 Source and detailed evidence: https://github.com/AndrewGoodson/aef-core
-Repository access is required. Public showcase: https://andrewgoodson.github.io/aef-core-site/
+Public website: https://andrewgoodson.github.io/aef-core/

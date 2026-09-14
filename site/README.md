@@ -1,11 +1,12 @@
 # AEF product website
 
-Public URL: <https://andrewgoodson.github.io/aef-core-site/>
+Public URL: <https://andrewgoodson.github.io/aef-core/>
 
-The canonical source is this directory in aef-core. The separate public
-[`AndrewGoodson/aef-core-site`](https://github.com/AndrewGoodson/aef-core-site)
-repository hosts only the curated website. Runtime source and website have
-separate publication paths; a source commit does not deploy the site.
+This directory is the canonical website source. The public
+[`AndrewGoodson/aef-core`](https://github.com/AndrewGoodson/aef-core) repository
+publishes it directly through [the Pages workflow](../.github/workflows/pages.yml).
+Changes to `site/` on `main` deploy automatically; a manual Actions run is also
+available. The earlier `aef-core-site` publication is no longer canonical.
 
 ## Preview and check
 
@@ -74,7 +75,7 @@ node site/tests/drilldowns.mjs
 ```
 
 For the deployed site, repeat with
-`SITE_URL=https://andrewgoodson.github.io/aef-core-site/` in the environment.
+`SITE_URL=https://andrewgoodson.github.io/aef-core/` in the environment.
 Omit `HEADED=1` for headless execution. A failed assertion exits nonzero.
 Each run saves its action/expected-result ledger as JSON and Markdown, full-page
 and graph screenshots, failed-step screenshots, downloaded instructions, and
@@ -87,7 +88,7 @@ node .scratch/site-browser/node_modules/playwright/cli.js show-trace output/play
 ```
 
 The suite checks outbound links through actual navigation and records HTTP
-status separately. External availability and authenticated source access are
+status separately. External availability is
 not guaranteed by a passing interaction check; inspect that report section.
 Widths simulate responsive layouts in Chromium, not Safari, Firefox or physical
 mobile devices. Test paths are synthetic; no integration command is executed.
@@ -96,20 +97,21 @@ under `docs/model-checks/` with findings, results and evidence paths.
 
 ## Publish a website update
 
-1. Review public copy and links. Keep private targets, tax records, source code,
-   credentials, internal logs and owner-only documents out of the public site.
-2. Copy **only** `index.html`, `styles.css`, `app.js`, `graph.js`, `logo.png`,
-   `learning-protocol.txt` and `THIRD_PARTY_NOTICES.txt` from this directory to the
-   root of an isolated clone of `AndrewGoodson/aef-core-site`. Do not mirror the aef-core repository.
-3. Review the public clone's diff; commit and push its `main` branch with Git.
-   Do not use GitHub CLI. GitHub Pages serves `main` / root, with an empty
-   `.nojekyll` file. The public repository may have its own short README.
-4. Verify the Pages deployment and compare all seven served assets with these
-   source files. Check the public URL in a browser before reporting it live.
+1. Review the copy and links, then run the checks above.
+2. Commit and push the reviewed changes to `main` with Git. Do not use GitHub
+   CLI. The **Deploy AEF website** workflow runs when `site/` or the workflow
+   changes; use **Run workflow** in Actions to redeploy an existing revision.
+3. The workflow stages only `index.html`, `styles.css`, `app.js`, `graph.js`,
+   `logo.png`, `learning-protocol.txt` and `THIRD_PARTY_NOTICES.txt`. Tests,
+   reports and other repository files are excluded from the Pages artifact.
+4. Check the workflow's `github-pages` deployment, run the saved browser suite
+   against the public URL, and compare all seven served assets with source
+   before reporting a deployment live.
 
-Source and website use separate commits. A source push alone does not publish
-the website; repeat this allowlisted sync after every site change. No cross-repo
-publication token or automatic export of private content is configured.
+Repository Settings → Pages → Source must be **GitHub Actions**. Deployment
+uses GitHub's scoped workflow token, without a personal publication token or a
+second repository. To roll back, revert the site change on `main` and let the
+workflow publish the reviewed revision.
 
 ## Moving graph provenance
 

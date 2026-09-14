@@ -1,6 +1,6 @@
 # Graph engineering and evidence-based learning
 
-The [public showcase](https://andrewgoodson.github.io/aef-core-site/) explains
+The [public showcase](https://andrewgoodson.github.io/aef-core/) explains
 AEF's graph contract, controlled tools, repository integration and learning
 protocol. Its source lives in [`site/`](../site/README.md). It is a static
 explanation and command preview; visiting it does not run an agent.
