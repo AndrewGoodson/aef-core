@@ -46,7 +46,8 @@ hide an earlier failure.
 
 ## Saved click-by-click browser tests
 
-[Latest product presentation verification and complete action ledger](../docs/model-checks/2026-09-12-aef-product-presentation.md).
+[Latest deployment verification](../docs/model-checks/2026-09-14-github-pages.md).
+[Product presentation verification and complete action ledger](../docs/model-checks/2026-09-12-aef-product-presentation.md).
 [Original defect reproductions](../docs/model-checks/2026-09-12-site-drilldowns.md).
 
 [`tests/drilldowns.mjs`](tests/drilldowns.mjs) drives a real Chromium browser
