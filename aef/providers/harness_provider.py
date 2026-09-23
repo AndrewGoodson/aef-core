@@ -47,6 +47,7 @@ harness needs a fourth class.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import tempfile
 from collections.abc import Callable, Sequence
@@ -193,6 +194,22 @@ def _usage_match(model_usage: dict[str, object], usage: dict[str, object] | None
     return hits[0] if len(hits) == 1 else None
 
 
+# A key is the requested model under another spelling when it adds a dated
+# snapshot (`-20260101`), a context-window marker (`[1m]`) or a server label
+# (`-build`) — and is a DIFFERENT model when what it adds is a short version
+# number. `claude-opus-5-5` extends `claude-opus-5-` and is Opus 5.5, not
+# Opus 5; a bare `startswith(f"{requested}-")` said otherwise
+# (model-check 2026-09-23).
+_VERSION_STEP = re.compile(r"-\d{1,4}(?:$|[-\[.])")
+
+
+def _is_alias_of(key: str, requested: str) -> bool:
+    if key == requested or not key.startswith(requested):
+        return False
+    suffix = key[len(requested) :]
+    return suffix[0] in "-[" and _VERSION_STEP.match(suffix) is None
+
+
 def answering_model(
     model_usage: dict[str, object],
     requested: str | None,
@@ -235,9 +252,10 @@ def answering_model(
     Six rules, in order, each returning the attribution it earned:
 
     1. the requested name, if the map has it — `requested`;
-    2. a key that *extends* the requested name (`claude-opus-5` ->
-       `claude-opus-5-20260101`) — `alias`, the case that made reading
-       `modelUsage` worth doing at all;
+    2. a key that extends the requested name by a date, a context-window
+       marker or a label (`claude-opus-5` -> `claude-opus-5-20260101`) —
+       `alias`, the case that made reading `modelUsage` worth doing at all.
+       Not by a version number: `claude-opus-5-5` is another model;
     3. a map with exactly one key — `sole`, no ambiguity to resolve;
     4. **the key whose token row equals the payload's top-level `usage`** —
        `usage_match`. S1 observed on a live call that the CLI's top-level
@@ -257,7 +275,7 @@ def answering_model(
     if requested:
         if requested in model_usage:
             return requested, "requested"
-        extended = [k for k in model_usage if k.startswith(f"{requested}-")]
+        extended = [k for k in model_usage if _is_alias_of(k, requested)]
         if len(extended) == 1:
             return extended[0], "alias"
 

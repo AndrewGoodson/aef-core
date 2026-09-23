@@ -475,6 +475,31 @@ def test_the_helper_model_is_not_reported_as_the_one_that_answered() -> None:
     assert result.model_attribution == "requested"
 
 
+def test_a_newer_model_is_not_an_alias_of_the_one_it_extends_by_name() -> None:
+    """`claude-opus-5-5` starts with `claude-opus-5-`, and it is a different
+    model (model-check 2026-09-23). Rule 2 matched any key extending the
+    request, so asking for Opus 5 and being billed on Opus 5.5 was recorded
+    as Opus 5 with attribution `alias` — provenance naming a model that
+    wrote none of the answer. Only a date suffix or a context-window
+    marker makes a key an alias."""
+    usage = {
+        "claude-haiku-4-5-20251001": {"outputTokens": 30},
+        "claude-opus-5-5": {"outputTokens": 4},
+    }
+    model, how = answering_model(usage, "claude-opus-5")
+    assert how != "alias"
+    assert model != "claude-opus-5"
+    # The two shapes that ARE the requested model under another spelling.
+    assert answering_model({"claude-opus-5-20260101": {}, "h": {}}, "claude-opus-5") == (
+        "claude-opus-5-20260101",
+        "alias",
+    )
+    assert answering_model({"claude-opus-5-5[1m]": {}, "h": {}}, "claude-opus-5-5") == (
+        "claude-opus-5-5[1m]",
+        "alias",
+    )
+
+
 def test_an_alias_resolved_to_a_dated_id_is_still_recognised() -> None:
     """Rule 2, and the reason `modelUsage` is read at all rather than echoing
     the request: the dated id is more informative than the alias."""
