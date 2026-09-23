@@ -336,3 +336,18 @@ def test_verification_instructions_were_kept(name: str) -> None:
     text = _surface()[name].lower()
     for keep in KEEP:
         assert keep in text, f"{name} dropped the verification instruction {keep!r}"
+
+
+def test_the_model_check_looks_for_the_harness_login_before_an_api_key() -> None:
+    """The 2026-09-03 run reported "no credential" and skipped its live step
+    on a machine logged in to Claude Code, because the skill only named
+    `ant auth status` and the SDK's env vars. This repo's model path is the
+    harness login (ADR 0112); the skill must look there first."""
+    for path in (
+        REPO / ".claude/skills/new-model-check/SKILL.md",
+        REPO / "aef/cli/templates/skills/new-model-check/SKILL.md",
+    ):
+        text = _flat(path.read_text())
+        login, api = text.find("claude auth status"), text.find("ant auth status")
+        assert login != -1, f"{path}: no harness-login check"
+        assert api == -1 or login < api, f"{path}: API credential checked before the login"

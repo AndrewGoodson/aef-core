@@ -120,3 +120,23 @@ def test_tools_empty_string_actually_suppresses_tools() -> None:
         finally:
             os.chdir(prev)
     assert sentinel not in result.content, "a tool ran: the sentinel line was read"
+
+
+@needs_claude
+def test_the_shipped_default_model_answers_with_effort_under_the_login() -> None:
+    """The model check's live step, kept (2026-09-23). The shipped default is
+    `claude-opus-5-5` and `model_provider.effort` rides on the CLI's own
+    `--effort` flag; both are judged by the binary under the operator's
+    Claude login — no API key — and the answering model is read back from
+    `modelUsage`, not echoed from the request."""
+    result = ClaudeCodeProvider(
+        default_model="claude-opus-5-5", effort="low", timeout_s=600
+    ).complete(
+        CompletionRequest(
+            messages=(ProviderMessage(role="user", content="Reply with the single word OK"),),
+            model="",
+        )
+    )
+    assert result.content.strip() == "OK"
+    assert result.model is not None and result.model.startswith("claude-opus-5-5")
+    assert result.model_attribution in ("requested", "alias", "sole", "usage_match")

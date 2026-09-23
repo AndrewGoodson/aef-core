@@ -85,15 +85,21 @@ jobs:
           pip install -e ".[dev]"
 
       # Detection is deliberately two questions, not one. "Is the CLI on PATH"
-      # is cheap and certain; "is it logged in" is not knowable without
-      # spending a call, so this checks the two forms a credential takes — an
-      # API key handed in from repository secrets, or the CLI's own auth file
-      # written by its login. A guess at a third form would be the shape ADR
-      # 0150 is about: a check that passes on the wrong thing.
+      # is cheap and certain; "is it logged in" is answered by the forms a
+      # credential takes — an API key handed in from repository secrets, or
+      # the CLI's own login. For codex that login is a file. For claude it is
+      # NOT reliably one: on macOS a claude.ai login lives in the Keychain and
+      # `~/.claude/.credentials.json` does not exist, which made this step
+      # print "NO credential" on the machine the Claude path was built for
+      # (model-check 2026-09-23). So claude is asked directly —
+      # `claude auth status` reports `"loggedIn": true` without spending a
+      # model call — and `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`) is
+      # the headless form of the same login for a runner with no Keychain.
       - name: Which harness backends can answer here
         id: detect
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           set -u
@@ -109,7 +115,9 @@ jobs:
             echo "codex: not installed on this runner"
           fi
           if command -v claude >/dev/null 2>&1; then
-            if [ -n "${ANTHROPIC_API_KEY:-}" ] || [ -f "$HOME/.claude/.credentials.json" ]; then
+            if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || [ -n "${ANTHROPIC_API_KEY:-}" ] \
+              || [ -f "$HOME/.claude/.credentials.json" ] \
+              || claude auth status 2>/dev/null | grep -Eq '"loggedIn": *true'; then
               targets="$targets tests/providers/test_harness_live.py"
               echo "claude: CLI present, credential present"
             else
@@ -129,6 +137,7 @@ jobs:
         env:
           AEF_LIVE_HARNESS: "1"
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: pytest -q ${{ steps.detect.outputs.targets }}
 
@@ -141,5 +150,6 @@ jobs:
           echo "This is not a failure: the adapters are exercised where a login exists."
           echo "To exercise them, set the AEF_LIVE_RUNNER repository variable to a"
           echo "self-hosted runner label whose machine has 'codex' and/or 'claude'"
-          echo "installed and logged in, or supply OPENAI_API_KEY / ANTHROPIC_API_KEY"
-          echo "as repository secrets."
+          echo "installed and logged in, or supply CLAUDE_CODE_OAUTH_TOKEN (from"
+          echo "'claude setup-token', your Claude login) or OPENAI_API_KEY as repository"
+          echo "secrets."

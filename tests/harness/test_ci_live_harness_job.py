@@ -161,3 +161,65 @@ def test_the_live_step_sets_the_opt_in_the_tests_require() -> None:
     skips — green, and measuring nothing."""
     assert _step("Live harness tests")["env"]["AEF_LIVE_HARNESS"] == "1"
     assert "pytest" in str(_step("Live harness tests")["run"])
+
+
+def _bin_with_a_fake_claude(tmp_path: Path, logged_in: bool) -> str:
+    """A PATH on which `claude auth status` answers as the real CLI does
+    (`{"loggedIn": true, "authMethod": "claude.ai", ...}`, observed 2026-09-23).
+    Nothing else about the stub is exercised."""
+    binary = tmp_path / "bin" / "claude"
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    state = "true" if logged_in else "false"
+    binary.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = auth ] && [ "$2" = status ]; then\n'
+        f'  printf \'{{\\n  "loggedIn": {state},\\n  "authMethod": "claude.ai"\\n}}\\n\'\n'
+        "  exit 0\n"
+        "fi\n"
+        "exit 1\n"
+    )
+    binary.chmod(0o755)
+    return f"{binary.parent}:/usr/bin:/bin"
+
+
+def test_a_claude_login_in_the_keychain_selects_the_backend(tmp_path: Path) -> None:
+    """The form this repo's own machine is in (model-check 2026-09-23): a
+    claude.ai login, no API key, and NO `~/.claude/.credentials.json` —
+    on macOS the CLI keeps the login in the Keychain. The detector looked
+    only for the key and the file, so on the box the Claude path was built
+    for it printed "NO credential" and the live tests never ran. It now asks
+    the CLI, which answers without spending a model call."""
+    output = _run_detect(
+        tmp_path,
+        {"HOME": str(tmp_path / "nohome"), "PATH": _bin_with_a_fake_claude(tmp_path, True)},
+    )
+    assert "tests/providers/test_harness_live.py" in output
+
+
+def test_a_claude_cli_that_says_logged_out_is_not_selected(tmp_path: Path) -> None:
+    output = _run_detect(
+        tmp_path,
+        {"HOME": str(tmp_path / "nohome"), "PATH": _bin_with_a_fake_claude(tmp_path, False)},
+    )
+    assert "test_harness_live.py" not in output
+
+
+def test_a_setup_token_secret_selects_the_backend(tmp_path: Path) -> None:
+    """`claude setup-token` is the CLI's documented headless form of the same
+    login; as a repository secret it reaches a hosted runner with no Keychain.
+    The stub reports logged-out so only the token can be what selects it."""
+    output = _run_detect(
+        tmp_path,
+        {
+            "HOME": str(tmp_path / "nohome"),
+            "PATH": _bin_with_a_fake_claude(tmp_path, False),
+            "CLAUDE_CODE_OAUTH_TOKEN": "not-a-real-token",
+        },
+    )
+    assert "tests/providers/test_harness_live.py" in output
+
+
+def test_the_setup_token_reaches_both_steps() -> None:
+    for name in ("Which harness backends can answer here", "Live harness tests"):
+        env = _step(name)["env"]
+        assert env["CLAUDE_CODE_OAUTH_TOKEN"] == "${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}"

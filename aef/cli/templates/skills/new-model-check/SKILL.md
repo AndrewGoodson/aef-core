@@ -117,11 +117,16 @@ For each hit in the API surface:
 2. Fix.
 3. Run it. See it pass. Mutation check: reintroduce the bad value,
    confirm the test fails, revert.
-4. If the repo has a working credential (`ant auth status`, or the SDK's
-   own env vars), one minimal live call against the target, asserting
-   `response.model` starts with the target ID. Mark the finding
-   **reproduced**. If no credential, mark it **suspected — documented in
-   <source>, not run**. Never blur these.
+4. One minimal live call against the target, asserting the answering
+   model starts with the target ID. **Look for the coding agent's own
+   login first** — no API key is not no credential. `claude auth status`
+   printing `"loggedIn": true` is one (on macOS it lives in the Keychain,
+   so there may be no credentials file to find); the call is then
+   `claude -p --model <target> --tools "" --max-turns 1 --output-format json`
+   and the answering model is the matching key of its `modelUsage`. Only
+   if there is no such login, try `ant auth status` or the SDK's own env
+   vars. Mark the finding **reproduced**. If none of these exist, mark it
+   **suspected — documented in <source>, not run**. Never blur these.
 
 Model IDs in config templates and examples: replace retired or fictional
 IDs with a real current one from the loaded guide. Do not append date
@@ -165,7 +170,9 @@ holds — a silent shrink is a finding, not a pass.
 ## Step 5 — runtime spot-check
 
 Already covered per-finding in Step 3. Summarize here: which calls ran,
-against which model, or "not run: no credential".
+against which model, through which credential (harness login, `ant`
+profile, API key), or "not run: no credential" — and say which of the
+three were checked before concluding there was none.
 
 ## Step 6 — record and finish
 
