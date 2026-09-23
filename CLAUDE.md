@@ -201,6 +201,9 @@ needs `ANTHROPIC_API_KEY`). Each declares its own `isolation` set, derived
 from the argv it actually builds, so removing a flag retracts the claim in
 the same commit (ADR 0169). `model_provider.model` in `aef.yaml` is the
 provider's default model; it validated for months while nothing read it.
+`model_provider.effort` (optional; `anthropic` and `claude_code` only, refused
+elsewhere) sets how hard the model thinks; unset sends nothing, and on
+Claude Opus 5.5 that means `medium`, one level below Opus 5 (ADR 0212).
 Offline optimization and multi-agent coordination remain typed interfaces
 with `NotImplementedError` bodies (Phase 5); LLM-backed reflection does
 not — see above. The evolution engine is a typed interface, disabled
@@ -420,6 +423,11 @@ it, because the block is adopt's to maintain.
 The generated `CLAUDE.md` is self-contained: a fresh coding-agent session
 in that other repo, with no memory of this conversation, can pick up the
 migration from it alone.
+
+## Latest model check (2026-09-23)
+
+`docs/model-checks/2026-09-23-claude-opus-5-5.md`: shipped default is now
+`claude-opus-5-5`; nothing in the request surface 400s on it.
 
 ## Current repository review (2026-09-11)
 

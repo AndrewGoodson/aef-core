@@ -152,7 +152,7 @@ class ModelProviderConfig(_StrictModel):
     command: CommandProviderConfig | None = None
     # How much the model thinks. Unset, each model keeps its own default —
     # which on Claude Opus 5.5 is `medium`, one level below Opus 5's `high`
-    # (docs/model-checks/2026-09-23-claude-opus-5-5.md, ADR 0206).
+    # (docs/model-checks/2026-09-23-claude-opus-5-5.md, ADR 0212).
     effort: Effort | None = None
 
     @model_validator(mode="after")
