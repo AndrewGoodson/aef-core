@@ -1259,7 +1259,7 @@ model_provider:
   # GitHub Copilot's CLI is `command`, configured by you when you install it:
   # this repo ships no guess about its flags (ADR 0150).
   impl: claude_code
-  model: claude-opus-5  # a real current ID; claude-fable-5-1 for the hardest long-horizon work
+  model: claude-opus-5-5  # a real current ID; claude-fable-5-1 for the hardest long-horizon work
   fallback: []
 
 memory:

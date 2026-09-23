@@ -53,3 +53,16 @@ def test_adopt_template_names_a_real_model() -> None:
 def test_init_template_names_a_real_model() -> None:
     for model in _model_lines(_render_config("agent")):
         assert CURRENT_ID.match(model), f"init template: {model!r} is not a model ID"
+
+
+def test_every_shipped_default_names_the_same_model() -> None:
+    """A model check moves the default in four places: two example configs
+    and the two templates written into other repos. Half a migration is
+    worse than none — an adopter's `aef init` and `aef adopt` would then
+    disagree about which model they run. Pins agreement, not the value."""
+    models = {
+        *(m for p in REPO.glob("aef/config/agent.*.yaml") for m in _model_lines(p.read_text())),
+        *_model_lines(render_aef_yaml("repo")),
+        *_model_lines(_render_config("agent")),
+    }
+    assert len(models) == 1, f"shipped defaults disagree: {sorted(models)}"

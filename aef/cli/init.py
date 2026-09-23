@@ -81,7 +81,7 @@ def _render_config(agent_name: str) -> str:
 
 model_provider:
   impl: claude_code  # the coding agent's own login, no API key; or codex / anthropic
-  model: claude-opus-5  # a real current ID; claude-fable-5-1 for the hardest long-horizon work
+  model: claude-opus-5-5  # a real current ID; claude-fable-5-1 for the hardest long-horizon work
   fallback: []
 
 memory:
