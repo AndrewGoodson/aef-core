@@ -91,7 +91,7 @@ class AnthropicProvider(ModelProvider):
         user_id = request.metadata.get("user_id")
         anthropic_metadata = {"user_id": user_id} if user_id is not None else None
         # `CompletionRequest.temperature` is deliberately NOT forwarded. Every
-        # current Anthropic model (Fable 5/5.1, Opus 5/4.8/4.7, Sonnet 5)
+        # current Anthropic model (Fable 5/5.1, Opus 5.5/5/4.8/4.7, Sonnet 5)
         # rejects sampling parameters with a 400, so an adapter that sent it
         # could not talk to any of them. The field stays on the vendor-neutral
         # request for adapters whose vendor still honours it.
