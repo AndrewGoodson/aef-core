@@ -29,7 +29,7 @@ from aef.config.schema import (
     ShadowConfig,
     ToolsConfig,
 )
-from aef.providers.base import FallbackProvider, ModelProvider
+from aef.providers.base import Effort, FallbackProvider, ModelProvider
 from aef.security.tool import PolicyConfig
 from aef.services.context.base import Retriever
 from aef.services.knowledge.base import KnowledgeStore
@@ -53,12 +53,15 @@ class UnsupportedProviderImplError(NotImplementedError):
 
 
 def _build_single(
-    impl: str, model: str, command: CommandProviderConfig | None = None
+    impl: str,
+    model: str,
+    command: CommandProviderConfig | None = None,
+    effort: Effort | None = None,
 ) -> ModelProvider:
     if impl == "claude_code":
         from aef.providers.harness_provider import ClaudeCodeProvider
 
-        return ClaudeCodeProvider(default_model=model)
+        return ClaudeCodeProvider(default_model=model, effort=effort)
     if impl == "codex":
         from aef.providers.harness_provider import CodexProvider
 
@@ -97,7 +100,7 @@ def _build_single(
         # building an anthropic-backed provider should.
         from aef.providers.anthropic_provider import AnthropicProvider
 
-        return AnthropicProvider()
+        return AnthropicProvider(effort=effort)
     raise UnsupportedProviderImplError(impl)
 
 
@@ -120,8 +123,10 @@ def build_model_provider(config: ModelProviderConfig | None) -> ModelProvider | 
     # model still wins.
     if config is None:
         return None
-    providers = [_build_single(config.impl, config.model, config.command)]
-    providers.extend(_build_single(impl, config.model) for impl in config.fallback)
+    providers = [_build_single(config.impl, config.model, config.command, config.effort)]
+    providers.extend(
+        _build_single(impl, config.model, effort=config.effort) for impl in config.fallback
+    )
     if len(providers) == 1:
         return providers[0]
     return FallbackProvider(providers)

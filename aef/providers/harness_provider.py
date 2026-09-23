@@ -56,6 +56,7 @@ from pathlib import Path
 from aef.providers.base import (
     CompletionRequest,
     CompletionResult,
+    Effort,
     ModelProvider,
     ModelProviderError,
     ProviderMessage,
@@ -368,8 +369,10 @@ class ClaudeCodeProvider(ModelProvider):
         executable: str = "claude",
         timeout_s: float = 600.0,
         runner: Runner = subprocess_runner,
+        effort: Effort | None = None,
     ) -> None:
         self._default_model = default_model
+        self._effort = effort
         self._executable = executable
         self._timeout_s = timeout_s
         self._runner = runner
@@ -402,6 +405,8 @@ class ClaudeCodeProvider(ModelProvider):
         ]
         if model:
             argv += ["--model", model]
+        if self._effort is not None:
+            argv += ["--effort", self._effort]
         if system is not None:
             argv += ["--system-prompt", system]
         argv.append(prompt)

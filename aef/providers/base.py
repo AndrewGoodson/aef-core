@@ -14,6 +14,11 @@ from typing import Literal
 
 Role = Literal["system", "user", "assistant", "tool"]
 
+# How much a current Anthropic model thinks. Opus 5.5 made this the only
+# control (thinking cannot be disabled) and moved its default from `high` to
+# `medium`, so an owner who wants the old depth has to name it.
+Effort = Literal["low", "medium", "high", "xhigh", "max"]
+
 ISOLATION_PROPERTIES: frozenset[str] = frozenset(
     {
         # -- containment: what the call CANNOT do -------------------------

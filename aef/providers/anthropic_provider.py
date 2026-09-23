@@ -12,6 +12,7 @@ import anthropic
 from aef.providers.base import (
     CompletionRequest,
     CompletionResult,
+    Effort,
     ModelProvider,
     ModelProviderError,
 )
@@ -50,7 +51,13 @@ class AnthropicProvider(ModelProvider):
     def isolation(self) -> frozenset[str]:
         return self._ISOLATION
 
-    def __init__(self, api_key: str | None = None, client: _AnthropicClient | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        client: _AnthropicClient | None = None,
+        effort: Effort | None = None,
+    ) -> None:
+        self._effort = effort
         self._client: _AnthropicClient = (
             client
             if client is not None
@@ -88,6 +95,13 @@ class AnthropicProvider(ModelProvider):
         # rejects sampling parameters with a 400, so an adapter that sent it
         # could not talk to any of them. The field stays on the vendor-neutral
         # request for adapters whose vendor still honours it.
+        # No `thinking` and no `tool_choice`: Opus 5.5 rejects disabled
+        # thinking, `budget_tokens` and forced tool use with a 400. Effort is
+        # the one thinking control left, and it is sent only when the owner
+        # set it — omitted, each model keeps its own default.
+        extra: dict[str, Any] = {}
+        if self._effort is not None:
+            extra["output_config"] = {"effort": self._effort}
         try:
             response = self._client.messages.create(
                 model=request.model,
@@ -95,6 +109,7 @@ class AnthropicProvider(ModelProvider):
                 system=system,
                 messages=messages,
                 metadata=anthropic_metadata,
+                **extra,
             )
         except anthropic.AnthropicError as exc:
             # Catch the TRUE base, not just APIError: the SDK has

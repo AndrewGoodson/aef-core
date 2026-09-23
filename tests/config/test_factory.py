@@ -196,3 +196,31 @@ def test_the_owners_isolation_assertion_reaches_the_built_provider() -> None:
     # And the half the owner does not get to assert is derived: no `{system}`
     # slot, so the persona would go out in the user turn.
     assert provider.isolation == frozenset({"no_tools", "user_turn_persona"})
+
+
+def test_effort_reaches_the_providers_that_have_a_knob_for_it() -> None:
+    from aef.providers.anthropic_provider import AnthropicProvider
+    from aef.providers.harness_provider import ClaudeCodeProvider
+
+    anth = build_model_provider(ModelProviderConfig(impl="anthropic", model="m", effort="low"))
+    assert isinstance(anth, AnthropicProvider)
+    assert anth._effort == "low"
+    cc = build_model_provider(ModelProviderConfig(impl="claude_code", model="m", effort="max"))
+    assert isinstance(cc, ClaudeCodeProvider)
+    assert "--effort" in cc.argv(
+        CompletionRequest(messages=(ProviderMessage(role="user", content="x"),), model="")
+    )
+
+
+def test_effort_is_refused_for_an_impl_that_would_ignore_it() -> None:
+    """Present-but-ignored is refused, as `command:` is: an owner who sets
+    effort on codex would believe it applied."""
+    with pytest.raises(ValidationError, match="effort"):
+        ModelProviderConfig(impl="codex", model="m", effort="high")
+    with pytest.raises(ValidationError, match="effort"):
+        ModelProviderConfig(impl="anthropic", model="m", effort="high", fallback=["grok"])
+
+
+def test_effort_rejects_a_level_that_does_not_exist() -> None:
+    with pytest.raises(ValidationError):
+        ModelProviderConfig(impl="anthropic", model="m", effort="extreme")  # type: ignore[arg-type]

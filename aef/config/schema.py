@@ -12,6 +12,8 @@ import math
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
+from aef.providers.base import Effort
+
 
 class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -138,6 +140,9 @@ class HaltChannelConfig(_StrictModel):
         return self
 
 
+_EFFORT_IMPLS = ("claude_code", "anthropic")
+
+
 class ModelProviderConfig(_StrictModel):
     impl: str
     model: str
@@ -145,6 +150,22 @@ class ModelProviderConfig(_StrictModel):
     # Only `impl: command` reads this. Present-but-ignored is refused below
     # for the same reason `knowledge_graph.impl` is (ADR 0100).
     command: CommandProviderConfig | None = None
+    # How much the model thinks. Unset, each model keeps its own default —
+    # which on Claude Opus 5.5 is `medium`, one level below Opus 5's `high`
+    # (docs/model-checks/2026-09-23-claude-opus-5-5.md, ADR 0206).
+    effort: Effort | None = None
+
+    @model_validator(mode="after")
+    def _effort_only_where_something_reads_it(self) -> ModelProviderConfig:
+        if self.effort is None:
+            return self
+        ignored = [i for i in (self.impl, *self.fallback) if i not in _EFFORT_IMPLS]
+        if ignored:
+            raise ValueError(
+                f"model_provider.effort is set but {ignored!r} would ignore it; only "
+                f"{_EFFORT_IMPLS!r} have an effort control. Remove `effort` or those impls."
+            )
+        return self
 
     @model_validator(mode="after")
     def _command_block_matches_the_impl(self) -> ModelProviderConfig:

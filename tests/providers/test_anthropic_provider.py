@@ -285,3 +285,41 @@ def test_fallbackprovider_falls_through_on_refusal() -> None:
         )
     )
     assert FallbackProvider([refusing, _Good()]).complete(_request()).content == "answered"
+
+
+# ---------------------------------------------------------------------------
+# Model-check 2026-09-23 (docs/model-checks/2026-09-23-claude-opus-5-5.md).
+# Claude Opus 5.5 rejects `thinking: {type: "disabled"}` and `budget_tokens`
+# at every effort level, and forced `tool_choice` `any`/`tool`, with a 400.
+# The adapter sends none of them today; this pins that. Its default effort
+# also dropped from `high` to `medium`, so an owner who wants the old depth
+# has to say so — `effort` is that knob, and it is sent only when set.
+# ---------------------------------------------------------------------------
+def _ok_client() -> _FakeClient:
+    return _FakeClient(
+        response=_FakeResponse(
+            model="claude-x", content=[_FakeTextBlock(text="ok")], usage=_FakeUsage(1, 1)
+        )
+    )
+
+
+def test_complete_sends_no_parameter_opus_5_5_rejects() -> None:
+    client = _ok_client()
+    AnthropicProvider(client=client).complete(_request())
+
+    call = client.messages.calls[0]
+    assert "thinking" not in call
+    assert "tool_choice" not in call
+    assert "tools" not in call  # `no_tools` isolation depends on this too
+
+
+def test_effort_is_omitted_unless_the_owner_sets_it() -> None:
+    client = _ok_client()
+    AnthropicProvider(client=client).complete(_request())
+    assert "output_config" not in client.messages.calls[0]
+
+
+def test_effort_is_forwarded_inside_output_config() -> None:
+    client = _ok_client()
+    AnthropicProvider(client=client, effort="high").complete(_request())
+    assert client.messages.calls[0]["output_config"] == {"effort": "high"}

@@ -95,6 +95,21 @@ def test_claude_argv_is_a_toolless_single_turn_under_the_session_login() -> None
     assert "--bare" not in argv
 
 
+def test_claude_argv_carries_effort_only_when_set() -> None:
+    """Claude Opus 5.5's default effort is `medium`, one level below Opus 5's
+    `high` (model-check 2026-09-23). `--effort` is the CLI's own flag for it;
+    absent unless the owner sets it, so the default argv is unchanged."""
+    runner = _Recorder(_ok(_CLAUDE_OK))
+    ClaudeCodeProvider(runner=runner).complete(_request())
+    assert "--effort" not in runner.calls[0]
+
+    runner = _Recorder(_ok(_CLAUDE_OK))
+    ClaudeCodeProvider(runner=runner, effort="xhigh").complete(_request())
+    argv = runner.calls[0]
+    assert argv[argv.index("--effort") + 1] == "xhigh"
+    assert argv[-1] == "hello"  # the prompt stays last
+
+
 def test_claude_argv_does_not_inherit_the_operators_session() -> None:
     """The operator's MCP schemas and `~/.claude/CLAUDE.md` were reaching every
     judge call: 211,470 input tokens per call as issued, 4,684 with the MCP
