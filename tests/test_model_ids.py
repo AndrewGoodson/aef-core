@@ -66,3 +66,17 @@ def test_every_shipped_default_names_the_same_model() -> None:
         *_model_lines(_render_config("agent")),
     }
     assert len(models) == 1, f"shipped defaults disagree: {sorted(models)}"
+
+
+def test_the_commented_effort_hint_is_valid_when_uncommented() -> None:
+    """The templates show `effort` as a commented line so an adopter can find
+    it (ADR 0212). A hint that fails validation once uncommented teaches the
+    wrong key; this uncomments it and builds the config."""
+    import yaml
+
+    from aef.config.schema import ModelProviderConfig
+
+    for text in (render_aef_yaml("repo"), _render_config("agent")):
+        assert "  # effort: " in text
+        doc = yaml.safe_load(text.replace("  # effort: ", "  effort: "))
+        assert ModelProviderConfig(**doc["model_provider"]).effort is not None

@@ -1261,6 +1261,7 @@ model_provider:
   impl: claude_code
   model: claude-opus-5-5  # a real current ID; claude-fable-5-1 for the hardest long-horizon work
   fallback: []
+  # effort: high  # optional, claude_code/anthropic; unset = model default (5.5: medium)
 
 memory:
   impl: in_memory
