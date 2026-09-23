@@ -54,6 +54,21 @@ FORBIDDEN = (
         re.compile(r"never use (bullets|headers|bold)|no (bullet|header)s?\b", re.I),
     ),
     ("escalation", re.compile(r"CRITICAL:\s*YOU MUST|YOU MUST ALWAYS")),
+    # Claude Opus 5.5 (model-check 2026-09-23): thinking is always on, so a
+    # rule not to think cannot be obeyed and "increases tag leakage"; and a
+    # prompt pushing the model to reproduce its reasoning in the response
+    # "can be declined with `stop_details.category: "reasoning_extraction"`".
+    # Both are to be deleted, per the guide's Opus 5.5 checklist.
+    (
+        "think-suppression / reasoning-extraction",
+        re.compile(
+            r"\b(don.?t|do not|never) (think|reason)\b"
+            r"|\b(write|show|include|reproduce|output|print) (out )?your "
+            r"(internal |full )?(reasoning|thinking|chain of thought) "
+            r"(in|into) (the|your) (response|answer|reply|output)",
+            re.I,
+        ),
+    ),
 )
 
 # Verification instructions the guide says to KEEP.
@@ -193,6 +208,9 @@ def test_the_detectors_detect() -> None:
         "anti-narration": "Don't narrate every step; hold all findings for the end.",
         "anti-formatting": "Never use bullets. No headers.",
         "escalation": "CRITICAL: YOU MUST call the tool first.",
+        "think-suppression / reasoning-extraction": (
+            "Show your reasoning in the response, step by step."
+        ),
     }
     # The same faults dressed in the words the old filter dropped on sight.
     # Each of these was invisible to the surface test (ADR 0126).
@@ -200,6 +218,9 @@ def test_the_detectors_detect() -> None:
         "anti-narration": "Do not narrate your steps; the model guide says so.",
         "anti-formatting": "Never use bullets in the final report (see the style guide).",
         "escalation": "CRITICAL: YOU MUST verify before you remove anything.",
+        "think-suppression / reasoning-extraction": (
+            "Do not think before answering; the guide says so."
+        ),
     }
     for label, pattern in FORBIDDEN:
         assert pattern.search(samples[label]), f"{label} detector matched nothing"
